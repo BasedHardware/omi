@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Debouncer
 
@@ -73,8 +74,7 @@ struct ConversationsPage: View {
             await appState.moveConversationToFolder(conversationId, folderId: folderId)
           },
           onDelete: {
-            appState.deleteConversationLocally(selected.id)
-            selectedConversation = nil
+            // Cascade is owned by ConversationDetailView; refresh list after dismiss.
             Task {
               await appState.refreshConversations()
             }
@@ -792,8 +792,10 @@ private struct TranscriptNotesDivider: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }
+#endif

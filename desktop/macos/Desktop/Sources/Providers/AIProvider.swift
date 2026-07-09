@@ -41,7 +41,27 @@ struct AIProvider: Identifiable {
     bridgeModeRawValue: "claudeCode"
   )
 
-  static let all: [AIProvider] = [.piMono, .claude]
+  static let hermes = AIProvider(
+    id: "hermes",
+    displayName: "Hermes",
+    tagline: "Local Hermes Agent via ACP",
+    attributionURL: nil,
+    sfSymbol: "",
+    logoResource: "hermes_logo",
+    bridgeModeRawValue: "hermes"
+  )
+
+  static let openClaw = AIProvider(
+    id: "openclaw",
+    displayName: "OpenClaw",
+    tagline: "Local OpenClaw agent",
+    attributionURL: nil,
+    sfSymbol: "",
+    logoResource: "openclaw_logo",
+    bridgeModeRawValue: "openclaw"
+  )
+
+  static let all: [AIProvider] = [.piMono, .claude, .hermes, .openClaw]
 
   /// Look up a provider by its `chatBridgeMode` raw value.
   static func from(bridgeMode: String) -> AIProvider? {

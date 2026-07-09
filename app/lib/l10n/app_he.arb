@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "צפה בהכל",
+    "expand": "הרחב",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10631,7 +10632,7 @@
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
     "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
-    "transcribeLaterNote": "פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
+    "transcribeLaterNote": "פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
     "newRecording": "הקלטה חדשה",
@@ -10640,5 +10641,84 @@
     "captureModeLater": "מאוחר יותר",
     "captureModeLiveDescription": "תמלול בזמן אמת תוך כדי דיבור.",
     "captureModeLaterDescription": "שמרו את האודיו עכשיו ותמללו מתי שתרצו.",
-    "backgroundModeUnavailable": "מצב רקע אינו זמין כי לא מחובר מכשיר תואם. חבר מכשיר Omi, OpenGlass או Friend Pendant כדי להשתמש בתכונה הזו."
+    "backgroundModeUnavailable": "מצב רקע אינו זמין כי לא מחובר מכשיר תואם. חבר מכשיר Omi, OpenGlass או Friend Pendant כדי להשתמש בתכונה הזו.",
+    "memoryThisDevice": "המכשיר הזה",
+    "memoryThisIphone": "ה-iPhone הזה",
+    "memoryThisPhone": "הטלפון הזה",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "איך להשתמש ב-Omi",
+    "deviceOnboardingTranscriptionTitle": "דברו אל ה-Omi שלכם",
+    "deviceOnboardingTranscriptionSubtitle": "אמרו כמה מילים וצפו בהן מופיעות בזמן אמת",
+    "deviceOnboardingGoodJob": "כל הכבוד!",
+    "deviceOnboardingStartSpeaking": "התחילו לדבר...",
+    "deviceOnboardingAskQuestionTitle": "שאלו את Omi שאלה",
+    "deviceOnboardingAskQuestionSubtitle": "לחצו על הכפתור פעם אחת, אמרו את השאלה, ואז לחצו שוב כשתסיימו",
+    "deviceOnboardingProcessingQuestion": "מעבד את השאלה שלכם...",
+    "deviceOnboardingListening": "מאזין...",
+    "deviceOnboardingTurnOffTitle": "כיבוי",
+    "deviceOnboardingTurnOnTitle": "הפעלה",
+    "deviceOnboardingTurnOffSubtitle": "החזיקו את הכפתור למשך 3 שניות",
+    "deviceOnboardingTurnOnSubtitle": "לחצו על הכפתור כדי להפעיל אותו מחדש",
+    "deviceOnboardingHoldButtonHint": "החזיקו את הכפתור בחוזקה עד שהנורית תכבה",
+    "deviceOnboardingStatusConnected": "מחובר",
+    "deviceOnboardingStatusConnectedDone": "מחובר!",
+    "deviceOnboardingStatusDisconnected": "מנותק",
+    "deviceOnboardingStatusTurningOff": "מכבה...",
+    "deviceOnboardingDoubleTapTitle": "התאמת הקשה כפולה",
+    "deviceOnboardingEndConversation": "סיום שיחה",
+    "deviceOnboardingEndConversationDesc": "שמירה וסיום של השיחה הנוכחית",
+    "deviceOnboardingMuteUnmute": "השתקה / ביטול השתקה",
+    "deviceOnboardingMuteUnmuteDesc": "הפעלה או כיבוי של המיקרופון",
+    "deviceOnboardingStarConversation": "סימון שיחה פעילה בכוכב",
+    "deviceOnboardingStarConversationDesc": "סימון השיחה כחשובה",
+    "deviceOnboardingSingleTapHint": "זו הייתה הקשה אחת — נסו להקיש פעמיים במהירות!",
+    "deviceOnboardingTryDoubleTap": "נסו עכשיו! הקישו פעמיים על ה-Omi שלכם",
+    "deviceOnboardingContinue": "המשך",
+    "deviceOnboardingFinish": "סיום",
+    "deviceOnboardingIntroTitle": "הכירו את ה-Omi שלכם",
+    "deviceOnboardingIntroSubtitle": "סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.",
+    "deviceOnboardingIntroDuration": "כדקה אחת",
+    "jumpToLatestMessage": "קפוץ להודעה האחרונה",
+    "latest": "האחרון",
+    "flashFirmware": "צריבת קושחה",
+    "pendantRecordingTitle": "מקליט על התליון",
+    "pendantRecordingNote": "התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.",
+    "pendantSyncingRecordings": "מסנכרן הקלטות מהתליון שלך…",
+    "pendantMinutesStored": "~{minutes} דקות מאוחסנות",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.",
+    "connectRayBanMeta": "חבר את Ray-Ban Meta",
+    "raybanMetaSetupDescription": "השתמש במשקפי Ray-Ban Meta שלך כמכשיר הלכידה של Omi עבור שיחות והקשר חזותי. Omi יפתח את אפליקציית Meta AI כדי לקשר את המשקפיים שלך.",
+    "raybanMetaOpenMetaAI": "התחבר דרך Meta AI",
+    "raybanMetaWaitingForMetaAI": "סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.",
+    "raybanMetaCheckAgain": "בדוק שוב",
+    "raybanMetaAllowCamera": "אפשר מצלמה במשקפיים",
+    "raybanMetaCameraExplanation": "Omi משתמש במצלמת המשקפיים שלך כדי להוסיף תמונות לשיחות שלך. אפשר לדלג על כך ולהשתמש בשמע בלבד.",
+    "raybanMetaSkipForNow": "דלג לעת עתה",
+    "raybanMetaAudioOnlyTitle": "מצב שמע בלבד של Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "גרסה זו של Omi יכולה להשתמש במיקרופון המשקפיים שלך באמצעות Bluetooth. לכידת תמונות דורשת את גרסת המפתחים של Meta עבור Omi.",
+    "raybanMetaMusicPauseNote": "המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.",
+    "raybanMetaContinue": "המשך",
+    "raybanMetaCapturePhoto": "צלם תמונה",
+    "raybanMetaPhotoRequested": "התמונה התבקשה — היא תופיע בשיחה שלך.",
+    "raybanMetaMicrophoneReady": "המיקרופון מוכן",
+    "raybanMetaImageCaptureReady": "לכידת תמונה מוכנה",
+    "raybanMetaImageCaptureUnavailable": "לא זמין במצב שמע בלבד",
+    "raybanMetaCamera": "מצלמה",
+    "errorConnectingRayBanMeta": "שגיאה בהתחברות ל-Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

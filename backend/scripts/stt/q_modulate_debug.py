@@ -10,12 +10,12 @@ Usage:
 import asyncio
 import json
 import os
-import struct
+import re
 import subprocess
-import sys
 import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import websockets
 
@@ -26,9 +26,9 @@ CHUNK_INTERVAL_S = 0.1
 TARGET_DURATION = 300
 
 
-def build_playlist(target_s):
-    playlist = []
-    total_s = 0
+def build_playlist(target_s: int) -> Tuple[List[Dict[str, Any]], float]:
+    playlist: List[Dict[str, Any]] = []
+    total_s = 0.0
     ref_path = LIBRISPEECH_DIR
     for reader_dir in sorted(ref_path.iterdir()):
         if not reader_dir.is_dir():
@@ -39,7 +39,7 @@ def build_playlist(target_s):
             trans_file = list(chapter_dir.glob('*.trans.txt'))
             if not trans_file:
                 continue
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for line in trans_file[0].read_text().strip().split('\n'):
                 parts = line.strip().split(' ', 1)
                 if len(parts) == 2:
@@ -69,7 +69,7 @@ def build_playlist(target_s):
     return playlist, total_s
 
 
-def convert_to_pcm16(flac_path):
+def convert_to_pcm16(flac_path: str) -> Optional[bytes]:
     result = subprocess.run(
         ['ffmpeg', '-y', '-i', flac_path, '-f', 's16le', '-ar', '16000', '-ac', '1', 'pipe:1'],
         capture_output=True,
@@ -77,7 +77,7 @@ def convert_to_pcm16(flac_path):
     return result.stdout if result.returncode == 0 else None
 
 
-def compute_wer(ref, hyp):
+def compute_wer(ref: str, hyp: str) -> float:
     ref_words = ref.upper().split()
     hyp_words = hyp.upper().split()
     if not ref_words:
@@ -96,7 +96,7 @@ def compute_wer(ref, hyp):
     return d[len(ref_words)][len(hyp_words)] / len(ref_words)
 
 
-async def main():
+async def main() -> None:
     playlist, total_s = build_playlist(TARGET_DURATION)
     ref_text = ' '.join(s['ref'] for s in playlist)
     ref_words = ref_text.split()
@@ -121,15 +121,17 @@ async def main():
     ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
     print(f'Connected to Modulate API')
 
-    raw_messages = []
-    all_utterances = []
-    all_partials = []
+    raw_messages: List[Dict[str, Any]] = []
+    all_utterances: List[Dict[str, Any]] = []
+    all_partials: List[Dict[str, Any]] = []
     recv_done = asyncio.Event()
+    send_start = 0.0
 
-    async def recv_loop():
+    async def recv_loop() -> None:
+        nonlocal send_start
         try:
             async for raw_msg in ws:
-                msg = json.loads(raw_msg)
+                msg: Any = json.loads(raw_msg)
                 msg['_recv_ts'] = time.monotonic() - send_start
                 raw_messages.append(msg)
                 msg_type = msg.get('type', '')
@@ -203,7 +205,7 @@ async def main():
 
     # Build transcript from partials (simulating confirmed-word delta)
     partial_words_emitted = 0
-    delta_words = []
+    delta_words: List[str] = []
     for pu in all_partials:
         text = pu.get('text', '').strip()
         if not text:
@@ -233,9 +235,7 @@ async def main():
     print(f'Words from delta approach: {len(delta_words)}')
 
     # WER
-    import re
-
-    def strip_punct(t):
+    def strip_punct(t: str) -> str:
         return re.sub(r'[^\w\s]', '', t)
 
     ref_clean = strip_punct(ref_text)
@@ -288,7 +288,7 @@ async def main():
     # Detailed delta trace — show where words get lost/garbled
     print(f'\n--- DELTA APPROACH DETAILED TRACE (first 30 events) ---')
     pwe = 0
-    trace_events = []
+    trace_events: List[Dict[str, Any]] = []
     for idx, pu in enumerate(all_partials):
         text = pu.get('text', '').strip()
         if not text:
@@ -388,7 +388,7 @@ async def main():
     print(f'Skipped (counter too high): {skipped}')
     print(f'Cross-boundary emits (wrong offset): {cross_boundary}')
 
-    out = {
+    out: Dict[str, Any] = {
         'raw_message_count': len(raw_messages),
         'utterance_count': len(all_utterances),
         'partial_count': len(all_partials),

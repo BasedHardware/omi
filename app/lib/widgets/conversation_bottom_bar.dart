@@ -365,7 +365,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: const Color(0xFF1A0B2E),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Row(
@@ -461,7 +466,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF6B46C1),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -478,7 +488,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent({
+    required FaIconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Container(
       height: 56,
       width: 56,
@@ -486,7 +500,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -566,7 +585,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF6B46C1),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -663,7 +687,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: Container(
               width: progressBarWidth,
               height: 4,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -710,7 +737,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                       width: progressBarWidth,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                       child: FractionallySizedBox(
@@ -772,7 +799,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Widget _buildCircularButton({
     Key? key,
-    required IconData icon,
+    required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -788,7 +815,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Material(
@@ -814,7 +846,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       decoration: BoxDecoration(
         color: Colors.red,
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), spreadRadius: 1, blurRadius: 4)],
+        boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), spreadRadius: 1, blurRadius: 4)],
       ),
       child: Material(
         color: Colors.transparent,

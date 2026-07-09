@@ -7788,6 +7788,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get viewAll => 'Prikaži sve';
 
   @override
+  String get expand => 'Proširi';
+
+  @override
   String get addTask => 'Dodaj zadatak';
 
   @override
@@ -9362,7 +9365,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Za sada radi s Omi uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.';
+      'Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9388,4 +9391,210 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
+
+  @override
+  String get memoryThisDevice => 'Ovaj uređaj';
+
+  @override
+  String get memoryThisIphone => 'Ovaj iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ovaj telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Kako koristiti Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Govori u svoj Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Izgovori nekoliko riječi i gledaj kako se pojavljuju u stvarnom vremenu';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Odlično!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Počni govoriti...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Postavi Omiju pitanje';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Pritisni dugme jednom, izgovori pitanje, pa pritisni ponovo kad završiš';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Obrađujem tvoje pitanje...';
+
+  @override
+  String get deviceOnboardingListening => 'Slušam...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Isključi';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Uključi';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Drži dugme 3 sekunde';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Pritisni dugme da ga ponovo uključiš';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Čvrsto drži dugme dok se svjetlo ne ugasi';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Povezano';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Povezano!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Nije povezano';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Isključivanje...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Prilagodi dvostruki dodir';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Završi razgovor';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Sačuvaj i završi trenutni razgovor';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Isključi / uključi zvuk';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Uključi ili isključi mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Označi tekući razgovor zvjezdicom';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Označi razgovor kao važan';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Probaj odmah! Dvaput dodirni svoj Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Nastavi';
+
+  @override
+  String get deviceOnboardingFinish => 'Završi';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Upoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Brz, praktičan obilazak svega što vaš Omi može.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Oko 1 minute';
+
+  @override
+  String get jumpToLatestMessage => 'Idi na najnoviju poruku';
+
+  @override
+  String get latest => 'Najnovije';
+
+  @override
+  String get flashFirmware => 'Instaliraj firmver';
+
+  @override
+  String get pendantRecordingTitle => 'Snimanje na privjesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Vaš privjesak snima samostalno. Snimci se sinhroniziraju s telefonom dok je aplikacija otvorena.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinhronizacija snimaka s vašeg privjeska…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min pohranjeno';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pohrana privjeska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.';
+
+  @override
+  String get connectRayBanMeta => 'Poveži Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Koristite svoje Ray-Ban Meta naočale kao Omi uređaj za snimanje za razgovore i vizuelni kontekst. Omi će otvoriti Meta AI aplikaciju da poveže vaše naočale.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Poveži se putem Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Završite povezivanje u Meta AI aplikaciji, a zatim se vratite ovdje.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Provjeri ponovo';
+
+  @override
+  String get raybanMetaAllowCamera => 'Dozvoli kameru na naočalama';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi koristi kameru vaših naočala da doda fotografije vašim razgovorima. Ovo možete preskočiti i koristiti samo zvuk.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Preskoči za sada';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta način rada samo sa zvukom';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Ova verzija Omija može koristiti mikrofon vaših naočala putem Bluetooth-a. Snimanje fotografija zahtijeva Meta razvojnu verziju Omija.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Muzika na vašem telefonu se pauzira dok se koristi mikrofon naočala.';
+
+  @override
+  String get raybanMetaContinue => 'Nastavi';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Snimi fotografiju';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotografija zatražena — pojavit će se u vašem razgovoru.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon spreman';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Snimanje slike spremno';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nedostupno u načinu rada samo sa zvukom';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Greška pri povezivanju s Ray-Ban Meta: $error';
+  }
 }

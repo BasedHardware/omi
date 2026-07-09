@@ -8,7 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
-import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';

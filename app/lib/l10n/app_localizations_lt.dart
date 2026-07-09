@@ -7772,6 +7772,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get viewAll => 'Peržiūrėti viską';
 
   @override
+  String get expand => 'Išskleisti';
+
+  @override
   String get addTask => 'Pridėti užduotį';
 
   @override
@@ -9351,7 +9354,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+      'Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9377,4 +9380,211 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
+
+  @override
+  String get memoryThisDevice => 'Šis įrenginys';
+
+  @override
+  String get memoryThisIphone => 'Šis iPhone';
+
+  @override
+  String get memoryThisPhone => 'Šis telefonas';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Kaip naudoti Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Kalbėkite į Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Pasakykite kelis žodžius ir stebėkite, kaip jie atsiranda realiuoju laiku';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Šaunu!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Pradėkite kalbėti...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Užduokite Omi klausimą';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Vieną kartą paspauskite mygtuką, užduokite klausimą ir baigę paspauskite dar kartą';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Apdorojamas jūsų klausimas...';
+
+  @override
+  String get deviceOnboardingListening => 'Klausoma...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Išjungti';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Įjungti';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Palaikykite mygtuką 3 sekundes';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Paspauskite mygtuką, kad vėl įjungtumėte';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tvirtai laikykite mygtuką, kol užges lemputė';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Prijungta';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Prijungta!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Atjungta';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Išjungiama...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Tinkinti dvigubą bakstelėjimą';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Baigti pokalbį';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Išsaugoti ir baigti esamą pokalbį';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Nutildyti / Įjungti garsą';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Įjungti arba išjungti mikrofoną';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Pažymėti vykstantį pokalbį žvaigždute';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Pažymėti pokalbį kaip svarbų';
+
+  @override
+  String get deviceOnboardingSingleTapHint =>
+      'Tai buvo vienas bakstelėjimas — pabandykite greitai bakstelėti du kartus!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Išbandykite dabar! Dukart bakstelėkite Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Tęsti';
+
+  @override
+  String get deviceOnboardingFinish => 'Baigti';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Susipažinkite su savo Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Greita praktinė apžvalga visko, ką gali jūsų Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Maždaug 1 minutė';
+
+  @override
+  String get jumpToLatestMessage => 'Peršokti į naujausią pranešimą';
+
+  @override
+  String get latest => 'Naujausias';
+
+  @override
+  String get flashFirmware => 'Įrašyti programinę aparatinę įrangą';
+
+  @override
+  String get pendantRecordingTitle => 'Įrašoma pakabuke';
+
+  @override
+  String get pendantRecordingNote =>
+      'Jūsų pakabukas įrašinėja savarankiškai. Įrašai sinchronizuojami su telefonu, kol programa atidaryta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinchronizuojami įrašai iš jūsų pakabuko…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min išsaugota';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.';
+
+  @override
+  String get connectRayBanMeta => 'Prijungti Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Naudokite savo Ray-Ban Meta akinius kaip Omi įrašymo įrenginį pokalbiams ir vaizdiniam kontekstui. Omi atidarys Meta AI programėlę, kad susietų jūsų akinius.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Prisijungti per Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Užbaikite prisijungimą Meta AI programėlėje ir grįžkite čia.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tikrinti dar kartą';
+
+  @override
+  String get raybanMetaAllowCamera => 'Leisti naudoti akinių kamerą';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi naudoja jūsų akinių kamerą, kad pridėtų nuotraukas prie jūsų pokalbių. Galite tai praleisti ir naudoti tik garsą.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Praleisti kol kas';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta tik garso režimas';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Ši Omi versija gali naudoti jūsų akinių mikrofoną per Bluetooth. Nuotraukoms fiksuoti reikia Meta kūrėjų Omi versijos.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Muzika jūsų telefone pristabdoma, kol naudojamas akinių mikrofonas.';
+
+  @override
+  String get raybanMetaContinue => 'Tęsti';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fotografuoti';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Nuotrauka užsakyta — ji pasirodys jūsų pokalbyje.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofonas paruoštas';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Vaizdų fiksavimas paruoštas';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Negalima tik garso režimu';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Klaida jungiantis prie Ray-Ban Meta: $error';
+  }
 }

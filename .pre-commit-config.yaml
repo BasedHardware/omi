@@ -9,8 +9,9 @@
 #   detect-secrets  ~1.2s   pre-commit-hooks ~0.1s
 #   Total:          ~2.0s
 #
-# Pre-push hook runs pytest on changed files (~10-30s).
-# See: .git/hooks/pre-push
+# Pre-push hook runs fast deterministic CI lint guards.
+# Install repo hooks: make setup
+# Run manually: .github/scripts/run-pre-push.sh
 
 repos:
   # ── Python formatting (mirrors CI: black --line-length 120) ──

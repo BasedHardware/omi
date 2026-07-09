@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 
 def _read_text(path):
@@ -595,6 +596,7 @@ _STUB_MODULES = [
     'models',
     'models.conversation',
     'models.conversation_enums',
+    'models.sync_audio',
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
@@ -619,6 +621,8 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.conversations.process_conversation',
+    'python_multipart',
+    'python_multipart.multipart',
 ]
 
 
@@ -660,11 +664,19 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
+        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
+        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
+        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
@@ -691,6 +703,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
         sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
@@ -722,6 +737,15 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+
+        class _AudioPrecacheResponse(BaseModel):
+            pass
+
+        class _AudioUrlsResponse(BaseModel):
+            pass
+
+        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
         # Import under stubs
         from routers.sync import process_segment
@@ -918,7 +942,7 @@ class TestProcessSegmentReal:
 
         mock_segment = MagicMock()
         mock_segment.end = 5.0
-        mock_segment.dict.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+        mock_segment.model_dump.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
 
         # Simulate existing conversation with the SAME segments (retry scenario)
         existing_conv = {
@@ -1044,6 +1068,13 @@ _CHAT_STUB_MODULES = [
     'database.apps',
     'database.redis_db',
     'firebase_admin',
+    'utils.apps',
+    'utils.conversation_helpers',
+    'utils.conversations',
+    'utils.conversations.factory',
+    'utils.llm',
+    'utils.llm.chat',
+    'utils.llm.persona',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.notifications',
@@ -1080,8 +1111,16 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
+        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
+        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
+        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
@@ -1095,6 +1134,11 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
         sys.modules['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
         sys.modules['database.apps'].record_app_usage = MagicMock()
+        sys.modules['utils.apps'].get_available_app_by_id = MagicMock(return_value=None)
+        sys.modules['utils.conversation_helpers'].extract_memory_ids = MagicMock(return_value=[])
+        sys.modules['utils.conversations.factory'].deserialize_conversation = MagicMock(return_value=None)
+        sys.modules['utils.llm.chat'].initial_chat_message = MagicMock()
+        sys.modules['utils.llm.persona'].initial_persona_chat_message = MagicMock()
 
         # Model stubs
         sys.modules['models.chat'].ChatSession = MagicMock()
@@ -1103,6 +1147,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.chat'].MessageConversation = MagicMock()
         sys.modules['models.conversation'].Conversation = MagicMock()
         sys.modules['models.notification_message'].NotificationMessage = MagicMock()
+        sys.modules['models.app'].App = MagicMock()
         sys.modules['models.app'].UsageHistoryType = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
 

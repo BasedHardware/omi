@@ -58,6 +58,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
   const adapterNativeSessionId = overrides.binding?.adapterNativeSessionId ?? "session-1";
   return {
     sessionId,
+    ownerId: overrides.ownerId ?? "owner-runtime",
     requestId: overrides.requestId ?? "request-runtime",
     clientId: overrides.clientId ?? "client-runtime",
     runId: overrides.runId ?? "run_runtime",
@@ -136,7 +137,6 @@ describe("PiMonoAdapter prompt correlation", () => {
       mode: "act",
       metadata: {
         protocolVersion: 2,
-        legacyAdapterSessionId: "legacy-runtime",
         disableSwiftBackedTools: true,
       },
     };
@@ -152,7 +152,6 @@ describe("PiMonoAdapter prompt correlation", () => {
       runId: "run_runtime",
       attemptId: "att_runtime",
       adapterSessionId: "session-1",
-      legacyAdapterSessionId: "legacy-runtime",
       disableSwiftBackedTools: true,
     });
 
@@ -500,8 +499,8 @@ describe("tool_use event filtering", () => {
     fileURLToPath(new URL("../src/index.ts", import.meta.url)),
     "utf8"
   );
-  const facadeSrc = readFileSync(
-    fileURLToPath(new URL("../src/runtime/compatibility-facade.ts", import.meta.url)),
+  const transportSrc = readFileSync(
+    fileURLToPath(new URL("../src/runtime/jsonl-transport.ts", import.meta.url)),
     "utf8"
   );
 
@@ -511,14 +510,14 @@ describe("tool_use event filtering", () => {
     expect(indexSrc).toMatch(/registry\.register\(["']pi-mono["']/);
   });
 
-  it("source: compatibility facade suppresses tool_use when configured or routed to pi-mono", () => {
-    expect(facadeSrc).toMatch(/case\s+["']tool_use["'][\s\S]*!this\.suppressToolUseEvents\s*&&\s*context\.adapterId\s*!==\s*["']pi-mono["']/);
+  it("source: jsonl transport suppresses tool_use when configured or routed to pi-mono", () => {
+    expect(transportSrc).toMatch(/case\s+["']tool_use["'][\s\S]*!this\.suppressToolUseEvents\s*&&\s*context\.adapterId\s*!==\s*["']pi-mono["']/);
   });
 
   it("behavioral: suppresses tool_use events and forwards all other types", () => {
     const forwarded: any[] = [];
 
-    // Equivalent filtering path used by the compatibility facade for pi-mono events.
+    // Equivalent filtering path used by the jsonl transport for pi-mono events.
     const eventCallback = (event: any) => {
       if ((event as any).type === "tool_use") return;
       forwarded.push(event);

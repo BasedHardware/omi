@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "سب دیکھیں",
+    "expand": "پھیلائیں",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10631,7 +10632,7 @@
     "syncCustomSttWarningMessage": "آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔",
     "transcribeLaterTitle": "بعد میں ٹرانسکرائب کریں",
     "transcribeLaterDescription": "ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔",
-    "transcribeLaterNote": "فی الحال صرف Omi ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔",
+    "transcribeLaterNote": "فی الحال Omi اور Limitless ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔",
     "transcribeLaterStorageFull": "آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔",
     "unmute": "آواز چالو کریں",
     "newRecording": "نئی ریکارڈنگ",
@@ -10640,5 +10641,84 @@
     "captureModeLater": "بعد میں",
     "captureModeLiveDescription": "بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔",
     "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔",
-    "backgroundModeUnavailable": "پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔"
+    "backgroundModeUnavailable": "پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔",
+    "memoryThisDevice": "یہ ڈیوائس",
+    "memoryThisIphone": "یہ iPhone",
+    "memoryThisPhone": "یہ فون",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Omi کیسے استعمال کریں",
+    "deviceOnboardingTranscriptionTitle": "اپنے Omi سے بولیں",
+    "deviceOnboardingTranscriptionSubtitle": "چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں",
+    "deviceOnboardingGoodJob": "شاباش!",
+    "deviceOnboardingStartSpeaking": "بولنا شروع کریں...",
+    "deviceOnboardingAskQuestionTitle": "Omi سے سوال پوچھیں",
+    "deviceOnboardingAskQuestionSubtitle": "بٹن ایک بار دبائیں، اپنا سوال بولیں، اور مکمل ہونے پر دوبارہ دبائیں",
+    "deviceOnboardingProcessingQuestion": "آپ کے سوال پر کارروائی ہو رہی ہے...",
+    "deviceOnboardingListening": "سن رہا ہوں...",
+    "deviceOnboardingTurnOffTitle": "بند کریں",
+    "deviceOnboardingTurnOnTitle": "آن کریں",
+    "deviceOnboardingTurnOffSubtitle": "بٹن کو 3 سیکنڈ تک دبائے رکھیں",
+    "deviceOnboardingTurnOnSubtitle": "دوبارہ آن کرنے کے لیے بٹن دبائیں",
+    "deviceOnboardingHoldButtonHint": "بٹن کو مضبوطی سے دبائے رکھیں جب تک روشنی بند نہ ہو جائے",
+    "deviceOnboardingStatusConnected": "منسلک",
+    "deviceOnboardingStatusConnectedDone": "منسلک ہو گیا!",
+    "deviceOnboardingStatusDisconnected": "منقطع",
+    "deviceOnboardingStatusTurningOff": "بند ہو رہا ہے...",
+    "deviceOnboardingDoubleTapTitle": "ڈبل ٹیپ حسبِ ضرورت ترتیب دیں",
+    "deviceOnboardingEndConversation": "گفتگو ختم کریں",
+    "deviceOnboardingEndConversationDesc": "موجودہ گفتگو محفوظ کر کے ختم کریں",
+    "deviceOnboardingMuteUnmute": "میوٹ / ان میوٹ",
+    "deviceOnboardingMuteUnmuteDesc": "مائیکروفون آن یا آف کریں",
+    "deviceOnboardingStarConversation": "جاری گفتگو کو سٹار کریں",
+    "deviceOnboardingStarConversationDesc": "گفتگو کو اہم کے طور پر نشان زد کریں",
+    "deviceOnboardingSingleTapHint": "یہ سنگل ٹیپ تھا — جلدی سے دو بار ٹیپ کرنے کی کوشش کریں!",
+    "deviceOnboardingTryDoubleTap": "ابھی آزمائیں! اپنے Omi کو ڈبل ٹیپ کریں",
+    "deviceOnboardingContinue": "جاری رکھیں",
+    "deviceOnboardingFinish": "مکمل کریں",
+    "deviceOnboardingIntroTitle": "اپنے Omi کو جانیں",
+    "deviceOnboardingIntroSubtitle": "آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔",
+    "deviceOnboardingIntroDuration": "تقریباً 1 منٹ",
+    "jumpToLatestMessage": "تازہ ترین پیغام پر جائیں",
+    "latest": "تازہ ترین",
+    "flashFirmware": "فرم ویئر فلیش کریں",
+    "pendantRecordingTitle": "پینڈنٹ پر ریکارڈنگ جاری ہے",
+    "pendantRecordingNote": "آپ کا پینڈنٹ خود بخود ریکارڈ کر رہا ہے۔ ایپ کھلی ہونے کے دوران ریکارڈنگز آپ کے فون سے سنک ہوتی ہیں۔",
+    "pendantSyncingRecordings": "آپ کے پینڈنٹ سے ریکارڈنگز سنک ہو رہی ہیں…",
+    "pendantMinutesStored": "~{minutes} منٹ محفوظ",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔",
+    "connectRayBanMeta": "Ray-Ban Meta جوڑیں",
+    "raybanMetaSetupDescription": "گفتگو اور بصری سیاق و سباق کے لیے اپنی Ray-Ban Meta عینک کو اپنے Omi کیپچر ڈیوائس کے طور پر استعمال کریں۔ Omi آپ کی عینک کو منسلک کرنے کے لیے Meta AI ایپ کھولے گا۔",
+    "raybanMetaOpenMetaAI": "Meta AI کے ذریعے جڑیں",
+    "raybanMetaWaitingForMetaAI": "Meta AI ایپ میں کنکشن مکمل کریں، پھر یہاں واپس آئیں۔",
+    "raybanMetaCheckAgain": "دوبارہ چیک کریں",
+    "raybanMetaAllowCamera": "عینک پر کیمرے کی اجازت دیں",
+    "raybanMetaCameraExplanation": "Omi آپ کی گفتگو میں تصاویر شامل کرنے کے لیے آپ کی عینک کا کیمرہ استعمال کرتا ہے۔ آپ اسے چھوڑ کر صرف آڈیو استعمال کر سکتے ہیں۔",
+    "raybanMetaSkipForNow": "ابھی کے لیے چھوڑ دیں",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta صرف آڈیو موڈ",
+    "raybanMetaAudioOnlyExplanation": "Omi کا یہ ورژن Bluetooth کے ذریعے آپ کی عینک کا مائیکروفون استعمال کر سکتا ہے۔ تصویر کیپچر کے لیے Omi کا Meta ڈیولپر بلڈ درکار ہے۔",
+    "raybanMetaMusicPauseNote": "جب عینک کا مائیکروفون استعمال میں ہو تو آپ کے فون پر موسیقی رک جاتی ہے۔",
+    "raybanMetaContinue": "جاری رکھیں",
+    "raybanMetaCapturePhoto": "تصویر لیں",
+    "raybanMetaPhotoRequested": "تصویر کی درخواست کی گئی — یہ آپ کی گفتگو میں ظاہر ہوگی۔",
+    "raybanMetaMicrophoneReady": "مائیکروفون تیار ہے",
+    "raybanMetaImageCaptureReady": "تصویر کیپچر تیار ہے",
+    "raybanMetaImageCaptureUnavailable": "صرف آڈیو موڈ میں دستیاب نہیں",
+    "raybanMetaCamera": "کیمرہ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta سے جڑنے میں خرابی: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

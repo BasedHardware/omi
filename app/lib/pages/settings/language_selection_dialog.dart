@@ -94,7 +94,7 @@ class LanguageSelectionDialog {
                         decoration: BoxDecoration(
                           color: const Color(0xFF2A2A2A),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF8E8E93).withOpacity(0.3)),
+                          border: Border.all(color: const Color(0xFF8E8E93).withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -152,7 +152,7 @@ class LanguageSelectionDialog {
                                   trailing:
                                       isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                                  selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   onTap: () {
                                     setState(() {
@@ -223,7 +223,7 @@ class LanguageSelectionDialog {
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withOpacity(0.3),
+                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
                     foregroundColor: Colors.white,
                   ),
                   child: Text(context.l10n.confirm),

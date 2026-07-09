@@ -4,7 +4,7 @@ import json
 import math
 import uuid
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
 from utils.executors import db_executor, run_blocking
@@ -24,6 +24,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _get_user(uid: str) -> Any:
+    return auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+
+
 # iOS bundle ID for APNs
 IOS_BUNDLE_ID = 'com.friend-app-with-wearable.ios12'
 
@@ -42,18 +47,18 @@ def _generate_tag(content: str) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
-def _generate_notification_tag(user_id: str, title: str, body: str, data: dict = None) -> str:
+def _generate_notification_tag(user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> str:
     """Generate a tag for notification deduplication based on content."""
     content = f"{user_id}:{title}:{body}"
     if data:
-        unique_id = data.get('action_item_id') or data.get('app_id') or data.get('type', '')
+        unique_id: str = str(data.get('action_item_id') or data.get('app_id') or data.get('type', ''))
         content += f":{unique_id}"
     return _generate_tag(content)
 
 
 def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool = False) -> messaging.AndroidConfig:
     """Build Android configuration with deduplication."""
-    config_kwargs = {
+    config_kwargs: Dict[str, Any] = {
         'collapse_key': tag,
         'priority': priority,
     }
@@ -83,7 +88,9 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
-def _build_webpush_config(tag: str, title: str = None, body: str = None, link: str = None) -> messaging.WebpushConfig:
+def _build_webpush_config(
+    tag: str, title: Optional[str] = None, body: Optional[str] = None, link: Optional[str] = None
+) -> messaging.WebpushConfig:
     """Build WebPush configuration for browser notifications.
 
     Note: WebpushNotification must explicitly include title/body because
@@ -93,7 +100,7 @@ def _build_webpush_config(tag: str, title: str = None, body: str = None, link: s
     fcm_options.link must be an absolute HTTPS URL - relative paths will cause
     FCM to reject the entire message batch with 'WebpushFCMOptions.link must be a HTTPS URL'.
     """
-    config_kwargs = {
+    config_kwargs: Dict[str, Any] = {
         'headers': {
             'Topic': tag,  # For deduplication
             'Urgency': 'high',
@@ -115,17 +122,17 @@ def _build_webpush_config(tag: str, title: str = None, body: str = None, link: s
 def _build_message(
     token: str,
     tag: str,
-    notification: messaging.Notification = None,
-    data: dict = None,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
     is_background: bool = False,
     priority: str = 'normal',
 ) -> messaging.Message:
     """Build a complete FCM message with proper platform configs."""
     # Extract title/body for webpush config (browsers need explicit values)
-    title = notification.title if notification else None
-    body = notification.body if notification else None
+    title: Optional[str] = cast(Any, notification).title if notification else None
+    body: Optional[str] = cast(Any, notification).body if notification else None
     # Extract navigate_to for webpush click-through link
-    link = data.get('navigate_to') if data else None
+    link: Optional[str] = data.get('navigate_to') if data else None
 
     return messaging.Message(
         token=token,
@@ -140,11 +147,11 @@ def _build_message(
 def _send_to_user(
     user_id: str,
     tag: str,
-    notification: messaging.Notification = None,
-    data: dict = None,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
     is_background: bool = False,
     priority: str = 'normal',
-    tokens: list = None,
+    tokens: Optional[List[str]] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
     if tokens is None:
@@ -157,10 +164,10 @@ def _send_to_user(
     messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
 
     try:
-        response = messaging.send_each(messages)
+        response = cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]  # firebase_admin send_each untyped
 
         # Collect invalid tokens and count successes
-        invalid_tokens = []
+        invalid_tokens: List[str] = []
         success_count = 0
 
         for idx, result in enumerate(response.responses):
@@ -186,7 +193,9 @@ def _send_to_user(
         return 0
 
 
-def send_notification(user_id: str, title: str, body: str, data: dict = None, tokens: list = None):
+def send_notification(
+    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+) -> None:
     """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
     logger.info(f'send_notification to user {user_id}')
     tag = _generate_notification_tag(user_id, title, body, data)
@@ -194,11 +203,12 @@ def send_notification(user_id: str, title: str, body: str, data: dict = None, to
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
-async def send_subscription_paid_personalized_notification(user_id: str, data: dict = None):
+async def send_subscription_paid_personalized_notification(user_id: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Send a personalized notification to all user's devices when unlimited subscription is purchased"""
     # Get user name from Firebase Auth
+    name: str = "there"
     try:
-        user = auth.get_user(user_id)
+        user = _get_user(user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -211,19 +221,20 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: d
     # Generate welcome message for unlimited plan with user context
     title, body = await generate_notification_message(user_id, name, "unlimited")
 
-    send_notification(user_id, "omi", body, data)
+    send_notification(user_id, title, body, data)
 
 
-async def send_credit_limit_notification(user_id: str):
+async def send_credit_limit_notification(user_id: str) -> None:
     """Send a personalized credit limit notification if not sent recently"""
-    # Check if notification was sent recently (within 6 hours)
-    if has_credit_limit_notification_been_sent(user_id):
+    # Check if notification was sent recently (within 6 hours). Offloaded: the Redis read is sync
+    # and blocks the event loop in this async path.
+    if await run_blocking(db_executor, has_credit_limit_notification_been_sent, user_id):
         logger.info(f"Credit limit notification already sent recently for user {user_id}")
         return
 
-    # Get user name from Firebase Auth
+    name: str = "there"
     try:
-        user = auth.get_user(user_id)
+        user = _get_user(user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -239,21 +250,23 @@ async def send_credit_limit_notification(user_id: str):
     # Send notification
     send_notification(user_id, title, body)
 
-    # Cache that notification was sent (6 hours TTL)
-    set_credit_limit_notification_sent(user_id)
+    # Cache that notification was sent (6 hours TTL). Offloaded: the Redis write is sync and blocks
+    # the event loop in this async path.
+    await run_blocking(db_executor, set_credit_limit_notification_sent, user_id)
     logger.info(f"Credit limit notification sent to user {user_id}")
 
 
-async def send_silent_user_notification(user_id: str):
+async def send_silent_user_notification(user_id: str) -> None:
     """Send a notification if a basic-plan user is silent for too long."""
-    # Check if notification was sent recently (within 24 hours)
-    if has_silent_user_notification_been_sent(user_id):
+    # Check if notification was sent recently (within 24 hours). Offloaded: the Redis read is sync
+    # and blocks the event loop in this async path.
+    if await run_blocking(db_executor, has_silent_user_notification_been_sent, user_id):
         logger.info(f"Silent user notification already sent recently for user {user_id}")
         return
 
-    # Get user name from Firebase Auth
+    name: str = "there"
     try:
-        user = auth.get_user(user_id)
+        user = _get_user(user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -269,16 +282,18 @@ async def send_silent_user_notification(user_id: str):
     # Send notification
     send_notification(user_id, title, body)
 
-    # Cache that notification was sent (24 hours TTL)
-    set_silent_user_notification_sent(user_id)
+    # Cache that notification was sent (24 hours TTL). Offloaded: the Redis write is sync and blocks
+    # the event loop in this async path.
+    await run_blocking(db_executor, set_silent_user_notification_sent, user_id)
     logger.info(f"Silent user notification sent to user {user_id}")
 
 
-def send_training_data_submitted_notification(user_id: str):
+def send_training_data_submitted_notification(user_id: str) -> None:
     """Send a notification when user submits their training data opt-in request."""
     # Get user name from Firebase Auth
+    name: str = "there"
     try:
-        user = auth.get_user(user_id)
+        user = _get_user(user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -295,7 +310,7 @@ def send_training_data_submitted_notification(user_id: str):
     logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
-async def send_bulk_notification(user_tokens: list, title: str, body: str):
+async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
     """Send notification to multiple users in batches."""
     try:
         batch_size = 500
@@ -303,12 +318,12 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
         tag = _generate_tag(f"bulk:{title}:{body}")
         notification = messaging.Notification(title=title, body=body)
 
-        def send_batch(batch_tokens):
+        def send_batch(batch_tokens: List[str]) -> Tuple[Any, List[str]]:
             messages = [_build_message(token, tag, notification=notification) for token in batch_tokens]
-            response = messaging.send_each(messages)
+            response = cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]  # firebase_admin send_each untyped
 
             # Collect permanently invalid tokens
-            invalid_tokens = []
+            invalid_tokens: List[str] = []
             for idx, result in enumerate(response.responses):
                 if not result.success and result.exception:
                     error_code = getattr(result.exception, 'code', None)
@@ -328,7 +343,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
         invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
         if invalid_tokens:
             logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
-            notification_db.remove_bulk_tokens(invalid_tokens)
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
 
     except Exception as e:
         logger.error(f"Error sending bulk notification: {e}")
@@ -374,7 +389,7 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
-def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
+def send_apple_reminders_sync_push(user_id: str, action_items: List[Dict[str, Any]]) -> bool:
     """
     Sends a single silent push notification with a batch of action items to sync to Apple Reminders.
     This avoids iOS throttling that occurs when sending multiple rapid silent pushes.
@@ -391,10 +406,10 @@ def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
 
     logger.info(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
 
-    items_payload = []
+    items_payload: List[Dict[str, Any]] = []
     for item in action_items:
         due_at = item.get('due_at')
-        due_at_str = ''
+        due_at_str: str = ''
         if due_at:
             if hasattr(due_at, 'isoformat'):
                 due_at_str = due_at.isoformat()
@@ -429,7 +444,9 @@ def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
     return success_count > 0
 
 
-def send_merge_completed_message(user_id: str, merged_conversation_id: str, removed_conversation_ids: list):
+def send_merge_completed_message(
+    user_id: str, merged_conversation_id: str, removed_conversation_ids: List[str]
+) -> None:
     """
     Sends a data-only FCM message when conversation merge completes.
 
@@ -528,7 +545,7 @@ def sync_action_item_reminder(
     if completed or not due_at:
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
-    due_iso = due_at.isoformat() if hasattr(due_at, 'isoformat') else due_at
+    due_iso: str = due_at.isoformat() if isinstance(due_at, datetime) else due_at
     send_action_item_update_message(
         user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso
     )

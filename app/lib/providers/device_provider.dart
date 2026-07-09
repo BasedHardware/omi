@@ -15,7 +15,7 @@ import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
@@ -408,6 +408,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       deviceType: 'omi',
       isConnected: false,
     );
+
+    // Notify interactive device onboarding of disconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -492,6 +495,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     onDeviceConnected?.call(device);
+
+    // Notify interactive device onboarding of reconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceReconnected();
   }
 
   /// Check firmware version to determine multi-file sync support.
@@ -529,7 +535,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final ringStatus = await connection.getRingStatus();
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
-            'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)');
+          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+        );
         onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
         return;
       }
@@ -604,6 +611,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _isOmiGlassDevice {
     if (pairedDevice == null) return false;
     if (pairedDevice!.type == DeviceType.openglass) return true;
+    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
+    // contain 'glasses' but its firmware is managed by the Meta AI app.
+    if (pairedDevice!.type != DeviceType.omi) return false;
     final name = pairedDevice!.name.toLowerCase();
     return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
   }

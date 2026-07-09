@@ -1,4 +1,5 @@
 import Foundation
+import OmiWAL
 
 actor APIClient {
   static let shared = APIClient()
@@ -76,11 +77,19 @@ actor APIClient {
 
   // MARK: - Request Building
 
-  func buildHeaders(requireAuth: Bool = true) async throws -> [String: String] {
+  func buildHeaders(
+    requireAuth: Bool = true,
+    forceRefreshAuth: Bool = false,
+    includeBYOK: Bool = true
+  ) async throws -> [String: String] {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+      "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
+      "X-Desktop-Request-ID": UUID().uuidString,
     ]
 
     if requireAuth {
@@ -88,15 +97,28 @@ actor APIClient {
         headers["Authorization"] = testHeader
       } else {
         let authService = await MainActor.run { AuthService.shared }
-        let authHeader = try await authService.getAuthHeader()
+        let authHeader = try await authService.getAuthHeader(forceRefresh: forceRefreshAuth)
         headers["Authorization"] = authHeader
       }
     }
 
     // BYOK: attach user-provided keys so the backend uses them for LLM/STT
     // calls this request triggers. Sent per-request; never stored server-side.
-    for (provider, entry) in APIKeyService.byokSnapshot {
-      headers[provider.headerName] = entry.key
+    if includeBYOK, APIKeyService.isByokActive {
+      let health = await MainActor.run { CredentialHealthManager.shared }
+      let snapshot = APIKeyService.byokSnapshot
+      for (provider, entry) in snapshot {
+        let canAttach = await MainActor.run {
+          health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)
+        }
+        if canAttach {
+          headers[provider.headerName] = entry.key
+        } else {
+          log(
+            "CredentialHealth: context=build_headers failure_class=byok_invalid_suppressed"
+              + " provider=\(provider.rawValue)")
+        }
+      }
     }
 
     return headers
@@ -107,13 +129,14 @@ actor APIClient {
   func get<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     return try await performRequest(request)
   }
@@ -122,14 +145,15 @@ actor APIClient {
     _ endpoint: String,
     body: B,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
     request.httpBody = try JSONEncoder().encode(body)
 
     return try await performRequest(request)
@@ -138,38 +162,110 @@ actor APIClient {
   func post<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     return try await performRequest(request)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
-  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall and
-  /// returns 402/403 if not entitled — any non-200 surfaces here as a thrown error,
-  /// so we return nil and the caller falls back to the legacy cascade.
-  func mintRealtimeToken(provider: String) async -> String? {
+  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
+  /// Credential failures are typed so the hub can recover deterministically instead
+  /// of treating every failure as a silent fallback.
+  func mintRealtimeToken(provider: String) async throws -> String {
     struct Resp: Decodable { let token: String }
     let base = rustBackendURL
-    guard !base.isEmpty else { return nil }
+    guard !base.isEmpty else {
+      throw CredentialHealthError.backendTransient(
+        statusCode: nil,
+        message: "Desktop backend URL is not configured.")
+    }
     let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/realtime/session") else {
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: "Invalid desktop backend URL.")
+    }
+
+    let providerType = CredentialHealthManager.realtimeProvider(from: provider)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true, includeBYOK: false)
+    request.httpBody = try JSONEncoder().encode(["provider": provider])
+
     do {
-      let resp: Resp = try await post(
-        "v2/realtime/session", body: ["provider": provider], customBaseURL: normalized)
-      return resp.token.isEmpty ? nil : resp.token
+      return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+    } catch let error as RealtimeTokenMintError {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
+    } catch let error as CredentialHealthError {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
     } catch {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
-      return nil
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
     }
   }
 
+  private func performRealtimeMintRequest(
+    _ request: URLRequest,
+    provider: RealtimeHubProvider?,
+    retriedAuth: Bool
+  ) async throws -> String {
+    struct Resp: Decodable { let token: String }
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
+      }
+      do {
+        let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
+        log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
+        return token
+      } catch let error as RealtimeTokenMintError {
+        throw error
+      } catch let error as CredentialHealthError {
+        throw error
+      } catch {
+        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
+      }
+    }
+
+    if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
+      throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let payload = Self.extractErrorPayload(from: data)
+      let healthError = CredentialHealthManager.classifyHTTPFailure(
+        statusCode: httpResponse.statusCode,
+        payload: payload,
+        provider: provider)
+      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+    }
+
+    let resp = try decoder.decode(Resp.self, from: data)
+    guard !resp.token.isEmpty else {
+      throw CredentialHealthError.backendTransient(statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
+    }
+    return resp.token
+  }
+
   /// Report a managed realtime turn's token usage so the backend can price it and record
-  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// it into the llm_usage cost ledger. Fire-and-forget; failures are
   /// logged and dropped (the backend reconciler is the eventual safety net). Only called
   /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
   func reportRealtimeUsage(
@@ -208,17 +304,11 @@ actor APIClient {
     }
   }
 
-  func delete(
-    _ endpoint: String,
-    requireAuth: Bool = true,
-    customBaseURL: String? = nil
+  private func performVoidRequest(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
   ) async throws {
-    let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
-    var request = URLRequest(url: url)
-    request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
-
     let (_, response) = try await session.data(for: request)
 
     guard let httpResponse = response as? HTTPURLResponse else {
@@ -226,7 +316,14 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: authPolicy.signOutOn401
+      ) else {
+        throw APIError.unauthorized
+      }
+      return try await performVoidRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
@@ -234,41 +331,99 @@ actor APIClient {
     }
   }
 
+  func delete(
+    _ endpoint: String,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true,
+    authPolicy: RequestAuthPolicy = .default
+  ) async throws {
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+
+    try await performVoidRequest(request, authPolicy: authPolicy)
+  }
+
   // MARK: - Request Execution
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+  /// When false, a post-refresh HTTP 401 throws `.unauthorized` without invalidating the
+  /// Firebase session (e.g. background polling that should not sign the user out).
+  struct RequestAuthPolicy: Sendable {
+    var signOutOn401: Bool
+
+    static let `default` = RequestAuthPolicy(signOutOn401: true)
+    static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
+  }
+
+  private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
+    guard signOutOn401 else { return }
+    await MainActor.run {
+      AuthSessionCoordinator.shared.handleHTTPUnauthorized(
+        endpoint: endpoint,
+        signOutOn401: true,
+        auth: AuthService.shared
+      )
+    }
+  }
+
+  private func endpointLabel(for request: URLRequest) -> String {
+    request.url?.path ?? request.url?.absoluteString ?? "unknown"
+  }
+
+  /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
+  private func authorizedRetryRequest(
+    from request: URLRequest,
+    retriedAuth: Bool,
+    signOutOn401: Bool
+  ) async throws -> URLRequest? {
+    if retriedAuth {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+    let authService = await MainActor.run { AuthService.shared }
+    do {
+      var retry = request
+      retry.setValue(
+        try await authService.getAuthHeader(forceRefresh: true),
+        forHTTPHeaderField: "Authorization"
+      )
+      return retry
+    } catch AuthError.notSignedIn {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+  }
+
+  private func performRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> T {
     let (data, response) = try await session.data(for: request)
 
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
-    // Handle 401 - token might be expired
     if httpResponse.statusCode == 401 {
-      // Try to refresh token and retry once
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
-      }
-
-      if retryHttpResponse.statusCode == 401 {
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: authPolicy.signOutOn401
+      ) else {
         throw APIError.unauthorized
       }
 
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        let detail = Self.extractErrorDetail(from: retryData)
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
-      }
-
-      return try decoder.decode(T.self, from: retryData)
+      return try await performRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
@@ -304,11 +459,18 @@ actor APIClient {
   }
 
   private static func extractErrorDetail(from data: Data) -> String? {
+    if let payload = extractErrorPayload(from: data) {
+      return payload.preferredMessage
+    }
     guard
       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let detail = json["detail"] as? String
     else { return nil }
     return detail
+  }
+
+  private static func extractErrorPayload(from data: Data) -> APIErrorPayload? {
+    try? JSONDecoder().decode(APIErrorPayload.self, from: data)
   }
 }
 
@@ -319,10 +481,19 @@ enum APIError: LocalizedError {
   case unauthorized
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
+  case unsupportedTierScopedBulkMutation(String)
+  case syncRateLimited(retryAfterSeconds: Int?)
+  case syncUploadRejected(reason: String)
 
   var detail: String? {
-    if case .httpError(_, let detail) = self { return detail }
-    return nil
+    switch self {
+    case .httpError(_, let detail):
+      return detail
+    case .syncUploadRejected(let reason):
+      return reason
+    default:
+      return nil
+    }
   }
 
   var errorDescription: String? {
@@ -336,7 +507,35 @@ enum APIError: LocalizedError {
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
+    case .unsupportedTierScopedBulkMutation(let operation):
+      return "Layer-scoped bulk memory \(operation) is not supported yet."
+    case .syncRateLimited(let retryAfterSeconds):
+      if let retryAfterSeconds {
+        return "Sync rate limited (retry after \(retryAfterSeconds)s)"
+      }
+      return "Sync rate limited"
+    case .syncUploadRejected(let reason):
+      return reason
     }
+  }
+}
+
+struct RealtimeTokenMintError: LocalizedError {
+  let statusCode: Int
+  let healthError: CredentialHealthError
+  let payload: APIErrorPayload?
+
+  var errorDescription: String? {
+    var description = healthError.localizedDescription
+    description += " [status: \(statusCode)"
+    if let reason = payload?.reason {
+      description += ", reason: \(reason)"
+    }
+    if let code = payload?.code {
+      description += ", code: \(code)"
+    }
+    description += "]"
+    return description
   }
 }
 
@@ -587,6 +786,22 @@ extension APIClient {
     return response.count
   }
 
+  /// True when this account has any conversations captured by an Omi wearable
+  /// (paired on any platform — usually the mobile app).
+  func hasOmiDeviceConversations() async throws -> Bool {
+    struct CountResponse: Decodable {
+      let count: Int
+      // Backends without the sources filter ignore the param and return the
+      // unfiltered total without this echo — decoding then fails, so we never
+      // read a false positive from an old backend.
+      let sources: [String]
+    }
+
+    let response: CountResponse = try await get(
+      "v1/conversations/count?include_discarded=true&sources=friend,omi")
+    return response.count > 0
+  }
+
   /// Gets the count of AI chat messages from PostHog
   func getChatMessageCount() async throws -> Int {
     struct CountResponse: Decodable {
@@ -773,29 +988,57 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Conversation (generated from app-client OpenAPI).
+    // The domain model adapts wire string-dates into Date via the APIClient
+    // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
+    // whether transcript_segments was present in the response.
+    let wire = try OmiAPI.Conversation(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
-    id = try container.decode(String.self, forKey: .id)
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
-    finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
-    structured = try container.decode(Structured.self, forKey: .structured)
+    id = wire.id
+    createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
+    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
+    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
+    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
+    // container.contains distinguishes `"transcript_segments": null` (present,
+    // empty) from the key being absent (omitted). wire.transcriptSegments is
+    // nil for both, so we must check the container directly.
     transcriptSegmentsIncluded = container.contains(.transcriptSegments)
-    transcriptSegments =
-      try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments) ?? []
-    geolocation = try container.decodeIfPresent(Geolocation.self, forKey: .geolocation)
-    photos = try container.decodeIfPresent([ConversationPhoto].self, forKey: .photos) ?? []
-    appsResults = try container.decodeIfPresent([AppResponse].self, forKey: .appsResults) ?? []
-    source = try container.decodeIfPresent(ConversationSource.self, forKey: .source)
-    language = try container.decodeIfPresent(String.self, forKey: .language)
-    status = try container.decodeIfPresent(ConversationStatus.self, forKey: .status) ?? .completed
-    discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
-    isLocked = try container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
-    starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
-    folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
-    inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
-    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
+    transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
+    geolocation = wire.geolocation
+    photos = (wire.photos ?? []).map(ConversationPhoto.init)
+    appsResults = (wire.appsResults ?? []).map(AppResponse.init)
+    source = wire.source.map { ConversationSource(rawValue: $0.rawValue) ?? .unknown }
+    language = wire.language
+    status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
+    discarded = wire.discarded ?? false
+    deleted = false  // backend REST Conversation schema does not expose deleted
+    isLocked = wire.isLocked ?? false
+    starred = wire.starred ?? false
+    folderId = wire.folderId
+    inputDeviceName = wire.clientDeviceId
+    deferred = wire.deferred ?? false
+  }
+
+  // Date helpers shared with Event/Structured adapters.
+  private static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
+    if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
+    throw DecodingError.dataCorrupted(.init(
+      codingPath: decoder.codingPath,
+      debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
+    ))
+  }
+
+  private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
+    guard let s else { return nil }
+    return try parseDate(s, decoder: decoder)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -908,21 +1151,59 @@ struct Structured: Codable, Equatable {
   let actionItems: [ActionItem]
   let events: [Event]
 
-  enum CodingKeys: String, CodingKey {
-    case title, overview, emoji, category
-    case actionItems = "action_items"
-    case events
+  init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
+    // The domain model adds tolerant defaults the wire DTO does not guarantee.
+    let wire = try OmiAPI.Structured(from: decoder)
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    // CategoryEnum is the backend's strict union; fall back to "other" when the
+    // backend returns a value outside it (decoded as ._unknown).
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
   }
 
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
+  init(_ wire: OmiAPI.Structured) {
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
+  }
 
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-    overview = try container.decodeIfPresent(String.self, forKey: .overview) ?? ""
-    emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? ""
-    category = try container.decodeIfPresent(String.self, forKey: .category) ?? "other"
-    actionItems = try container.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
-    events = try container.decodeIfPresent([Event].self, forKey: .events) ?? []
+  func encode(to encoder: Encoder) throws {
+    let actionItemsWire = actionItems.map {
+      OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
+    }
+    let eventsWire = events.map {
+      OmiAPI.Event(
+        created: $0.created,
+        description_: $0.description,
+        duration: $0.duration,
+        start: Event.encodeDateForWire($0.startsAt),
+        title: $0.title
+      )
+    }
+    let wire = OmiAPI.Structured(
+      actionItems: actionItemsWire,
+      category: OmiAPI.CategoryEnum(rawValue: category),
+      emoji: emoji,
+      events: eventsWire,
+      overview: overview,
+      title: title
+    )
+    try wire.encode(to: encoder)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -955,11 +1236,33 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.deleted = deleted
   }
 
+  /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
+  /// desktop-only field the backend REST schema does not expose; it defaults
+  /// to false on decode.
+  init(_ wire: OmiAPI.ActionItem) {
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+  }
+
   init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
+    let wire = try OmiAPI.ActionItem(from: decoder)
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let wire = OmiAPI.ActionItem(
+      completed: completed,
+      completedAt: nil,
+      conversationId: nil,
+      createdAt: nil,
+      description_: description,
+      dueAt: nil,
+      updatedAt: nil
+    )
+    try wire.encode(to: encoder)
   }
 }
 
@@ -971,29 +1274,88 @@ struct Event: Codable, Identifiable, Equatable {
   let description: String
   let created: Bool
 
-  enum CodingKeys: String, CodingKey {
-    case title
-    case startsAt = "starts_at"
-    case duration
-    case description
-    case created
+  /// Adapter from the generated wire DTO (OmiAPI.Event). The backend `Event`
+  /// model exposes `start` (not `starts_at`); this adapter maps the field and
+  /// parses the ISO8601 string into a Date using the APIClient decoder's
+  /// strategy via JSONDecoder reuse.
+  init(_ wire: OmiAPI.Event) {
+    self.title = wire.title
+    self.startsAt = Self.parseDate(wire.start) ?? Date()
+    self.duration = wire.duration ?? 0
+    self.description = wire.description_ ?? ""
+    self.created = wire.created ?? false
   }
 
   init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-    startsAt = try container.decodeIfPresent(Date.self, forKey: .startsAt) ?? Date()
-    duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
+    // Decode via the generated wire shape, then adapt. `start` is the backend
+    // field name (generated); cached rows may still use legacy `starts_at`.
+    if let wire = try? OmiAPI.Event(from: decoder) {
+      self.title = wire.title
+      self.startsAt = Self.parseDate(wire.start) ?? Date()
+      self.duration = wire.duration ?? 0
+      self.description = wire.description_ ?? ""
+      self.created = wire.created ?? false
+      return
+    }
+
+    enum LegacyKeys: String, CodingKey {
+      case title, start, startsAt = "starts_at", duration, description, created
+    }
+    let container = try decoder.container(keyedBy: LegacyKeys.self)
+    self.title = try container.decode(String.self, forKey: .title)
+    let startString = try container.decodeIfPresent(String.self, forKey: .start)
+      ?? container.decodeIfPresent(String.self, forKey: .startsAt)
+    self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
+    self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
+    self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    self.created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let startString = Self.encodeDate(startsAt)
+    let wire = OmiAPI.Event(
+      created: created,
+      description_: description,
+      duration: duration,
+      start: startString,
+      title: title
+    )
+    try wire.encode(to: encoder)
+  }
+
+  // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
+  private static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String) -> Date? {
+    fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
+  }
+
+  private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {
+    if let date = parseDate(s) { return date }
+    let context = DecodingError.Context(
+      codingPath: decoder.codingPath,
+      debugDescription: "Event.start is not a valid ISO8601 date: \(s)"
+    )
+    throw DecodingError.dataCorrupted(context)
+  }
+
+  private static func encodeDate(_ date: Date) -> String {
+    fractionalFormatter.string(from: date)
+  }
+
+  fileprivate static func encodeDateForWire(_ date: Date) -> String {
+    encodeDate(date)
   }
 }
 
-/// Translation from backend
-struct TranscriptTranslation: Codable {
-  let lang: String
-  let text: String
-}
+/// Schema authority: OmiAPI.Translation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO, so this is a thin alias.
+typealias TranscriptTranslation = OmiAPI.Translation
 
 struct TranscriptSegment: Codable, Identifiable {
   let id: String
@@ -1037,6 +1399,22 @@ struct TranscriptSegment: Codable, Identifiable {
       try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
   }
 
+  /// Adapter from the generated wire DTO (OmiAPI.TranscriptSegment). The
+  /// generated wire exposes `speaker_id` directly; the domain derives it from
+  /// `speaker` to preserve legacy behavior.
+  init(_ wire: OmiAPI.TranscriptSegment) {
+    let decodedId = wire.id
+    self.id = decodedId ?? UUID().uuidString
+    self.backendId = decodedId
+    self.text = wire.text
+    self.speaker = wire.speaker
+    self.isUser = wire.isUser
+    self.personId = wire.personId
+    self.start = wire.start
+    self.end = wire.end
+    self.translations = []  // wire translations map omitted; legacy field
+  }
+
   /// Memberwise initializer for creating from local storage
   init(
     id: String,
@@ -1076,17 +1454,11 @@ struct TranscriptSegment: Codable, Identifiable {
   }
 }
 
-struct Geolocation: Codable {
-  let latitude: Double?
-  let longitude: Double?
-  let address: String?
-  let locationType: String?
-
-  enum CodingKeys: String, CodingKey {
-    case latitude, longitude, address
-    case locationType = "location_type"
-  }
-}
+/// Schema authority: OmiAPI.Geolocation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO; the prior adapter only passed
+/// the four exposed fields through with no transformation (no Date parsing,
+/// no defaults, no computed properties), so this is a thin alias.
+typealias Geolocation = OmiAPI.Geolocation
 
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
@@ -1109,6 +1481,24 @@ struct ConversationPhoto: Codable, Identifiable {
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
   }
+
+  /// Adapter from the generated wire DTO (OmiAPI.ConversationPhoto). The wire
+  /// exposes `created_at` as a string; this adapter parses it via the shared
+  /// ISO8601 strategy.
+  init(_ wire: OmiAPI.ConversationPhoto) {
+    self.id = wire.id ?? UUID().uuidString
+    self.base64 = wire.base64
+    self.description = wire.description_
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    if let s = wire.createdAt, let d = f.date(from: s) ?? std.date(from: s) {
+      self.createdAt = d
+    } else {
+      self.createdAt = Date()
+    }
+    self.discarded = wire.discarded ?? false
+  }
 }
 
 struct AppResponse: Codable, Identifiable {
@@ -1119,6 +1509,12 @@ struct AppResponse: Codable, Identifiable {
   enum CodingKeys: String, CodingKey {
     case appId = "app_id"
     case content
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.AppResult).
+  init(_ wire: OmiAPI.AppResult) {
+    self.appId = wire.appId
+    self.content = wire.content
   }
 
   init(from decoder: Decoder) throws {
@@ -1243,14 +1639,127 @@ enum MemoryCategory: String, Codable, CaseIterable {
     case .workflow: return "arrow.triangle.branch"
     }
   }
+
+  /// Adapter from the generated wire enum (OmiAPI.MemoryCategory). The backend
+  /// exposes a wider enum than the desktop renders; unknown values collapse to
+  /// `.system` so the row still decodes.
+  init(_ wire: OmiAPI.MemoryCategory) {
+    self = MemoryCategory(rawValue: wire.rawValue) ?? .system
+  }
 }
 
-struct ServerMemory: Codable, Identifiable {
+enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
+  case shortTerm = "short_term"
+  case longTerm = "long_term"
+  case archive
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let rawValue = try container.decode(String.self)
+    guard let layer = MemoryLayer(rawValue: rawValue) else {
+      throw DecodingError.dataCorruptedError(
+        in: container,
+        debugDescription: "Unknown ServerMemory layer '\(rawValue)'"
+      )
+    }
+    self = layer
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .shortTerm: return "Short-term"
+    case .longTerm: return "Long-term"
+    case .archive: return "Archive"
+    }
+  }
+
+  var icon: String {
+    switch self {
+    case .shortTerm: return "clock"
+    case .longTerm: return "brain.head.profile"
+    case .archive: return "archivebox"
+    }
+  }
+
+  var isDefaultAccessible: Bool {
+    self == .shortTerm || self == .longTerm
+  }
+
+  var layerInfoText: String {
+    switch self {
+    case .shortTerm:
+      return
+        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+    case .longTerm:
+      return
+        "Durable facts Omi keeps long-term - stable details about you, your preferences, and your life."
+    case .archive:
+      return "Aged-out long-term memories. Hidden by default; search Archive to find them."
+    }
+  }
+}
+
+/// Reversible alias during WS-G client rename.
+typealias MemoryTier = MemoryLayer
+
+struct MemoryLayerScope: Equatable {
+  let tiers: [MemoryLayer]
+  let requiresArchiveAcknowledgement: Bool
+
+  static let defaultAccess = MemoryLayerScope(
+    tiers: [.shortTerm, .longTerm],
+    requiresArchiveAcknowledgement: false
+  )
+  static let archiveOnly = MemoryLayerScope(
+    tiers: [.archive],
+    requiresArchiveAcknowledgement: true
+  )
+  static let allIncludingArchive = MemoryLayerScope(
+    tiers: [.shortTerm, .longTerm, .archive],
+    requiresArchiveAcknowledgement: true
+  )
+
+  var includesArchive: Bool { tiers.contains(.archive) }
+  var sqlTierRawValues: [String] { tiers.map { $0.rawValue } }
+}
+
+/// Reversible alias during WS-G client rename.
+typealias MemoryTierScope = MemoryLayerScope
+
+private enum ServerMemoryAliasDecodeError {
+  static func conflict(
+    _ firstField: String,
+    _ firstValue: String,
+    _ secondField: String,
+    _ secondValue: String,
+    codingPath: [CodingKey]
+  ) -> DecodingError {
+    DecodingError.dataCorrupted(
+      DecodingError.Context(
+        codingPath: codingPath,
+        debugDescription: "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
+      )
+    )
+  }
+}
+
+struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
   let category: MemoryCategory
   let createdAt: Date
   let updatedAt: Date
+  let capturedAt: Date?
+  let expiresAt: Date?
+  let tier: MemoryLayer
+  let tierIsExplicit: Bool
   let conversationId: String?
   let reviewed: Bool
   let userReview: Bool?
@@ -1274,14 +1783,21 @@ struct ServerMemory: Codable, Identifiable {
   let inputDeviceName: String?
   // Window title when memory was extracted
   let windowTitle: String?
+  // Capture-device provenance (optional; absent on legacy memories)
+  let primaryCaptureDevice: String?
+  let captureDeviceIds: [String]
   // Short headline for notification preview (advice/tips only)
   let headline: String?
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline
+      headline, tier, layer
+    case memoryId = "memory_id"
+    case memoryTier = "memory_tier"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case capturedAt = "captured_at"
+    case expiresAt = "expires_at"
     case conversationId = "conversation_id"
     case userReview = "user_review"
     case manuallyAdded = "manually_added"
@@ -1292,33 +1808,108 @@ struct ServerMemory: Codable, Identifiable {
     case currentActivity = "current_activity"
     case inputDeviceName = "input_device_name"
     case windowTitle = "window_title"
+    case primaryCaptureDevice = "primary_capture_device"
+    case captureDeviceIds = "capture_device_ids"
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    content = try container.decode(String.self, forKey: .content)
-    category = try container.decodeIfPresent(MemoryCategory.self, forKey: .category) ?? .system
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    updatedAt = try container.decode(Date.self, forKey: .updatedAt)
-    conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
-    reviewed = try container.decodeIfPresent(Bool.self, forKey: .reviewed) ?? false
-    userReview = try container.decodeIfPresent(Bool.self, forKey: .userReview)
-    visibility = try container.decodeIfPresent(String.self, forKey: .visibility) ?? "private"
-    manuallyAdded = try container.decodeIfPresent(Bool.self, forKey: .manuallyAdded) ?? false
-    scoring = try container.decodeIfPresent(String.self, forKey: .scoring)
+    // Schema authority: OmiAPI.MemoryDB (generated from app-client OpenAPI).
+    // The wire DTO validates backend-owned fields against the generated
+    // contract, but its required fields (uid, id, createdAt, updatedAt) are
+    // stricter than the legacy decoder which used decodeIfPresent for
+    // tolerance. We try the wire DTO and fall back to the container for any
+    // field it rejects, preserving the old tolerant behavior.
+    let wire = try? OmiAPI.MemoryDB(from: decoder)
+
+    // id / memory_id alias resolution: wire.id is the backend authority
+    // (required String); memory_id is an optional legacy alias. Preserve the
+    // silent-mismatch behavior from the legacy decoder.
+    let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
+    let memoryIdValue = try wire?.memoryId ?? container.decodeIfPresent(String.self, forKey: .memoryId)
+    switch (idValue, memoryIdValue) {
+    case let (.some(id), .some(memoryId)) where id != memoryId:
+      self.id = id
+    case let (.some(id), _):
+      self.id = id
+    case let (_, .some(memoryId)):
+      self.id = memoryId
+    case (.none, .none):
+      throw DecodingError.keyNotFound(
+        CodingKeys.id,
+        DecodingError.Context(
+          codingPath: container.codingPath,
+          debugDescription: "ServerMemory requires either id or memory_id"
+        )
+      )
+    }
+
+    content = try wire?.content ?? container.decode(String.self, forKey: .content)
+    category = wire?.category.map(MemoryCategory.init) ?? .system
+    capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    let createdAtString = wire?.createdAt
+    createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? capturedAt ?? Date()
+    let updatedAtString = wire?.updatedAt
+    updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
+    expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+
+    // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
+    // (schema-validated); fall back to container decoding when the wire DTO
+    // could not be constructed (missing required fields like uid).
+    let layerValue = try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
+    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+    let memoryTierValue = try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
+      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
+    tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
+
+    let presentTierAliases: [(String, MemoryLayer)] = [
+      layerValue.map { ("layer", $0) },
+      tierValue.map { ("tier", $0) },
+      memoryTierValue.map { ("memory_tier", $0) },
+    ].compactMap { $0 }
+    if presentTierAliases.count >= 2 {
+      let first = presentTierAliases[0]
+      for other in presentTierAliases.dropFirst() where other.1 != first.1 {
+        throw ServerMemoryAliasDecodeError.conflict(
+          first.0, first.1.rawValue, other.0, other.1.rawValue, codingPath: container.codingPath)
+      }
+    }
+
+    switch (layerValue, tierValue, memoryTierValue) {
+    case let (.some(layer), _, _):
+      self.tier = layer
+    case let (_, .some(tier), _):
+      self.tier = tier
+    case let (_, _, .some(memoryTier)):
+      self.tier = memoryTier
+    case (.none, .none, .none):
+      self.tier = .longTerm
+    }
+
+    conversationId = wire?.conversationId
+    reviewed = wire?.reviewed ?? false
+    userReview = wire?.userReview
+    visibility = wire?.visibility ?? "private"
+    manuallyAdded = wire?.manuallyAdded ?? false
+    scoring = wire?.scoring
     source = try container.decodeIfPresent(String.self, forKey: .source)
-    confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
-    sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
+    confidence = wire?.captureConfidence
+    sourceApp = wire?.appId
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
-    tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+    tags = wire?.tags ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
-    headline = try container.decodeIfPresent(String.self, forKey: .headline)
+    primaryCaptureDevice = wire?.primaryCaptureDevice
+    captureDeviceIds = wire?.captureDeviceIds ?? []
+    headline = wire?.headline
   }
 
   var isPublic: Bool {
@@ -1428,6 +2019,19 @@ extension APIClient {
       return nil
     }
   }
+
+  /// Finalize a specific backend conversation id. This avoids the global Redis-backed
+  /// force-process endpoint, which can act on a newer in-progress recording after rotation.
+  func finalizeConversation(id conversationId: String) async throws -> ServerConversation {
+    struct EmptyBody: Encodable {}
+
+    let response: ForceProcessConversationResponse = try await post(
+      "v1/conversations/\(conversationId)/finalize",
+      body: EmptyBody(),
+      customBaseURL: nil
+    )
+    return response.conversation
+  }
 }
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
@@ -1450,12 +2054,26 @@ extension APIClient {
     let started_at: String?  // ISO8601
     let finished_at: String?  // ISO8601
     let language: String
+    let client_conversation_id: String?
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {
     let id: String
     let status: String
     let discarded: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case status
+      case discarded
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decode(String.self, forKey: .id)
+      status = try container.decodeIfPresent(String.self, forKey: .status) ?? ConversationStatus.processing.rawValue
+      discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
+    }
   }
 
   /// Upload an already-transcribed (on-device Parakeet) conversation to the backend so it is
@@ -1475,6 +2093,14 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
+  private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+
+  struct MemoryListPage {
+    let memories: [ServerMemory]
+    let canonicalLifecycleExposed: Bool
+    let deviceScopeSupported: Bool?
+  }
 
   /// Fetches memories from the API with optional filtering
   func getMemories(
@@ -1482,7 +2108,8 @@ extension APIClient {
     offset: Int = 0,
     category: String? = nil,
     tags: [String]? = nil,
-    includeDismissed: Bool = false
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
   ) async throws -> [ServerMemory] {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -1494,7 +2121,78 @@ extension APIClient {
     if includeDismissed {
       endpoint += "&include_dismissed=true"
     }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
+    }
     return try await get(endpoint)
+  }
+
+  /// Fetches memories plus server-authoritative capability headers.
+  func getMemoriesPage(
+    limit: Int = 100,
+    offset: Int = 0,
+    category: String? = nil,
+    tags: [String]? = nil,
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
+  ) async throws -> MemoryListPage {
+    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
+    if let category = category {
+      endpoint += "&category=\(category)"
+    }
+    if let tags = tags, !tags.isEmpty {
+      endpoint += "&tags=\(tags.joined(separator: ","))"
+    }
+    if includeDismissed {
+      endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
+    }
+
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    return try await performMemoryListRequest(request, retriedAuth: false)
+  }
+
+  private func performMemoryListRequest(_ request: URLRequest, retriedAuth: Bool) async throws -> MemoryListPage {
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
+      return try await performMemoryListRequest(retry, retriedAuth: true)
+    }
+    if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
+      throw APIError.unauthorized
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
+
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
+    let canonicalLifecycleExposed = lifecycleHeader == "true"
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
+    let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    return MemoryListPage(
+      memories: memories,
+      canonicalLifecycleExposed: canonicalLifecycleExposed,
+      deviceScopeSupported: deviceScopeSupported
+    )
   }
 
   /// Creates a new memory (manual or extracted)
@@ -1554,10 +2252,9 @@ extension APIClient {
   /// Max memories per POST /v3/memories/batch call. Must match the
   /// `MEMORIES_BATCH_MAX` constant in backend/routers/memories.py.
   static let memoriesBatchMaxSize = 100
+  static let memoryImportBatchMaxSize = 100
 
-  /// Creates many memories in a single HTTP call. Used by the onboarding
-  /// local-file import flow to avoid fanning out N requests and tripping
-  /// Cloud Armor's per-Authorization 120/min throttle.
+  /// Creates many product memories in a single HTTP call.
   ///
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
@@ -1571,6 +2268,14 @@ extension APIClient {
     }
     let body = BatchRequest(memories: memories)
     return try await post("v3/memories/batch", body: body)
+  }
+
+  func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
+    precondition(
+      batch.items.count <= Self.memoryImportBatchMaxSize,
+      "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
+    )
+    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
   }
 
   /// Deletes a memory by ID
@@ -1618,6 +2323,11 @@ extension APIClient {
     let _: MemoryStatusResponse = try await post("v3/memories/mark-all-read", body: EmptyBody())
   }
 
+  /// Layer/archive scoped bulk read-state mutations remain disabled until backend semantics exist.
+  func markAllMemoriesRead(scope: MemoryLayerScope) async throws {
+    throw APIError.unsupportedTierScopedBulkMutation("read-state updates")
+  }
+
   /// Updates visibility of all memories
   func updateAllMemoriesVisibility(visibility: String) async throws {
     struct VisibilityRequest: Encodable {
@@ -1627,9 +2337,29 @@ extension APIClient {
     let _: MemoryStatusResponse = try await patch("v3/memories/visibility", body: body)
   }
 
+  /// Updates visibility of all default-scope memories.
+  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  func updateAllMemoriesVisibility(scope: MemoryLayerScope, visibility: String) async throws {
+    if scope == .defaultAccess {
+      try await updateAllMemoriesVisibility(visibility: visibility)
+      return
+    }
+    throw APIError.unsupportedTierScopedBulkMutation("visibility updates")
+  }
+
   /// Deletes all memories
   func deleteAllMemories() async throws {
     try await delete("v3/memories")
+  }
+
+  /// Deletes all default-scope memories.
+  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  func deleteAllMemories(scope: MemoryLayerScope) async throws {
+    if scope == .defaultAccess {
+      try await deleteAllMemories()
+      return
+    }
+    throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
   // MARK: - PATCH helper
@@ -1651,21 +2381,11 @@ extension APIClient {
   }
 
   private func performPatchRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(T.self, from: data)
+    // Delegate to performRequest so PATCH gets the same 401 refresh-and-retry as
+    // GET/POST. PATCH previously threw `.unauthorized` on the first 401, which
+    // surfaced as a user-visible failure (e.g. the onboarding language step)
+    // whenever the ID token was momentarily stale right after sign-in.
+    return try await performRequest(request)
   }
 }
 
@@ -1683,19 +2403,30 @@ struct MemoryBatchItem: Encodable {
   let category: String
   let tags: [String]
   let headline: String?
+  let source: String?
+  let windowTitle: String?
 
   init(
     content: String,
     visibility: String = "private",
     category: MemoryCategory = .system,
     tags: [String] = [],
-    headline: String? = nil
+    headline: String? = nil,
+    source: String? = nil,
+    windowTitle: String? = nil
   ) {
     self.content = content
     self.visibility = visibility
     self.category = category.rawValue
     self.tags = tags
     self.headline = headline
+    self.source = source
+    self.windowTitle = windowTitle
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case content, visibility, category, tags, headline, source
+    case windowTitle = "window_title"
   }
 }
 
@@ -1714,6 +2445,116 @@ struct BatchMemoriesResponse: Decodable {
   struct BatchMemory: Decodable {
     let id: String
     let content: String
+  }
+}
+
+struct ImportEvidenceBatch: Encodable {
+  let sourceType: String
+  let importRunId: String?
+  let sourceAccountHash: String?
+  let importerVersion: String
+  let extractorVersion: String?
+  let items: [ImportEvidenceBatchItem]
+
+  init(
+    sourceType: String,
+    importRunId: String? = nil,
+    sourceAccountHash: String? = nil,
+    importerVersion: String = "desktop-import-v1",
+    extractorVersion: String? = nil,
+    items: [ImportEvidenceBatchItem]
+  ) {
+    self.sourceType = sourceType
+    self.importRunId = importRunId
+    self.sourceAccountHash = sourceAccountHash
+    self.importerVersion = importerVersion
+    self.extractorVersion = extractorVersion
+    self.items = items
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case sourceType = "source_type"
+    case importRunId = "import_run_id"
+    case sourceAccountHash = "source_account_hash"
+    case importerVersion = "importer_version"
+    case extractorVersion = "extractor_version"
+    case items
+  }
+}
+
+struct ImportEvidenceBatchItem: Encodable, Hashable {
+  let externalId: String?
+  let occurredAt: Date?
+  let title: String?
+  let snippet: String?
+  let content: String?
+  let contentHash: String?
+  let metadata: [String: String]
+  let clientDeviceId: String?
+
+  init(
+    externalId: String? = nil,
+    occurredAt: Date? = nil,
+    title: String? = nil,
+    snippet: String? = nil,
+    content: String? = nil,
+    contentHash: String? = nil,
+    metadata: [String: String] = [:],
+    clientDeviceId: String? = nil
+  ) {
+    self.externalId = externalId
+    self.occurredAt = occurredAt
+    self.title = title
+    self.snippet = snippet
+    self.content = content
+    self.contentHash = contentHash
+    self.metadata = metadata
+    self.clientDeviceId = clientDeviceId
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case externalId = "external_id"
+    case occurredAt = "occurred_at"
+    case title
+    case snippet
+    case content
+    case contentHash = "content_hash"
+    case metadata
+    case clientDeviceId = "client_device_id"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(externalId, forKey: .externalId)
+    if let occurredAt {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      try container.encode(formatter.string(from: occurredAt), forKey: .occurredAt)
+    }
+    try container.encodeIfPresent(title, forKey: .title)
+    try container.encodeIfPresent(snippet, forKey: .snippet)
+    try container.encodeIfPresent(content, forKey: .content)
+    try container.encodeIfPresent(contentHash, forKey: .contentHash)
+    try container.encode(metadata, forKey: .metadata)
+    try container.encodeIfPresent(clientDeviceId, forKey: .clientDeviceId)
+  }
+}
+
+struct ImportEvidenceBatchResponse: Decodable {
+  let runId: String
+  let artifactsReceived: Int
+  let artifactsCreated: Int
+  let artifactsDeduped: Int
+  let candidatesCreated: Int
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case runId = "run_id"
+    case artifactsReceived = "artifacts_received"
+    case artifactsCreated = "artifacts_created"
+    case artifactsDeduped = "artifacts_deduped"
+    case candidatesCreated = "candidates_created"
+    case status
   }
 }
 
@@ -2786,19 +3627,32 @@ struct Goal: Codable, Identifiable {
   }
 
   init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.GoalResponse (generated from app-client OpenAPI).
+    // The domain model layers on client-only fields (description, completedAt,
+    // source) the backend REST schema does not expose, read via the same
+    // container with tolerant fallbacks.
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+    // Wire DTO required fields (created_at, title, etc.) are stricter than the
+    // legacy decoder; use try? and fall back to the container for tolerance.
+    let wire = try? OmiAPI.GoalResponse(from: decoder)
+
+    id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType = try container.decodeIfPresent(GoalType.self, forKey: .goalType) ?? .boolean
-    targetValue = try container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 1.0
-    currentValue = try container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0.0
-    minValue = try container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0.0
-    maxValue = try container.decodeIfPresent(Double.self, forKey: .maxValue) ?? 100.0
-    unit = try container.decodeIfPresent(String.self, forKey: .unit)
-    isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    goalType = GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "") ?? .boolean
+    targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
+    currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
+    minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0
+    maxValue = try wire?.maxValue ?? container.decodeIfPresent(Double.self, forKey: .maxValue) ?? 0
+    unit = try wire?.unit ?? container.decodeIfPresent(String.self, forKey: .unit)
+    isActive = try wire?.isActive ?? container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    let createdAtString = wire?.createdAt
+    createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? Date()
+    let updatedAtString = wire?.updatedAt
+    updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
     source = try container.decodeIfPresent(String.self, forKey: .source)
   }
@@ -3066,7 +3920,7 @@ struct OmiAppDetails: Codable, Identifiable {
     price = try container.decodeIfPresent(Double.self, forKey: .price)
     paymentPlan = try container.decodeIfPresent(String.self, forKey: .paymentPlan)
     username = try container.decodeIfPresent(String.self, forKey: .username)
-    twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
+    twitter = (try? container.decodeIfPresent(String.self, forKey: .twitter)) ?? nil
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
     externalIntegration = try container.decodeIfPresent(
@@ -3249,33 +4103,34 @@ extension APIClient {
       let data: [OmiApp]
     }
 
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
+    var queryItems: [URLQueryItem] = [
+      URLQueryItem(name: "limit", value: "\(limit)"),
+      URLQueryItem(name: "offset", value: "\(offset)"),
     ]
 
     if let query = query, !query.isEmpty {
-      queryItems.append(
-        "query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)")
+      queryItems.append(URLQueryItem(name: "q", value: query))
     }
 
     if let category = category {
-      queryItems.append("category=\(category)")
+      queryItems.append(URLQueryItem(name: "category", value: category))
     }
 
     if let capability = capability {
-      queryItems.append("capability=\(capability)")
+      queryItems.append(URLQueryItem(name: "capability", value: capability))
     }
 
     if let minRating = minRating {
-      queryItems.append("rating=\(minRating)")
+      queryItems.append(URLQueryItem(name: "rating", value: "\(minRating)"))
     }
 
     if installedOnly {
-      queryItems.append("installed_apps=true")
+      queryItems.append(URLQueryItem(name: "installed_apps", value: "true"))
     }
 
-    let endpoint = "v2/apps/search?\(queryItems.joined(separator: "&"))"
+    var components = URLComponents()
+    components.queryItems = queryItems
+    let endpoint = "v2/apps/search?\(components.percentEncodedQuery ?? "")"
     let response: SearchResponse = try await get(endpoint)
     return response.data
   }
@@ -3575,8 +4430,13 @@ extension APIClient {
     return try await get("v1/users/language")
   }
 
-  /// Updates user language preference
-  func updateUserLanguage(_ language: String) async throws -> UserLanguageResponse {
+  /// Updates user language preference. The PATCH endpoint's response shape differs
+  /// from GET's (`{status, single_language_mode}`, not `{language}`) — decoding into
+  /// UserLanguageResponse here always threw ("data couldn't be read because it is
+  /// missing") even though the backend had already saved the language, silently
+  /// (pre-await-fix) or now visibly blocking the caller on a save that succeeded.
+  @discardableResult
+  func updateUserLanguage(_ language: String) async throws -> SetUserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
     }
@@ -3680,6 +4540,15 @@ extension APIClient {
     -> AssistantSettingsResponse
   {
     return try await patch("v1/users/assistant-settings", body: settings)
+  }
+
+  /// Fetches server-controlled desktop update/banner policy.
+  func getDesktopUpdatePolicy(currentBuild: Int?) async throws -> DesktopUpdatePolicyResponse {
+    var endpoint = "v2/desktop/update-policy?platform=macos"
+    if let currentBuild {
+      endpoint += "&current_build=\(currentBuild)"
+    }
+    return try await get(endpoint, requireAuth: false, includeBYOK: false)
   }
 
   // MARK: - Knowledge Graph API
@@ -3848,9 +4717,17 @@ struct TranscriptionPreferences: Codable {
   }
 }
 
-/// User language response
+/// User language response (GET /v1/users/language)
 struct UserLanguageResponse: Codable {
   let language: String
+}
+
+/// Response shape for PATCH /v1/users/language — deliberately distinct from
+/// UserLanguageResponse; the backend's set_user_language handler returns
+/// {status, single_language_mode}, never {language}.
+struct SetUserLanguageResponse: Codable {
+  let status: String
+  let single_language_mode: Bool
 }
 
 /// Recording permission response
@@ -4163,6 +5040,40 @@ struct UserProfileResponse: Codable {
   }
 }
 
+// MARK: - Desktop Update Policy Models
+
+struct DesktopUpdatePolicyResponse: Codable, Equatable {
+  enum Severity: String, Codable {
+    case none
+    case banner
+    case required
+  }
+
+  let id: String
+  let active: Bool
+  let severity: Severity
+  let maximumBuildNumber: Int?
+  let latestBuildNumber: Int?
+  let title: String?
+  let message: String?
+  let ctaText: String
+  let downloadURL: String
+  let canDismiss: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, active, severity, title, message
+    case maximumBuildNumber = "maximum_build_number"
+    case latestBuildNumber = "latest_build_number"
+    case ctaText = "cta_text"
+    case downloadURL = "download_url"
+    case canDismiss = "can_dismiss"
+  }
+
+  var isRequired: Bool {
+    active && severity == .required
+  }
+}
+
 // MARK: - Assistant Settings Models
 
 struct SharedAssistantSettingsResponse: Codable {
@@ -4253,9 +5164,63 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
+  var elevenlabsVoiceId: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
+    case elevenlabsVoiceId = "elevenlabs_voice_id"
+  }
+}
+
+enum AssistantSettingsJSONValue: Codable, Equatable {
+  case null
+  case bool(Bool)
+  case int(Int)
+  case double(Double)
+  case string(String)
+  case array([AssistantSettingsJSONValue])
+  case object([String: AssistantSettingsJSONValue])
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    if container.decodeNil() {
+      self = .null
+    } else if let value = try? container.decode(Bool.self) {
+      self = .bool(value)
+    } else if let value = try? container.decode(Int.self) {
+      self = .int(value)
+    } else if let value = try? container.decode(Double.self) {
+      self = .double(value)
+    } else if let value = try? container.decode(String.self) {
+      self = .string(value)
+    } else if let value = try? container.decode([AssistantSettingsJSONValue].self) {
+      self = .array(value)
+    } else if let value = try? container.decode([String: AssistantSettingsJSONValue].self) {
+      self = .object(value)
+    } else {
+      throw DecodingError.dataCorruptedError(
+        in: container, debugDescription: "Unsupported assistant settings JSON value")
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .null:
+      try container.encodeNil()
+    case .bool(let value):
+      try container.encode(value)
+    case .int(let value):
+      try container.encode(value)
+    case .double(let value):
+      try container.encode(value)
+    case .string(let value):
+      try container.encode(value)
+    case .array(let value):
+      try container.encode(value)
+    case .object(let value):
+      try container.encode(value)
+    }
   }
 }
 
@@ -4267,13 +5232,99 @@ struct AssistantSettingsResponse: Codable {
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
+  var unknownSections: [String: AssistantSettingsJSONValue]
 
-  enum CodingKeys: String, CodingKey {
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, focus, task
     case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
+  }
+
+  init(
+    shared: SharedAssistantSettingsResponse? = nil,
+    focus: FocusSettingsResponse? = nil,
+    task: TaskSettingsResponse? = nil,
+    insight: InsightSettingsResponse? = nil,
+    memory: MemorySettingsResponse? = nil,
+    floatingBar: FloatingBarSettingsResponse? = nil,
+    updateChannel: String? = nil,
+    unknownSections: [String: AssistantSettingsJSONValue] = [:]
+  ) {
+    self.shared = shared
+    self.focus = focus
+    self.task = task
+    self.insight = insight
+    self.memory = memory
+    self.floatingBar = floatingBar
+    self.updateChannel = updateChannel
+    self.unknownSections = unknownSections
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
+    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
+    task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
+    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
+    memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
+    floatingBar = Self.decodeLossy(
+      FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
+    updateChannel = Self.decodeLossy(String.self, from: container, forKey: .updateChannel)
+
+    let rawContainer = try decoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    unknownSections = rawContainer.allKeys.reduce(into: [:]) { result, key in
+      guard !knownKeys.contains(key.stringValue),
+        let value = try? rawContainer.decode(AssistantSettingsJSONValue.self, forKey: key)
+      else { return }
+      result[key.stringValue] = value
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(shared, forKey: .shared)
+    try container.encodeIfPresent(focus, forKey: .focus)
+    try container.encodeIfPresent(task, forKey: .task)
+    try container.encodeIfPresent(insight, forKey: .insight)
+    try container.encodeIfPresent(memory, forKey: .memory)
+    try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
+    try container.encodeIfPresent(updateChannel, forKey: .updateChannel)
+
+    var rawContainer = encoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    for (key, value) in unknownSections where !knownKeys.contains(key) {
+      try rawContainer.encode(value, forKey: AssistantSettingsDynamicCodingKey(stringValue: key))
+    }
+  }
+
+  private static func decodeLossy<T: Decodable>(
+    _ type: T.Type,
+    from container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) -> T? {
+    do {
+      return try container.decodeIfPresent(type, forKey: key)
+    } catch {
+      return nil
+    }
+  }
+}
+
+struct AssistantSettingsDynamicCodingKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+
+  init(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+
+  init(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
   }
 }
 
@@ -4303,7 +5354,9 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
-    metadata: String? = nil
+    metadata: String? = nil,
+    clientMessageId: String? = nil,
+    messageSource: String = "desktop_chat"
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
       let text: String
@@ -4311,9 +5364,18 @@ extension APIClient {
       let app_id: String?
       let session_id: String?
       let metadata: String?
+      let client_message_id: String?
+      let message_source: String
     }
     let body = SaveRequest(
-      text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
+      text: text,
+      sender: sender,
+      app_id: appId,
+      session_id: sessionId,
+      metadata: metadata,
+      client_message_id: clientMessageId,
+      message_source: messageSource
+    )
     return try await post("v2/desktop/messages", body: body)
   }
 
@@ -4348,21 +5410,7 @@ extension APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(MessageDeleteResponse.self, from: data)
+    return try await performRequest(request)
   }
 
   /// Fetch messages for a specific session
@@ -4438,20 +5486,140 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    if http.statusCode == 401 { throw APIError.unauthorized }
-    guard (200...299).contains(http.statusCode) else {
-      throw APIError.httpError(statusCode: http.statusCode)
-    }
-    return try decoder.decode([ChatFileResponse].self, from: data)
+    return try await performRequest(request)
   }
 
-}
+  // MARK: - Sync local files (WAL upload)
 
-/// Response from rating a message
-struct MessageStatusResponse: Codable {
-  let status: String
+  /// Upload-only POST to `/v2/sync-local-files`. Mirrors Flutter `uploadLocalFilesV2`.
+  func uploadLocalFilesV2(
+    fileURLs: [URL],
+    conversationId: String? = nil
+  ) async throws -> UploadLocalFilesResult {
+    var components = URLComponents(string: baseURL + "v2/sync-local-files")!
+    if let conversationId, !conversationId.isEmpty {
+      components.queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
+    }
+    guard let url = components.url else {
+      throw APIError.syncUploadRejected(reason: "Invalid sync-local-files URL")
+    }
+    let request = try await buildSyncLocalFilesMultipartRequest(url: url, fileURLs: fileURLs)
+    return try await performSyncLocalFilesUpload(request)
+  }
+
+  /// Single GET of a sync job's status — no polling loop.
+  func fetchSyncJobStatus(jobId: String) async -> SyncJobFetch {
+    let endpoint = "v2/sync-local-files/\(jobId)"
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
+
+    guard let (data, response) = try? await session.data(for: request),
+          let http = response as? HTTPURLResponse else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    if http.statusCode == 404 {
+      return SyncJobFetch(outcome: .notFound)
+    }
+    // 403 means the caller is not permitted to access this sync job. Unlike a
+    // transient transport failure, re-polling will not resolve it — the upload
+    // path already refreshed auth on 401, so a 403 here is a durable permission
+    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
+    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
+    // instead of polling forever.
+    if http.statusCode == 403 {
+      return SyncJobFetch(outcome: .forbidden)
+    }
+    guard http.statusCode == 200 else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    do {
+      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+      return SyncJobFetch(outcome: .ok, status: status)
+    } catch {
+      return SyncJobFetch(outcome: .transient)
+    }
+  }
+
+  private func buildSyncLocalFilesMultipartRequest(url: URL, fileURLs: [URL]) async throws -> URLRequest {
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    var headers = try await buildHeaders(requireAuth: true)
+    headers.removeValue(forKey: "Content-Type")
+    request.allHTTPHeaderFields = headers
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    for fileURL in fileURLs {
+      // Legacy desktop WAL files on disk may still use byte-length `_fsN` tokens;
+      // normalize at upload time so the backend Opus decoder gets sample-frame size.
+      let fileName = WALSyncUploadFileName.normalizedForUpload(fileURL.lastPathComponent)
+      let fileData = try Data(contentsOf: fileURL)
+      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(
+        "Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\(lineBreak)"
+          .data(using: .utf8)!)
+      body.append("Content-Type: application/octet-stream\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+      body.append(fileData)
+      body.append(lineBreak.data(using: .utf8)!)
+    }
+    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    request.httpBody = body
+    return request
+  }
+
+  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+
+    if http.statusCode == 401 {
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
+      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
+    }
+
+    if http.statusCode == 200 {
+      let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)
+      return .done(completed)
+    }
+    if http.statusCode == 202 {
+      let start = try decoder.decode(SyncJobStartResponse.self, from: data)
+      guard !start.jobId.isEmpty else {
+        throw APIError.syncUploadRejected(reason: "Upload accepted but no job id returned")
+      }
+      return .queued(jobId: start.jobId)
+    }
+    if http.statusCode == 429 {
+      let retryAfter = Self.parseRetryAfterSeconds(from: http)
+      throw APIError.syncRateLimited(retryAfterSeconds: retryAfter)
+    }
+    if http.statusCode == 400 {
+      throw APIError.syncUploadRejected(reason: "Audio file could not be processed by server")
+    }
+    if http.statusCode == 413 {
+      throw APIError.syncUploadRejected(reason: "Audio file is too large to upload")
+    }
+    if http.statusCode >= 500 {
+      throw APIError.syncUploadRejected(reason: "Server is temporarily unavailable")
+    }
+    throw APIError.syncUploadRejected(reason: "Upload failed unexpectedly")
+  }
+
+  private static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
 }
 
 /// Response shape for `POST /v2/files` — mirrors backend `FileChat` model.
@@ -4470,6 +5638,99 @@ struct ChatFileResponse: Codable {
     case mimeType = "mime_type"
     case thumbName = "thumb_name"
     case openaiFileId = "openai_file_id"
+  }
+}
+
+/// Response from rating a message
+struct MessageStatusResponse: Codable {
+  let status: String
+}
+
+// MARK: - Sync local files (WAL upload)
+
+/// Outcome of POST `/v2/sync-local-files` — exactly one of `jobId` (202) or `completed` (200).
+enum UploadLocalFilesResult: Equatable {
+  case queued(jobId: String)
+  case done(SyncLocalFilesResultResponse)
+
+  var jobId: String? {
+    if case .queued(let jobId) = self { return jobId }
+    return nil
+  }
+}
+
+struct SyncLocalFilesResultResponse: Codable, Equatable {
+  let newMemories: [String]
+  let updatedMemories: [String]
+  let failedSegments: Int
+  let totalSegments: Int
+  let errors: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case newMemories = "new_memories"
+    case updatedMemories = "updated_memories"
+    case failedSegments = "failed_segments"
+    case totalSegments = "total_segments"
+    case errors
+  }
+}
+
+struct SyncJobStartResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalFiles: Int
+  let totalSegments: Int
+  let pollAfterMs: Int
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalFiles = "total_files"
+    case totalSegments = "total_segments"
+    case pollAfterMs = "poll_after_ms"
+  }
+}
+
+struct SyncJobStatusResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalSegments: Int
+  let processedSegments: Int
+  let successfulSegments: Int
+  let failedSegments: Int
+  let result: SyncLocalFilesResultResponse?
+  let error: String?
+
+  var isTerminal: Bool {
+    status == "completed" || status == "partial_failure" || status == "failed"
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalSegments = "total_segments"
+    case processedSegments = "processed_segments"
+    case successfulSegments = "successful_segments"
+    case failedSegments = "failed_segments"
+    case result
+    case error
+  }
+}
+
+enum SyncJobFetchOutcome: Equatable {
+  case ok
+  case notFound
+  case forbidden
+  case transient
+}
+
+struct SyncJobFetch: Equatable {
+  let outcome: SyncJobFetchOutcome
+  let status: SyncJobStatusResponse?
+
+  init(outcome: SyncJobFetchOutcome, status: SyncJobStatusResponse? = nil) {
+    self.outcome = outcome
+    self.status = status
   }
 }
 
@@ -4605,10 +5866,14 @@ struct InitialMessageResponse: Codable {
 struct SaveMessageResponse: Codable {
   let id: String
   let createdAt: Date
+  let sessionId: String?
+  let created: Bool?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case sessionId = "session_id"
+    case created
   }
 }
 
@@ -4736,13 +6001,49 @@ extension APIClient {
 struct Person: Codable, Identifiable {
   let id: String
   let name: String
-  let createdAt: Date
-  let updatedAt: Date
+  let createdAt: Date?
+  let updatedAt: Date?
+  let speechSamples: [String]
+  let speechSampleTranscripts: [String]?
+  let speechSamplesVersion: Int
 
   enum CodingKeys: String, CodingKey {
     case id, name
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case speechSamples = "speech_samples"
+    case speechSampleTranscripts = "speech_sample_transcripts"
+    case speechSamplesVersion = "speech_samples_version"
+  }
+
+  init(
+    id: String,
+    name: String,
+    createdAt: Date? = nil,
+    updatedAt: Date? = nil,
+    speechSamples: [String] = [],
+    speechSampleTranscripts: [String]? = nil,
+    speechSamplesVersion: Int = 3
+  ) {
+    self.id = id
+    self.name = name
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+    self.speechSamples = speechSamples
+    self.speechSampleTranscripts = speechSampleTranscripts
+    self.speechSamplesVersion = speechSamplesVersion
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    speechSamples = try container.decodeIfPresent([String].self, forKey: .speechSamples) ?? []
+    speechSampleTranscripts = try container.decodeIfPresent(
+      [String].self, forKey: .speechSampleTranscripts)
+    speechSamplesVersion = try container.decodeIfPresent(Int.self, forKey: .speechSamplesVersion) ?? 3
   }
 }
 
@@ -4815,13 +6116,13 @@ extension APIClient {
     }
     struct Empty: Decodable {}
     let _: Empty = try await post(
-      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints)
+      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints), includeBYOK: false
     )
   }
 
   /// Deactivate BYOK (user cleared keys) so they return to the paid plan gate.
   func deactivateBYOK() async throws {
-    try await delete("v1/users/me/byok-active")
+    try await delete("v1/users/me/byok-active", includeBYOK: false)
   }
 
   /// Fetches all people for the current user
@@ -5016,18 +6317,20 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
 
       let (retryData, retryResponse) = try await session.data(for: retryRequest)
       guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
         throw APIError.invalidResponse
       }
       guard retryHttpResponse.statusCode != 401 else {
+        await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
         throw APIError.unauthorized
       }
       guard (200...299).contains(retryHttpResponse.statusCode) else {
@@ -5099,6 +6402,24 @@ extension APIClient {
       case completed
       case description
       case dueAt = "due_at"
+    }
+  }
+
+  struct CreateCalendarEventRequest: Encodable {
+    let title: String
+    let startTime: String
+    let endTime: String
+    let description: String?
+    let location: String?
+    let attendees: String?
+
+    enum CodingKeys: String, CodingKey {
+      case title
+      case startTime = "start_time"
+      case endTime = "end_time"
+      case description
+      case location
+      case attendees
     }
   }
 
@@ -5186,6 +6507,25 @@ extension APIClient {
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
+  }
+
+  func toolCreateCalendarEvent(
+    title: String,
+    startTime: String,
+    endTime: String,
+    description: String? = nil,
+    location: String? = nil,
+    attendees: String? = nil
+  ) async throws -> ToolResponse {
+    let body = CreateCalendarEventRequest(
+      title: title,
+      startTime: startTime,
+      endTime: endTime,
+      description: description,
+      location: location,
+      attendees: attendees
+    )
+    return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
   }
 
   // MARK: - X (Twitter) Connector

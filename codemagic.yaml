@@ -24,7 +24,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -32,13 +32,8 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -247,7 +242,7 @@ workflows:
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -256,13 +251,8 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -473,7 +463,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -659,7 +649,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -851,7 +841,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1025,7 +1015,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1157,7 +1147,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1765,7 +1755,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -2043,25 +2033,23 @@ workflows:
         script: |
           scripts/prepare-agent-runtime.sh --universal-node
 
-      - name: Test pi-mono-extension denylist classifier
+      - name: Test desktop tool surfaces
         script: |
-          # Run the pi-mono-extension unit tests so a `classifyBash()` /
-          # `classifyFileWrite()` / audit-log fail-safe regression fails the
-          # Mac app build before the tagged release is cut. The tests live
-          # in `pi-mono-extension/index.test.ts` and use node:test + the
-          # `--experimental-strip-types` flag that ships in Node 22+. We
-          # avoid a hard dependency on the codemagic runner's Node version
-          # by using `npx tsx` as a version-agnostic TypeScript loader that
-          # still delegates to node:test.
-          cd pi-mono-extension
-          npm ci --no-fund --no-audit
-          if node --experimental-strip-types --test index.test.ts; then
-            echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
-          else
-            echo "Falling back to npx tsx for older Node versions..."
-            npx --yes tsx@4.19.2 --test index.test.ts
+          cd agent
+          NODE_BIN=""
+          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
+            if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+              NODE_BIN="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$NODE_BIN" ]]; then
+            echo "ERROR: Node.js 22.6+ with --experimental-strip-types required" >&2
+            exit 1
           fi
+          "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
           cd ..
+          scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
@@ -2370,9 +2358,15 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
-            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            if [ ! -d ".harness/agent-runtime/agent-node_modules" ]; then
+              echo "ERROR: packaged agent dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2386,7 +2380,11 @@ workflows:
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            if [ ! -d ".harness/agent-runtime/pi-mono-extension-node_modules" ]; then
+              echo "ERROR: packaged pi-mono-extension dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/pi-mono-extension-node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1
@@ -2427,6 +2425,8 @@ workflows:
 
       - name: Sign app
         script: |
+          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
+
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2528,6 +2528,10 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
+
+      - name: Audit app bundle dependencies
+        script: |
+          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |
@@ -2641,25 +2645,26 @@ workflows:
             fi
           fi
 
-          if [ -n "$ED_SIGNATURE" ]; then
-            echo "EdDSA signature: $ED_SIGNATURE"
-          else
-            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
+            exit 1
           fi
+          echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
+
+      - name: Smoke signed desktop artifact
+        script: |
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$APP_BUNDLE" \
+            --zip "$SPARKLE_ZIP_PATH" \
+            --dmg "$DMG_PATH" \
+            --tag "$CM_TAG" \
+            --expected-channel beta \
+            --result-json "$BUILD_DIR/desktop-smoke-result.json"
 
       - name: Create GitHub release
         script: |
-          CHANGELOG_MD=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            changes = data.get('releases', [{}])[0].get('changes', [])
-            print('\n'.join('- ' + c for c in changes))
-          except:
-            print('- Bug fixes and improvements')
-          ")
+          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
@@ -2762,20 +2767,12 @@ workflows:
           # verified. Remove this step once the Rust backend is decommissioned.
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
 
-          export CHANGELOG_JSON=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
-          except:
-            print('[]')
-          ")
+          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
 
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['BUILD_NAME'],
+            'version':      os.environ['VERSION'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),
@@ -2806,68 +2803,11 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/desktop-smoke-result.json
     publishing:
       email:
         recipients:
           - i@m13v.com
         notify:
           success: true
-          failure: true
-
-  # ============================================
-  # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
-  # Triggered on push to main when desktop/macos/agent-cloud/ changes.
-  # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
-  # ============================================
-  agent-cloud-auto-deploy:
-    name: Auto Deploy Agent Cloud to GCS
-    instance_type: linux_x2
-    max_build_duration: 10
-    environment:
-      groups:
-        - desktop_secrets
-      vars:
-        GCS_BUCKET: "gs://based-hardware-agent"
-        GCP_PROJECT: "based-hardware"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'desktop/macos/agent-cloud/agent.mjs'
-          - 'desktop/macos/agent-cloud/scripts/startup.sh'
-    scripts:
-      - name: Authenticate with GCP
-        script: |
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-      - name: Deploy agent.mjs and startup.sh to GCS
-        script: |
-          VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
-          echo "Deploying version $VERSION to $GCS_BUCKET..."
-
-          gsutil cp desktop/macos/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
-          echo "Uploaded agent.mjs"
-
-          gsutil cp desktop/macos/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
-          echo "Uploaded startup.sh"
-
-          # Update version.txt last — triggers hot-reload on running VMs
-          echo "$VERSION" | gsutil cp - "$GCS_BUCKET/version.txt"
-          echo "Version bumped to $VERSION"
-          echo "Running VMs will hot-reload within 10 minutes."
-    publishing:
-      email:
-        recipients:
-          - i@m13v.com
-        notify:
-          success: false
           failure: true

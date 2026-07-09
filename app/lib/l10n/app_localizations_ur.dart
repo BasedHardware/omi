@@ -7777,6 +7777,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get viewAll => 'سب دیکھیں';
 
   @override
+  String get expand => 'پھیلائیں';
+
+  @override
   String get addTask => 'کام شامل کریں';
 
   @override
@@ -9351,7 +9354,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'فی الحال صرف Omi ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
+      'فی الحال Omi اور Limitless ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9377,4 +9380,208 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
+
+  @override
+  String get memoryThisDevice => 'یہ ڈیوائس';
+
+  @override
+  String get memoryThisIphone => 'یہ iPhone';
+
+  @override
+  String get memoryThisPhone => 'یہ فون';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi کیسے استعمال کریں';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'اپنے Omi سے بولیں';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں';
+
+  @override
+  String get deviceOnboardingGoodJob => 'شاباش!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'بولنا شروع کریں...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi سے سوال پوچھیں';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'بٹن ایک بار دبائیں، اپنا سوال بولیں، اور مکمل ہونے پر دوبارہ دبائیں';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'آپ کے سوال پر کارروائی ہو رہی ہے...';
+
+  @override
+  String get deviceOnboardingListening => 'سن رہا ہوں...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'بند کریں';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'آن کریں';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'بٹن کو 3 سیکنڈ تک دبائے رکھیں';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'دوبارہ آن کرنے کے لیے بٹن دبائیں';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'بٹن کو مضبوطی سے دبائے رکھیں جب تک روشنی بند نہ ہو جائے';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'منسلک';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'منسلک ہو گیا!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'منقطع';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'بند ہو رہا ہے...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ڈبل ٹیپ حسبِ ضرورت ترتیب دیں';
+
+  @override
+  String get deviceOnboardingEndConversation => 'گفتگو ختم کریں';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'موجودہ گفتگو محفوظ کر کے ختم کریں';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'میوٹ / ان میوٹ';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'مائیکروفون آن یا آف کریں';
+
+  @override
+  String get deviceOnboardingStarConversation => 'جاری گفتگو کو سٹار کریں';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'گفتگو کو اہم کے طور پر نشان زد کریں';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'یہ سنگل ٹیپ تھا — جلدی سے دو بار ٹیپ کرنے کی کوشش کریں!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'ابھی آزمائیں! اپنے Omi کو ڈبل ٹیپ کریں';
+
+  @override
+  String get deviceOnboardingContinue => 'جاری رکھیں';
+
+  @override
+  String get deviceOnboardingFinish => 'مکمل کریں';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'اپنے Omi کو جانیں';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
+
+  @override
+  String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
+
+  @override
+  String get latest => 'تازہ ترین';
+
+  @override
+  String get flashFirmware => 'فرم ویئر فلیش کریں';
+
+  @override
+  String get pendantRecordingTitle => 'پینڈنٹ پر ریکارڈنگ جاری ہے';
+
+  @override
+  String get pendantRecordingNote =>
+      'آپ کا پینڈنٹ خود بخود ریکارڈ کر رہا ہے۔ ایپ کھلی ہونے کے دوران ریکارڈنگز آپ کے فون سے سنک ہوتی ہیں۔';
+
+  @override
+  String get pendantSyncingRecordings => 'آپ کے پینڈنٹ سے ریکارڈنگز سنک ہو رہی ہیں…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes منٹ محفوظ';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta جوڑیں';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'گفتگو اور بصری سیاق و سباق کے لیے اپنی Ray-Ban Meta عینک کو اپنے Omi کیپچر ڈیوائس کے طور پر استعمال کریں۔ Omi آپ کی عینک کو منسلک کرنے کے لیے Meta AI ایپ کھولے گا۔';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI کے ذریعے جڑیں';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI ایپ میں کنکشن مکمل کریں، پھر یہاں واپس آئیں۔';
+
+  @override
+  String get raybanMetaCheckAgain => 'دوبارہ چیک کریں';
+
+  @override
+  String get raybanMetaAllowCamera => 'عینک پر کیمرے کی اجازت دیں';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi آپ کی گفتگو میں تصاویر شامل کرنے کے لیے آپ کی عینک کا کیمرہ استعمال کرتا ہے۔ آپ اسے چھوڑ کر صرف آڈیو استعمال کر سکتے ہیں۔';
+
+  @override
+  String get raybanMetaSkipForNow => 'ابھی کے لیے چھوڑ دیں';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta صرف آڈیو موڈ';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi کا یہ ورژن Bluetooth کے ذریعے آپ کی عینک کا مائیکروفون استعمال کر سکتا ہے۔ تصویر کیپچر کے لیے Omi کا Meta ڈیولپر بلڈ درکار ہے۔';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'جب عینک کا مائیکروفون استعمال میں ہو تو آپ کے فون پر موسیقی رک جاتی ہے۔';
+
+  @override
+  String get raybanMetaContinue => 'جاری رکھیں';
+
+  @override
+  String get raybanMetaCapturePhoto => 'تصویر لیں';
+
+  @override
+  String get raybanMetaPhotoRequested => 'تصویر کی درخواست کی گئی — یہ آپ کی گفتگو میں ظاہر ہوگی۔';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'مائیکروفون تیار ہے';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'تصویر کیپچر تیار ہے';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'صرف آڈیو موڈ میں دستیاب نہیں';
+
+  @override
+  String get raybanMetaCamera => 'کیمرہ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta سے جڑنے میں خرابی: $error';
+  }
 }

@@ -7639,6 +7639,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewAll => '모두 보기';
 
   @override
+  String get expand => '펼치기';
+
+  @override
   String get addTask => '작업 추가';
 
   @override
@@ -9185,7 +9188,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
 
   @override
-  String get transcribeLaterNote => '현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+  String get transcribeLaterNote => '현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
 
   @override
   String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
@@ -9210,4 +9213,205 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
+
+  @override
+  String get memoryThisDevice => '이 기기';
+
+  @override
+  String get memoryThisIphone => '이 iPhone';
+
+  @override
+  String get memoryThisPhone => '이 휴대폰';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi 사용법';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '몇 마디 말하면 실시간으로 텍스트가 나타나요';
+
+  @override
+  String get deviceOnboardingGoodJob => '잘했어요!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '말해보세요...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi에게 질문하기';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '버튼을 한 번 누르고 질문한 뒤, 끝나면 다시 누르세요';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '질문을 처리하는 중...';
+
+  @override
+  String get deviceOnboardingListening => '듣는 중...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '전원 끄기';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '전원 켜기';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '버튼을 3초간 길게 누르세요';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '버튼을 눌러 다시 켜세요';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '불이 꺼질 때까지 버튼을 꾹 누르세요';
+
+  @override
+  String get deviceOnboardingStatusConnected => '연결됨';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '연결되었어요!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '연결 끊김';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '끄는 중...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '더블 탭 설정하기';
+
+  @override
+  String get deviceOnboardingEndConversation => '대화 종료';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '현재 대화를 저장하고 종료해요';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '음소거 / 해제';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '마이크를 켜거나 꺼요';
+
+  @override
+  String get deviceOnboardingStarConversation => '진행 중인 대화 즐겨찾기';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '대화를 중요로 표시해요';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '방금 한 번 탭했어요 — 빠르게 두 번 탭해보세요!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '지금 해보세요! Omi를 더블 탭하세요';
+
+  @override
+  String get deviceOnboardingContinue => '계속';
+
+  @override
+  String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
+
+  @override
+  String get jumpToLatestMessage => '최신 메시지로 이동';
+
+  @override
+  String get latest => '최신';
+
+  @override
+  String get flashFirmware => '펌웨어 플래시';
+
+  @override
+  String get pendantRecordingTitle => '펜던트에서 녹음 중';
+
+  @override
+  String get pendantRecordingNote => '펜던트가 자동으로 녹음하고 있습니다. 앱이 열려 있는 동안 녹음이 휴대폰으로 동기화됩니다.';
+
+  @override
+  String get pendantSyncingRecordings => '펜던트에서 녹음을 동기화하는 중…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes분 저장됨';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta 연결';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta 안경을 대화 및 시각적 컨텍스트를 위한 Omi 캡처 기기로 사용하세요. Omi가 Meta AI 앱을 열어 안경을 연결합니다.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI를 통해 연결';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI 앱에서 연결을 완료한 후 여기로 돌아오세요.';
+
+  @override
+  String get raybanMetaCheckAgain => '다시 확인';
+
+  @override
+  String get raybanMetaAllowCamera => '안경 카메라 허용';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi는 안경 카메라를 사용하여 대화에 사진을 추가합니다. 이 단계를 건너뛰고 오디오만 사용할 수 있습니다.';
+
+  @override
+  String get raybanMetaSkipForNow => '지금은 건너뛰기';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 오디오 전용 모드';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      '이 버전의 Omi는 Bluetooth를 통해 안경 마이크를 사용할 수 있습니다. 사진 촬영에는 Omi의 Meta 개발자 빌드가 필요합니다.';
+
+  @override
+  String get raybanMetaMusicPauseNote => '안경 마이크를 사용하는 동안 휴대폰의 음악이 일시 정지됩니다.';
+
+  @override
+  String get raybanMetaContinue => '계속';
+
+  @override
+  String get raybanMetaCapturePhoto => '사진 촬영';
+
+  @override
+  String get raybanMetaPhotoRequested => '사진을 요청했습니다 — 대화에 표시됩니다.';
+
+  @override
+  String get raybanMetaMicrophoneReady => '마이크 준비됨';
+
+  @override
+  String get raybanMetaImageCaptureReady => '이미지 캡처 준비됨';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '오디오 전용 모드에서는 사용할 수 없음';
+
+  @override
+  String get raybanMetaCamera => '카메라';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta 연결 오류: $error';
+  }
 }

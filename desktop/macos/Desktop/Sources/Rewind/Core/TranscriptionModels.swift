@@ -12,6 +12,20 @@ enum TranscriptionSessionStatus: String, Codable, CaseIterable {
     case failed = "failed"
 }
 
+enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
+    case localSegments = "local_segments"
+    case cloudReconcile = "cloud_reconcile"
+}
+
+enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
+    case userStop = "user_stop"
+    case finishAndContinue = "finish_and_continue"
+    case meetingEnded = "meeting_ended"
+    case maxDurationRotation = "max_duration_rotation"
+    case crashRecovery = "crash_recovery"
+    case retry = "retry"
+}
+
 /// Conversation processing status (from backend)
 /// Matches ConversationStatus in APIClient.swift
 enum LocalConversationStatus: String, Codable, CaseIterable {
@@ -39,9 +53,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     var retryCount: Int
     var lastError: String?
     var backendId: String?                // Server conversation ID
+    var clientConversationId: String?     // Client-generated stable conversation ID for listen reconciliation
     var backendSynced: Bool
     var createdAt: Date
     var updatedAt: Date
+    var finalizationStrategy: TranscriptionFinalizationStrategy?
+    var finalizationReason: TranscriptionFinalizationReason?
+    var finalizationStartedAt: Date?
+    var finalizationCompletedAt: Date?
 
     // MARK: - Structured Data (from ServerConversation.Structured)
     var title: String?
@@ -80,9 +99,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         retryCount: Int = 0,
         lastError: String? = nil,
         backendId: String? = nil,
+        clientConversationId: String? = nil,
         backendSynced: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
+        finalizationStrategy: TranscriptionFinalizationStrategy? = nil,
+        finalizationReason: TranscriptionFinalizationReason? = nil,
+        finalizationStartedAt: Date? = nil,
+        finalizationCompletedAt: Date? = nil,
         // Structured data
         title: String? = nil,
         overview: String? = nil,
@@ -113,9 +137,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         self.retryCount = retryCount
         self.lastError = lastError
         self.backendId = backendId
+        self.clientConversationId = clientConversationId
         self.backendSynced = backendSynced
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.finalizationStrategy = finalizationStrategy
+        self.finalizationReason = finalizationReason
+        self.finalizationStartedAt = finalizationStartedAt
+        self.finalizationCompletedAt = finalizationCompletedAt
         // Structured data
         self.title = title
         self.overview = overview
@@ -256,6 +285,10 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
     var session: QueryInterfaceRequest<TranscriptionSessionRecord> {
         request(for: TranscriptionSegmentRecord.session)
     }
+
+    var hasSpeakerAssignment: Bool {
+        isUser || personId != nil
+    }
 }
 
 // MARK: - Session with Segments
@@ -345,6 +378,10 @@ extension TranscriptionSessionRecord {
             backendSynced: true,
             createdAt: conversation.createdAt,
             updatedAt: Date(),
+            finalizationStrategy: nil,
+            finalizationReason: nil,
+            finalizationStartedAt: nil,
+            finalizationCompletedAt: localStatus == .completed ? (conversation.finishedAt ?? Date()) : nil,
             title: conversation.structured.title,
             overview: conversation.structured.overview,
             emoji: conversation.structured.emoji,
@@ -363,9 +400,19 @@ extension TranscriptionSessionRecord {
         )
     }
 
-    /// Update this record from a ServerConversation (preserving local id)
-    mutating func updateFrom(_ conversation: ServerConversation) {
+    /// Update this record from a ServerConversation (preserving local id).
+    /// When a local mutation is newer than the server timestamp, keep user-controlled local
+    /// fields such as title, star, folder, and delete state while still accepting backend-owned data.
+    mutating func updateFrom(
+        _ conversation: ServerConversation,
+        preservingNewerLocalFields preserveNewerLocalFields: Bool = false
+    ) {
         let encoder = JSONEncoder()
+        let localUpdatedAt = updatedAt
+        let localTitle = title
+        let localStarred = starred
+        let localFolderId = folderId
+        let localDeleted = deleted
 
         // Update timestamps — use server's latest timestamp so local mutations
         // (which set updatedAt = Date()) aren't overwritten by stale sync data
@@ -408,6 +455,46 @@ extension TranscriptionSessionRecord {
         // Mark as synced
         self.backendId = conversation.id
         self.backendSynced = true
+
+        if preserveNewerLocalFields {
+            self.title = Self.preserveLocalNonEmpty(localTitle, over: self.title)
+            self.starred = localStarred
+            self.folderId = localFolderId
+            self.deleted = localDeleted
+            self.updatedAt = max(localUpdatedAt, self.updatedAt)
+        }
+    }
+
+    /// True when the server response can fill at least one empty local server-owned field.
+    func hasHydratableServerFields(from conversation: ServerConversation) -> Bool {
+        guard backendSynced, backendId == conversation.id else { return false }
+        return Self.isEmpty(title) && !conversation.structured.title.isEmpty ||
+            Self.isEmpty(overview) && !conversation.structured.overview.isEmpty ||
+            Self.isEmpty(emoji) && !conversation.structured.emoji.isEmpty ||
+            Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category) ||
+            Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty ||
+            Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty ||
+            Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty ||
+            Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
+    }
+
+    private static func preserveLocalNonEmpty(_ local: String?, over server: String?) -> String? {
+        guard !isEmpty(local) else { return server }
+        guard isEmpty(server) else { return local }
+        return local
+    }
+
+    private static func isEmpty(_ value: String?) -> Bool {
+        value?.isEmpty ?? true
+    }
+
+    private static func isDefaultCategory(_ value: String?) -> Bool {
+        isEmpty(value) || value == "other"
+    }
+
+    private static func isEmptyJsonCollection(_ value: String?) -> Bool {
+        guard let value, !value.isEmpty else { return true }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines) == "[]"
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
@@ -503,7 +504,7 @@ struct ConversationDetailView: View {
     private func copyTranscript() {
         guard canCopyTranscript else { return }
 
-        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        let peopleDict = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
             let speakerName: String
             if segment.isUser {
@@ -554,8 +555,11 @@ struct ConversationDetailView: View {
         defer { isDeleting = false }
 
         do {
-            try await APIClient.shared.deleteConversation(id: conversation.id)
+            let conversationId = conversation.id
+            try await APIClient.shared.deleteConversation(id: conversationId)
             await MainActor.run {
+                // Always purge local conversation + memory cache; onDelete is nav/UI only.
+                AppState.current?.deleteConversationLocally(conversationId)
                 onDelete?()
                 onBack()
             }
@@ -741,7 +745,7 @@ struct ConversationDetailView: View {
     /// Do NOT wrap this in another LazyVStack or VStack — it emits ForEach items directly.
     @ViewBuilder
     private var transcriptBubblesContent: some View {
-        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        let peopleDict = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         ForEach(displayConversation.transcriptSegments) { segment in
             SpeakerBubbleView(
                 segment: segment,
@@ -1059,6 +1063,7 @@ struct ConversationDetailView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     ConversationDetailView(
         conversation: ServerConversation.preview,
@@ -1067,6 +1072,7 @@ struct ConversationDetailView: View {
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundPrimary)
 }
+#endif
 
 // Preview helper
 extension ServerConversation {

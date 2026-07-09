@@ -53,12 +53,39 @@ impl Category {
     /// Get all category values as a comma-separated string (for prompts)
     pub fn all_as_string() -> String {
         vec![
-            "personal", "education", "health", "finance", "legal", "philosophy",
-            "spiritual", "science", "entrepreneurship", "parenting", "romantic",
-            "travel", "inspiration", "technology", "business", "social", "work",
-            "sports", "politics", "literature", "history", "architecture", "music",
-            "weather", "news", "entertainment", "psychology", "real", "design",
-            "family", "economics", "environment", "other",
+            "personal",
+            "education",
+            "health",
+            "finance",
+            "legal",
+            "philosophy",
+            "spiritual",
+            "science",
+            "entrepreneurship",
+            "parenting",
+            "romantic",
+            "travel",
+            "inspiration",
+            "technology",
+            "business",
+            "social",
+            "work",
+            "sports",
+            "politics",
+            "literature",
+            "history",
+            "architecture",
+            "music",
+            "weather",
+            "news",
+            "entertainment",
+            "psychology",
+            "real",
+            "design",
+            "family",
+            "economics",
+            "environment",
+            "other",
         ]
         .join(", ")
     }
@@ -75,11 +102,19 @@ pub enum MemoryCategory {
     Interesting,
     /// Manually added by user
     Manual,
+    /// Workflow-generated memory
+    Workflow,
     // Legacy categories for backward compatibility with old data
     Core,
     Hobbies,
     Lifestyle,
     Interests,
+    Habits,
+    Work,
+    Skills,
+    Learnings,
+    Other,
+    Auto,
 }
 
 impl Default for MemoryCategory {

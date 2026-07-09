@@ -13,11 +13,13 @@ This skill teaches you the Omi desktop macOS app's navigation structure, screen 
 Two things make iterating on the desktop app slow: signing in (web OAuth) and clicking through the UI to reach a screen. Both are solved — use these before reaching for `agent-swift`.
 
 ### 1. Skip the web login (seed auth/settings once, reuse forever)
-Dev/named bundles store auth and common developer settings in UserDefaults (not Keychain), so a signed-in session and shortcuts can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
+Named bundles clone auth state + Firebase tokens into UserDefaults; on first launch the app migrates tokens into its own Keychain item (correct `teamid:` partition — avoids the login-keychain password sheet). Prefer `./run.sh` for named bundles — it dumps/seeds after install. Manual seed:
 ```bash
 cd desktop/macos
 ./scripts/omi-auth-dump.sh                                  # capture Omi Dev's session -> tmp/desktop-auth.json
-./scripts/omi-auth-seed.sh com.omi.omi-myfeature           # replay into a named bundle (run BEFORE launch)
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature \
+  tmp/desktop-auth.json \
+  "/Applications/omi-myfeature.app"                         # optional: Team ID for clearing stale Keychain
 ./scripts/omi-settings-seed.sh com.omi.omi-myfeature       # replay shortcuts/settings
 ```
 The seeded bundle boots already signed-in and past onboarding, with Omi Dev's shortcuts/settings — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
@@ -33,6 +35,15 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+### 2a. Desktop core E2E harness (tiered)
+Primary entry for the desktop confidence ladder: `scripts/desktop-core-harness.sh` (see `e2e/CORE_E2E.md`).
+```bash
+./scripts/desktop-core-harness.sh --self-check   # Linux-safe T0 (flow lint + gauntlet hooks)
+./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
+./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e   # hermetic: dev-up offline + core matrix
+```
+Typed flows live in `e2e/flows/`; run individually with `scripts/omi-harness run <flow.yaml> --lane bridge`.
+
 ### 2b. Run semantic actions (cursor-free, in-process)
 Beyond navigation, the bridge exposes named **actions** that invoke the app's real
 code paths directly — no synthetic mouse events, so they never grab the cursor (the
@@ -43,16 +54,185 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+`omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
+`sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
+`agent-swift`: prefer actions whose `surfaces` match the screen and whose
+`safety` is `read_only`, `local_artifact`, or `local_ui_state` for routine checks.
 Add new actions in `DesktopAutomationActionRegistry` (`registerBuiltins()` for global
 ones, or `register(name:summary:params:handler:)` from a view model for screen-scoped
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
+After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
+saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
+after `updateWalWithDownloadedData`; the WiFi path tears down the device SoftAP
+first so the Mac can regain internet before upload.
+```bash
+# Structured WAL state via automation bridge (named test bundle must be running)
+cd desktop/macos && ./scripts/omi-ctl action wal_snapshot
+# Expect pending_count=0 and status synced|uploaded after SD-card sync completes
+
+# After triggering SD sync in a named test bundle:
+rg 'Uploaded WAL|WiFi sync completed|syncToCloud' /private/tmp/omi-dev.log | tail -20
+```
+Expect log lines like `Uploaded WAL <id>: status=synced` (or `status=uploaded` for
+202-queued jobs). Hermetic regression:
+`cd desktop/macos && xcrun swift test --filter 'WifiSync|SdCardSyncParity'`.
+
+### 2d. Inject backend faults (failure-path testing)
+The hermetic E2E harness is backend-only, so desktop failure paths (backend 5xx →
+structured `ChatErrorState`, task sortOrder sync failure surfaced/retried not silent,
+transcription transport truthfulness) can't be driven end-to-end. `scripts/omi-fault-inject.sh`
+stands up a local endpoint that fails on purpose; point a **named test bundle** (never
+prod) at it via the documented backend overrides — `OMI_PYTHON_API_URL` (chat / action-item
+sync / transcription relay), `OMI_DESKTOP_API_URL` (Rust backend), `OMI_AUTH_API_URL` (auth):
+```bash
+cd desktop/macos
+eval "$(./scripts/omi-fault-inject.sh start error)"      # modes: error | status:CODE | latency | reset | refuse
+OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+  OMI_PYTHON_API_URL="$OMI_FAULT_URL" OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
+  OMI_APP_NAME="omi-fault" ./run.sh &
+./scripts/omi-ctl wait-ready
+./scripts/omi-ctl action ask query="hi"                  # exercise the path; assert a surfaced error, not a crash/silent no-op
+./scripts/omi-fault-inject.sh stop
+```
+`status:CODE` returns an HTTP status code in 100-599 (e.g. `status:503`, `status:429`, `status:401`);
+`latency` sleeps `--latency-ms` (default 30 000) before replying (watchdog/timeout paths);
+`reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
+mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
+
+### 2e. Hardening smoke (runtime regression tripwire)
+`scripts/omi-hardening-smoke.sh` re-runs the proven runtime probes behind hardened
+acceptance rows so a behavior that regresses upstream is caught on the next run, not the
+next manual audit. One-time setup — build and seed a dedicated named bundle:
+```bash
+cd desktop/macos
+OMI_APP_NAME="omi-smoke" ./run.sh          # build + install /Applications/omi-smoke.app, then quit it
+./scripts/omi-auth-dump.sh                 # capture the signed-in Omi Dev session
+./scripts/omi-auth-seed.sh com.omi.omi-smoke tmp/desktop-auth.json "/Applications/omi-smoke.app"
+```
+Then re-run any time (launches the installed bundle on an isolated port, ends with it stopped):
+```bash
+./scripts/omi-hardening-smoke.sh run                          # all probes, defaults: com.omi.omi-smoke, port 47797
+./scripts/omi-hardening-smoke.sh run --only set-01,set-04     # subset
+./scripts/omi-hardening-smoke.sh run --attach --port 47795    # against an already-running bundle (skips lifecycle probes)
+./scripts/omi-hardening-smoke.sh scan <dir>                   # credential-pattern sweep of any evidence dir
+```
+Probes in canonical order (destructive last): `auth-06` prod tokens-at-rest (passive read) ·
+`set-04` log credential hygiene · `set-01` settings navigation · `mic-06` rapid-PTT orphan
+guard · `chat-03` agent-kill recovery · `auth-03` expired-token refresh (**relaunches** the
+app) · `lnch-07` shutdown flush (**stops** the app) · `self-hygiene` report-dir scan.
+Exit codes: `0` all PASS · `1` any FAIL (a regression — investigate) · `2` usage/prod-refusal ·
+`3` BLOCKED only (harness couldn't run: port busy, stale auth seed, app missing). Reports +
+`smoke-summary.json` land under `${TMPDIR}/omi-hardening-smoke/<ts>/` unless `--report-dir` is
+given. Safety: only `com.omi.omi-*` bundles are accepted; the sole production interaction is
+the read-only `defaults read` in `auth-06`.
+
+### 2e. Stall the agent stream (chat watchdog testing)
+The HTTP fault harness (§2c) can't stall the **agent** stream — that's a node/stdio
+bridge, not HTTP. Two non-prod bridge actions freeze it so the chat stall path can be
+exercised end-to-end (CHAT-02): a slow/stalled annotation at 8s/20s (`StallDetector`),
+and ChatProvider's **180s send watchdog** which force-releases `isSending` and surfaces
+"Response took too long. Try again." (recoverable — the next send works).
+
+- `suspend_agent_stream` — SIGSTOP the agent process so it emits no events; `durationMs`
+  (default `190000`, just past the 180s watchdog; capped at `300000`) auto-resumes it, so
+  a forgotten resume can never wedge the agent.
+- `resume_agent_stream` — SIGCONT immediately (early clear).
+
+Both are non-production only (`AppBuild.isNonProduction`). Recipe (drive against a named
+test bundle's automation port):
+```bash
+cd desktop/macos
+# 1. start a chat turn so a send is in flight
+./scripts/omi-ctl action ask query="write a long detailed answer" &
+sleep 2
+# 2. freeze the agent stream past the 180s watchdog
+./scripts/omi-ctl action suspend_agent_stream durationMs=190000
+# 3. within <=180s the send watchdog fires: assert the error + that sending is released
+sleep 185
+./scripts/omi-ctl action main_chat_snapshot | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("error:", d.get("has_error"), d.get("error_message")); print("is_sending:", d.get("is_sending"))'
+#   expect has_error=true / "Response took too long…" and is_sending=false (recoverable)
+# 4. resume + prove recovery with a fresh turn
+./scripts/omi-ctl action resume_agent_stream
+./scripts/omi-ctl action ask query="are you back?"   # succeeds — not blocked by the stale send
+```
+`suspend_agent_stream` returns `{suspended:true, pid, durationMs}` (or an `error` if no
+agent process is running / on a prod bundle).
+
+### 2f. Inject a server push mid-drag (task requery suppression, TASK-06)
+A server push arriving while a task drag/sort-sync is in flight must not clobber the
+in-flight order — the Tasks view model holds `suppressDatabaseRequery` during that
+window so a recompute recomputes from the in-memory drag order instead of re-reading
+stale rows from SQLite. `inject_requery_during_drag` (non-prod) drives the **real**
+`recomputeAllCaches` path under a simulated drag and reports the outcome:
+
+```bash
+cd desktop/macos
+# optional: seed some tasks first so the order snapshot is non-trivial
+./scripts/omi-ctl action seed_tasks count=8
+./scripts/omi-ctl action inject_requery_during_drag | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print(d)'
+#   assert: requery_suppressed_during_drag=true  (the server-push recompute did NOT re-read SQLite)
+#   control: requery_fires_without_suppress=true  (same push with the flag cleared DOES requery)
+```
+A suppressed requery is exactly why the in-memory drag order stays on screen instead of
+a stale SQLite re-read clobbering it — so `requery_suppressed_during_drag=true` is the
+TASK-06 assertion; the control proves the guard is load-bearing. The action **forces the
+filtered-requery branch** internally, so the assertion is never vacuous even with no user
+filter active; it polls the requery counter (no fixed sleeps) for a deterministic signal.
+The default task filter (`.last7Days`, a date tag) also arms the path in normal use, so
+`requery_fires_without_suppress=true` confirms the injected push *would* have requeried
+without the drag guard. `had_non_status_filters=false` means no filter is active and the
+requery path is inert (the suppression assertion is then vacuous — apply a date/tag
+filter first). Non-production bundles only.
+
+### 2g. Inspect the feedback payload without submitting (SET-02)
+`FeedbackView.submitFeedback()` always fires a real Sentry event and attaches the app log
+plus a `desktop_diagnostics.json`, so there's no way to verify the payload is token-free
+without spamming Sentry. `dump_feedback_payload_dryrun` (non-prod only) assembles the
+**same** payload — the report title (`feedbackReportTitle`) and the diagnostics JSON
+(`writeDiagnosticsAttachment`, the exact builder the real submit uses) — and returns it
+**without** calling `SentrySDK`, so the diagnostics JSON can be secret-scanned.
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action dump_feedback_payload_dryrun message="mic dropped mid-call" \
+  | python3 -c 'import json,sys,re; d=json.load(sys.stdin)["result"]["detail"]; \
+assert d["sentry_capture_invoked"]=="false" and d["would_submit_to_sentry"]=="false"; \
+dj=d["diagnostics_json"]; \
+pats=[r"eyJ[A-Za-z0-9_-]{10,}",r"AIza[0-9A-Za-z_-]{10,}",r"omi_(auto|mcp)_[0-9a-f]{8,}",r"AMf-[A-Za-z0-9_-]{10,}",r"[Bb]earer\s+\S{12,}",r"(?i)_API_KEY\s*[=:]\s*\S+"]; \
+hits=[p for p in pats if re.search(p,dj)]; \
+print("title:", d["sentry_message"]); print("secret hits:", hits or "NONE")'
+```
+Assert `sentry_capture_invoked=false`, `would_submit_to_sentry=false`, and **no secret
+hits** in `diagnostics_json`. Empty `message` yields the "User Report (logs only)" title.
+The action returns the log only as **metadata** (`log_attachment_filename`/`_exists`/`_bytes`) —
+never its contents — so the bridge response itself can't leak the raw log. To confirm no
+Sentry event fired, check the app log has no "User report submitted to Sentry" line.
+
+### 2h. Prove /state survives a wedged main thread (bridge responsiveness)
+`GET /state` refreshes live UI fields on the MainActor. If the main thread is wedged
+(e.g. a sign-in Keychain read blocking on `SecItemCopyMatching`), that hop used to hang
+the whole bridge — `curl /state` timed out with 0 bytes. `liveAutomationSnapshot()` now
+bounds the hop (`awaitWithTimeout`, 3s) and falls back to the last cached snapshot with
+`snapshotStale=true`, so `/state` always answers. `debug_block_main_thread` (non-prod)
+wedges the main thread on demand so this is testable:
+```bash
+cd desktop/macos
+# wedge the main thread for 8s, then /state must still answer (stale) within ~3s
+./scripts/omi-ctl action debug_block_main_thread durationMs=8000
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("stale:", d.get("snapshotStale"))'
+#   expect snapshotStale=true during the wedge (cached fallback), false again once it clears
+```
+Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
+Hermetic ratchet for the timeout itself: `xcrun swift test --package-path Desktop --filter AwaitWithTimeoutTests`.
+
 ### The full loop
 ```bash
 cd desktop/macos
 OMI_APP_NAME="omi-myfeature" ./run.sh &                 # build + launch once
-./scripts/omi-auth-seed.sh com.omi.omi-myfeature        # (first run, or after re-dump) — relaunch to apply
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature tmp/desktop-auth.json "/Applications/omi-myfeature.app"  # after install; relaunch to apply
 ./scripts/omi-settings-seed.sh com.omi.omi-myfeature    # copy shortcuts/settings from Omi Dev
 ./scripts/omi-ctl wait-ready
 ./scripts/omi-ctl navigate memories                      # jump to the screen you changed

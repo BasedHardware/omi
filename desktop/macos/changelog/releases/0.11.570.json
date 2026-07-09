@@ -1,0 +1,7 @@
+{
+  "version": "0.11.570",
+  "date": "2026-06-30",
+  "changes": [
+    "Improved desktop update recovery with clearer failure guidance and safer manual downloads"
+  ]
+}

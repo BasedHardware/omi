@@ -9550,6 +9550,10 @@
     "@viewAll": {
         "description": "Button text to view all items"
     },
+    "expand": "Expand",
+    "@expand": {
+        "description": "Button text to expand/open a section such as the mind map preview"
+    },
     "addTask": "Add Task",
     "@addTask": {
         "description": "Menu option to add a new task"
@@ -11035,7 +11039,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11070,5 +11074,207 @@
     "transcribeLaterPaused": "Paused — audio isn't being recorded",
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
+    },
+    "memoryThisDevice": "This device",
+    "@memoryThisDevice": {
+        "description": "Filter chip and provenance label for the current device"
+    },
+    "memoryThisIphone": "This iPhone",
+    "@memoryThisIphone": {
+        "description": "Provenance label when capture device is this iPhone"
+    },
+    "memoryThisPhone": "This phone",
+    "@memoryThisPhone": {
+        "description": "Provenance label when capture device is this Android phone"
+    },
+    "memoryProvenanceMac": "Mac",
+    "@memoryProvenanceMac": {
+        "description": "Provenance label for a Mac capture device"
+    },
+    "memoryProvenanceIphone": "iPhone",
+    "@memoryProvenanceIphone": {
+        "description": "Provenance label for an iPhone capture device"
+    },
+    "memoryProvenanceAndroid": "Android",
+    "@memoryProvenanceAndroid": {
+        "description": "Provenance label for an Android capture device"
+    },
+    "deviceTutorial": "How to Use Your Omi",
+    "@deviceTutorial": {
+        "description": "Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)"
+    },
+    "deviceOnboardingTranscriptionTitle": "Speak Into Your Omi",
+    "@deviceOnboardingTranscriptionTitle": {
+        "description": "Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo"
+    },
+    "deviceOnboardingTranscriptionSubtitle": "Say a few words and watch them appear in real-time",
+    "@deviceOnboardingTranscriptionSubtitle": {
+        "description": "Tutorial step 1 subtitle — explains that spoken words appear in real time"
+    },
+    "deviceOnboardingGoodJob": "Good job!",
+    "@deviceOnboardingGoodJob": {
+        "description": "Tutorial step 1 success message after the user speaks enough words"
+    },
+    "deviceOnboardingStartSpeaking": "Start speaking...",
+    "@deviceOnboardingStartSpeaking": {
+        "description": "Tutorial step 1 placeholder in the live transcript area before any speech is detected"
+    },
+    "deviceOnboardingAskQuestionTitle": "Ask Omi a Question",
+    "@deviceOnboardingAskQuestionTitle": {
+        "description": "Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press"
+    },
+    "deviceOnboardingAskQuestionSubtitle": "Press the button once, speak your question, then press again when done",
+    "@deviceOnboardingAskQuestionSubtitle": {
+        "description": "Tutorial step 2 subtitle — instructions for the single-press ask-a-question flow"
+    },
+    "deviceOnboardingProcessingQuestion": "Processing your question...",
+    "@deviceOnboardingProcessingQuestion": {
+        "description": "Tutorial step 2 status while the spoken question is processed by the AI"
+    },
+    "deviceOnboardingListening": "Listening...",
+    "@deviceOnboardingListening": {
+        "description": "Tutorial step 2 status chip while Omi is actively listening to the question"
+    },
+    "deviceOnboardingTurnOffTitle": "Turn Off",
+    "@deviceOnboardingTurnOffTitle": {
+        "description": "Tutorial step 3 title while waiting for the user to power the device off"
+    },
+    "deviceOnboardingTurnOnTitle": "Turn On",
+    "@deviceOnboardingTurnOnTitle": {
+        "description": "Tutorial step 3 title while waiting for the user to power the device back on"
+    },
+    "deviceOnboardingTurnOffSubtitle": "Hold the button for 3 seconds",
+    "@deviceOnboardingTurnOffSubtitle": {
+        "description": "Tutorial step 3 instruction to long-press the button to turn the device off"
+    },
+    "deviceOnboardingTurnOnSubtitle": "Press the button to turn it back on",
+    "@deviceOnboardingTurnOnSubtitle": {
+        "description": "Tutorial step 3 instruction to press the button to turn the device back on"
+    },
+    "deviceOnboardingHoldButtonHint": "Hold the button firmly until the light turns off",
+    "@deviceOnboardingHoldButtonHint": {
+        "description": "Tutorial step 3 hint shown if the device has not turned off after a while"
+    },
+    "deviceOnboardingStatusConnected": "Connected",
+    "@deviceOnboardingStatusConnected": {
+        "description": "Tutorial step 3 status chip — device connected (before power-off)"
+    },
+    "deviceOnboardingStatusConnectedDone": "Connected!",
+    "@deviceOnboardingStatusConnectedDone": {
+        "description": "Tutorial step 3 status chip — device reconnected after the power cycle"
+    },
+    "deviceOnboardingStatusDisconnected": "Disconnected",
+    "@deviceOnboardingStatusDisconnected": {
+        "description": "Tutorial step 3 status chip — device disconnected/off"
+    },
+    "deviceOnboardingStatusTurningOff": "Turning off...",
+    "@deviceOnboardingStatusTurningOff": {
+        "description": "Tutorial step 3 status chip while the device is powering off"
+    },
+    "deviceOnboardingDoubleTapTitle": "Customize Double Tap",
+    "@deviceOnboardingDoubleTapTitle": {
+        "description": "Tutorial step 4 title — configure the device double-tap action"
+    },
+    "deviceOnboardingEndConversation": "End Conversation",
+    "@deviceOnboardingEndConversation": {
+        "description": "Tutorial step 4 double-tap option title — end the current conversation"
+    },
+    "deviceOnboardingEndConversationDesc": "Save and end current conversation",
+    "@deviceOnboardingEndConversationDesc": {
+        "description": "Tutorial step 4 double-tap option description for End Conversation"
+    },
+    "deviceOnboardingMuteUnmute": "Mute / Unmute",
+    "@deviceOnboardingMuteUnmute": {
+        "description": "Tutorial step 4 double-tap option title — mute or unmute the microphone"
+    },
+    "deviceOnboardingMuteUnmuteDesc": "Toggle microphone on or off",
+    "@deviceOnboardingMuteUnmuteDesc": {
+        "description": "Tutorial step 4 double-tap option description for Mute/Unmute"
+    },
+    "deviceOnboardingStarConversation": "Star Ongoing Conversation",
+    "@deviceOnboardingStarConversation": {
+        "description": "Tutorial step 4 double-tap option title — star the ongoing conversation"
+    },
+    "deviceOnboardingStarConversationDesc": "Mark conversation as important",
+    "@deviceOnboardingStarConversationDesc": {
+        "description": "Tutorial step 4 double-tap option description for Star Conversation"
+    },
+    "deviceOnboardingSingleTapHint": "That was a single tap — try tapping twice quickly!",
+    "@deviceOnboardingSingleTapHint": {
+        "description": "Tutorial step 4 hint shown when the user single-taps instead of double-tapping"
+    },
+    "deviceOnboardingTryDoubleTap": "Try it now! Double tap your Omi",
+    "@deviceOnboardingTryDoubleTap": {
+        "description": "Tutorial step 4 prompt encouraging the user to double-tap the device"
+    },
+    "deviceOnboardingContinue": "Continue",
+    "@deviceOnboardingContinue": {
+        "description": "Onboarding tutorial primary button label to advance to the next step"
+    },
+    "deviceOnboardingFinish": "Finish",
+    "@deviceOnboardingFinish": {
+        "description": "Onboarding tutorial final button label to complete the tutorial"
+    },
+    "deviceOnboardingIntroTitle": "Get to Know Your Omi",
+    "@deviceOnboardingIntroTitle": {
+        "description": "Onboarding intro screen title shown before the device tutorial steps"
+    },
+    "deviceOnboardingIntroSubtitle": "A quick, hands-on tour of everything your Omi can do.",
+    "@deviceOnboardingIntroSubtitle": {
+        "description": "Onboarding intro screen subtitle explaining the tutorial"
+    },
+    "deviceOnboardingIntroDuration": "About 1 minute",
+    "@deviceOnboardingIntroDuration": {
+        "description": "Onboarding intro screen estimated duration hint"
+    },
+    "jumpToLatestMessage": "Jump to latest message",
+    "@jumpToLatestMessage": {
+        "description": "Accessibility label and tooltip for the jump-to-latest button in chat"
+    },
+    "latest": "Latest",
+    "@latest": {
+        "description": "Visible label for the jump-to-latest button in chat"
+    },
+    "flashFirmware": "Flash Firmware",
+    "@flashFirmware": {
+        "description": "Button on the manual firmware flash page (developer settings)"
+    },
+    "pendantRecordingTitle": "Recording on Pendant",
+    "pendantRecordingNote": "Your pendant is recording on its own. Recordings sync to your phone while the app is open.",
+    "pendantSyncingRecordings": "Syncing recordings from your pendant…",
+    "pendantMinutesStored": "~{minutes} min stored",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pendant storage is almost full — keep the app open to sync.",
+    "connectRayBanMeta": "Connect Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.",
+    "raybanMetaOpenMetaAI": "Connect through Meta AI",
+    "raybanMetaWaitingForMetaAI": "Finish connecting in the Meta AI app, then come back here.",
+    "raybanMetaCheckAgain": "Check Again",
+    "raybanMetaAllowCamera": "Allow Camera on Glasses",
+    "raybanMetaCameraExplanation": "Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.",
+    "raybanMetaSkipForNow": "Skip for Now",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta audio-only mode",
+    "raybanMetaAudioOnlyExplanation": "This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.",
+    "raybanMetaMusicPauseNote": "Music on your phone pauses while the glasses microphone is in use.",
+    "raybanMetaContinue": "Continue",
+    "raybanMetaCapturePhoto": "Capture Photo",
+    "raybanMetaPhotoRequested": "Photo requested — it will appear in your conversation.",
+    "raybanMetaMicrophoneReady": "Microphone ready",
+    "raybanMetaImageCaptureReady": "Image capture ready",
+    "raybanMetaImageCaptureUnavailable": "Unavailable in audio-only mode",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Error connecting to Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
     }
 }

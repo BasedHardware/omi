@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Thumbnail view for a single screenshot in the grid
 struct ScreenshotThumbnailView: View {
@@ -354,6 +355,7 @@ struct ScreenshotGridView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     ScreenshotGridView(
         screenshots: [],
@@ -365,3 +367,4 @@ struct ScreenshotGridView: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

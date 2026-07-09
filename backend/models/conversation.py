@@ -129,6 +129,10 @@ class Conversation(BaseModel):
     # Calendar event link - set when conversation overlaps with a Google Calendar event
     calendar_event: Optional[CalendarEventLink] = None
 
+    # Capture-device provenance (optional; absent on legacy conversations).
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
+
     def __init__(self, **data):
         super().__init__(**data)
         # Update plugins_results based on apps_results
@@ -161,7 +165,7 @@ class Conversation(BaseModel):
             else:
                 return obj
 
-        conversation_dict = self.dict()
+        conversation_dict = self.model_dump()
         # Convert all datetime objects recursively
         conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
@@ -181,6 +185,10 @@ class CreateConversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     is_locked: bool = False
+    private_cloud_sync_enabled: bool = False
+
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
@@ -205,6 +213,9 @@ class ExternalIntegrationCreateConversation(BaseModel):
     language: Optional[str] = None
 
     app_id: Optional[str] = None
+
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
@@ -273,12 +284,13 @@ class UpdateActionItemDescriptionRequest(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = ''
     page: Optional[int] = 1
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
     start_date: Optional[str] = None  # ISO format datetime string
     end_date: Optional[str] = None  # ISO format datetime string
+    speaker_id: Optional[str] = None
 
 
 class TestPromptRequest(BaseModel):

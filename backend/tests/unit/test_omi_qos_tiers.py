@@ -106,6 +106,7 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -130,6 +131,9 @@ for _package, _path in {
         module = types.ModuleType(_package)
         sys.modules[_package] = module
     module.__path__ = [str(_path)]
+    if '.' in _package:
+        parent_name, child_name = _package.rsplit('.', 1)
+        setattr(sys.modules[parent_name], child_name, module)
 
 _clients_stub = sys.modules.get('utils.llm.clients')
 if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
@@ -151,6 +155,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "from unittest.mock import MagicMock",
         "for module_name in [",
         "    'anthropic',",
+        "    'cachetools',",
         "    'firebase_admin',",
         "    'firebase_admin.firestore',",
         "    'google.cloud.firestore',",
@@ -167,6 +172,8 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
+        "    'models.structured_extraction',",
+        "    'prometheus_client',",
         "]:",
         "    sys.modules.setdefault(module_name, MagicMock())",
         "os.environ['OPENAI_API_KEY'] = 'sk-test'",
@@ -180,7 +187,6 @@ def _clients_subprocess_script(assertion: str) -> str:
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
-    _CACHE_KEY_MODELS,
     _PERPLEXITY_ONLY_FEATURES,
     _PINNED_FEATURES,
     _STRUCTURED_OUTPUT_FEATURES,
@@ -197,6 +203,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 
 # ---------------------------------------------------------------------------
@@ -396,9 +403,9 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # memories uses gpt-4.1-mini which is not in _CACHE_KEY_MODELS
-        llm_with_key = get_llm('memories', cache_key='omi-test-key')
-        llm_without_key = get_llm('memories')
+        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
+        llm_with_key = get_llm('followup', cache_key='omi-test-key')
+        llm_without_key = get_llm('followup')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -539,8 +546,9 @@ class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
     def test_cache_key_models_contains_expected(self):
-        assert 'gpt-5.4' in _CACHE_KEY_MODELS
-        assert 'gpt-5.4-mini' in _CACHE_KEY_MODELS
+        assert supports_prompt_cache('gpt-5.4')
+        assert supports_prompt_cache('gpt-5.4-mini')
+        assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
 class TestGetQosInfo:
@@ -950,6 +958,44 @@ class TestBYOKWrapperArchitecture:
             assert not hasattr(mod, name), f'{name} should have been removed from clients.py'
 
 
+class TestBYOKEmbeddingsProxy:
+    def test_model_access_403_falls_back_to_default_embeddings(self, monkeypatch):
+        """BYOK OpenAI projects can reject text-embedding-3-large with model_not_found."""
+        import utils.llm.clients as mod
+
+        class _FailingBYOKEmbeddings:
+            def embed_documents(self, _texts):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+            def embed_query(self, _text):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+        default = MagicMock()
+        default.embed_documents.return_value = [[0.1, 0.2]]
+        default.embed_query.return_value = [0.1, 0.2]
+
+        monkeypatch.setattr(mod, 'get_byok_key', lambda provider: 'sk-byok' if provider == 'openai' else None)
+        monkeypatch.setattr(mod, 'OpenAIEmbeddings', lambda **_kwargs: _FailingBYOKEmbeddings())
+        mod._openai_cache.clear()
+
+        proxy = mod._OpenAIEmbeddingsProxy(
+            model='text-embedding-3-large',
+            default=default,
+            ctor_kwargs={},
+        )
+
+        assert proxy.embed_documents(['hello']) == [[0.1, 0.2]]
+        assert proxy.embed_query('hello') == [0.1, 0.2]
+        default.embed_documents.assert_called_once_with(['hello'])
+        default.embed_query.assert_called_once_with('hello')
+
+
 class TestBYOKProfile:
     """Verify BYOK QoS profile structure and model selections."""
 
@@ -1107,8 +1153,8 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
             assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
         finally:
@@ -1128,10 +1174,22 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
             assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
+
+    def test_structured_output_route_omits_thinking_budget(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('trends', 'gemini-2.5-flash-lite', 'gemini')
+        assert 'thinking_budget' not in opts
+
+    def test_non_structured_gemini_route_sets_thinking_budget_zero(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
+        assert opts.get('thinking_budget') == 0

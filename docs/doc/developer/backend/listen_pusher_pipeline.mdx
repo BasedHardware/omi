@@ -145,6 +145,8 @@ sequenceDiagram
     Note over Backend: No local fallback processing (#6061).<br/>Pusher is required for conversation processing.<br/>Without it, conversations stay in_progress permanently.
 ```
 
+**Teardown invariant:** flush any remaining multi-channel mix via `audio_bytes_send` **before** `pusher_close()` so `ListenPusherSession._flush()` can deliver tail audio to pusher.
+
 ## 3.1 Pusher Reconnect & Pending Flush
 
 When pusher reconnects after a disconnection, all buffered conversations are replayed.

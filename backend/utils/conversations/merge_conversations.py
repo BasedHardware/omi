@@ -14,16 +14,21 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
+from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
     list_audio_chunks,
-    storage_client,
+    _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
@@ -253,7 +258,7 @@ def perform_merge_async(
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
 
         # Store photos in subcollection if any
         if merged_photos:
@@ -417,7 +422,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
 
     for conv in conversations:
@@ -486,8 +491,11 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
     import database.action_items as action_items_db
 
     try:
-        # Delete memories
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
+        memory_system = pin_memory_system(uid, db_client=firestore_db)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=firestore_db):
+            MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
+        else:
+            memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
 

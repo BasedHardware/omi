@@ -30,7 +30,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional, cast
 
 from dotenv import load_dotenv
 
@@ -50,7 +50,7 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def count_punctuation(text: str) -> dict:
+def count_punctuation(text: str) -> Dict[str, Any]:
     marks = re.findall(r'[^\w\s]', text)
     return {'total': len(marks), 'detail': dict(sorted(((m, marks.count(m)) for m in set(marks)), key=lambda x: -x[1]))}
 
@@ -62,14 +62,14 @@ CHUNK_SIZE = 3200
 CHUNK_INTERVAL = 0.1
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('ERROR: Samples not prepared. Run first:')
         print('  python scripts/stt/n_benchmark_02_prerecorded.py --prepare')
         sys.exit(1)
     with open(manifest_path) as f:
-        return json.load(f)
+        return cast(List[Dict[str, Any]], json.load(f))
 
 
 def read_pcm_from_wav(wav_path: Path) -> bytes:
@@ -79,17 +79,18 @@ def read_pcm_from_wav(wav_path: Path) -> bytes:
     return data
 
 
-async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> dict:
+async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> Dict[str, Any]:
     """Stream audio and receive transcripts in parallel, tracking per-segment timing."""
-    segment_log = []  # [(wall_time, audio_sent_ms, segment_text, segment_count)]
-    segments_received = []
-    stream_start = [None]
+    segment_log: List[Dict[str, Any]] = []  # [(wall_time, audio_sent_ms, segment_text, segment_count)]
+    segments_received: List[Dict[str, Any]] = []
+    stream_start: List[Optional[float]] = [None]
 
-    def stream_transcript(segments):
+    def stream_transcript(segments: List[Dict[str, Any]]) -> None:
         now = time.monotonic()
         for seg in segments:
             segments_received.append(seg)
-            elapsed = (now - stream_start[0]) if stream_start[0] else 0
+            start = stream_start[0]
+            elapsed = (now - start) if start else 0
             segment_log.append(
                 {
                     'wall_s': round(elapsed, 3),
@@ -99,6 +100,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
             )
 
     connect_start = time.monotonic()
+    socket: Any = None
     try:
         if provider == 'deepgram':
             socket = await asyncio.wait_for(
@@ -113,8 +115,12 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
     except Exception as e:
         return {'error': str(e), 'connect_time': -1}
 
+    if socket is None:
+        return {'error': 'Failed to obtain socket', 'connect_time': -1}
+
     connect_time = time.monotonic() - connect_start
-    stream_start[0] = time.monotonic()
+    stream_start_val = time.monotonic()
+    stream_start[0] = stream_start_val
 
     audio_duration_s = len(audio_pcm) / (16000 * 2)
     segs_before_finish = 0
@@ -127,7 +133,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
         await asyncio.sleep(CHUNK_INTERVAL)
 
     segs_before_finish = len(segments_received)
-    audio_sent_time = time.monotonic() - stream_start[0]
+    audio_sent_time = time.monotonic() - stream_start_val
 
     if provider == 'modulate':
         try:
@@ -138,7 +144,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
         socket.finish()
         await asyncio.sleep(3)
 
-    total_time = time.monotonic() - stream_start[0]
+    total_time = time.monotonic() - stream_start_val
     first_seg_latency = segment_log[0]['wall_s'] if segment_log else -1
     segs_after_finish = len(segments_received) - segs_before_finish
 
@@ -160,7 +166,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
     }
 
 
-async def run_benchmark():
+async def run_benchmark() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     dg_key = os.getenv('DEEPGRAM_API_KEY')
@@ -177,14 +183,14 @@ async def run_benchmark():
     print(f'Source: LibriSpeech test-clean (CC BY 4.0)')
     print(f'Streaming at real-time pace: {CHUNK_SIZE} bytes / {CHUNK_INTERVAL}s = 16kHz mono s16le\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_pcm = read_pcm_from_wav(wav_path)
         ref_norm = normalize_for_wer(case['text'])
         lang = 'en'
 
-        row = {
+        row: Dict[str, Any] = {
             'id': case['id'],
             'uid': case['uid'],
             'description': case['description'],
@@ -202,8 +208,10 @@ async def run_benchmark():
                 result = await stream_to_provider(audio_pcm, lang, provider)
                 if 'error' in result:
                     raise RuntimeError(result['error'])
-                wer_val = compute_wer(ref_norm, normalize_for_wer(result['text'])) if result['text'] else 1.0
-                punct = count_punctuation(result['text']) if result['text'] else {'total': 0, 'detail': {}}
+                wer_val: float = compute_wer(ref_norm, normalize_for_wer(result['text'])) if result['text'] else 1.0
+                punct: Dict[str, Any] = (
+                    count_punctuation(result['text']) if result['text'] else {'total': 0, 'detail': {}}
+                )
                 row.update(
                     {
                         f'{prefix}_connect': result['connect_time'],
@@ -222,7 +230,6 @@ async def run_benchmark():
                     }
                 )
                 during = result['segs_during_stream']
-                after = result['segs_after_finish']
                 total_raw = result['segments_raw']
                 total_deduped = result['segments_deduped']
                 parallel_pct = (during / total_raw * 100) if total_raw > 0 else 0
@@ -257,10 +264,10 @@ async def run_benchmark():
     print('SUITE 02 — STREAMING BENCHMARK RESULTS (Real Human Speech — LibriSpeech test-clean)')
     print('=' * 130)
 
-    def fmt_time(v):
+    def fmt_time(v: float) -> str:
         return f"{v:.2f}s" if v >= 0 else 'ERR'
 
-    table_data = []
+    table_data: List[List[Any]] = []
     for r in results:
         dg_during = r.get('dg_segs_during', 0)
         dg_total_s = r.get('dg_segments', 0)
@@ -357,7 +364,7 @@ async def run_benchmark():
     print(f'\nDetailed results saved to: {output_path}')
 
 
-def main():
+def main() -> None:
     asyncio.run(run_benchmark())
 
 

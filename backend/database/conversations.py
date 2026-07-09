@@ -5,7 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -172,6 +172,24 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref.set(conversation_data)
 
 
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
+    """Atomically create a conversation document if it does not already exist."""
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    try:
+        conversation_ref.create(conversation_data)
+        return True
+    except (AlreadyExists, Conflict):
+        return False
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
@@ -237,10 +255,13 @@ def get_conversations_count(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    sources: Optional[List[str]] = None,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
@@ -576,22 +597,36 @@ def delete_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids):
+def get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_by_id_without_photos(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
-    conversations = []
+    conversations_by_id = {}
     for doc in docs:
         if doc.exists:
             data = doc.to_dict()
-            if data.get('discarded'):
+            if data.get('discarded') and not include_discarded:
                 continue
-            conversations.append(data)
+            data.setdefault('id', doc.id)
+            conversations_by_id[str(data['id'])] = data
 
-    return conversations
+    return [
+        conversations_by_id[str(conversation_id)]
+        for conversation_id in conversation_ids
+        if str(conversation_id) in conversations_by_id
+    ]
 
 
 # **************************************
@@ -741,6 +776,35 @@ def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
+
+
+def claim_conversation_status(
+    uid: str,
+    conversation_id: str,
+    expected_status: ConversationStatus,
+    claimed_status: ConversationStatus,
+    extra_updates: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Atomically transition a conversation status when the current status matches."""
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _claim(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            raise NotFound(f'Conversation {conversation_id} not found')
+        current = snapshot.to_dict() or {}
+        if current.get('status') != expected_status.value:
+            return False
+        updates = {'status': claimed_status.value}
+        if extra_updates:
+            updates.update(extra_updates)
+        transaction.update(conversation_ref, updates)
+        return True
+
+    return _claim(transaction)
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
@@ -975,7 +1039,7 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
-        batch.set(segment_ref, segment.dict())
+        batch.set(segment_ref, segment.model_dump())
         if i >= 400:
             batch.commit()
             batch = db.batch()
@@ -1046,7 +1110,7 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
     for photo in photos:
         photo_id = photo.id or str(uuid.uuid4())
         photo_ref = photos_ref.document(photo_id)
-        data = photo.dict()
+        data = photo.model_dump()
         data['id'] = photo_id
         prepared_data = _prepare_photo_for_write(data, uid, level)
         batch.set(photo_ref, prepared_data)

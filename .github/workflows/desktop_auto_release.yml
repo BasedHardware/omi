@@ -6,6 +6,7 @@ on:
     paths:
       - 'desktop/macos/**'
       - '!desktop/macos/CHANGELOG.json'
+      - '!desktop/macos/changelog/**'
   schedule:
     # Pick up desktop merges that accumulated while Codemagic was busy.
     - cron: '*/5 * * * *'
@@ -19,6 +20,10 @@ on:
         options:
           - release_now
           - force_release
+      next_version:
+        description: 'Optional explicit desktop version to tag (for example, 0.12.0)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -101,11 +106,22 @@ jobs:
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
         id: version
+        env:
+          NEXT_VERSION: ${{ github.event.inputs.next_version || '' }}
         run: |
           # Get latest desktop release tag
           LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
 
-          if [ -z "$LATEST" ]; then
+          if [ -n "$NEXT_VERSION" ]; then
+            if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "next_version must be a semantic version like 0.12.0" >&2
+              exit 1
+            fi
+            VERSION="$NEXT_VERSION"
+            if [ -n "$LATEST" ]; then
+              python3 -c 'import sys; latest=sys.argv[1].removeprefix("v").split("+", 1)[0]; candidate=sys.argv[2]; parse=lambda v: tuple(int(p) for p in v.split(".")); sys.exit(0 if parse(candidate) > parse(latest) else f"next_version {candidate} must be greater than latest desktop version {latest}")' "$LATEST" "$VERSION"
+            fi
+          elif [ -z "$LATEST" ]; then
             VERSION="0.0.1"
           else
             # Strip v prefix and +build-macos suffix  e.g. v0.11.11+11011-macos -> 0.11.11
@@ -128,33 +144,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
-          # Consolidate unreleased changelog entries into a versioned release
+          # Consolidate unreleased changelog fragments into a versioned release
           TODAY=$(date -u +%Y-%m-%d)
-          python3 -c "
-          import json, sys
-
-          with open('desktop/macos/CHANGELOG.json', 'r') as f:
-              data = json.load(f)
-
-          unreleased = data.get('unreleased', [])
-          if not unreleased:
-              unreleased = ['Bug fixes and improvements']
-
-          new_release = {
-              'version': '$VERSION',
-              'date': '$TODAY',
-              'changes': unreleased
-          }
-
-          data.setdefault('releases', []).insert(0, new_release)
-          data['unreleased'] = []
-
-          with open('desktop/macos/CHANGELOG.json', 'w') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-
-          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
-          "
+          python3 .github/scripts/desktop-changelog.py consolidate \
+            --version "$VERSION" \
+            --date "$TODAY" \
+            --write
 
       - name: Commit changelog and create tag
         if: steps.recheck.outputs.should_release == 'true'
@@ -164,7 +159,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add desktop/macos/CHANGELOG.json
+          git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
           # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
@@ -197,8 +192,8 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             PR_URL=$(gh pr create \
-              --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
-              --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
+              --title "Update desktop changelog for v${VERSION} [skip ci]" \
+              --body "Auto-generated: consolidates unreleased changelog fragments into v${VERSION} and regenerates CHANGELOG.json." \
               --base main \
               --head "$BRANCH")
             PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')

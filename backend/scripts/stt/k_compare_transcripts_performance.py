@@ -13,7 +13,7 @@ import os
 import re
 from collections import defaultdict
 from itertools import islice
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 import firebase_admin
 import requests
@@ -22,31 +22,31 @@ from pydub import AudioSegment
 from tabulate import tabulate
 
 load_dotenv('../../.dev.env')
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-firebase_admin.initialize_app()
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + (os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or '')
+cast(Any, firebase_admin).initialize_app()
 
 from models.transcript_segment import TranscriptSegment
 from utils.stt.streaming import process_audio_dg
 from groq import Groq
 
 from utils.other.storage import upload_postprocessing_audio
-from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.pre_recorded import fal_whisperx, postprocess_words
 
 
-def add_model_result_segments(model: str, new_segments: List[Dict], result: Dict):
+def add_model_result_segments(model: str, new_segments: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
     segments = [TranscriptSegment(**s) for s in result[model]]
-    new_segments = [TranscriptSegment(**s) for s in new_segments]
-    segments, _, _ = TranscriptSegment.combine_segments(segments, new_segments)
+    new_seg_objs = [TranscriptSegment(**s) for s in new_segments]
+    segments, _, _ = TranscriptSegment.combine_segments(segments, new_seg_objs)
     result[model] = [s.dict() for s in segments]
 
 
-def execute_groq(file_path: str):
+def execute_groq(file_path: str) -> str:
     file_size = os.path.getsize(file_path)
     print('execute_groq file_size', file_size / 1024 / 1024, 'MB')
-    split_files = []
+    split_files: List[str] = []
     if file_size / 1024 / 1024 > 25:
         # split file
-        aseg = AudioSegment.from_wav(file_path)
+        aseg = cast(Any, AudioSegment).from_wav(file_path)
         # split every 10 minutes
         split_duration = 10 * 60 * 1000
         for i in range(0, len(aseg), split_duration):
@@ -58,10 +58,10 @@ def execute_groq(file_path: str):
 
     client = Groq(api_key=os.getenv('GROQ_API_KEY'))
     result = ''
-    for file_path in split_files:
-        with open(file_path, "rb") as file:
+    for split_file_path in split_files:
+        with open(split_file_path, "rb") as file:
             transcription = client.audio.transcriptions.create(
-                file=(file_path, file.read()),
+                file=(split_file_path, file.read()),
                 model="whisper-large-v3",
                 response_format="text",
                 language="en",
@@ -71,9 +71,9 @@ def execute_groq(file_path: str):
     return result.strip().lower().replace('  ', ' ')
 
 
-async def _execute_single(file_path: str):
-    aseg = AudioSegment.from_wav(file_path)
-    duration = aseg.duration_seconds
+async def _execute_single(file_path: str) -> None:
+    aseg = cast(Any, AudioSegment).from_wav(file_path)
+    duration: float = aseg.duration_seconds
     memory_id = file_path.split('/')[-1].split('.')[0]
 
     if os.path.exists(f'results/{memory_id}.json'):
@@ -84,14 +84,17 @@ async def _execute_single(file_path: str):
         return
 
     print('Started processing', memory_id, 'duration', aseg.duration_seconds)
-    result = {'deepgram': []}
+    result: Dict[str, Any] = {'deepgram': []}
 
-    def stream_transcript_deepgram(new_segments, _):
+    def stream_transcript_deepgram(new_segments: List[Dict[str, Any]]) -> None:
         print('stream_transcript_deepgram', new_segments)
         add_model_result_segments('deepgram', new_segments, result)
 
     # streaming models
     socket = await process_audio_dg(stream_transcript_deepgram, language='en', sample_rate=16000, channels=1)
+    if socket is None:
+        print('Failed to obtain socket for', memory_id)
+        return
     print('duration', duration)
     with open(file_path, "rb") as file:
         while True:
@@ -109,7 +112,7 @@ async def _execute_single(file_path: str):
     try:
         signed_url = upload_postprocessing_audio(file_path)
         words = fal_whisperx(signed_url)
-        fal_segments = fal_postprocessing(words, duration)
+        fal_segments = postprocess_words(cast(List[Dict[str, Any]], words), int(duration))
         result['fal_whisperx'] = [s.dict() for s in fal_segments]
     except Exception as e:
         print('fal_whisperx', e)
@@ -125,19 +128,19 @@ async def _execute_single(file_path: str):
     socket.finish()
 
 
-def batched(iterable, n):
+def batched(iterable: Any, n: int) -> Any:
     """
     Generator that yields lists of size 'n' from 'iterable'.
     """
     it = iter(iterable)
     while True:
-        batch = list(islice(it, n))
+        batch: List[Any] = list(islice(it, n))
         if not batch:
             break
         yield batch
 
 
-async def process_memories_audio_files():
+async def process_memories_audio_files() -> None:
     uids = os.listdir('_temp2')
     for uid in uids:
         memories = os.listdir(f'_temp2/{uid}')
@@ -154,16 +157,16 @@ async def process_memories_audio_files():
 from jiwer import wer
 
 
-def compute_wer():
+def compute_wer() -> None:
     """
     Computes the Word Error Rate (WER) for each transcription model against a reference model
     across all JSON files in the specified directory. Outputs detailed results and overall rankings.
     """
     dir_path = 'results/'  # Directory containing JSON files
     reference_model = 'whisper-large-v3'  # Reference model key
-    table_data = []  # List to hold detailed table rows
-    wer_accumulator = defaultdict(list)  # To accumulate WERs per model
-    points_counter = defaultdict(int)  # To count points per model based on WER rankings
+    table_data: List[List[Any]] = []  # List to hold detailed table rows
+    wer_accumulator: defaultdict[str, List[float]] = defaultdict(list)  # To accumulate WERs per model
+    points_counter: defaultdict[str, int] = defaultdict(int)  # To count points per model based on WER rankings
 
     # Define detailed table headers
     detailed_headers = [
@@ -190,7 +193,7 @@ def compute_wer():
         file_path = os.path.join(dir_path, file)
         with open(file_path, 'r', encoding='utf-8') as f:
             try:
-                result = json.load(f)
+                result: Any = json.load(f)
             except json.JSONDecodeError:
                 print(f"Error decoding JSON in file: {file}")
                 continue  # Skip files with invalid JSON
@@ -201,10 +204,12 @@ def compute_wer():
             continue  # Skip files without the reference model
 
         # Assemble the reference transcript
-        reference_text = regex_fix(result.get(reference_model, ''))
+        reference_text: Any = regex_fix(result.get(reference_model, ''))
         if isinstance(reference_text, list):
             # If reference_text is a list of segments
-            reference_text = ' '.join([segment.get('text', '') for segment in reference_text]).strip().lower()
+            reference_text = (
+                ' '.join([str(segment.get('text', '')) for segment in cast(List[Any], reference_text)]).strip().lower()
+            )
         else:
             # If reference_text is a single string
             reference_text = str(reference_text).strip().lower()
@@ -217,7 +222,7 @@ def compute_wer():
         print(f"Processing file: {file}")
 
         # Temporary storage for current file's model WERs to determine ranking points
-        current_file_wer = {}
+        current_file_wer: Dict[str, float] = {}
 
         # Iterate through each model in the JSON
         for model, segments in result.items():
@@ -226,7 +231,11 @@ def compute_wer():
             else:
                 if isinstance(segments, list):
                     # Assemble the model's transcript from segments
-                    model_text = ' '.join([segment.get('text', '') for segment in segments]).strip().lower()
+                    model_text = (
+                        ' '.join([str(segment.get('text', '')) for segment in cast(List[Any], segments)])
+                        .strip()
+                        .lower()
+                    )
                 else:
                     # If segments is a single string
                     model_text = str(segments).strip().lower()
@@ -237,7 +246,7 @@ def compute_wer():
             model_characters = len(model_text)
 
             # Compute WER
-            current_wer = wer(reference_text, model_text)
+            current_wer: float = wer(reference_text, model_text)
 
             # Accumulate WER for overall statistics (exclude reference model)
             if model != reference_model:
@@ -280,13 +289,13 @@ def compute_wer():
         print("No data to display.")
 
     # Compute overall WER per model (average)
-    overall_wer = {}
+    overall_wer: Dict[str, float] = {}
     for model, wer_list in wer_accumulator.items():
         if wer_list:
             overall_wer[model] = sum(wer_list) / len(wer_list)
 
     # Create a list for overall WER table
-    overall_wer_table = []
+    overall_wer_table: List[List[Any]] = []
     for model, avg_wer in overall_wer.items():
         overall_wer_table.append([model, f"{avg_wer:.2%}"])
 
@@ -309,7 +318,7 @@ def compute_wer():
         print("No overall WER data to display.")
 
     # Create a ranking table based on points
-    ranking_table = []
+    ranking_table: List[List[Any]] = []
     for model, points in points_counter.items():
         ranking_table.append([model, points])
 
@@ -317,10 +326,10 @@ def compute_wer():
     ranking_table_sorted = sorted(ranking_table, key=lambda x: x[1], reverse=True)
 
     # Assign rankings
-    ranking_table_with_rank = []
+    ranking_table_with_rank: List[List[Any]] = []
     current_rank = 1
-    previous_points = None
-    for idx, (model, points) in enumerate(ranking_table_sorted):
+    previous_points: Any = None
+    for model, points in ranking_table_sorted:
         if points != previous_points:
             rank = current_rank
         else:
@@ -345,7 +354,7 @@ def compute_wer():
         print("No ranking data to display.")
 
 
-def regex_fix(text: str):
+def regex_fix(text: str) -> str:
     """Fix some of the stored JSON in results/$id.json from the Groq API."""
     pattern = r'(?<=transcription\(text=["\'])(.*?)(?=["\'],\s*task=)'
     match = re.search(pattern, text)
@@ -357,7 +366,7 @@ def regex_fix(text: str):
         return text
 
 
-def pyannote_diarize(file_path: str):
+def pyannote_diarize(file_path: str) -> None:
     memory_id = file_path.split('/')[-1].split('.')[0]
     with open('diarization.json', 'r') as f:
         results = json.loads(f.read())
@@ -382,7 +391,7 @@ def pyannote_diarize(file_path: str):
         json.dump(diarization, f, indent=2)
 
 
-def generate_diarizations():
+def generate_diarizations() -> None:
     uids = os.listdir('_temp2')
     for uid in uids:
         memories = os.listdir(f'_temp2/{uid}')
@@ -395,13 +404,13 @@ def generate_diarizations():
                 print('Skipping', memory_id)
 
 
-from pyannote.metrics.diarization import DiarizationErrorRate
-from pyannote.core import Annotation, Segment
+from pyannote.metrics.diarization import DiarizationErrorRate  # type: ignore[reportMissingImports]
+from pyannote.core import Annotation, Segment  # type: ignore[reportMissingImports]
 
-der_metric = DiarizationErrorRate()
+der_metric = cast(Any, DiarizationErrorRate())
 
 
-def compute_der():
+def compute_der() -> None:
     """
     Computes the Diarization Error Rate (DER) for each model across all JSON files in the 'results/' directory.
     Outputs a summary table and rankings to 'der_report.txt'.
@@ -411,7 +420,7 @@ def compute_der():
     excluded_model = 'whisper-large-v3'  # Model to exclude from analysis
 
     # Initialize DER metric
-    der_metric = DiarizationErrorRate()
+    local_der_metric = cast(Any, DiarizationErrorRate())
 
     # Check if the directory exists
     if not os.path.isdir(dir_path):
@@ -424,14 +433,14 @@ def compute_der():
     # Load reference diarization data
     with open(diarization_path, 'r', encoding='utf-8') as f:
         try:
-            diarization = json.load(f)
+            diarization: Any = json.load(f)
         except json.JSONDecodeError:
             print(f"Error decoding JSON in 'diarization.json'.")
             return
 
     # Prepare to collect DER results
-    der_results = []  # List to store [Memory ID, Model, DER]
-    model_der_accumulator = defaultdict(list)  # To calculate average DER per model
+    der_results: List[List[Any]] = []  # List to store [Memory ID, Model, DER]
+    model_der_accumulator: defaultdict[str, List[float]] = defaultdict(list)  # To calculate average DER per model
 
     # Iterate through all JSON files in 'results/' directory
     for file in os.listdir(dir_path):
@@ -447,7 +456,7 @@ def compute_der():
 
         # Load reference segments for the current memory_id
         ref_segments = diarization[memory_id]
-        ref_annotation = Annotation()
+        ref_annotation = cast(Any, Annotation())
         for seg in ref_segments:
             speaker, start, end = seg['speaker'], seg['start'], seg['end']
             ref_annotation[Segment(start, end)] = speaker
@@ -456,7 +465,7 @@ def compute_der():
         file_path = os.path.join(dir_path, file)
         with open(file_path, 'r', encoding='utf-8') as f:
             try:
-                data = json.load(f)
+                data: Any = json.load(f)
             except json.JSONDecodeError:
                 print(f"Error decoding JSON in file: {file}. Skipping.")
                 continue
@@ -466,7 +475,7 @@ def compute_der():
             if model == excluded_model:
                 continue  # Skip the excluded model
 
-            hyp_annotation = Annotation()
+            hyp_annotation = cast(Any, Annotation())
             for seg in segments:
                 speaker, start, end = seg['speaker'], seg['start'], seg['end']
                 # Optional: Normalize speaker labels if necessary
@@ -481,7 +490,7 @@ def compute_der():
                 hyp_annotation[Segment(start, end)] = speaker
 
             # Compute DER between reference and hypothesis
-            der = der_metric(ref_annotation, hyp_annotation)
+            der = cast(float, local_der_metric(ref_annotation, hyp_annotation))
 
             # Store the result
             der_results.append([memory_id, model, f"{der:.2%}"])
@@ -491,23 +500,23 @@ def compute_der():
     der_table = tabulate(der_results, headers=["Memory ID", "Model", "DER"], tablefmt="grid", stralign="left")
 
     # Calculate average DER per model
-    average_der = []
+    average_der: List[List[Any]] = []
     for model, ders in model_der_accumulator.items():
         avg = sum(ders) / len(ders)
         average_der.append([model, f"{avg:.2%}"])
 
     # Sort models by average DER ascending (lower is better)
-    average_der_sorted = sorted(average_der, key=lambda x: float(x[1].strip('%')))
+    average_der_sorted = sorted(average_der, key=lambda x: float(str(x[1]).strip('%')))
 
     # Determine the winner (model with the lowest average DER)
     winner = average_der_sorted[0][0] if average_der_sorted else "N/A"
 
     # Prepare rankings (1st, 2nd, etc.)
-    rankings = []
+    rankings: List[List[Any]] = []
     rank = 1
-    previous_der = None
+    previous_der: Any = None
     for model, avg in average_der_sorted:
-        current_der = float(avg.strip('%'))
+        current_der = float(str(avg).strip('%'))
         if previous_der is None or current_der < previous_der:
             current_rank = rank
         else:

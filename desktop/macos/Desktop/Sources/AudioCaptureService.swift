@@ -16,6 +16,26 @@ class AudioCaptureService: @unchecked Sendable {
     /// Callback for receiving audio levels (0.0 - 1.0)
     typealias AudioLevelHandler = (Float) -> Void
 
+    enum SilentMicRecoveryAction {
+        case fallbackToBuiltIn
+        case rebuildCoreAudioStack
+    }
+
+    struct SilentMicDetection {
+        let deviceID: AudioDeviceID
+        let deviceDescription: String
+        let consecutiveSilentWindows: Int
+        let isBluetoothTransport: Bool
+
+        var suggestedAction: SilentMicRecoveryAction {
+            isBluetoothTransport ? .fallbackToBuiltIn : .rebuildCoreAudioStack
+        }
+
+        var reason: String {
+            "silent input on \(deviceDescription) after \(consecutiveSilentWindows) windows"
+        }
+    }
+
     enum AudioCaptureError: LocalizedError {
         case noInputAvailable
         case engineStartFailed(Error)
@@ -43,6 +63,7 @@ class AudioCaptureService: @unchecked Sendable {
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
     private var isCapturing = false
+    private var isTrackingOverrideDevice = false
 
     /// Optional explicit device to open instead of the system default input.
     /// Used by the silent-mic fallback path to bind directly to the built-in mic.
@@ -62,10 +83,14 @@ class AudioCaptureService: @unchecked Sendable {
     private var onAudioChunk: AudioChunkHandler?
     private var onAudioLevel: AudioLevelHandler?
 
-    /// Called once when the mic has been alive-but-silent for `silentMicWindowThreshold`
-    /// seconds AND the current device transports over Bluetooth. Caller is expected to
-    /// fall back to the built-in mic. Fires at most once per capture session.
-    var onSilentMicDetected: (() -> Void)?
+    /// Called when the mic has been alive-but-silent for `silentMicWindowThreshold`
+    /// windows. By default this is limited to Bluetooth inputs, where macOS can feed
+    /// zeros during A2DP/HFP profile conflicts. PTT enables all-transport detection so
+    /// it can recover a stale HAL route that reports the built-in mic but still returns
+    /// silence. The watchdog re-arms after each fire (see `evaluateSilentMicWindow`), so a
+    /// single capture session can recover from more than one silent episode.
+    var onSilentMicDetected: ((SilentMicDetection) -> Void)?
+    var detectSilentMicOnAnyTransport = false
 
     /// Human-readable description of the capture device currently in use — for
     /// diagnostics (which mic a turn was recorded from).
@@ -74,10 +99,19 @@ class AudioCaptureService: @unchecked Sendable {
         return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
     }
 
-    // Silent-mic watchdog (fires once per session)
+    // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
+    // than one silent episode; two guards keep it from spinning the recovery loop:
+    //   - `silentMicRecoveryCooldown`: suppress re-detection right after a fire so a freshly
+    //     rebuilt/switched capture has time to deliver real audio before we judge it again.
+    //   - `maxSilentMicFiresPerSession`: hard cap so an unrecoverable mic can't loop forever.
+    // `silentMicDetectedFired` now means "recently fired, awaiting re-arm" (not a permanent latch).
     private var consecutiveSilentWindows: Int = 0
     private var silentMicDetectedFired: Bool = false
+    private var silentMicFireCount: Int = 0
+    private var lastSilentMicFireTime: CFAbsoluteTime = 0
     private let silentMicWindowThreshold: Int = 2  // windows of ~1s each
+    private let silentMicRecoveryCooldown: CFAbsoluteTime = 3.0  // seconds to let recovery take effect
+    private let maxSilentMicFiresPerSession: Int = 3
 
     /// Target sample rate for DeepGram
     private let targetSampleRate: Double = 16000
@@ -107,6 +141,64 @@ class AudioCaptureService: @unchecked Sendable {
     private let audioQueue = DispatchQueue(label: "com.omi.audiocapture.device")
 
     // MARK: - Public Methods
+
+    func resetSilentMicWatchdog() {
+        consecutiveSilentWindows = 0
+        silentMicDetectedFired = false
+        silentMicFireCount = 0
+        lastSilentMicFireTime = 0
+        watchdogWindowPeak = 0
+        watchdogWindowStart = 0
+    }
+
+    /// Classify one closed ~1-second watchdog window and update re-arm bookkeeping.
+    ///
+    /// Returns a `SilentMicDetection` when the mic has been silent for
+    /// `silentMicWindowThreshold` consecutive windows and the watchdog is armed — the
+    /// caller then invokes `onSilentMicDetected`. Returns `nil` otherwise. After a fire the
+    /// watchdog suppresses re-detection until `silentMicRecoveryCooldown` has elapsed, then
+    /// re-arms, so a mic that recovered and later re-wedged (or a recovery that did not take)
+    /// is detected again — bounded by `maxSilentMicFiresPerSession` so an unrecoverable mic
+    /// cannot loop the recovery path forever.
+    ///
+    /// `internal` (not `private`) so the recover-more-than-once-per-session contract can be
+    /// unit-tested without driving real CoreAudio buffers.
+    func evaluateSilentMicWindow(peak: Int16, isBluetooth: Bool, now: CFAbsoluteTime) -> SilentMicDetection? {
+        // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
+        if peak <= 5 {
+            consecutiveSilentWindows += 1
+        } else {
+            consecutiveSilentWindows = 0
+        }
+
+        // Re-arm once the post-fire cooldown has elapsed.
+        if silentMicDetectedFired, now - lastSilentMicFireTime >= silentMicRecoveryCooldown {
+            silentMicDetectedFired = false
+        }
+
+        guard !silentMicDetectedFired,
+              silentMicFireCount < maxSilentMicFiresPerSession,
+              consecutiveSilentWindows >= silentMicWindowThreshold,
+              isBluetooth || detectSilentMicOnAnyTransport
+        else {
+            return nil
+        }
+
+        let firedWindows = consecutiveSilentWindows
+        silentMicDetectedFired = true
+        silentMicFireCount += 1
+        lastSilentMicFireTime = now
+        // Require a fresh run of silent windows before the next fire so we never re-trigger
+        // on the very next window.
+        consecutiveSilentWindows = 0
+
+        return SilentMicDetection(
+            deviceID: deviceID,
+            deviceDescription: currentDeviceDescription,
+            consecutiveSilentWindows: firedWindows,
+            isBluetoothTransport: isBluetooth
+        )
+    }
 
     /// Check if microphone permission is granted
     static func checkPermission() -> Bool {
@@ -151,6 +243,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
+        resetSilentMicWatchdog()
 
         // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
@@ -174,33 +267,11 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
     private func startCaptureOnQueue() throws {
-        // 1. Resolve input device: explicit override (fallback path) wins over system default.
-        var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
+        resetSilentMicWatchdog()
 
-        if let override = overrideDeviceID {
-            inputDeviceID = override
-            log("AudioCapture: Using override device ID \(override)")
-        } else {
-            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            let status = AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &address,
-                0,
-                nil,
-                &size,
-                &inputDeviceID
-            )
-
-            guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
-                throw AudioCaptureError.noInputAvailable
-            }
-        }
+        // 1. Resolve input device: explicit override wins while available, otherwise
+        // fall back to the system default instead of pinning capture to a stale device.
+        let inputDeviceID = try resolveInputDeviceID()
         self.deviceID = inputDeviceID
 
         // 2. Get device stream format
@@ -271,6 +342,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Stop capturing audio
     func stopCapture() {
+        resetSilentMicWatchdog()
         guard isCapturing else { return }
 
         removePropertyListeners()
@@ -293,6 +365,7 @@ class AudioCaptureService: @unchecked Sendable {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
+        isTrackingOverrideDevice = false
 
         // AudioDeviceStop can block waiting for the IO thread — run off main thread
         if let procID = procID, devID != kAudioObjectUnknown {
@@ -355,6 +428,49 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     // MARK: - Private Methods
+
+    private func resolveInputDeviceID() throws -> AudioDeviceID {
+        if let override = overrideDeviceID {
+            if Self.isAvailableInputDevice(override) {
+                log("AudioCapture: Using override device ID \(override)")
+                isTrackingOverrideDevice = true
+                return override
+            }
+            log("AudioCapture: Override device ID \(override) is unavailable; falling back to default input")
+        }
+
+        guard let defaultDeviceID = Self.currentDefaultInputDeviceID() else {
+            throw AudioCaptureError.noInputAvailable
+        }
+        isTrackingOverrideDevice = false
+        return defaultDeviceID
+    }
+
+    private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+
+        guard status == noErr, isAvailableInputDevice(deviceID) else { return nil }
+        return deviceID
+    }
+
+    private static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        deviceID != kAudioObjectUnknown && deviceID != kAudioDeviceUnknown && deviceHasInputChannels(deviceID)
+    }
 
     /// Get stream format for a device on input scope
     private func getStreamFormat(for deviceID: AudioObjectID) -> AudioStreamBasicDescription? {
@@ -451,6 +567,11 @@ class AudioCaptureService: @unchecked Sendable {
             // Clamp and convert to Int16 range (-32768 to 32767)
             let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
             pcmData.append(pcmSample)
+
+            // Accumulate the silent-mic peak while converting samples to avoid an
+            // extra pass on the audio callback hot path.
+            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
+            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
         }
 
         // Convert to Data (little-endian, which is native on Apple platforms)
@@ -458,37 +579,27 @@ class AudioCaptureService: @unchecked Sendable {
             return Data(buffer: buffer)
         }
 
-        // Silent-mic watchdog: on Bluetooth-to-Bluetooth A2DP/HFP profile conflicts macOS
-        // accepts the IOProc but delivers only zero samples. Track the peak amplitude within
-        // a rolling ~1s window; if the window is silent AND the device transports over
-        // Bluetooth, fire onSilentMicDetected so the caller can swap to the built-in mic.
-        // Fires at most once per capture session.
-        if !silentMicDetectedFired {
-            for s in pcmData {
-                // Int16.min has magnitude 32768 which is out of Int16 range — clamp.
-                let a = s == Int16.min ? Int16.max : Int16(s.magnitude)
-                if a > watchdogWindowPeak { watchdogWindowPeak = a }
-            }
-            let nowAbs = CFAbsoluteTimeGetCurrent()
-            if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
-            if nowAbs - watchdogWindowStart >= 1.0 {
-                // Window closed — classify and reset.
-                // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
-                if watchdogWindowPeak <= 5 {
-                    consecutiveSilentWindows += 1
+        // Silent-mic watchdog: macOS can accept the IOProc but deliver only zero samples.
+        // Bluetooth inputs recover by switching to the built-in mic; PTT can opt into
+        // all-transport detection so a stale built-in/default route triggers a full rebuild.
+        // Classify once every ~1s window. Windows keep rolling after a fire (unlike a
+        // one-shot latch) so the watchdog observes recovery and can re-arm for a second
+        // episode — see `evaluateSilentMicWindow`.
+        let nowAbs = CFAbsoluteTimeGetCurrent()
+        if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
+        if nowAbs - watchdogWindowStart >= 1.0 {
+            let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
+            if let detection = evaluateSilentMicWindow(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs) {
+                if isBluetooth {
+                    log("AudioCapture: Bluetooth mic returning silence for \(detection.consecutiveSilentWindows)s — falling back to built-in mic")
                 } else {
-                    consecutiveSilentWindows = 0
+                    log("AudioCapture: Input device returning silence for \(detection.consecutiveSilentWindows)s — rebuilding CoreAudio capture")
                 }
-                if consecutiveSilentWindows >= silentMicWindowThreshold,
-                   Self.isBluetoothTransport(deviceID: deviceID) {
-                    silentMicDetectedFired = true
-                    log("AudioCapture: Bluetooth mic returning silence for \(consecutiveSilentWindows)s — falling back to built-in mic")
-                    let handler = onSilentMicDetected
-                    DispatchQueue.main.async { handler?() }
-                }
-                watchdogWindowPeak = 0
-                watchdogWindowStart = nowAbs
+                let handler = onSilentMicDetected
+                DispatchQueue.main.async { handler?(detection) }
             }
+            watchdogWindowPeak = 0
+            watchdogWindowStart = nowAbs
         }
 
         // Calculate and report audio level (RMS normalized to 0.0 - 1.0)
@@ -530,30 +641,45 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
-        // Listen for default input device changes — only when we're tracking the
-        // system default. If we're using an explicit override (silent-mic fallback path)
-        // we deliberately ignore default-device changes so we stay pinned to our target.
-        if overrideDeviceID == nil {
-            var defaultDeviceAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
+    }
 
-            let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-                self?.audioQueue.async {
-                    self?.handleConfigurationChange()
-                }
-            }
-            self.defaultDeviceListenerBlock = deviceBlock
-
-            AudioObjectAddPropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject),
-                &defaultDeviceAddress,
-                listenerQueue,
-                deviceBlock
-            )
+    private func updateDefaultDeviceListener() {
+        if isTrackingOverrideDevice {
+            removeDefaultDeviceListener()
+            return
         }
+
+        guard defaultDeviceListenerBlock == nil else { return }
+
+        // Listen for default input device changes when the resolved capture device
+        // is the system default. If an explicit override was requested but is
+        // unavailable, capture falls back to the default and must still observe
+        // default-device changes.
+        var defaultDeviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            self?.audioQueue.async {
+                self?.handleConfigurationChange()
+            }
+        }
+        self.defaultDeviceListenerBlock = deviceBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultDeviceAddress,
+            listenerQueue,
+            deviceBlock
+        )
+    }
+
+    private func installDeviceFormatListener() {
+        guard deviceFormatListenerBlock == nil else { return }
 
         // Listen for format changes on current device
         var formatAddress = AudioObjectPropertyAddress(
@@ -578,6 +704,11 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     private func removePropertyListeners() {
+        removeDefaultDeviceListener()
+        removeDeviceFormatListener()
+    }
+
+    private func removeDefaultDeviceListener() {
         if let block = defaultDeviceListenerBlock {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -592,7 +723,9 @@ class AudioCaptureService: @unchecked Sendable {
             )
             defaultDeviceListenerBlock = nil
         }
+    }
 
+    private func removeDeviceFormatListener() {
         if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyStreamFormat,
@@ -626,21 +759,8 @@ class AudioCaptureService: @unchecked Sendable {
             ioProcID = nil
         }
 
-        // Remove old format listener (device may have changed)
-        if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyStreamFormat,
-                mScope: kAudioDevicePropertyScopeInput,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(
-                deviceID,
-                &address,
-                listenerQueue,
-                block
-            )
-            deviceFormatListenerBlock = nil
-        }
+        // Remove old format listener (device may have changed).
+        removeDeviceFormatListener()
 
         // Delay to let the audio hardware settle after device change
         audioQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -651,25 +771,10 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
-        // Get new default input device
-        var newDeviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &newDeviceID
-        )
-
-        guard status == noErr, newDeviceID != kAudioObjectUnknown else {
+        let newDeviceID: AudioDeviceID
+        do {
+            newDeviceID = try resolveInputDeviceID()
+        } catch {
             log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
             retryOrGiveUp(retryCount: retryCount)
             return
@@ -738,26 +843,8 @@ class AudioCaptureService: @unchecked Sendable {
             return
         }
 
-        // Install format listener on new device
-        var formatAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreamFormat,
-            mScope: kAudioDevicePropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            self?.audioQueue.async {
-                self?.handleConfigurationChange()
-            }
-        }
-        self.deviceFormatListenerBlock = formatBlock
-
-        AudioObjectAddPropertyListenerBlock(
-            deviceID,
-            &formatAddress,
-            listenerQueue,
-            formatBlock
-        )
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
@@ -893,11 +980,15 @@ class AudioCaptureService: @unchecked Sendable {
         if isCapturing {
             removePropertyListeners()
             if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-                // Use sync in deinit to ensure cleanup completes before deallocation
-                audioQueue.sync {
-                    AudioDeviceStop(deviceID, procID)
-                    AudioDeviceDestroyIOProcID(deviceID, procID)
-                }
+                // Call the HAL teardown directly — do NOT `audioQueue.sync` here.
+                // deinit can run *on* audioQueue (e.g. the last reference is released
+                // inside an audioQueue block), and dispatching sync to the current
+                // queue deadlocks. The object has no remaining references, so no
+                // concurrent audioQueue work can touch it; these HAL calls are
+                // thread-safe, so a direct call completes cleanup before deallocation
+                // (which `audioQueue.async` could not guarantee).
+                AudioDeviceStop(deviceID, procID)
+                AudioDeviceDestroyIOProcID(deviceID, procID)
             }
         }
     }

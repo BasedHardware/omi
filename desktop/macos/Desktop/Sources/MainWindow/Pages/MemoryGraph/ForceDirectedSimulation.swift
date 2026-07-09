@@ -406,7 +406,7 @@ class ForceDirectedSimulation {
 
         var adjacency: [String: Set<String>] = [:]
         for node in nodes {
-            adjacency[node.id, default: []]
+            adjacency[node.id] = adjacency[node.id] ?? []
         }
         for edge in edges {
             adjacency[edge.sourceId, default: []].insert(edge.targetId)

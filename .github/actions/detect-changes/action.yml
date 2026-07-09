@@ -1,0 +1,148 @@
+name: Detect Changes
+description: Compute path-filter booleans for PR and main-branch checks.
+
+outputs:
+  diff_base:
+    value: ${{ steps.changed.outputs.diff_base }}
+  has_dart:
+    value: ${{ steps.changed.outputs.has_dart }}
+  has_python:
+    value: ${{ steps.changed.outputs.has_python }}
+  has_arb:
+    value: ${{ steps.changed.outputs.has_arb }}
+  has_firmware:
+    value: ${{ steps.changed.outputs.has_firmware }}
+  has_frontend:
+    value: ${{ steps.changed.outputs.has_frontend }}
+  has_web_app:
+    value: ${{ steps.changed.outputs.has_web_app }}
+  has_admin:
+    value: ${{ steps.changed.outputs.has_admin }}
+  has_personas:
+    value: ${{ steps.changed.outputs.has_personas }}
+  has_workflows:
+    value: ${{ steps.changed.outputs.has_workflows }}
+  has_backend_runtime_env:
+    value: ${{ steps.changed.outputs.has_backend_runtime_env }}
+  has_backend_async_gate:
+    value: ${{ steps.changed.outputs.has_backend_async_gate }}
+  has_desktop_agent_runtime:
+    value: ${{ steps.changed.outputs.has_desktop_agent_runtime }}
+  has_app_codegen:
+    value: ${{ steps.changed.outputs.has_app_codegen }}
+  has_app_l10n:
+    value: ${{ steps.changed.outputs.has_app_l10n }}
+  has_app_compile_smoke:
+    value: ${{ steps.changed.outputs.has_app_compile_smoke }}
+  has_desktop_rust:
+    value: ${{ steps.changed.outputs.has_desktop_rust }}
+  has_desktop_defaults_ratchet:
+    value: ${{ steps.changed.outputs.has_desktop_defaults_ratchet }}
+  has_desktop_async_after_ratchet:
+    value: ${{ steps.changed.outputs.has_desktop_async_after_ratchet }}
+  has_desktop_auth_session_ratchet:
+    value: ${{ steps.changed.outputs.has_desktop_auth_session_ratchet }}
+  has_format:
+    value: ${{ steps.changed.outputs.has_format }}
+  has_flutter_generated:
+    value: ${{ steps.changed.outputs.has_flutter_generated }}
+  has_backend_static_contracts:
+    value: ${{ steps.changed.outputs.has_backend_static_contracts }}
+  has_backend_workflow_contracts:
+    value: ${{ steps.changed.outputs.has_backend_workflow_contracts }}
+  has_web_lint:
+    value: ${{ steps.changed.outputs.has_web_lint }}
+  has_web_build:
+    value: ${{ steps.changed.outputs.has_web_build }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get changed files
+      id: changed
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          DIFF_BASE="origin/${{ github.base_ref }}"
+        else
+          DIFF_BASE="HEAD~1"
+        fi
+
+        FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
+        APP_COMPILE_FILES=$(git diff --name-only --diff-filter=ACMD "$DIFF_BASE"...HEAD)
+        echo "$FILES"
+        echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
+
+        has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)
+        has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)
+        has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)
+        has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)
+        has_frontend=$(echo "$FILES" | grep -qE '^web/frontend/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_web_app=$(echo "$FILES" | grep -qE '^web/app/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_admin=$(echo "$FILES" | grep -qE '^web/admin/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_personas=$(echo "$FILES" | grep -qE '^web/personas-open-source/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_workflow_contracts=$(echo "$FILES" | grep -qE '^backend/testing/workflow_contracts\.json$|^backend/scripts/check_workflow_contracts\.py$|^scripts/pre-push$|^\.github/workflows/backend-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces|agent-logic-harness)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_app_compile_smoke=$(echo "$APP_COMPILE_FILES" | grep -qE '^app/(lib/|android/|ios/|pubspec\.yaml$|pubspec\.lock$|build\.yaml$|analysis_options\.yaml$|l10n\.yaml$|flavorizr\.yaml$|setup/prebuilt/|setup/scripts/|config/|assets/)|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_auth_session_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/(APIClient|AuthService|AuthSessionCoordinator)\.swift$|^\.github/scripts/check_desktop_auth_session\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+
+        {
+          echo "has_dart=$has_dart"
+          echo "has_python=$has_python"
+          echo "has_arb=$has_arb"
+          echo "has_firmware=$has_firmware"
+          echo "has_frontend=$has_frontend"
+          echo "has_web_app=$has_web_app"
+          echo "has_admin=$has_admin"
+          echo "has_personas=$has_personas"
+          echo "has_workflows=$has_workflows"
+          echo "has_backend_runtime_env=$has_backend_runtime_env"
+          echo "has_backend_async_gate=$has_backend_async_gate"
+          echo "has_backend_workflow_contracts=$has_backend_workflow_contracts"
+          echo "has_desktop_agent_runtime=$has_desktop_agent_runtime"
+          echo "has_app_codegen=$has_app_codegen"
+          echo "has_app_l10n=$has_app_l10n"
+          echo "has_app_compile_smoke=$has_app_compile_smoke"
+          echo "has_desktop_rust=$has_desktop_rust"
+          echo "has_desktop_defaults_ratchet=$has_desktop_defaults_ratchet"
+          echo "has_desktop_async_after_ratchet=$has_desktop_async_after_ratchet"
+          echo "has_desktop_auth_session_ratchet=$has_desktop_auth_session_ratchet"
+        } >> "$GITHUB_OUTPUT"
+
+        if [ "$has_dart" = "true" ] || [ "$has_python" = "true" ] || [ "$has_arb" = "true" ] || [ "$has_firmware" = "true" ]; then
+          echo "has_format=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_format=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then
+          echo "has_flutter_generated=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_flutter_generated=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ] || [ "$has_backend_workflow_contracts" = "true" ]; then
+          echo "has_backend_static_contracts=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_backend_static_contracts=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$has_frontend" = "true" ] || [ "$has_personas" = "true" ]; then
+          echo "has_web_lint=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_web_lint=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$has_web_app" = "true" ] || [ "$has_admin" = "true" ]; then
+          echo "has_web_build=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_web_build=false" >> "$GITHUB_OUTPUT"
+        fi

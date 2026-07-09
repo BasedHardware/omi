@@ -39,28 +39,40 @@ import type {
   ControlToolRequestMessage,
   DirectControlToolRequestMessage,
   OutboundMessage,
+  OutboundMessageDraft,
   QueryScopedOutbound,
   QueryMessage,
-  ProtocolVersion,
   WarmupMessage,
   RefreshTokenMessage,
+  RecordSurfaceTurnMessage,
+  GetVoiceSeedContextMessage,
+  GetKernelTurnTailMessage,
+  ClearOwnerSurfaceStateMessage,
+  ProjectCrossSurfaceTurnMessage,
+  MergeFloatingChatIntoMainChatMessage,
   AuthMethod,
 } from "./protocol.js";
-import { requestIdFor } from "./protocol.js";
+import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
-import type { PromptBlock } from "./adapters/interface.js";
+import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
-import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
+import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
+  adapterActivationError,
+  adapterIdForHarnessMode,
+  ensureRegisteredAdapter,
+} from "./runtime/adapter-selection.js";
+import {
   activeControlToolOwnerId,
+  AGENT_CONTROL_TOOL_NAMES,
+  SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  legacyControlRequestKey,
   registerSignedDirectControlOwner,
   resolveControlRequestContext,
   withMergedOwnerGuard,
@@ -69,17 +81,12 @@ import {
   type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
+import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
+import { failureFromError } from "./runtime/failures.js";
+import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
-  "list_agent_sessions",
-  "get_agent_run",
-  "cancel_agent_run",
-  "inspect_agent_artifacts",
-  "update_agent_artifact_lifecycle",
-]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -95,32 +102,39 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessage): void {
+function send(msg: OutboundMessageDraft): void {
   try {
-    process.stdout.write(JSON.stringify(msg) + "\n");
+    process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
   } catch (err) {
     logErr(`Failed to write to stdout: ${err}`);
   }
 }
 
-function withQueryCorrelation<T extends OutboundMessage>(
+function withQueryCorrelation<T extends OutboundMessageDraft>(
   msg: T,
   query: QueryMessage,
   adapterSessionId?: string
 ): T {
-  if (query.protocolVersion !== 2) return msg;
   return {
     ...msg,
-    protocolVersion: 2,
-    requestId: requestIdFor(query),
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: query.requestId,
     clientId: query.clientId,
     sessionId: query.sessionId,
     runId: query.runId,
     attemptId: query.attemptId,
     eventId: query.eventId,
     adapterSessionId,
-    legacyAdapterSessionId: query.legacyAdapterSessionId ?? query.resume,
   };
+}
+
+function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
+  const failure = failureFromError(error, {
+    code: "runtime_error",
+    source: "runtime",
+    userMessage: error instanceof Error ? error.message : String(error),
+  });
+  return { message: failure.userMessage, failure };
 }
 
 function logErr(msg: string): void {
@@ -135,6 +149,10 @@ function logErr(msg: string): void {
 
 function agentStateDir(): string {
   return process.env.OMI_AGENT_STATE_DIR ?? join(homedir(), "Library", "Application Support", "Omi", "agent");
+}
+
+function agentArtifactsDir(): string {
+  return defaultArtifactRoot(process.env);
 }
 
 // --- OMI tools relay via Unix socket ---
@@ -177,9 +195,7 @@ function registerActiveControlOwner(requestKey: string, ownerId: string): boolea
 }
 
 function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
-  return input.clientId && input.requestId
-    ? `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`
-    : `legacy\0${input.callId}`;
+  return `scoped\0${input.clientId ?? ""}\0${input.requestId ?? ""}\0${input.callId}`;
 }
 
 /** Resolve a pending tool call with a result from Swift */
@@ -191,7 +207,7 @@ function resolveToolCall(msg: { callId: string; result: string; clientId?: strin
     clearTimeout(pending.timeout);
     pending.resolve(msg.result);
   } else {
-    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<legacy>"} requestId=${msg.requestId ?? "<legacy>"}`);
+    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<missing>"} requestId=${msg.requestId ?? "<missing>"}`);
   }
 }
 
@@ -234,52 +250,51 @@ function startOmiToolsRelay(): Promise<string> {
               callId: string;
               name: string;
               input: Record<string, unknown>;
-              protocolVersion?: number;
               requestId?: string;
               clientId?: string;
               sessionId?: string;
               runId?: string;
               attemptId?: string;
               adapterSessionId?: string;
-              legacyAdapterSessionId?: string;
               adapterId?: string;
             };
 
             if (msg.type === "tool_use") {
-              const protocolVersion: ProtocolVersion | undefined =
-                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
-              if (isAgentControlToolName(msg.name)) {
-                const resolvedCorrelation =
-                  toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
-                const messageRequestIsActive = Boolean(
-                  msg.requestId?.trim() &&
-                    msg.clientId?.trim() &&
-                    resolvedCorrelation.requestId === msg.requestId &&
-                    resolvedCorrelation.clientId === msg.clientId
+              const requestId = msg.requestId?.trim();
+              const clientId = msg.clientId?.trim();
+              if (!requestId || !clientId) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing active Omi request context for tool relay",
+                  }) + "\n"
                 );
-                if (protocolVersion === 2 && !messageRequestIsActive) {
-                  client.write(
-                    JSON.stringify({
-                      type: "tool_result",
-                      callId: msg.callId,
-                      result: "Error: missing active Omi request context for v2 control tool relay",
-                    }) + "\n"
-                  );
-                  continue;
-                }
+                continue;
+              }
+              const resolvedCorrelation =
+                toolCallCorrelation?.({ requestId, clientId, adapterId: msg.adapterId }) ?? {};
+              const messageRequestIsActive =
+                resolvedCorrelation.requestId === requestId && resolvedCorrelation.clientId === clientId;
+              if (!messageRequestIsActive) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing active Omi request context for tool relay",
+                  }) + "\n"
+                );
+                continue;
+              }
+              if (isAgentControlToolName(msg.name)) {
                 void (async () => {
                   const controlToolContext = agentControlToolContext
                     ? {
                         ...agentControlToolContext,
-                        getProtocolVersion: () => protocolVersion,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestKey: controlRequestKey(msg) ?? (protocolVersion === 2 ? undefined : legacyControlRequestKey(msg)),
-                            runId: protocolVersion === 2 ? undefined : msg.runId,
-                            attemptId: protocolVersion === 2 ? undefined : msg.attemptId,
+                            requestKey: controlRequestKey({ requestId, clientId }),
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                            ownerIdForRun: (runId) => activeControlToolOwnersByRun.get(runId),
-                            ownerIdForAttempt: (attemptId) => activeControlToolOwnersByAttempt.get(attemptId),
                           }),
                       }
                     : undefined;
@@ -304,42 +319,22 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              // Forward tool call to Swift via stdout
-              const resolvedCorrelation =
-                toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
-              const messageRequestIsActive = Boolean(
-                msg.requestId &&
-                  msg.clientId &&
-                  resolvedCorrelation.requestId === msg.requestId &&
-                  resolvedCorrelation.clientId === msg.clientId
-              );
-              if (protocolVersion === 2 && !messageRequestIsActive) {
-                client.write(
-                  JSON.stringify({
-                    type: "tool_result",
-                    callId: msg.callId,
-                    result: "Error: missing active Omi request context for v2 tool relay",
-                  }) + "\n"
-                );
-                continue;
-              }
               const correlation = {
                 ...resolvedCorrelation,
-                ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
-                ...(messageRequestIsActive && msg.clientId ? { clientId: msg.clientId } : {}),
-                ...(messageRequestIsActive && protocolVersion ? { protocolVersion } : {}),
-                ...(messageRequestIsActive && msg.sessionId ? { sessionId: msg.sessionId } : {}),
-                ...(messageRequestIsActive && msg.runId ? { runId: msg.runId } : {}),
-                ...(messageRequestIsActive && msg.attemptId ? { attemptId: msg.attemptId } : {}),
-                ...(messageRequestIsActive && msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
-                ...(messageRequestIsActive && msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
+                protocolVersion: PROTOCOL_VERSION,
+                requestId,
+                clientId,
+                ...(msg.sessionId ? { sessionId: msg.sessionId } : {}),
+                ...(msg.runId ? { runId: msg.runId } : {}),
+                ...(msg.attemptId ? { attemptId: msg.attemptId } : {}),
+                ...(msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
               };
 
               const callId = msg.callId;
               const pendingKey = toolCallPendingKey({
                 callId,
-                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
-                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+                clientId,
+                requestId,
               });
               if (pendingToolCalls.has(pendingKey)) {
                 client.write(
@@ -605,7 +600,7 @@ function buildMcpServers(
     const omiToolsEnv: Array<{ name: string; value: string }> = [
       { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
       { name: "OMI_QUERY_MODE", value: mode },
-      { name: "OMI_ADAPTER_ID", value: "acp" },
+      { name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" },
     ];
     if (context) {
       omiToolsEnv.push(
@@ -624,12 +619,24 @@ function buildMcpServers(
       if (context.attemptId) {
         omiToolsEnv.push({ name: "OMI_ATTEMPT_ID", value: context.attemptId });
       }
+      if (context.surfaceKind) {
+        omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
+      }
+      if (context.externalRefKind) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_KIND", value: context.externalRefKind });
+      }
+      if (context.externalRefId) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_ID", value: context.externalRefId });
+      }
     }
     if (cwd) {
       omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
     }
     if (sessionKey === "onboarding") {
       omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
+    }
+    if (context?.screenContext === true) {
+      omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
     servers.push({
       name: "omi-tools",
@@ -639,24 +646,28 @@ function buildMcpServers(
     });
   }
 
-  // Playwright MCP server
-  const playwrightArgs = [playwrightCli];
-  if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
-    playwrightArgs.push("--extension");
-  }
-  const playwrightEnv: Array<{ name: string; value: string }> = [];
-  if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
-    playwrightEnv.push({
-      name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
-      value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
+  // Playwright MCP server. Only expose it when the desktop app has verified
+  // the user already configured the Playwright bridge; otherwise the agent
+  // must use app-native tools instead of opening a fresh Playwright browser.
+  if (process.env.PLAYWRIGHT_MCP_ENABLED === "true") {
+    const playwrightArgs = [playwrightCli];
+    if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+      playwrightArgs.push("--extension");
+    }
+    const playwrightEnv: Array<{ name: string; value: string }> = [];
+    if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
+      playwrightEnv.push({
+        name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
+        value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
+      });
+    }
+    servers.push({
+      name: "playwright",
+      command: process.execPath,
+      args: playwrightArgs,
+      env: playwrightEnv,
     });
   }
-  servers.push({
-    name: "playwright",
-    command: process.execPath,
-    args: playwrightArgs,
-    env: playwrightEnv,
-  });
 
   return servers;
 }
@@ -666,7 +677,7 @@ function withControlRunCorrelation(
   input: Record<string, unknown>,
   fallbackClientId: string | undefined
 ): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
-  if (name !== "send_agent_message" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
     return { input };
   }
   const requestId = randomUUID();
@@ -683,7 +694,7 @@ function withControlRunCorrelation(
 }
 
 function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
-  if (name !== "send_agent_message" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
     return undefined;
   }
   const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
@@ -693,7 +704,7 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
-  return name === "delegate_agent" && input.mode === "spawn";
+  return name === "spawn_background_agent" || name === "spawn_agent";
 }
 
 function controlToolResultOk(result: string): boolean {
@@ -771,7 +782,8 @@ process.on("uncaughtException", (err) => {
   logErr(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
   logCrash(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
   try {
-    send({ type: "error", message: `Uncaught: ${err.message}` });
+    const envelope = runtimeErrorEnvelope(err);
+    send({ type: "error", message: envelope.message, failure: envelope.failure });
   } catch {
     // already broken
   }
@@ -805,7 +817,7 @@ async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
   const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
-  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
   // 1. Start Unix socket for omi-tools relay
@@ -813,14 +825,18 @@ async function main(): Promise<void> {
   logErr("omi-tools relay started");
   process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
 
-  // 2. Start the ACP subprocess
-  await startAcpProcess();
-  logErr("ACP subprocess spawned");
+  // 2. Start ACP only when selected or lazily needed by an ACP query.
+  if (defaultAdapterId === "acp") {
+    await startAcpProcess();
+    logErr("ACP subprocess spawned");
+  }
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
-  const kernel = new AgentRuntimeKernel({ store, registry });
+  const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
+  logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -876,6 +892,10 @@ async function main(): Promise<void> {
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
+  const localAcpAdapters = new Set<RuntimeAdapter>();
+  const stopLocalAcpAdapters = async (): Promise<void> => {
+    await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
+  };
   let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
@@ -896,8 +916,36 @@ async function main(): Promise<void> {
   };
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const ensureHermesAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "hermes", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const ensureOpenClawAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "openclaw", {
+      log: logErr,
+      maxWorkers: configuredPiMonoMaxWorkers(),
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const hermesAvailable = await ensureHermesAdapter();
+  const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!hermesAvailable && defaultAdapterId === "hermes") {
+    const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!openClawAvailable && defaultAdapterId === "openclaw") {
+    const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -907,7 +955,7 @@ async function main(): Promise<void> {
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
   };
-  const facade = new JsonlCompatibilityFacade({
+  const transport = new JsonlTransport({
     kernel,
     send,
     log: logErr,
@@ -925,15 +973,15 @@ async function main(): Promise<void> {
       { requestId, clientId, adapterId },
       {
         forRequest: (scopedRequestId, scopedClientId) =>
-          facade.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
-        forAdapter: (scopedAdapterId) => facade.toolCallCorrelationForAdapter(scopedAdapterId),
-        unscoped: () => facade.unscopedToolCallCorrelation(),
+          transport.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
+        forAdapter: (scopedAdapterId) => transport.toolCallCorrelationForAdapter(scopedAdapterId),
+        unscoped: () => transport.unscopedToolCallCorrelation(),
       }
     );
   };
 
   // 3. Signal readiness
-  send({ type: "init", sessionId: "" });
+  send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -955,25 +1003,35 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
-          if (query.protocolVersion === 2 && !query.clientId?.trim()) {
-            throw new Error("protocol v2 query requires clientId");
+          if (!query.clientId?.trim()) {
+            throw new Error("query requires clientId");
           }
-          if (query.protocolVersion === 2 && !query.requestId?.trim()) {
-            throw new Error("protocol v2 query requires requestId");
+          if (!query.requestId?.trim()) {
+            throw new Error("query requires requestId");
           }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
-          query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
-          const queryRequestId = requestIdFor(query);
-          const queryOwnerKey =
-            controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
-            (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
+          query.ownerId = queryOwnerId;
+          query.requestId = query.requestId.trim();
+          const queryRequestId = query.requestId;
+          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
+              await startAcpProcess();
               await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              if (!(await ensureHermesAdapter())) {
+                throw new Error(adapterActivationError("hermes"));
+              }
+            } else if (adapterId === "openclaw") {
+              if (!(await ensureOpenClawAdapter())) {
+                throw new Error(adapterActivationError("openclaw"));
+              }
             }
-            await facade.handleQuery(query);
+            await transport.handleQuery(query);
           } finally {
             if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
@@ -982,11 +1040,13 @@ async function main(): Promise<void> {
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
           const query = msg as QueryMessage;
+          const envelope = runtimeErrorEnvelope(err);
           send({
             type: "error",
-            message: String(err),
-            protocolVersion: query.protocolVersion,
-            requestId: requestIdFor(query),
+            message: envelope.message,
+            failure: envelope.failure,
+            protocolVersion: PROTOCOL_VERSION,
+            requestId: query.requestId,
             clientId: query.clientId,
           });
         });
@@ -994,7 +1054,7 @@ async function main(): Promise<void> {
 
       case "warmup": {
         const wm = msg as WarmupMessage;
-        facade.handleWarmup(wm);
+        transport.handleWarmup(wm);
         break;
       }
 
@@ -1004,7 +1064,7 @@ async function main(): Promise<void> {
 
       case "control_tool": {
         const control = msg as ControlToolRequestMessage;
-        const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
+        const requestId = control.requestId.trim();
         const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
         const activeOwnerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
         let controlContext;
@@ -1051,8 +1111,7 @@ async function main(): Promise<void> {
             if (controlRunOwnerKey) {
               controlRunOwnerInserted = registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
             }
-            facade.registerExternalRequestContext({
-              protocolVersion: control.protocolVersion,
+            transport.registerExternalRequestContext({
               requestId: correlated.requestId,
               clientId: correlated.clientId,
               ownerId: controlContext.activeOwnerId,
@@ -1064,7 +1123,7 @@ async function main(): Promise<void> {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
             type: "control_tool_result",
@@ -1091,7 +1150,7 @@ async function main(): Promise<void> {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
             type: "control_tool_result",
@@ -1115,7 +1174,7 @@ async function main(): Promise<void> {
                 const toolResult = await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
-                    getProtocolVersion: () => control.protocolVersion,
+                    trustedUserControl: false,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
                         requestKey: controlOwnerKey,
@@ -1132,7 +1191,7 @@ async function main(): Promise<void> {
                   activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
                 }
                 if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                  facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                  transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
                 }
               }
             })()
@@ -1141,7 +1200,7 @@ async function main(): Promise<void> {
                 activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
               }
               if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
               return JSON.stringify({
                 ok: false,
@@ -1161,36 +1220,36 @@ async function main(): Promise<void> {
 
       case "direct_control_tool": {
         const control = msg as DirectControlToolRequestMessage;
-        if (control.protocolVersion === 2 && !control.clientId?.trim()) {
+        if (!control.clientId?.trim()) {
           send({
             type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
+            protocolVersion: PROTOCOL_VERSION,
             requestId: control.requestId?.trim(),
             clientId: control.clientId,
             name: control.name,
             result: JSON.stringify({
               ok: false,
-              error: { code: "invalid_request", message: "protocol v2 direct control requires clientId" },
+              error: { code: "invalid_request", message: "direct control requires clientId" },
             }),
           });
           break;
         }
-        if (control.protocolVersion === 2 && !control.requestId?.trim()) {
+        if (!control.requestId?.trim()) {
           send({
             type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
+            protocolVersion: PROTOCOL_VERSION,
             requestId: control.requestId?.trim(),
             clientId: control.clientId,
             name: control.name,
             result: JSON.stringify({
               ok: false,
-              error: { code: "invalid_request", message: "protocol v2 direct control requires requestId" },
+              error: { code: "invalid_request", message: "direct control requires requestId" },
             }),
           });
           break;
         }
-        const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
-        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+        const requestId = control.requestId.trim();
+        if (!isAgentControlToolName(control.name)) {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1259,7 +1318,7 @@ async function main(): Promise<void> {
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
-                    getProtocolVersion: () => control.protocolVersion,
+                    trustedUserControl: true,
                     getOwnerId: () => controlContext.activeOwnerId,
                   },
                   control.name,
@@ -1286,13 +1345,229 @@ async function main(): Promise<void> {
 
       case "interrupt":
         logErr("Interrupt requested by user");
-        facade.handleInterrupt(msg).catch((err) => {
+        transport.handleInterrupt(msg).catch((err) => {
           logErr(`Interrupt error: ${err}`);
         });
         break;
 
+      case "clear_owner_state": {
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const result = kernel.clearOwnerState(ownerId);
+        logErr(
+          `Cleared owner state for ${ownerId}: invalidated ${result.invalidatedBindingIds.length} binding(s)`,
+        );
+        break;
+      }
+
+      case "import_legacy_main_chat_sessions": {
+        // TODO(desktop-agent-platonic-gap-closure G6): delete handler two desktop releases after platonic ships.
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const entries = Array.isArray(msg.entries) ? msg.entries : [];
+        const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
+        logErr(`Imported ${imported} main-chat surface session(s) for ${ownerId}`);
+        break;
+      }
+
+      case "import_conversation_turns": {
+        const ownerId = msg.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
+        const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
+        const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        const turns = Array.isArray(msg.turns) ? msg.turns : [];
+        const imported = kernel.importConversationTurns({
+          ownerId,
+          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          turns: turns
+            .map((turn): ConversationTurnImportEntry | null => {
+              if (!turn || typeof turn !== "object") return null;
+              const record = turn as Record<string, unknown>;
+              const role = record.role === "assistant" ? "assistant" : record.role === "user" ? "user" : null;
+              const content = typeof record.content === "string" ? record.content : "";
+              if (!role || !content.trim()) return null;
+              return {
+                role,
+                content,
+                surfaceKind: typeof record.surfaceKind === "string" ? record.surfaceKind : undefined,
+                createdAtMs: typeof record.createdAtMs === "number" ? record.createdAtMs : undefined,
+                metadataJson: typeof record.metadataJson === "string" ? record.metadataJson : undefined,
+              };
+            })
+            .filter((turn): turn is ConversationTurnImportEntry => turn !== null),
+        });
+        logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
+        break;
+      }
+
+      case "merge_floating_chat_into_main_chat": {
+        const merge = msg as MergeFloatingChatIntoMainChatMessage;
+        const ownerId = merge.ownerId?.trim() || currentOwnerId;
+        const chatId = typeof merge.chatId === "string" ? merge.chatId : "default";
+        const result = kernel.mergeFloatingChatIntoMainChat({ ownerId, chatId });
+        logErr(
+          `Merged floating_chat into main_chat for ${ownerId}/${chatId}: `
+            + `${result.mergedTurns} turn(s), removedMapping=${result.removedFloatingMapping}`,
+        );
+        break;
+      }
+
+      case "record_surface_turn": {
+        const record = msg as RecordSurfaceTurnMessage;
+        const ownerId = record.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof record.surfaceKind === "string" ? record.surfaceKind : "";
+        const externalRefKind = typeof record.externalRefKind === "string" ? record.externalRefKind : "";
+        const externalRefId = typeof record.externalRefId === "string" ? record.externalRefId : "";
+        const userText = typeof record.userText === "string" ? record.userText : "";
+        const assistantText = typeof record.assistantText === "string" ? record.assistantText : "";
+        const origin = typeof record.origin === "string" ? record.origin : "surface";
+        const result = kernel.recordSurfaceTurn({
+          ownerId,
+          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          userText,
+          assistantText,
+          origin,
+          interrupted: record.interrupted === true,
+          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+        });
+        if (result.recorded) {
+          send({
+            type: "turn_recorded",
+            protocolVersion: record.protocolVersion,
+            requestId: record.requestId,
+            clientId: record.clientId,
+            conversationId: result.conversationId,
+            surfaceKind,
+            externalRefKind,
+            externalRefId,
+            userText: userText.trim(),
+            assistantText: assistantText.trim(),
+            origin,
+            interrupted: record.interrupted === true,
+            idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+            userTurnId: result.userTurn?.turnId,
+            assistantTurnId: result.assistantTurn?.turnId,
+          });
+        }
+        break;
+      }
+
+      case "get_voice_seed_context": {
+        const seed = msg as GetVoiceSeedContextMessage;
+        const ownerId = seed.ownerId?.trim() || currentOwnerId;
+        const requestId = seed.requestId.trim();
+        let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
+        let context = "";
+        if (conversationId) {
+          context = kernel.getVoiceSeedContext({ conversationId });
+        } else {
+          const surfaceKind = typeof seed.surfaceKind === "string" ? seed.surfaceKind : "main_chat";
+          const externalRefKind = typeof seed.externalRefKind === "string" ? seed.externalRefKind : "chat";
+          const externalRefId = typeof seed.externalRefId === "string" ? seed.externalRefId : "default";
+          const resolved = kernel.getVoiceSeedContextForSurface({
+            ownerId,
+            surfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          });
+          conversationId = resolved.conversationId;
+          context = resolved.context;
+        }
+        send({
+          type: "voice_seed_context",
+          protocolVersion: seed.protocolVersion,
+          requestId,
+          clientId: seed.clientId,
+          conversationId,
+          context,
+        });
+        break;
+      }
+
+      case "clear_owner_surface_state": {
+        const clear = msg as ClearOwnerSurfaceStateMessage;
+        const ownerId = clear.ownerId?.trim() || currentOwnerId;
+        const chatId = typeof clear.chatId === "string" ? clear.chatId : "default";
+        const result = kernel.clearOwnerMainChatTurns(ownerId, chatId);
+        logErr(
+          `Cleared main_chat kernel turns for ${ownerId}/${chatId}: `
+            + `conversation=${result.conversationId ?? "none"}, deleted=${result.deletedTurns}`,
+        );
+        break;
+      }
+
+      case "get_kernel_turn_tail": {
+        const tail = msg as GetKernelTurnTailMessage;
+        const ownerId = tail.ownerId?.trim() || currentOwnerId;
+        const requestId = tail.requestId.trim();
+        const limit = typeof tail.limit === "number" ? tail.limit : 8;
+        const chatId = typeof tail.chatId === "string" ? tail.chatId : "default";
+        const resolved = kernel.getMainChatTurnTail(ownerId, limit, chatId);
+        const turns = resolved.turns.map((turn) => {
+          let origin = "";
+          try {
+            const metadata = JSON.parse(turn.metadataJson || "{}") as { origin?: unknown };
+            origin = typeof metadata.origin === "string" ? metadata.origin : "";
+          } catch {
+            origin = "";
+          }
+          return {
+            role: turn.role,
+            content: turn.content,
+            surfaceKind: turn.surfaceKind,
+            createdAtMs: turn.createdAtMs,
+            metadataJson: turn.metadataJson,
+            origin,
+          };
+        });
+        send({
+          type: "kernel_turn_tail",
+          protocolVersion: tail.protocolVersion,
+          requestId,
+          clientId: tail.clientId,
+          conversationId: resolved.conversationId ?? "",
+          turns,
+        });
+        break;
+      }
+
+      case "project_cross_surface_turn": {
+        const project = msg as ProjectCrossSurfaceTurnMessage;
+        const ownerId = project.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof project.surfaceKind === "string" ? project.surfaceKind : "main_chat";
+        const externalRefKind = typeof project.externalRefKind === "string" ? project.externalRefKind : "chat";
+        const externalRefId = typeof project.externalRefId === "string" ? project.externalRefId : "default";
+        const userText = typeof project.userText === "string" ? project.userText : "";
+        const assistantText = typeof project.assistantText === "string" ? project.assistantText : "";
+        const origin = typeof project.origin === "string" ? project.origin : "surface";
+        const result = kernel.projectCrossSurfaceTurn({
+          ownerId,
+          targetSurfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          userText,
+          assistantText,
+          origin,
+          idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
+        });
+        if (result.recorded) {
+          send({
+            type: "turn_recorded",
+            protocolVersion: project.protocolVersion,
+            requestId: project.requestId,
+            clientId: project.clientId,
+            conversationId: result.conversationId,
+            surfaceKind,
+            externalRefKind,
+            externalRefId,
+            userText: userText.trim(),
+            assistantText: assistantText.trim(),
+            origin,
+            interrupted: false,
+            idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
+            userTurnId: result.userTurn?.turnId,
+            assistantTurnId: result.assistantTurn?.turnId,
+          });
+        }
+        break;
+      }
+
       case "invalidate_session":
-        facade.handleInvalidateSession(msg);
+        transport.handleInvalidateSession(msg);
         break;
 
       case "refresh_token": {
@@ -1314,9 +1589,7 @@ async function main(): Promise<void> {
       }
 
       case "authenticate": {
-        // Legacy fallback: OAuth flow now handles auth internally.
-        // This handler is kept for backward compatibility.
-        logErr(`Authentication message received from Swift (legacy fallback)`);
+        logErr(`Authentication message received from Swift`);
         send({ type: "auth_success" });
         if (authResolve) {
           authResolve();
@@ -1330,6 +1603,7 @@ async function main(): Promise<void> {
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+        await stopLocalAcpAdapters();
         process.exit(0);
         break;
 
@@ -1344,6 +1618,7 @@ async function main(): Promise<void> {
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+    void stopLocalAcpAdapters();
     process.exit(0);
   });
 }
@@ -1351,6 +1626,7 @@ async function main(): Promise<void> {
 main().catch((err) => {
   logErr(`Fatal error: ${err}`);
   logCrash(`Fatal error: ${err}`);
-  send({ type: "error", message: `Fatal: ${err}` });
+  const envelope = runtimeErrorEnvelope(err);
+  send({ type: "error", message: envelope.message, failure: envelope.failure });
   process.exit(1);
 });

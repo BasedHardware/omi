@@ -31,6 +31,7 @@ Covers round 3:
 
 import inspect
 import os
+import re
 import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -318,7 +319,11 @@ class TestChatUtilsExecutorMigration:
 
     def test_uses_storage_executor(self):
         src = _read_source('utils/chat.py')
-        assert 'storage_executor.submit(' in src
+        storage_src = _read_source('utils/other/storage.py')
+        assert 'schedule_syncing_temporal_file_deletion' in src
+        assert 'time.sleep(480)' not in src
+        assert 'DeferredDeleter' in storage_src
+        assert 'def schedule_syncing_temporal_file_deletion' in storage_src
 
 
 class TestPostprocessExecutorMigration:
@@ -424,7 +429,9 @@ class TestNoRequestsInProductionCode:
                     if rel in excluded:
                         continue
                     src = _read_source(rel)
-                    assert 'import requests' not in src, f'{rel} still imports requests'
+                    bare_import = re.search(r'^\s*import requests\b', src, re.MULTILINE)
+                    from_import = re.search(r'^\s*from requests\b', src, re.MULTILINE)
+                    assert bare_import is None and from_import is None, f'{rel} still imports requests'
 
     def test_no_threading_thread_start_in_routers(self):
         # users.py retains threading.Thread for background wipe (long-running, not executor-suitable)

@@ -29,10 +29,20 @@ export default defineConfig(
     }
   },
   {
-    // Plain JS cannot carry TypeScript return-type annotations. The upstream
-    // @electron-toolkit config already disables this rule for JS, but its
-    // `*.js`/`*.mjs` globs only match root-level files, not scripts/**.
-    files: ['**/*.{js,mjs,cjs}'],
+    // react-three-fiber intrinsics (<mesh>, <group>, position, args, intensity…)
+    // are not DOM elements/attributes, so the DOM-oriented react/no-unknown-property
+    // rule mis-flags them. Scope it off for the r3f render trees.
+    files: ['**/components/graph/**/*.tsx'],
+    rules: {
+      'react/no-unknown-property': 'off'
+    }
+  },
+  {
+    // Plain JS cannot carry TypeScript return-type annotations (the upstream
+    // @electron-toolkit config's `*.js`/`*.mjs` globs only match root-level
+    // files, not scripts/**), and diagnostic scripts / test files don't benefit
+    // from explicit return-type annotations either; the strictness is noise.
+    files: ['**/*.{js,mjs,cjs}', 'scripts/**/*.ts', '**/*.test.{ts,tsx,mjs}'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
     }

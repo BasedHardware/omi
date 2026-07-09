@@ -31,11 +31,26 @@ let package = Package(
         .brew(["webp"])
       ]
     ),
+    .target(
+      name: "OmiSupport",
+      path: "Sources/OmiSupport"
+    ),
+    .target(
+      name: "OmiTheme",
+      path: "Sources/Theme"
+    ),
+    .target(
+      name: "OmiWAL",
+      path: "Sources/OmiWAL"
+    ),
     .executableTarget(
       name: "Omi Computer",
       dependencies: [
         "ObjCExceptionCatcher",
         "CWebP",
+        "OmiSupport",
+        "OmiTheme",
+        "OmiWAL",
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
@@ -47,6 +62,13 @@ let package = Package(
         .product(name: "FluidAudio", package: "FluidAudio"),
       ],
       path: "Sources",
+      exclude: [
+        "GoogleService-Info-Dev.plist",
+        "GoogleService-Info-Local.plist",
+        "Theme",
+        "OmiSupport",
+        "OmiWAL",
+      ],
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks).
@@ -59,7 +81,10 @@ let package = Package(
     .testTarget(
       name: "Omi ComputerTests",
       dependencies: [
-        .target(name: "Omi Computer")
+        .target(name: "Omi Computer"),
+        "OmiSupport",
+        "OmiTheme",
+        "OmiWAL",
       ],
       path: "Tests"
     ),

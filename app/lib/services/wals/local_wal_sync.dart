@@ -644,9 +644,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
           final r = result.completed!;
-          resp.newConversationIds.addAll(
-            r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-          );
+          resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
           resp.updatedConversationIds.addAll(
             r.updatedConversationIds.where(
               (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
@@ -729,7 +727,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     await _flush();
 
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    final matches = _wals.where((w) => w == wal).toList();
+    if (matches.isEmpty) {
+      DebugLogManager.logInfo('Single WAL upload skipped — WAL no longer tracked', {'walId': wal.id});
+      return null;
+    }
+    final walToSync = matches.first;
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -765,8 +768,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       } catch (e) {
         wal.status = WalStatus.corrupted;
         print(e.toString());
-        DebugLogManager.logError(
-            e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
+        DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {
+          'walId': wal.id,
+        });
       }
     }
 
@@ -786,9 +790,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       if (result.completed != null) {
         final r = result.completed!;
-        resp.newConversationIds.addAll(
-          r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-        );
+        resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
         resp.updatedConversationIds.addAll(
           r.updatedConversationIds.where(
             (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
@@ -872,9 +874,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
-      final fetched = await Future.wait(
-        slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))),
-      );
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;

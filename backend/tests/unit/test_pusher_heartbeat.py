@@ -11,11 +11,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pusher_websockets_stub import install_websockets_stub
+from tests.unit.pusher_websockets_stub import install_websockets_stub
 
 install_websockets_stub()
 
 from websockets.exceptions import ConnectionClosed
+
+pytestmark = pytest.mark.slow
 
 # ---------------------------------------------------------------------------
 # Helper: build a minimal pusher_heartbeat coroutine matching the real impl

@@ -17,8 +17,8 @@ import Network
 //               Transport: URLSession WebSocket (HTTP/1.1-friendly endpoint).
 //
 //   • Gemini  — wss://generativelanguage.googleapis.com/ws/…BidiGenerateContent?key=…
-//               half-cascade Live model, response modality TEXT + function calling.
-//               Text out is spoken by the caller via AVSpeechSynthesizer.
+//               Live model, response modality AUDIO + function calling.
+//               Native spoken audio out (PCM) + output transcription.
 //               Transport: Network.framework WebSocket with ALPN pinned to
 //               http/1.1 — Gemini's endpoint upgrades URLSession's WS to HTTP/2
 //               and resets it (the documented reason the legacy path needed a
@@ -29,16 +29,16 @@ import Network
 
 @MainActor
 protocol RealtimeHubSessionDelegate: AnyObject {
-  func hubDidConnect()
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool)
+  func hubDidConnect(source: RealtimeHubSession)
+  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession)
   /// OpenAI native spoken audio (PCM16 mono 24 kHz).
-  func hubDidReceiveAudio(_ pcm24k: Data)
+  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession)
   /// Assistant text to display / speak. Gemini emits its whole reply here;
   /// OpenAI emits its spoken transcript here (for the on-screen bubble).
-  func hubDidEmitText(_ text: String, isFinal: Bool)
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String)
-  func hubDidFinishTurn()
-  func hubDidError(_ message: String)
+  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession)
+  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession)
+  func hubDidFinishTurn(source: RealtimeHubSession)
+  func hubDidError(_ message: String, source: RealtimeHubSession)
 }
 
 /// How the client authenticates to the realtime provider:
@@ -59,6 +59,11 @@ enum HubAuth {
   var isEphemeral: Bool { if case .ephemeral = self { return true } else { return false } }
 }
 
+enum RealtimeHubBargeInStrategy {
+  case inSessionCancel
+  case freshSession
+}
+
 final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
@@ -67,6 +72,10 @@ final class RealtimeHubSession: NSObject {
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
   var requiredInputSampleRate: Int { provider == .openai ? 24000 : 16000 }
+  /// Provider-specific interruption contract for a new PTT turn while a reply is still streaming.
+  var bargeInStrategy: RealtimeHubBargeInStrategy {
+    provider == .gemini ? .freshSession : .inSessionCancel
+  }
 
   // All socket + state access is serialized here (audio arrives on the capture
   // thread; receives on the URLSession/NW queue). Delegate calls hop to main.
@@ -85,6 +94,9 @@ final class RealtimeHubSession: NSObject {
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
+  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
+  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
   private var openAIFunctionNames: [String: String] = [:]
@@ -98,12 +110,17 @@ final class RealtimeHubSession: NSObject {
   /// OpenAI: a response is mid-flight — don't create a second one (the realtime
   /// API rejects "Conversation already has an active response in progress").
   private var openAIResponseActive = false
+  private var openAIResponseCreatePending = false
+  private var openAIActiveResponseID: String?
   /// Gemini: a committed turn is awaiting its spoken reply. Gates BOTH audio
   /// playback and turn completion to the CURRENT turn, so an interrupted/abandoned
   /// turn's trailing audio + bookkeeping `turnComplete` can't leak into the next
   /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
   /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
   private var geminiResponsePending = false
+  private var pendingOpenAIToolCallIds = Set<String>()
+  private var pendingGeminiToolCallIds = Set<String>()
+  private var geminiSyntheticToolCallCounter = 0
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
   // commit, reported at finishTurn (only for ephemeral sessions; BYOK pays the provider
@@ -176,12 +193,15 @@ final class RealtimeHubSession: NSObject {
       self.isOpen = false
       self.pendingAudio.removeAll()
       self.pendingVideo.removeAll()
+      self.pendingTextInputs.removeAll()
       self.pendingCommit = false
       self.openAIFunctionNames.removeAll()
       self.dispatchedToolItems.removeAll()
       self.activityOpen = false
       self.pendingActivityStart = false
       self.openAIResponseActive = false
+      self.openAIResponseCreatePending = false
+      self.openAIActiveResponseID = nil
       self.geminiResponsePending = false
     }
   }
@@ -190,7 +210,7 @@ final class RealtimeHubSession: NSObject {
     guard !terminated else { return }
     terminated = true
     let d = delegate
-    Task { @MainActor in d?.hubDidError(message) }
+    Task { @MainActor in d?.hubDidError(message, source: self) }
   }
 
   // MARK: Public stream API
@@ -206,6 +226,9 @@ final class RealtimeHubSession: NSObject {
         if self.openAIResponseActive {
           self.send(json: ["type": "response.cancel"])
           self.openAIResponseActive = false
+          self.openAIResponseCreatePending = false
+          self.openAIActiveResponseID = nil
+          self.pendingOpenAIToolCallIds.removeAll()
         }
         // Drop any uncommitted mic input so it can't leak into the next turn.
         self.send(json: ["type": "input_audio_buffer.clear"])
@@ -231,22 +254,106 @@ final class RealtimeHubSession: NSObject {
   /// a frame sent here becomes part of the user's speech turn, so the model has the screen
   /// when it answers. This is the ONLY image delivery this model accepts — a separate
   /// image-only turn (after the speech turn closed) is rejected with close 1007.
-  func sendVideoFrame(_ image: Data, mime: String) {
-    guard provider == .gemini else { return }
-    let b64 = image.base64EncodedString()
-    q.async { [weak self] in
-      guard let self else { return }
-      // Buffer until the socket is open AND a turn is active, then flush in markReady.
-      // A cold first turn dumps audio + this frame before connect (~300ms); without
-      // buffering the frame is dropped and the model answers blind.
-      guard self.isOpen, self.activityOpen else {
-        self.pendingVideo.append((b64, mime))
-        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
-        return
+  func sendVideoFrame(_ image: Data, mime: String, allowClosedActivityWindow: Bool = false) {
+	    guard provider == .gemini else { return }
+	    let b64 = image.base64EncodedString()
+	    q.async { [weak self] in
+	      guard let self else { return }
+	      // Buffer until the socket is open AND a turn is active, then flush in markReady.
+	      // A cold first turn dumps audio + this frame before connect (~300ms); without
+	      // buffering the frame is dropped and the model answers blind.
+	      guard self.isOpen, self.activityOpen || allowClosedActivityWindow else {
+	        self.pendingVideo.append((b64, mime))
+	        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
+	        return
+	      }
+	      let phase = self.activityOpen ? "in-turn" : "after-activity-end"
+	      log("\(self.tag): screen frame sent \(phase) (\(image.count) bytes)")
+	      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
+	    }
+	  }
+
+  /// TEST SEAM (ptt_test_turn only, bridge is non-prod-only): inject the probe text as
+  /// realtime user input so the model answers the forced transcript instead of the
+  /// fixture audio — the harness feeds a sine tone, and without this the model replies
+  /// to a beep in whatever language it hallucinates. Gemini: text rides the open
+  /// activity window (same rule as video frames). OpenAI: a user message item is
+  /// appended before the audio commit.
+  /// TEST SEAM (ptt_test_turn only): queue-synced snapshot of whether this session can
+  /// accept in-turn input right now. Gemini needs the speech-activity window open;
+  /// OpenAI only needs the socket. The headless turn waits on this before injecting
+  /// text/committing — beginTurn may defer activityStart during a seed-stale reconnect,
+  /// and an activityEnd without a window is a Gemini policy-close (1008).
+  func activityWindowOpen() async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async {
+        continuation.resume(
+          returning: self.isOpen && (self.provider == .openai || self.activityOpen))
       }
-      log("\(self.tag): screen frame sent in-turn (\(image.count) bytes)")
-      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
     }
+  }
+
+  func sendTestTextInput(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "test text input")
+  }
+
+  func sendTurnContextText(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "turn context")
+  }
+
+  private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self else {
+          continuation.resume(returning: false)
+          return
+        }
+        guard self.isOpen else {
+          self.bufferTextInput(text, logLabel: logLabel, reason: "socket not open")
+          continuation.resume(returning: true)
+          return
+        }
+        if self.provider == .gemini, !self.activityOpen {
+          self.bufferTextInput(text, logLabel: logLabel, reason: "no open activity window")
+          continuation.resume(returning: true)
+          return
+        }
+        self.sendTextInputNow(text, logLabel: logLabel)
+        continuation.resume(returning: true)
+      }
+    }
+  }
+
+  private func bufferTextInput(_ text: String, logLabel: String, reason: String) {
+    pendingTextInputs.append((text: text, logLabel: logLabel))
+    log("\(tag): \(logLabel) buffered — \(reason) (\(text.count) chars)")
+  }
+
+  private func flushPendingTextInputs() {
+    guard isOpen else { return }
+    guard provider == .openai || activityOpen else { return }
+    let inputs = pendingTextInputs
+    pendingTextInputs.removeAll()
+    for input in inputs {
+      sendTextInputNow(input.text, logLabel: input.logLabel)
+    }
+  }
+
+  private func sendTextInputNow(_ text: String, logLabel: String) {
+    switch provider {
+    case .gemini:
+      send(json: ["realtimeInput": ["text": text]])
+    case .openai:
+      send(json: [
+        "type": "conversation.item.create",
+        "item": [
+          "type": "message",
+          "role": "user",
+          "content": [["type": "input_text", "text": text]],
+        ],
+      ])
+    }
+    log("\(tag): \(logLabel) sent (\(text.count) chars)")
   }
 
   /// End the user's PTT turn and ask the model to respond.
@@ -256,17 +363,18 @@ final class RealtimeHubSession: NSObject {
     guard provider == .gemini else { return }
     q.async { [weak self] in
       guard let self else { return }
-      // Barge-in: abandon the previous turn's still-pending reply so its trailing
-      // audio + bookkeeping turnComplete are ignored. A fresh activityStart on the
-      // SAME socket cancels the in-flight generation server-side (it replies with
-      // serverContent.interrupted) — no teardown, so conversation context survives.
+      // Barge-in on a live Gemini generation uses a fresh session at the controller
+      // boundary. This same-session flag is only a local gate for abandoned/stale
+      // Gemini events that arrive before replacement or on non-provider interruptions.
       if interrupting {
         self.geminiResponsePending = false
+        self.pendingGeminiToolCallIds.removeAll()
       }
       guard !self.activityOpen else { return }
       self.activityOpen = true
       if self.isOpen {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
+        self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
       } else {
         self.pendingActivityStart = true
@@ -279,12 +387,15 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       self.resetTurnUsage()  // fresh per-turn usage before the model responds
       guard self.isOpen else { self.pendingCommit = true; return }
+      self.flushPendingTextInputs()
       log("\(self.tag): turn committed")
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.commit"])
         self.requestResponse(audio: true)
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         self.activityOpen = false
         self.geminiResponsePending = true  // expect a spoken reply for THIS turn
@@ -300,10 +411,13 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in
       guard let self else { return }
       self.geminiResponsePending = false
+      self.pendingTextInputs.removeAll()
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.clear"])
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
           self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         }
@@ -320,12 +434,18 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.remove(callId)
         self.send(json: [
           "type": "conversation.item.create",
           "item": ["type": "function_call_output", "call_id": callId, "output": output],
         ])
-        self.requestResponse(audio: true)
+        if self.pendingOpenAIToolCallIds.isEmpty {
+          self.requestResponse(audio: true)
+        } else {
+          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+        }
       case .gemini:
+        self.pendingGeminiToolCallIds.remove(callId)
         self.send(json: [
           "toolResponse": [
             "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
@@ -360,6 +480,8 @@ final class RealtimeHubSession: NSObject {
       return
     }
     openAIResponseActive = true
+    openAIResponseCreatePending = true
+    openAIActiveResponseID = nil
     send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
   }
 
@@ -397,27 +519,60 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// Whether the provider's input transcription accepts an explicit language hint.
+  /// OpenAI's whisper transcription does; Gemini Live's inputAudioTranscription has no
+  /// language field at all (native-audio models pick per utterance — the misdetect bug).
+  var supportsInputTranscriptionLanguage: Bool { provider == .openai }
+
+  /// ISO 639-1 hint applied to committed input transcription (OpenAI only).
+  private var inputTranscriptionLanguage: String?
+
+  /// Set (or clear, with nil) the input transcription language for this turn. Sends a
+  /// full idempotent session.update — partial nested updates have murkier merge
+  /// semantics, and the payload is deterministic anyway. Call BEFORE commitInputTurn();
+  /// both hop to `q`, so FIFO ordering guarantees the update lands first. All state
+  /// mutation happens on `q` (same discipline as every other send-path member).
+  func setInputTranscriptionLanguage(_ code: String?) {
+    guard provider == .openai else { return }
+    q.async { [weak self] in
+      guard let self else { return }
+      guard code != self.inputTranscriptionLanguage else { return }
+      self.inputTranscriptionLanguage = code
+      log("\(self.tag): input transcription language → \(code ?? "auto")")
+      guard self.isOpen else { return }  // pre-open: sendSessionSetup includes it
+      self.send(json: self.openAISessionPayload())
+    }
+  }
+
+  private func openAISessionPayload() -> [String: Any] {
+    var transcription: [String: Any] = ["model": "whisper-1"]
+    if let inputTranscriptionLanguage {
+      transcription["language"] = inputTranscriptionLanguage
+    }
+    return [
+      "type": "session.update",
+      "session": [
+        "type": "realtime",
+        "instructions": instructions,
+        "output_modalities": ["audio"],
+        "audio": [
+          "input": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "turn_detection": NSNull(),  // PTT controls turns
+            "transcription": transcription,
+          ],
+          "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
+        ],
+        "tools": RealtimeHubTools.openAITools,
+        "tool_choice": "auto",
+      ],
+    ]
+  }
+
   private func sendSessionSetup() {
     switch provider {
     case .openai:
-      send(json: [
-        "type": "session.update",
-        "session": [
-          "type": "realtime",
-          "instructions": instructions,
-          "output_modalities": ["audio"],
-          "audio": [
-            "input": [
-              "format": ["type": "audio/pcm", "rate": 24000],
-              "turn_detection": NSNull(),  // PTT controls turns
-              "transcription": ["model": "whisper-1"],
-            ],
-            "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
-          ],
-          "tools": RealtimeHubTools.openAITools,
-          "tool_choice": "auto",
-        ],
-      ])
+      send(json: openAISessionPayload())
     case .gemini:
       // AUDIO modality: the only currently-available Live models are native-audio
       // (TEXT is rejected with close 1007). The spoken reply (24k PCM) is played by
@@ -432,6 +587,12 @@ final class RealtimeHubSession: NSObject {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
+            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
+            // which differs from the OpenAI hub voice (marin) and can change across
+            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
+            "speechConfig": [
+              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
+            ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
@@ -461,6 +622,7 @@ final class RealtimeHubSession: NSObject {
       pendingActivityStart = false
       send(json: ["realtimeInput": ["activityStart": [:]]])
     }
+    flushPendingTextInputs()
     for chunk in pendingAudio { appendAudioFrame(chunk) }
     pendingAudio.removeAll()
     // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
@@ -469,6 +631,7 @@ final class RealtimeHubSession: NSObject {
       log("\(tag): screen frame flushed into turn")
     }
     pendingVideo.removeAll()
+    flushPendingTextInputs()
     if pendingCommit {
       pendingCommit = false
       // Re-run commit now that we're open.
@@ -483,7 +646,7 @@ final class RealtimeHubSession: NSObject {
       }
     }
     let d = delegate
-    Task { @MainActor in d?.hubDidConnect() }
+    Task { @MainActor in d?.hubDidConnect(source: self) }
   }
 
   // Send buffered audio after open (already on q).
@@ -531,31 +694,31 @@ final class RealtimeHubSession: NSObject {
   private func emitText(_ text: String, isFinal: Bool) {
     guard !text.isEmpty || isFinal else { return }
     let d = delegate
-    Task { @MainActor in d?.hubDidEmitText(text, isFinal: isFinal) }
+    Task { @MainActor in d?.hubDidEmitText(text, isFinal: isFinal, source: self) }
   }
 
   private func emitTranscript(_ text: String, isFinal: Bool) {
     let d = delegate
-    Task { @MainActor in d?.hubDidReceiveInputTranscript(text, isFinal: isFinal) }
+    Task { @MainActor in d?.hubDidReceiveInputTranscript(text, isFinal: isFinal, source: self) }
   }
 
   private func emitAudio(_ pcm: Data) {
     let d = delegate
-    Task { @MainActor in d?.hubDidReceiveAudio(pcm) }
+    Task { @MainActor in d?.hubDidReceiveAudio(pcm, source: self) }
   }
 
   private func emitTool(name: String, callId: String, argumentsJSON: String) {
     log("\(tag): tool_call \(name)(\(argumentsJSON.prefix(160)))")
     let d = delegate
     Task { @MainActor in
-      d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON)
+      d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON, source: self)
     }
   }
 
   private func finishTurn() {
     reportUsageIfNeeded()
     let d = delegate
-    Task { @MainActor in d?.hubDidFinishTurn() }
+    Task { @MainActor in d?.hubDidFinishTurn(source: self) }
   }
 
   // MARK: - Usage (client-reported billing, managed sessions only)
@@ -633,9 +796,18 @@ final class RealtimeHubSession: NSObject {
     switch type {
     case "session.created", "session.updated":
       markReady()
+    case "response.created":
+      if openAIResponseActive,
+        let response = e["response"] as? [String: Any], let id = response["id"] as? String
+      {
+        openAIActiveResponseID = id
+        openAIResponseCreatePending = false
+      }
     case "response.output_audio.delta":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) { emitAudio(d) }
     case "response.output_audio_transcript.delta":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       if let t = e["delta"] as? String { emitText(t, isFinal: false) }
     case "conversation.item.input_audio_transcription.delta":
       if let t = e["delta"] as? String { emitTranscript(t, isFinal: false) }
@@ -645,6 +817,7 @@ final class RealtimeHubSession: NSObject {
         emitTranscript(t, isFinal: true)
       }
     case "response.output_item.added":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       // Record function-call name keyed by call_id for the done parse below.
       if let item = e["item"] as? [String: Any], (item["type"] as? String) == "function_call",
         let callId = item["call_id"] as? String, let name = item["name"] as? String
@@ -655,6 +828,8 @@ final class RealtimeHubSession: NSObject {
       handleOpenAIResponseDone(e)
     case "error":
       openAIResponseActive = false
+      openAIResponseCreatePending = false
+      openAIActiveResponseID = nil
       let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
       notifyError(msg)
     default:
@@ -662,8 +837,22 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  private func isCurrentOpenAIResponseEvent(_ e: [String: Any]) -> Bool {
+    guard openAIResponseActive else { return false }
+    guard !openAIResponseCreatePending, let expected = openAIActiveResponseID else { return false }
+    let eventResponseID = (e["response_id"] as? String)
+      ?? ((e["response"] as? [String: Any])?["id"] as? String)
+    return eventResponseID == expected
+  }
+
   private func handleOpenAIResponseDone(_ e: [String: Any]) {
+    guard isCurrentOpenAIResponseEvent(e) else {
+      log("\(tag): ignoring stale response.done")
+      return
+    }
     openAIResponseActive = false  // this response finished — a new one may be created
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
     if let usage = (e["response"] as? [String: Any])?["usage"] as? [String: Any] {
       accumulateOpenAIUsage(usage)
     }
@@ -674,6 +863,7 @@ final class RealtimeHubSession: NSObject {
         continue
       }
       dispatchedToolItems.insert(callId)
+      pendingOpenAIToolCallIds.insert(callId)
       let name = (item["name"] as? String) ?? openAIFunctionNames[callId] ?? ""
       let argsStr = (item["arguments"] as? String) ?? "{}"
       if !name.isEmpty {
@@ -707,8 +897,10 @@ final class RealtimeHubSession: NSObject {
       }
       for call in calls {
         let name = call["name"] as? String ?? ""
-        // Gemini may omit id for single calls; synthesize one for our bookkeeping.
-        let callId = call["id"] as? String ?? name
+        // Gemini may omit ids; synthesize unique ones so same-name calls in one turn
+        // do not collapse controller/session pending-tool bookkeeping.
+        let callId = call["id"] as? String ?? nextGeminiSyntheticToolCallId(name: name)
+        pendingGeminiToolCallIds.insert(callId)
         let args = call["args"] as? [String: Any] ?? [:]
         let argsJSON =
           (try? JSONSerialization.data(withJSONObject: args)).flatMap {
@@ -723,6 +915,7 @@ final class RealtimeHubSession: NSObject {
       // Barge-in: drop the pending reply so its trailing audio + bookkeeping turnComplete
       // are ignored; the new turn (already started via activityStart) re-arms on commit.
       geminiResponsePending = false
+      pendingGeminiToolCallIds.removeAll()
       log("\(tag): server confirmed interrupt")
     }
     // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
@@ -747,6 +940,10 @@ final class RealtimeHubSession: NSObject {
       }
     }
     if (sc["turnComplete"] as? Bool) == true {
+      guard pendingGeminiToolCallIds.isEmpty else {
+        log("\(tag): deferring Gemini turnComplete with \(pendingGeminiToolCallIds.count) tool result(s) pending")
+        return
+      }
       // Only finish the turn we're actually awaiting a reply for. A turnComplete that
       // closes an interrupted/abandoned generation (pending=false) is ignored, so it
       // can't prematurely end the live turn.
@@ -756,6 +953,11 @@ final class RealtimeHubSession: NSObject {
         finishTurn()
       }
     }
+  }
+
+  private func nextGeminiSyntheticToolCallId(name: String) -> String {
+    geminiSyntheticToolCallCounter += 1
+    return "\(name):\(geminiSyntheticToolCallCounter)"
   }
 
   // MARK: - Send (on q)

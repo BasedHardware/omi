@@ -14,6 +14,8 @@ import os
 import threading
 import time
 
+import pytest
+
 from utils.other.deferred_delete import DeferredDeleter
 
 
@@ -88,6 +90,7 @@ class TestDeferredDeleterBehavior:
         assert d._thread is first_thread
         assert _wait_for(lambda: d.pending_count() == 0)
 
+    @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
     def test_janitor_restarts_if_killed_by_base_exception(self):
         """SystemExit/MemoryError bypass the except-Exception catch and kill the
         thread; the next schedule() must notice and start a fresh janitor."""

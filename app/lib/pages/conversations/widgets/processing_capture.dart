@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -32,16 +33,27 @@ class ConversationCaptureWidget extends StatefulWidget {
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isPhoneMicPaused = false;
   Timer? _offlineTicker;
+  int _offlineTick = 0;
 
   @override
   void initState() {
     super.initState();
     // Drive the "captured so far" timer on the offline capture card. Cheap no-op
     // (just a null check) whenever an offline recording session isn't active.
-    _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+    _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
-      if (context.read<CaptureProvider>().offlineRecordingStartedAt != null) {
+      final provider = context.read<CaptureProvider>();
+      if (provider.offlineRecordingStartedAt != null) {
         setState(() {});
+      }
+      _offlineTick++;
+      // The pendant card is fed by prefs the native drain engine writes; reload
+      // periodically because the Dart prefs cache doesn't see native writes.
+      if (_offlineTick % 10 == 0 &&
+          SharedPreferencesUtil().batchModeEnabled &&
+          provider.recordingDevice?.type == DeviceType.limitless) {
+        await SharedPreferencesUtil.reload();
+        if (mounted) setState(() {});
       }
     });
   }
@@ -64,10 +76,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
-            ? provider.conversationProvider!.conversations.first.id
-            : null;
-
         var header = _getConversationHeader(context);
         if (header == null) {
           return const SizedBox.shrink();
@@ -95,7 +103,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               segmentCount: provider.segments.length,
               photoCount: provider.photos.length,
             );
-            routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
+            routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -111,9 +119,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildUnifiedRecordingUI(provider, header),
-                ],
+                children: [_buildUnifiedRecordingUI(provider, header)],
               ),
             ),
           ),
@@ -519,10 +525,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// saving regardless of the Dart stream). Shows a live "captured so far" timer
   /// for the current session. Tapping opens [_showOfflineModeInfoSheet].
   Widget _buildBatchRecordingUI(CaptureProvider provider) {
-    final muted = provider.offlineMuted;
+    final isPendant = provider.recordingDevice?.type == DeviceType.limitless;
+    final prefs = SharedPreferencesUtil();
+    final muted = !isPendant && provider.offlineMuted;
     final elapsed = provider.offlineRecordingElapsedSeconds;
     String? elapsedLabel;
-    if (elapsed != null) {
+    if (isPendant) {
+      final minutesStored = (prefs.pendantPagesStored * 1.4 / 60).round();
+      if (minutesStored > 0) elapsedLabel = context.l10n.pendantMinutesStored(minutesStored);
+    } else if (elapsed != null) {
       elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
     final dotColor = muted ? Colors.grey.shade600 : const Color(0xFFFE5D50);
@@ -535,10 +546,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -570,36 +578,49 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           ),
           const SizedBox(height: 10),
           Text(
-            muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote,
+            isPendant
+                ? (prefs.pendantDraining ? context.l10n.pendantSyncingRecordings : context.l10n.pendantRecordingNote)
+                : (muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote),
             style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _buildOfflineControl(
-                icon: muted ? Icons.mic_none_rounded : Icons.mic_off_outlined,
-                label: muted ? context.l10n.unmute : context.l10n.mute,
-                primary: false,
-                onTap: () => provider.toggleOfflineMute(),
-              ),
-              const SizedBox(width: 10),
-              _buildOfflineControl(
-                icon: Icons.fiber_new_rounded,
-                label: context.l10n.newRecording,
-                primary: true,
-                onTap: () => provider.startNewOfflineRecording(),
-              ),
-            ],
-          ),
+          if (isPendant && prefs.pendantStorageAlmostFull) ...[
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.pendantStorageAlmostFull,
+              style: TextStyle(color: Colors.orange.shade300, fontSize: 12, height: 1.3),
+            ),
+          ],
+          // Mute / New recording drive the native writer prefs, which the pendant
+          // drain path doesn't use — the pendant records on its own.
+          if (!isPendant) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _buildOfflineControl(
+                  icon: muted ? FontAwesomeIcons.microphone : FontAwesomeIcons.microphoneSlash,
+                  label: muted ? context.l10n.unmute : context.l10n.mute,
+                  primary: false,
+                  onTap: () => provider.toggleOfflineMute(),
+                ),
+                const SizedBox(width: 10),
+                _buildOfflineControl(
+                  icon: FontAwesomeIcons.circlePlus,
+                  label: context.l10n.newRecording,
+                  primary: true,
+                  onTap: () => provider.startNewOfflineRecording(),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildOfflineControl({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required bool primary,
     required VoidCallback onTap,
@@ -618,9 +639,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: color),
+              FaIcon(icon, size: 16, color: color),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ),

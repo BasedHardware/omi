@@ -10,6 +10,7 @@ import {
   Tray
 } from 'electron'
 import { join } from 'path'
+import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPngPath from '../../resources/icon.png?asset'
 import iconIcoPath from '../../resources/icon.ico?asset'
@@ -58,6 +59,66 @@ if (!process.env.OMI_PERF_LOG) {
   process.env.OMI_PERF_LOG = join(app.getPath('userData'), 'perf.jsonl')
 }
 perfMark('app:start')
+
+// --- Global crash observability --------------------------------------------
+// The main process previously had no top-level error handling: an unhandled
+// exception or rejection could terminate (or silently wedge) the app with
+// nothing recorded, and renderer/GPU/utility crashes went unnoticed. Record
+// fatal events to a crash log under userData so field failures are diagnosable,
+// and keep the app usable on a renderer crash by reloading rather than leaving
+// a blank window. Handlers are best-effort and must never throw themselves.
+function logFatal(kind: string, detail: unknown): void {
+  const body = detail instanceof Error ? (detail.stack ?? detail.message) : String(detail)
+  try {
+    // Resolve the path at call time, not module load: the sandbox block below
+    // re-pins userData, and a path captured at import would send sandbox-mode
+    // crash logs to the production profile.
+    appendFileSync(
+      join(app.getPath('userData'), 'crash.log'),
+      `${new Date().toISOString()} [${kind}] ${body}\n`
+    )
+  } catch {
+    /* best-effort; never throw from a crash handler */
+  }
+  console.error(`[fatal] ${kind}:`, detail)
+}
+process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
+process.on('unhandledRejection', (reason) => logFatal('unhandledRejection', reason))
+// Reload a crashed renderer instead of leaving a white window — but cap rapid
+// retries: a persistent startup failure would otherwise loop crash → reload →
+// crash forever, flashing the window and flooding crash.log. The budget is
+// tracked PER WebContents (WeakMap, so destroyed windows drop out): a
+// crash-looping toast/overlay must not exhaust the main window's retries.
+const RENDERER_RELOAD_WINDOW_MS = 60_000
+const RENDERER_RELOAD_MAX = 3
+const rendererReloadTimes = new WeakMap<Electron.WebContents, number[]>()
+app.on('render-process-gone', (_e, wc, details) => {
+  logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  // Skip clean exits (intentional teardown) and destroyed windows.
+  if (details.reason === 'clean-exit' || wc.isDestroyed()) return
+  const now = Date.now()
+  const recent = (rendererReloadTimes.get(wc) ?? []).filter(
+    (t) => now - t < RENDERER_RELOAD_WINDOW_MS
+  )
+  if (recent.length >= RENDERER_RELOAD_MAX) {
+    rendererReloadTimes.set(wc, recent)
+    logFatal(
+      'render-process-gone',
+      `reload suppressed — renderer (webContents ${wc.id}) crashed ${RENDERER_RELOAD_MAX}+ times in ${RENDERER_RELOAD_WINDOW_MS / 1000}s; leaving window for manual reload`
+    )
+    return
+  }
+  recent.push(now)
+  rendererReloadTimes.set(wc, recent)
+  try {
+    wc.reload()
+  } catch {
+    /* window may be mid-teardown */
+  }
+})
+app.on('child-process-gone', (_e, details) =>
+  logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
+)
 
 // Opt-in sandbox isolation. By default Electron derives userData from the
 // product name ("omi-windows"), which is the real user's data + signed-in

@@ -7800,6 +7800,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get viewAll => 'Összes megtekintése';
 
   @override
+  String get expand => 'Kibontás';
+
+  @override
   String get addTask => 'Feladat hozzáadása';
 
   @override
@@ -9377,7 +9380,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9403,4 +9406,209 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
+
+  @override
+  String get memoryThisDevice => 'Ez az eszköz';
+
+  @override
+  String get memoryThisIphone => 'Ez az iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ez a telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Az Omi használata';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Mondj néhány szót, és nézd, ahogy valós időben megjelennek';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Szép munka!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Kezdj el beszélni...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tegyél fel kérdést az Ominak';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nyomd meg egyszer a gombot, mondd el a kérdésed, majd nyomd meg újra, ha végeztél';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Kérdés feldolgozása...';
+
+  @override
+  String get deviceOnboardingListening => 'Hallgatom...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kikapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bekapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tartsd nyomva a gombot 3 másodpercig';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nyomd meg a gombot a visszakapcsoláshoz';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tartsd határozottan nyomva a gombot, amíg a fény ki nem alszik';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Csatlakoztatva';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Csatlakoztatva!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Leválasztva';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kikapcsolás...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dupla koppintás testreszabása';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beszélgetés befejezése';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Aktuális beszélgetés mentése és lezárása';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Némítás / Feloldás';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofon be- vagy kikapcsolása';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Folyamatban lévő beszélgetés csillagozása';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Beszélgetés megjelölése fontosként';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Próbáld ki most! Koppints duplán az Omira';
+
+  @override
+  String get deviceOnboardingContinue => 'Folytatás';
+
+  @override
+  String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+
+  @override
+  String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
+
+  @override
+  String get latest => 'Legújabb';
+
+  @override
+  String get flashFirmware => 'Firmware flashelése';
+
+  @override
+  String get pendantRecordingTitle => 'Felvétel a medálon';
+
+  @override
+  String get pendantRecordingNote =>
+      'A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.';
+
+  @override
+  String get pendantSyncingRecordings => 'Felvételek szinkronizálása a medálodról…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes perc tárolva';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta csatlakoztatása';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Használja a Ray-Ban Meta szemüvegét Omi rögzítőeszközként beszélgetésekhez és vizuális kontextushoz. Az Omi megnyitja a Meta AI alkalmazást a szemüveg összekapcsolásához.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Csatlakozás a Meta AI-n keresztül';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Fejezze be a csatlakozást a Meta AI alkalmazásban, majd térjen vissza ide.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Ellenőrzés újra';
+
+  @override
+  String get raybanMetaAllowCamera => 'Kamera engedélyezése a szemüvegen';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Az Omi a szemüveg kameráját használja fényképek hozzáadásához a beszélgetésekhez. Ezt kihagyhatja, és csak hangot használhat.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Kihagyás egyelőre';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta csak hang mód';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Az Omi ezen verziója Bluetooth-on keresztül tudja használni a szemüveg mikrofonját. A fényképek rögzítéséhez az Omi Meta fejlesztői változata szükséges.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'A telefonon lévő zene szünetel, amíg a szemüveg mikrofonja használatban van.';
+
+  @override
+  String get raybanMetaContinue => 'Folytatás';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fénykép készítése';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fénykép kérve — meg fog jelenni a beszélgetésében.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon készen áll';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Képrögzítés készen áll';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nem érhető el csak hang módban';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Hiba a Ray-Ban Meta csatlakoztatásakor: $error';
+  }
 }

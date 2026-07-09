@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% set display_client_name = client_name | default("ChatGPT") %}
+    <title>Connect {{ display_client_name }} to Omi</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.css" />
+    {% include "_oauth_shared_styles.html" %}
+</head>
+
+<body>
+    <main class="oauth-shell">
+        <div class="oauth-card">
+            <div class="oauth-header">
+                <span class="omi-logo">
+                    <svg class="omi-mark" viewBox="237.36 237.338 549.318 549.322" fill="currentColor"
+                        aria-hidden="true">
+                        <circle cx="282.523" cy="511.982" r="45.163" />
+                        <circle cx="339.909" cy="339.89" r="45.107" />
+                        <circle cx="512.014" cy="282.495" r="45.156" />
+                        <circle cx="684.096" cy="339.88" r="45.103" />
+                        <circle cx="741.511" cy="512.003" r="45.167" />
+                        <circle cx="684.096" cy="684.094" r="45.103" />
+                        <circle cx="511.981" cy="741.5" r="45.16" />
+                        <circle cx="339.902" cy="684.107" r="45.103" />
+                    </svg>
+                    Omi
+                </span>
+                <span class="oauth-eyebrow">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="5" y="10.5" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.8" />
+                        <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" />
+                    </svg>
+                    Secure connection
+                </span>
+            </div>
+            <div class="oauth-content">
+                <div class="oauth-hero">
+                    <div class="connect-lockup" aria-hidden="true">
+                        <span class="lockup-tile lockup-app">C</span>
+                        <span class="lockup-bridge">
+                            <span class="lockup-bridge-badge">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M10.5 13.5a3.4 3.4 0 0 0 4.8 0l2-2a3.4 3.4 0 0 0-4.8-4.8l-1 1"
+                                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M13.5 10.5a3.4 3.4 0 0 0-4.8 0l-2 2a3.4 3.4 0 0 0 4.8 4.8l1-1"
+                                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg>
+                            </span>
+                        </span>
+                        <span class="lockup-tile lockup-omi">
+                            <svg class="omi-mark" viewBox="237.36 237.338 549.318 549.322" fill="currentColor">
+                                <circle cx="282.523" cy="511.982" r="45.163" />
+                                <circle cx="339.909" cy="339.89" r="45.107" />
+                                <circle cx="512.014" cy="282.495" r="45.156" />
+                                <circle cx="684.096" cy="339.88" r="45.103" />
+                                <circle cx="741.511" cy="512.003" r="45.167" />
+                                <circle cx="684.096" cy="684.094" r="45.103" />
+                                <circle cx="511.981" cy="741.5" r="45.16" />
+                                <circle cx="339.902" cy="684.107" r="45.103" />
+                            </svg>
+                        </span>
+                    </div>
+                    <h1>Connect {{ display_client_name }}</h1>
+                    <p class="oauth-subtitle">Sign in to review what <strong>{{ display_client_name }}</strong> can access and allow the
+                        connection to your Omi account.</p>
+                </div>
+
+                <section class="permissions-card" aria-labelledby="permissions-title">
+                    <p class="permissions-title" id="permissions-title">{{ display_client_name }} will be able to</p>
+                    <ul class="permissions-list" tabindex="0" role="list" aria-labelledby="permissions-title">
+                        {% for permission in permissions %}
+                        <li>
+                            <span class="perm-check" aria-hidden="true">
+                                <svg viewBox="0 0 16 16" fill="none">
+                                    <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </span>
+                            <span>{{ permission }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </section>
+
+                <div class="oauth-actions">
+                    <div id="firebaseui-auth-container"></div>
+                    <div class="oauth-divider" id="social-sign-in-divider">or sign in with email</div>
+                    <form class="email-sign-in-form" id="email-sign-in-form" novalidate>
+                        <div class="oauth-field">
+                            <label for="email-input">Email</label>
+                            <input id="email-input" name="email" type="email" autocomplete="email"
+                                autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"
+                                placeholder="you@example.com" required>
+                        </div>
+                        <div class="oauth-field">
+                            <label for="password-input">Password</label>
+                            <input id="password-input" name="password" type="password" autocomplete="current-password"
+                                placeholder="••••••••" required>
+                        </div>
+                        <button class="email-sign-in-button" id="email-sign-in-button" type="submit">
+                            Sign in &amp; allow access
+                        </button>
+                    </form>
+
+                    <div class="consent-retry" id="consent-retry" hidden>
+                        <div class="signed-in-chip" id="signed-in-chip">
+                            <span class="dot" aria-hidden="true"></span>
+                            <span id="signed-in-label">You're signed in</span>
+                        </div>
+                        <button class="connect-button" id="connect-button">Allow access</button>
+                    </div>
+
+                    <div class="loader" id="loader" role="status" aria-live="polite">
+                        <span class="spinner" aria-hidden="true"></span>
+                        <span>Connecting…</span>
+                    </div>
+                    <div id="error-message" class="error" role="alert">
+                        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <circle cx="8" cy="8" r="6.6" stroke="currentColor" stroke-width="1.5" />
+                            <path d="M8 4.6v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                            <circle cx="8" cy="11" r="0.9" fill="currentColor" />
+                        </svg>
+                        <span id="error-text"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="oauth-footer">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 3 5 6v5c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6l-7-3Z" stroke="currentColor"
+                        stroke-width="1.7" stroke-linejoin="round" />
+                    <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <span>Only continue if you trust <strong>{{ display_client_name }}</strong> with the Omi data shown above. You can revoke
+                    access anytime from your Omi settings.</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const oauthParams = {{ oauth_params | tojson }};
+        const firebaseConfig = {{ firebase_config | tojson }};
+        firebase.initializeApp(firebaseConfig);
+
+        let idToken = null;
+        let signedInEmail = null;
+        const emailSignInForm = document.getElementById('email-sign-in-form');
+        const emailInput = document.getElementById('email-input');
+        const passwordInput = document.getElementById('password-input');
+        const emailSignInButton = document.getElementById('email-sign-in-button');
+        const socialSignInDivider = document.getElementById('social-sign-in-divider');
+        const firebaseUiContainer = document.getElementById('firebaseui-auth-container');
+        const consentRetry = document.getElementById('consent-retry');
+        const connectButton = document.getElementById('connect-button');
+        const signedInLabel = document.getElementById('signed-in-label');
+        const loader = document.getElementById('loader');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID];
+        if (/Mac|iPod|iPhone|iPad/.test(navigator.platform)) {
+            signInOptions.push('apple.com');
+        }
+
+        function setLoading(isLoading) {
+            loader.classList.toggle('is-visible', isLoading);
+            emailInput.disabled = isLoading;
+            passwordInput.disabled = isLoading;
+            emailSignInButton.disabled = isLoading;
+            connectButton.disabled = isLoading;
+        }
+
+        function clearError() {
+            errorText.textContent = '';
+            errorMessage.classList.remove('is-visible');
+        }
+
+        function showConsentRetry() {
+            if (signedInEmail) {
+                signedInLabel.textContent = 'Signed in as ' + signedInEmail;
+            }
+            consentRetry.hidden = false;
+        }
+
+        function showError(error) {
+            errorText.textContent = error.message || String(error);
+            errorMessage.classList.add('is-visible');
+            setLoading(false);
+            if (idToken) {
+                showConsentRetry();
+            } else {
+                consentRetry.hidden = true;
+            }
+        }
+
+        function showSignInError() {
+            showError(new Error('We could not sign in with that email and password. Check the credentials and try again.'));
+        }
+
+        function hideSignInOptions() {
+            emailSignInForm.style.display = 'none';
+            socialSignInDivider.style.display = 'none';
+            firebaseUiContainer.style.display = 'none';
+        }
+
+        function submitConsent() {
+            clearError();
+            setLoading(true);
+            consentRetry.hidden = true;
+            const formData = new FormData();
+            Object.entries(oauthParams).forEach(([key, value]) => formData.append(key, value));
+            formData.append('firebase_id_token', idToken);
+            fetch('/authorize', { method: 'POST', body: formData, redirect: 'manual' })
+                .then(response => {
+                    if (response.type === 'opaqueredirect' || response.status === 0) {
+                        window.location.reload();
+                        return null;
+                    }
+                    if (response.status >= 300 && response.status < 400) {
+                        const location = response.headers.get('Location');
+                        if (location) {
+                            window.location.href = location;
+                            return null;
+                        }
+                    }
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error_description || err.detail || 'Authorization failed'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.redirect_uri) {
+                        window.location.href = data.redirect_uri;
+                    }
+                })
+                .catch(showError);
+        }
+
+        function finishSignIn(user, autoSubmitConsent) {
+            setLoading(true);
+            clearError();
+            signedInEmail = user.email || null;
+            user.getIdToken().then(function (token) {
+                idToken = token;
+                hideSignInOptions();
+                if (autoSubmitConsent) {
+                    submitConsent();
+                    return;
+                }
+                setLoading(false);
+                showConsentRetry();
+            }).catch(showError);
+        }
+
+        emailSignInForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            clearError();
+
+            if (!emailInput.value.trim() || !passwordInput.value) {
+                showError(new Error('Enter the review email and password to continue.'));
+                return;
+            }
+
+            setLoading(true);
+            firebase.auth()
+                .signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value)
+                .then(function (result) {
+                    finishSignIn(result.user, true);
+                })
+                .catch(function () {
+                    passwordInput.value = '';
+                    showSignInError();
+                });
+        });
+
+        connectButton.addEventListener('click', submitConsent);
+        const ui = new firebaseui.auth.AuthUI(firebase.auth());
+        ui.start('#firebaseui-auth-container', {
+            signInFlow: 'popup',
+            signInOptions: signInOptions,
+            callbacks: {
+                signInSuccessWithAuthResult: function (authResult) {
+                    finishSignIn(authResult.user, false);
+                    return false;
+                },
+                signInFailure: function (error) {
+                    showError(error);
+                },
+                uiShown: function () {
+                    setLoading(false);
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,4 +1,7 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+import OmiTheme
 
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {
@@ -7,6 +10,8 @@ struct AskAIInputView: View {
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
     @State private var hasMarkedText = false
+    @State private var attachments: [ChatAttachment] = []
+    @State private var isDropTargeted = false
 
     var canClearVisibleConversation: Bool = false
     var onSend: ((String) -> Void)?
@@ -17,7 +22,9 @@ struct AskAIInputView: View {
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
     private var trimmedInput: String { localInput.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var canSend: Bool { !hasMarkedText && !trimmedInput.isEmpty }
+    private var canSend: Bool {
+        !hasMarkedText && (!trimmedInput.isEmpty || !attachments.isEmpty)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +48,16 @@ struct AskAIInputView: View {
                 .padding(.trailing, 16)
             }
 
+            if !attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: attachments,
+                    onRemove: removeAttachment
+                )
+                .environment(\.colorScheme, .dark)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            }
+
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
                     if localInput.isEmpty && !hasMarkedText {
@@ -56,7 +73,7 @@ struct AskAIInputView: View {
                         lineFragmentPadding: 8,
                         onSubmit: {
                             guard canSend else { return }
-                            onSend?(trimmedInput)
+                            sendMessage()
                         },
                         focusOnAppear: true,
                         onMarkedTextChange: { hasMarkedText = $0 },
@@ -81,7 +98,7 @@ struct AskAIInputView: View {
 
                 Button(action: {
                     guard canSend else { return }
-                    onSend?(trimmedInput)
+                    sendMessage()
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .scaledFont(size: 24)
@@ -96,13 +113,40 @@ struct AskAIInputView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
         }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
         .onExitCommand {
             onEscape?()
         }
     }
 
-    // Model picker moved to Settings > Ask Omi Floating Bar
-    // private var modelPicker: some View { ... }
-    // private func showModelMenu() { ... }
-    // private var currentModelLabel: String { ... }
+    private func sendMessage() {
+        let text = trimmedInput
+        let staged = attachments
+        guard !text.isEmpty || !staged.isEmpty else { return }
+        localInput = ""
+        userInput = ""
+        attachments = []
+        if !staged.isEmpty {
+            FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
+        }
+        onSend?(text)
+    }
+
+    private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
+        ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
+            addAttachmentURLs(urls)
+        }
+    }
+
+    private func addAttachmentURLs(_ urls: [URL]) {
+        let remaining = max(0, kMaxChatAttachments - attachments.count)
+        guard remaining > 0 else { return }
+        let staged = urls.prefix(remaining).compactMap(ChatAttachment.from(url:))
+        guard !staged.isEmpty else { return }
+        attachments.append(contentsOf: staged)
+    }
+
+    private func removeAttachment(_ id: String) {
+        attachments.removeAll { $0.id == id }
+    }
 }

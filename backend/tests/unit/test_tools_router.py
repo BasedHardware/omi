@@ -21,6 +21,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -46,6 +50,11 @@ def _stub_package(name):
     mod = types.ModuleType(name)
     mod.__path__ = []
     sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 
@@ -61,7 +70,69 @@ def _load_module_from_file(module_name, file_path):
 
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before importing anything from backend
+#
+# Snapshot touched modules first so the stubs installed below do not leak into
+# other test files during bulk ``pytest tests/unit/`` collection (issue #8661).
+# They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
+_SYS_MODULE_NAMES = [
+    "firebase_admin",
+    "firebase_admin.firestore",
+    "firebase_admin.auth",
+    "firebase_admin.messaging",
+    "firebase_admin.credentials",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.firestore_v1.base_query",
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.transport.requests",
+    "google.cloud.storage",
+    "opuslib",
+    "sentry_sdk",
+    "database",
+    "database._client",
+    "database.redis_db",
+    "database.auth",
+    "database.conversations",
+    "database.users",
+    "database.memories",
+    "database.vector_db",
+    "database.action_items",
+    "database.notifications",
+    "utils",
+    "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.render",
+    "utils.conversations.factory",
+    "utils.conversations.search",
+    "utils.conversations.transcript_chunks",
+    "utils.retrieval",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools.calendar_tools",
+    "utils.retrieval.tool_services",
+    "utils.retrieval.tool_services.conversations",
+    "utils.retrieval.tool_services.memories",
+    "utils.retrieval.tool_services.action_items",
+    "utils.retrieval.tool_result_boundaries",
+    "utils.other",
+    "utils.other.endpoints",
+    "utils.memory",
+    "utils.memory.chat_memory_adapter",
+    "utils.memory.default_read_rollout",
+    "utils.memory.memory_system",
+    "utils.memory.memory_service",
+    "utils.memory.surface_routing",
+    "utils.rate_limit_config",
+    "routers",
+    "routers.tools",
+    "models",
+    "models.conversation",
+    "models.other",
+    "models.memories",
+]
+_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -86,6 +157,7 @@ for mod_name in [
 
 # Stub database packages
 _stub_package("database")
+sys.modules["database._client"].db = MagicMock()
 
 # Stub database.conversations
 conversations_db = _stub_module("database.conversations")
@@ -128,8 +200,52 @@ notif_mod.sync_action_item_reminder = MagicMock()
 _stub_package("utils")
 _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
+_stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
+_stub_package("utils.memory")
+
+memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
+memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
+    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
+)
+memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
+    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
+)
+read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
+read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
+    USE_MEMORY="use_memory",
+    USE_LEGACY_SAFE="use_legacy_safe",
+)
+
+memory_system_stub = _stub_module("utils.memory.memory_system")
+memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
+
+memory_service_stub = _stub_module("utils.memory.memory_service")
+memory_service_stub.MemoryService = MagicMock
+
+surface_routing_stub = _stub_module("utils.memory.surface_routing")
+surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
+boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
+
+
+class FakeCalendarEventTool:
+    def __init__(self):
+        self.calls = []
+        self.next_result = None
+
+    async def ainvoke(self, tool_input, config=None):
+        self.calls.append((tool_input, config))
+        if self.next_result is not None:
+            result = self.next_result
+            self.next_result = None
+            return result
+        return f"✅ Successfully created calendar event: {tool_input['title']}"
+
+
+calendar_tools_mod = _stub_module("utils.retrieval.tools.calendar_tools")
+calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
@@ -252,6 +368,19 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+router_mod = _load_module_from_file(
+    "routers.tools",
+    BACKEND_DIR / "routers" / "tools.py",
+)
+rate_limit_config_mod = _load_module_from_file(
+    "utils.rate_limit_config",
+    BACKEND_DIR / "utils" / "rate_limit_config.py",
+)
+
+# Restore sys.modules now that the modules under test are imported and bound to
+# their stubbed dependencies. Tests below patch those module objects directly.
+restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 # ===========================================================================
@@ -568,6 +697,7 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.reset_mock()
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
         notif_mod.send_action_item_completed_notification.reset_mock()
 
     def test_empty_id_rejected(self):
@@ -607,18 +737,12 @@ class TestRouterEnvelope:
     """Test the _ok helper in the router module."""
 
     def test_ok_normal(self):
-        # Import the router module
-        router_mod = _load_module_from_file(
-            "routers.tools",
-            BACKEND_DIR / "routers" / "tools.py",
-        )
         result = router_mod._ok("test_tool", "All good")
         assert result["tool_name"] == "test_tool"
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
 
     def test_ok_error(self):
-        router_mod = sys.modules["routers.tools"]
         result = router_mod._ok("test_tool", "Error: something went wrong")
         assert result["is_error"] is True
 
@@ -631,18 +755,12 @@ class TestRouterEndpoints:
 
     @pytest.fixture(autouse=True)
     def setup_app(self):
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
         # Override auth dependency
-        router_mod = sys.modules["routers.tools"]
         app = FastAPI()
         app.include_router(router_mod.router)
 
         # Override auth deps to return a fixed uid
-        from utils.other.endpoints import get_current_user_uid
-
-        app.dependency_overrides[get_current_user_uid] = lambda: "test-uid"
+        app.dependency_overrides[endpoints_mod.get_current_user_uid] = lambda: "test-uid"
         # Override rate-limited deps too — with_rate_limit returns a new dependency
         # so we need to override whatever it returned
         for route in app.routes:
@@ -678,6 +796,8 @@ class TestRouterEndpoints:
         action_items_db.create_action_item.return_value = "test-item-id"
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
+        calendar_tools_mod.create_calendar_event_tool.next_result = None
 
     def test_get_conversations_endpoint(self):
         resp = self.client.get("/v1/tools/conversations")
@@ -732,6 +852,69 @@ class TestRouterEndpoints:
         assert body["tool_name"] == "update_action_item"
         assert "completed" in body["result_text"].lower()
 
+    def test_create_calendar_event_endpoint(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+                "location": "Zoom",
+                "attendees": "sam@example.com",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert "Design review" in body["result_text"]
+        assert body["is_error"] is False
+
+        tool_input, config = calendar_tools_mod.create_calendar_event_tool.calls[-1]
+        assert tool_input["title"] == "Design review"
+        assert tool_input["start_time"] == "2026-06-28T14:00:00-04:00"
+        assert tool_input["end_time"] == "2026-06-28T15:00:00-04:00"
+        assert tool_input["location"] == "Zoom"
+        assert tool_input["attendees"] == "sam@example.com"
+        assert config == {"configurable": {"user_id": "test-uid"}}
+
+    def test_create_calendar_event_rejects_malformed_datetimes(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "tomorrow at 2",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_requires_timezone(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_marks_calendar_tool_failures_as_errors(self):
+        calendar_tools_mod.create_calendar_event_tool.next_result = "Google Calendar is not connected."
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert body["result_text"] == "Google Calendar is not connected."
+        assert body["is_error"] is True
+
     def test_get_conversations_query_params(self):
         """Query params are forwarded correctly to the service."""
         resp = self.client.get("/v1/tools/conversations?limit=10&offset=5&include_transcript=false")
@@ -768,17 +951,14 @@ class TestRateLimitPolicies:
     """Verify rate limit policies exist and are wired correctly."""
 
     def test_tools_search_policy_exists(self):
-        rl_mod = _load_module_from_file(
-            "utils.rate_limit_config",
-            BACKEND_DIR / "utils" / "rate_limit_config.py",
-        )
+        rl_mod = rate_limit_config_mod
         assert "tools:search" in rl_mod.RATE_POLICIES
         max_req, window = rl_mod.RATE_POLICIES["tools:search"]
         assert max_req == 60
         assert window == 3600
 
     def test_tools_mutate_policy_exists(self):
-        rl_mod = sys.modules["utils.rate_limit_config"]
+        rl_mod = rate_limit_config_mod
         assert "tools:mutate" in rl_mod.RATE_POLICIES
         max_req, window = rl_mod.RATE_POLICIES["tools:mutate"]
         assert max_req == 60

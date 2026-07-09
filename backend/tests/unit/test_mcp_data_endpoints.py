@@ -7,6 +7,7 @@ stubbing pattern in test_mcp_search_memories.py.
 """
 
 from datetime import datetime, timezone
+import json
 from unittest.mock import patch, MagicMock
 import os
 import sys
@@ -83,6 +84,7 @@ _stubs = [
     'database.notifications',
     'database.mem_db',
     'database.mcp_api_key',
+    'database.mcp_oauth',
     'database.daily_summaries',
     'database.screen_activity',
     'database.x_posts',
@@ -97,6 +99,10 @@ _stubs = [
     'google.cloud.firestore_v1.FieldFilter',
     'google',
     'google.cloud',
+    # mcp_sse imports FailedPrecondition from google.api_core.exceptions; the
+    # bare 'google' AutoMock is not a package unless __path__ is set below.
+    'google.api_core',
+    'google.api_core.exceptions',
     'pinecone',
     'typesense',
     'opuslib',
@@ -123,12 +129,22 @@ for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+# Make stubbed google.* packages importable as packages (submodule imports).
+for _pkg_name in ('google', 'google.cloud', 'google.api_core'):
+    _pkg = sys.modules.get(_pkg_name)
+    if isinstance(_pkg, ModuleType) and not hasattr(_pkg, '__path__'):
+        _pkg.__path__ = []  # type: ignore[attr-defined]
+
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
     sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
+sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
+    side_effect=lambda dependency, _policy: dependency
+)
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
@@ -138,12 +154,207 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+# AutoMockModule invents MagicMocks for missing attrs; those cannot be caught.
+# Reuse an existing Exception subclass if another test already installed one.
+_api_core_exc = sys.modules['google.api_core.exceptions']
+_existing_fp = getattr(_api_core_exc, 'FailedPrecondition', None)
+if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseException)):
+    _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+
+
+async def _run_blocking_inline(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+class _JsonRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/json"}
+        self.body = body
+
+    async def json(self):
+        return self.body
+
+    async def is_disconnected(self):
+        return False
+
+
+class _FormRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        self.body = body
+
+    async def form(self):
+        return self.body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_json_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_JsonRequest(body)) == body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_form_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_FormRequest(body)) == body
+
+
+def test_sse_tools_list_filters_by_oauth_scopes():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})
+    names = {tool['name'] for tool in response['result']['tools']}
+
+    assert session_id is None
+    assert 'get_memories' in names
+    assert 'search_memories' in names
+    assert 'create_memory' not in names
+    assert 'get_conversations' not in names
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_accepts_missing_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_ignores_stale_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ):
+        response = await sse.mcp_streamable_http(
+            request,
+            authorization='Bearer token',
+            mcp_session_id='session-from-another-instance',
+            accept=None,
+        )
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+@pytest.mark.asyncio
+async def test_sse_get_keepalive_uses_transport_rate_limit():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ), patch.object(sse, 'check_rate_limit_inline') as check_rate_limit:
+        response = await sse.mcp_sse_get(request, authorization='Bearer token')
+
+    assert response.status_code == 200
+    check_rate_limit.assert_called_once_with(UID, 'mcp:sse')
+
+
+def test_sse_tool_security_schemes_match_runtime_scope_map():
+    for tool in sse.MCP_TOOLS:
+        advertised_scopes = tool['securitySchemes'][0]['scopes']
+        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+
+
+def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'create_memory', 'arguments': {}}}
+    )
+
+    assert response['error']['code'] == -32003
+    assert 'memories.write' in response['error']['data']['_meta']['mcp/www_authenticate']
+
+
+def test_authorize_redirect_builder_preserves_existing_query():
+    redirect_uri = sse._redirect_with_code(
+        'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
+    )
+    assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+
+
+def test_authorize_request_accepts_chatgpt_public_client():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.normalize_scopes', return_value=['memories.read']),
+    ):
+        validated_client, scopes = sse._validate_authorize_request(
+            'code',
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            sse.MCP_RESOURCE_URL,
+            'memories.read',
+            'a' * 64,
+            'S256',
+        )
+
+    assert validated_client == client
+    assert scopes == ['memories.read']
+
+
+def test_authorize_request_rejects_legacy_omi_client_id():
+    with patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=None):
+        with pytest.raises(ValueError, match='Unknown OAuth client'):
+            sse._validate_authorize_request(
+                'code',
+                'omi',
+                'https://chatgpt.com/connector_platform_oauth_redirect',
+                sse.MCP_RESOURCE_URL,
+                'memories.read',
+                'a' * 64,
+                'S256',
+            )
+
+
+def test_legacy_api_key_helper_rejects_oauth_tokens():
+    with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
+        validate_access_token.return_value = {
+            'uid': UID,
+            'scopes': ['memories.read'],
+            'client_id': 'omi',
+            'resource': sse.MCP_RESOURCE_URL,
+            'grant_id': 'grant-1',
+        }
+
+        assert sse.authenticate_api_key('Bearer omi_oat_test') is None
 
 
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):
@@ -297,6 +508,27 @@ class TestScreenActivity:
         mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
         result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
         assert result['total_screenshots'] == 0
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
+        # Regression for #9189: a missing Firestore index must surface as a typed,
+        # actionable ToolExecutionError, not an opaque 500.
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert exc_info.value.code == -32009
+        assert 'index' in exc_info.value.message.lower()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert exc_info.value.code == -32009
 
 
 class TestDailySummaries:

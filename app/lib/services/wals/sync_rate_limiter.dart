@@ -103,4 +103,14 @@ class SyncRateLimiter extends ChangeNotifier {
     SharedPreferencesUtil().saveString(_prefKeyReason, '');
     notifyListeners();
   }
+
+  /// Clear only the persisted fair-use rate-limit cooldown (HTTP 429),
+  /// preserving any active in-memory backend-busy cooldown. Used when a
+  /// fair-use status refresh confirms the restriction was lifted but the
+  /// backend may still be saturated and should keep its own backoff.
+  void clearRateLimit() {
+    SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
+    SharedPreferencesUtil().saveString(_prefKeyReason, '');
+    notifyListeners();
+  }
 }

@@ -3,9 +3,7 @@ import contextlib
 import io
 import logging
 import os
-import re
 import shutil
-import struct
 import threading
 import time
 import uuid as _uuid
@@ -27,15 +25,9 @@ from utils.executors import (
 )
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-try:
-    from opuslib import Decoder
-except Exception as e:
-    Decoder = None
-    _OPUS_IMPORT_ERROR = e
-else:
-    _OPUS_IMPORT_ERROR = None
 from pydub import AudioSegment
 
 from database import conversations as conversations_db
@@ -58,6 +50,7 @@ from database.sync_jobs import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -77,7 +70,7 @@ from utils.other.storage import (
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys, set_byok_uid
 from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
@@ -86,15 +79,15 @@ from utils.cloud_tasks import (
 )
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
-from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
+from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
 from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
     get_rolling_speech_ms,
     check_soft_caps,
-    is_hard_restricted,
+    get_hard_restriction_status,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
@@ -110,6 +103,8 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.subscription import has_transcription_credits
+from utils.observability.fallback import record_fallback
+from utils.metrics import OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -121,16 +116,46 @@ _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files
 router = APIRouter()
 
 
-def _get_opus_decoder_class():
-    if Decoder is None:
-        raise RuntimeError(
-            'Opus sync decoding requires opuslib and the native libopus library. '
-            'Install the OS-level Opus package before processing .opus sync files.'
-        ) from _OPUS_IMPORT_ERROR
-    return Decoder
+class SyncLocalFilesResultResponse(BaseModel):
+    new_memories: list[str] = Field(default_factory=list)
+    updated_memories: list[str] = Field(default_factory=list)
+    failed_segments: int = 0
+    total_segments: int = 0
+    errors: list[str] = Field(default_factory=list)
 
 
-@router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
+class SyncJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    total_files: int
+    total_segments: int
+    poll_after_ms: int
+
+
+class SyncJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    total_segments: int = 0
+    processed_segments: int = 0
+    successful_segments: int = 0
+    failed_segments: int = 0
+    result: SyncLocalFilesResultResponse | None = None
+    error: str | None = None
+
+
+class AudioDownloadPendingResponse(BaseModel):
+    status: str
+    poll_after_ms: int
+
+
+def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    headers = dict(base_headers or {})
+    if retry_after is not None:
+        headers['Retry-After'] = str(retry_after)
+    return headers
+
+
+@router.post("/v1/sync/audio/{conversation_id}/precache", response_model=AudioPrecacheResponse, tags=['v1'])
 def precache_conversation_audio_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -148,7 +173,7 @@ def precache_conversation_audio_endpoint(
     return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
 
 
-@router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
+@router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -175,7 +200,33 @@ def get_audio_signed_urls_endpoint(
 # **********************************************
 
 
-@router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
+@router.get(
+    "/v1/sync/audio/{conversation_id}/{audio_file_id}",
+    tags=['v1'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        202: {
+            "description": "Audio artifact is being prepared.",
+            "model": AudioDownloadPendingResponse,
+        },
+        206: {
+            "description": "Partial audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+    },
+)
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
@@ -222,204 +273,6 @@ def download_audio_file_endpoint(
 # **********************************************
 # ************ SYNC LOCAL FILES ****************
 # **********************************************
-
-
-def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
-    """Decode an Opus file with length-prefixed frames to WAV format.
-
-    Writes directly to WAV file to avoid accumulating all PCM data in memory.
-    """
-    if not os.path.exists(opus_file_path):
-        logger.warning(f"File not found: {sanitize(opus_file_path)}")
-        return False
-
-    decoder = _get_opus_decoder_class()(sample_rate, channels)
-    frame_count = 0
-
-    try:
-        with open(opus_file_path, 'rb') as f, wave.open(wav_file_path, 'wb') as wav_file:
-            wav_file.setnchannels(channels)
-            wav_file.setsampwidth(2)  # 16-bit audio
-            wav_file.setframerate(sample_rate)
-
-            while True:
-                length_bytes = f.read(4)
-                if not length_bytes:
-                    logger.info("End of file reached.")
-                    break
-                if len(length_bytes) < 4:
-                    logger.info("Incomplete length prefix at the end of the file.")
-                    break
-
-                frame_length = struct.unpack('<I', length_bytes)[0]
-                opus_data = f.read(frame_length)
-                if len(opus_data) < frame_length:
-                    logger.error(f"Unexpected end of file at frame {frame_count}.")
-                    break
-                try:
-                    pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
-                    wav_file.writeframes(pcm_frame)  # Write directly to file
-                    frame_count += 1
-                except Exception as e:
-                    logger.error(f"Error decoding frame {frame_count}: {e}")
-                    # Skip this frame instead of breaking the entire decode loop
-                    continue
-
-        if frame_count > 0:
-            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
-            return True
-        else:
-            logger.info("No PCM data was decoded.")
-            # Clean up empty/invalid wav file
-            if os.path.exists(wav_file_path):
-                os.remove(wav_file_path)
-            return False
-    except Exception as e:
-        logger.error(f"Error during decode: {e}")
-        # Clean up on error
-        if os.path.exists(wav_file_path):
-            os.remove(wav_file_path)
-        return False
-
-
-def get_timestamp_from_path(path: str):
-    return parse_sync_filename_timestamp(path)
-
-
-def retrieve_file_paths(files: List[UploadFile], uid: str):
-    directory = f'syncing/{uid}/'
-    os.makedirs(directory, exist_ok=True)
-    paths = []
-    for file in files:
-        filename = file.filename
-        # Validate the file is .bin and contains a _$timestamp.bin, if not, 400 bad request
-        if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if not filename.endswith('.bin'):
-            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
-        if '_' not in filename:
-            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
-        try:
-            timestamp = get_timestamp_from_path(filename)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
-
-        path = f"{directory}{filename}"
-        try:
-            with open(path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            paths.append(path)
-        except Exception as e:
-            if os.path.exists(path):
-                os.remove(path)
-            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
-    return paths
-
-
-def get_wav_duration(wav_path: str) -> float:
-    """Get WAV file duration without loading entire file into memory."""
-    try:
-        with wave.open(wav_path, 'rb') as wav_file:
-            frames = wav_file.getnframes()
-            rate = wav_file.getframerate()
-            return frames / float(rate)
-    except Exception as e:
-        logger.error(f"Error reading WAV duration: {e}")
-        return 0.0
-
-
-def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1, sample_width=2):
-    """Decode a length-prefixed PCM .bin file to WAV.
-
-    The file format is: [4-byte uint32 frame_length][frame_bytes] repeated.
-    Each frame contains raw PCM samples (no encoding).
-    sample_width: 2 for pcm16, 1 for pcm8.
-    """
-    try:
-        pcm_data = bytearray()
-        with open(pcm_file_path, 'rb') as f:
-            while True:
-                length_bytes = f.read(4)
-                if not length_bytes or len(length_bytes) < 4:
-                    break
-                frame_length = struct.unpack('<I', length_bytes)[0]
-                if frame_length == 0 or frame_length > 65536:
-                    logger.warning(f"PCM decode: suspicious frame length {frame_length}, skipping rest")
-                    break
-                frame_data = f.read(frame_length)
-                if len(frame_data) < frame_length:
-                    break
-                pcm_data.extend(frame_data)
-
-        if not pcm_data:
-            logger.info(f"PCM decode: no data in {pcm_file_path}")
-            return False
-
-        wav_data = sync_playback.pcm_to_wav(
-            bytes(pcm_data), sample_rate=sample_rate, channels=channels, sample_width=sample_width
-        )
-        with open(wav_file_path, 'wb') as f:
-            f.write(wav_data)
-        return True
-    except Exception as e:
-        logger.error(f"PCM decode failed for {pcm_file_path}: {e}")
-        return False
-
-
-def _is_pcm_codec(filename: str) -> bool:
-    """Check if the filename indicates a PCM codec (pcm8 or pcm16)."""
-    return '_pcm16_' in filename or '_pcm8_' in filename
-
-
-def decode_files_to_wav(files_path: List[str]):
-    wav_files = []
-    for path in files_path:
-        wav_path = path.replace('.bin', '.wav')
-        filename = os.path.basename(path)
-        frame_size = 160  # Default frame size
-        match = re.search(r'_fs(\d+)', filename)
-        if match:
-            try:
-                frame_size = int(match.group(1))
-                logger.info(f"Found frame size {frame_size} in filename: {filename}")
-            except ValueError:
-                logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
-
-        # Detect codec from filename: PCM files need different decoding than Opus
-        if _is_pcm_codec(filename):
-            # Parse sample rate from filename: audio_{device}_{codec}_{sampleRate}_{channel}_...
-            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
-            sample_rate = (
-                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
-            )
-            sample_width = 1 if '_pcm8_' in filename else 2
-            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
-        else:
-            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
-
-        if not success:
-            # Clean up .bin file even on decode failure
-            if os.path.exists(path):
-                os.remove(path)
-            continue
-
-        # Always remove .bin file after decode attempt
-        if os.path.exists(path):
-            os.remove(path)
-
-        # Check duration without loading entire file into memory
-        duration = get_wav_duration(wav_path)
-        if duration == 0:
-            # Invalid WAV file
-            if os.path.exists(wav_path):
-                os.remove(wav_path)
-            raise HTTPException(status_code=400, detail=f"Invalid file format {path}")
-
-        if duration < 1:
-            os.remove(wav_path)
-            continue
-        wav_files.append(wav_path)
-    return wav_files
 
 
 # Max length of a single VAD segment / STT transcribe request. Bounds GPU memory on the
@@ -847,6 +700,7 @@ def process_segment(
                 transcript_segments=transcript_segments,
                 source=source,
                 is_locked=is_locked,
+                private_cloud_sync_enabled=private_cloud_sync_enabled,
             )
             created = process_conversation(uid, language, create_memory)
             with lock:
@@ -855,7 +709,7 @@ def process_segment(
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
 
-            transcript_segments = [s.dict() for s in transcript_segments]
+            transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
             for segment in transcript_segments:
@@ -1000,7 +854,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
             if not audio_files:
                 continue
-            files_payload = [af.dict() for af in audio_files]
+            files_payload = [af.model_dump() for af in audio_files]
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
         except Exception as e:
@@ -1017,6 +871,8 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
+# response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
+# the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
     request: Request,
@@ -1034,11 +890,12 @@ async def sync_local_files(
     response.headers.update(_V1_DEPRECATION_HEADERS)
 
     # Pre-check gates (#5854)
-    if is_hard_restricted(uid):
+    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    if hard_restricted:
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
-            headers=_V1_DEPRECATION_HEADERS,
+            headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS),
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
@@ -1133,6 +990,14 @@ async def sync_local_files(
 
         # Fetch user transcription preferences once before spawning threads
         transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+        private_cloud_sync_enabled = bool(
+            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        )
+        data_protection_level = (
+            await run_blocking(db_executor, users_db.get_data_protection_level, uid)
+            if private_cloud_sync_enabled
+            else None
+        )
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
@@ -1164,12 +1029,16 @@ async def sync_local_files(
                     person_embeddings_cache,
                     conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 for path in ordered_paths
             ]
         )
 
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+        if private_cloud_sync_enabled:
+            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1308,6 +1177,7 @@ async def _run_full_pipeline_background_async(
     """
     concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
     async with concurrency_gate:
+        set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
@@ -1440,8 +1310,8 @@ async def _run_full_pipeline_background_async(
             # --- Phase 4: Fetch prefs & embeddings ---
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            private_cloud_sync_enabled = await run_blocking(
-                db_executor, users_db.get_user_private_cloud_sync_enabled, uid
+            private_cloud_sync_enabled = bool(
+                await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
             )
             data_protection_level = (
                 await run_blocking(db_executor, users_db.get_data_protection_level, uid)
@@ -1496,8 +1366,8 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
-                    private_cloud_sync_enabled,
-                    data_protection_level,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
@@ -1517,6 +1387,7 @@ async def _run_full_pipeline_background_async(
                         segment_errors.append('Segment timed out after 300s')
                         logger.error(f'sync_v2 bg: segment timed out job={job_id}')
                     elif isinstance(r, Exception):
+                        segment_errors.append(f'Segment failed: {sanitize(str(r))}')
                         logger.error(f'sync_v2 bg: segment error: {r}')
                 try:
                     await run_blocking(
@@ -1604,6 +1475,7 @@ async def _run_full_pipeline_background_async(
                 pass
         finally:
             set_byok_keys({})
+            set_byok_uid(None)
             await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
             await run_blocking(storage_executor, _cleanup_files, wav_paths)
             try:
@@ -1639,7 +1511,7 @@ def _download_staged_files(blob_paths: list) -> bool:
     return True
 
 
-@router.post("/v2/sync-local-files")
+@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1653,8 +1525,14 @@ async def sync_local_files_v2(
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if await run_blocking(critical_executor, is_hard_restricted, uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+    if hard_restricted:
+        headers = _hard_restriction_headers(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=headers,
+        )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
@@ -1708,14 +1586,59 @@ async def sync_local_files_v2(
                     },
                 )
                 dispatched = True
-                # The handler instance downloads from GCS; local copies are done
-                await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='cloud_tasks').inc()
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error(f'sync_v2: Cloud Tasks dispatch failed job={job_id}, falling back inline: {e}')
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='enqueue_failed',
+                    outcome='degraded',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
                 start_background_task(_delete_staged_blobs_async(owned_paths), name=f'sync_unstage:{job_id}')
 
+            if dispatched:
+                try:
+                    # The handler instance downloads from GCS; local copies are done
+                    await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                    await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+                except Exception as e:
+                    logger.error(f'sync_v2: post-enqueue local cleanup failed job={job_id}: {e}')
+
         if not dispatched:
+            if not is_cloud_tasks_dispatch_enabled():
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='dispatch_disabled',
+                    outcome='recovered',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
+            elif has_byok_keys():
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='byok',
+                    outcome='recovered',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
+
             # Async coordinator: runs on event loop, offloads blocking work to pools.
             # No thread pool slot held for the full pipeline duration (fixes #7361).
             start_background_task(
@@ -1750,7 +1673,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.get("/v2/sync-local-files/{job_id}")
+@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
@@ -1778,6 +1701,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: runs one sync job inside the request.
@@ -1864,6 +1789,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.

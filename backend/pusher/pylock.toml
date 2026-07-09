@@ -384,6 +384,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/6a/0a/eebeb1fa92507ea94
 wheels = [{ url = "https://files.pythonhosted.org/packages/71/92/5e77f98553e9e75130c78900d000368476aed74276eb8ae8796f65f00918/jsonpointer-3.0.0-py2.py3-none-any.whl", upload-time = 2024-06-10T19:24:40Z, size = 7595, hashes = { sha256 = "13e088adc14fca8b6aa8177c044e12701e6ad4b28ff10e65f2267a90109c9942" } }]
 
 [[packages]]
+name = "jsonschema"
+version = "4.23.0"
+sdist = { url = "https://files.pythonhosted.org/packages/38/2e/03362ee4034a4c917f697890ccd4aec0800ccf9ded7f511971c75451deec/jsonschema-4.23.0.tar.gz", upload-time = 2024-07-08T18:40:05Z, size = 325778, hashes = { sha256 = "d71497fef26351a33265337fa77ffeb82423f3ea21283cd9467bb03999266bc4" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/69/4a/4f9dbeb84e8850557c02365a0eee0649abe5eb1d84af92a25731c6c0f922/jsonschema-4.23.0-py3-none-any.whl", upload-time = 2024-07-08T18:40:00Z, size = 88462, hashes = { sha256 = "fbadb6f8b144a8f8cf9f0b89ba94501d143e50411a1278633f56a7acf7fd5566" } }]
+
+[[packages]]
+name = "jsonschema-specifications"
+version = "2023.12.1"
+sdist = { url = "https://files.pythonhosted.org/packages/f8/b9/cc0cc592e7c195fb8a650c1d5990b10175cf13b4c97465c72ec841de9e4b/jsonschema_specifications-2023.12.1.tar.gz", upload-time = 2023-12-25T15:16:53Z, size = 13983, hashes = { sha256 = "48a76787b3e70f5ed53f1160d2b81f586e4ca6d1548c5de7085d1682674764cc" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/ee/07/44bd408781594c4d0a027666ef27fab1e441b109dc3b76b4f836f8fd04fe/jsonschema_specifications-2023.12.1-py3-none-any.whl", upload-time = 2023-12-25T15:16:51Z, size = 18482, hashes = { sha256 = "87e4fdf3a94858b8a2ba2778d9ba57d8a9cafca7c7489c46ba0d30a8bc6a9c3c" } }]
+
+[[packages]]
 name = "langchain"
 version = "1.2.9"
 sdist = { url = "https://files.pythonhosted.org/packages/ff/d5/e7c8d18bf1ee2d37839dde161d523049fd0a5b172cf4c62f17090e1b4dcb/langchain-1.2.9.tar.gz", upload-time = 2026-02-06T12:39:41Z, size = 569621, hashes = { sha256 = "ae266c640b63c38f16b6d996a50aea575940b29b63cbc652c5d12f0111357f01" } }
@@ -725,6 +737,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/48/10/defc227d65ea9c2ff
 wheels = [{ url = "https://files.pythonhosted.org/packages/c5/d1/19a9c76811757684a0f74adc25765c8a901d67f9f6472ac9d57c844a23c8/redis-5.0.8-py3-none-any.whl", upload-time = 2024-07-30T14:11:49Z, size = 255608, hashes = { sha256 = "56134ee08ea909106090934adc36f65c9bcbbaecea5b21ba704ba6fb561f8eb4" } }]
 
 [[packages]]
+name = "referencing"
+version = "0.37.0"
+sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", upload-time = 2025-10-13T15:30:48Z, size = 78036, hashes = { sha256 = "44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl", upload-time = 2025-10-13T15:30:47Z, size = 26766, hashes = { sha256 = "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231" } }]
+
+[[packages]]
 name = "regex"
 version = "2024.7.24"
 sdist = { url = "https://files.pythonhosted.org/packages/3f/51/64256d0dc72816a4fe3779449627c69ec8fee5a5625fd60ba048f53b3478/regex-2024.7.24.tar.gz", upload-time = 2024-07-24T21:51:16Z, size = 393485, hashes = { sha256 = "9cfd009eed1a46b27c14039ad5bbc5e71b6367c5b2e6d5f5da0ea91600817506" } }
@@ -741,6 +759,12 @@ name = "requests-toolbelt"
 version = "1.0.0"
 sdist = { url = "https://files.pythonhosted.org/packages/f3/61/d7545dafb7ac2230c70d38d31cbfe4cc64f7144dc41f6e4e4b78ecd9f5bb/requests-toolbelt-1.0.0.tar.gz", upload-time = 2023-05-01T04:11:33Z, size = 206888, hashes = { sha256 = "7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/3f/51/d4db610ef29373b879047326cbf6fa98b6c1969d6f6dc423279de2b1be2c/requests_toolbelt-1.0.0-py2.py3-none-any.whl", upload-time = 2023-05-01T04:11:28Z, size = 54481, hashes = { sha256 = "cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06" } }]
+
+[[packages]]
+name = "rpds-py"
+version = "2026.6.3"
+sdist = { url = "https://files.pythonhosted.org/packages/aa/2a/9618a122aeb2a169a28b03889a2995fe297588964333d4a7d67bdf46e147/rpds_py-2026.6.3.tar.gz", upload-time = 2026-06-30T07:17:53Z, size = 64051, hashes = { sha256 = "1cebd1337c242e4ec2293e541f712b2da849b29f48f0c293684b71c0632625d4" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/5e/19/7e98f468bd50346faff5b10e5297374b443bfdddacc8e9fbc65984539597/rpds_py-2026.6.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2026-06-30T07:15:03Z, size = 371315, hashes = { sha256 = "9c1255b302953c86a486b81d330d5ee1d5bd937691ce271b6be0ef0e299eaab7" } }]
 
 [[packages]]
 name = "rsa"

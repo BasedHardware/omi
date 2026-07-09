@@ -8,6 +8,7 @@ configuration decide which provider/model to use.
 
 import logging
 import os
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -16,6 +17,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from utils.llm.gateway_client import get_llm_gateway_base_url, get_llm_gateway_service_token
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -111,6 +113,48 @@ def get_or_create_openai_compatible_llm(
             kwargs['stream_options'] = {"include_usage": True}
 
         _llm_cache[key] = ChatOpenAI(model=_api_model_name(provider_config, model_name), **kwargs)
+    return _llm_cache[key]
+
+
+def get_or_create_omi_gateway_llm(
+    lane_id: str,
+    streaming: bool = False,
+    options: Optional[Dict[str, Any]] = None,
+) -> ChatOpenAI:
+    """Get or create a cached LangChain chat model backed by the Omi LLM gateway."""
+
+    options = options or {}
+    base_url = f'{get_llm_gateway_base_url()}/v1'
+    service_token = get_llm_gateway_service_token()
+    default_headers = {'X-Omi-Service-Caller': 'backend'}
+    if service_token:
+        default_headers['Authorization'] = f'Bearer {service_token}'
+    service_token_cache_key = hashlib.sha256(service_token.encode()).hexdigest() if service_token else 'none'
+
+    key = _cache_key(
+        'omi_gateway',
+        lane_id,
+        streaming,
+        {
+            'base_url': base_url,
+            'service_token': service_token_cache_key,
+            'request_timeout': options.get('request_timeout', 120),
+            'max_retries': options.get('max_retries', 1),
+        },
+    )
+    if key not in _llm_cache:
+        kwargs: Dict[str, Any] = {
+            'api_key': SecretStr('omi-gateway'),
+            'base_url': base_url,
+            'callbacks': [_usage_callback],
+            'default_headers': default_headers,
+            'request_timeout': options.get('request_timeout', 120),
+            'max_retries': options.get('max_retries', 1),
+        }
+        if streaming:
+            kwargs['streaming'] = True
+            kwargs['stream_options'] = {"include_usage": True}
+        _llm_cache[key] = ChatOpenAI(model=lane_id, **kwargs)
     return _llm_cache[key]
 
 

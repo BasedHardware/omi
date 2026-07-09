@@ -1,8 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
+import OmiSupport
 import Sentry
 import Sparkle
 import SwiftUI
+import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments
@@ -45,15 +47,25 @@ class AuthState: ObservableObject {
   @Published var userEmail: String?
 
   private init() {
+    BundleEnvironment.loadIfNeeded()
+
     // Restore auth state from UserDefaults immediately on init (before UI renders)
     let savedSignedIn = UserDefaults.standard.bool(forKey: Self.kAuthIsSignedIn)
     let savedEmail = UserDefaults.standard.string(forKey: Self.kAuthUserEmail)
-    self.isSignedIn = savedSignedIn
-    self.userEmail = savedEmail
-    // Show loading splash while Firebase restores session (only if user was previously signed in)
-    self.isRestoringAuth = savedSignedIn
+
+    if DesktopLocalProfile.isEnabled {
+      // Harness-owned emulator auth replaces any persisted cloud session.
+      self.isSignedIn = false
+      self.userEmail = nil
+      self.isRestoringAuth = true
+    } else {
+      self.isSignedIn = savedSignedIn
+      self.userEmail = savedEmail
+      self.isRestoringAuth = savedSignedIn
+    }
     NSLog(
-      "OMI AuthState: Initialized with savedSignedIn=%@, email=%@, isRestoringAuth=%@",
+      "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
+      DesktopLocalProfile.isEnabled ? "true" : "false",
       savedSignedIn ? "true" : "false", savedEmail ?? "nil", self.isRestoringAuth ? "true" : "false"
     )
   }
@@ -104,6 +116,7 @@ struct OMIApp: App {
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
+        .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
@@ -211,6 +224,9 @@ struct OMIApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   static var openMainWindow: (() -> Void)?
+  private static var appIsActive = false
+  private static var mainWindowIsKey = false
+  private static var lastMainWindowForegroundAt: Date?
 
   private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
@@ -227,15 +243,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
 
+  func applicationWillFinishLaunching(_ notification: Notification) {
+    // Single-instance guard: a second live copy of the same bundle id + launch mode
+    // would race the first against the shared Rewind SQLite DB
+    // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
+    // corrupting state. Enforce here — the earliest delegate callback — so a duplicate
+    // exits before any DB open or UserDefaults write in applicationDidFinishLaunching.
+    SingleInstanceGuard.enforceSingleInstanceOrExit(
+      launchMode: OMIApp.launchMode,
+      isExporting: ViewExporter.shouldExport())
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
       ViewExporter.run()
       return
     }
 
+    // Running from the mounted DMG / a translocated mount breaks TCC permissions
+    // and Sparkle updates — install to /Applications and relaunch before any
+    // services start. Returns true when this process is being replaced.
+    if AppInstaller.moveToApplicationsIfNeeded() {
+      return
+    }
+
     // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
     // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
     signal(SIGPIPE, SIG_IGN)
+
+    // Load bundle .env before AuthState/Firebase so local harness env is visible to getenv().
+    BundleEnvironment.loadIfNeeded()
 
     DesktopAutomationBridge.shared.startIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
@@ -247,14 +284,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    if let restoreMainWindowAfterUpdateRelaunch {
+      log(
+        "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
+      )
+    }
 
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
     // After a Sparkle update, show a small "what's new" card in the corner of the
     // main window once. Delayed so the window/overlay exist to render it.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-      WhatsNewToast.shared.presentIfUpdated()
+    if restoreMainWindowAfterUpdateRelaunch != false {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        WhatsNewToast.shared.presentIfUpdated()
+      }
     }
 
     // Proactive notifications are now OFF by default for everyone. Run the one-time
@@ -301,19 +346,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
+    NotificationRegistrationRepair.repairOnceForCurrentVersion(reason: "startup_version_registration")
 
     // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
     _ = UpdaterViewModel.shared
     UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
-    // Initialize Sentry for crash reporting and error tracking (including dev builds)
+    // Initialize Sentry for crash reporting and error tracking.
+    // Non-production bundles keep explicit feedback/error APIs available, but must
+    // not install native crash/app-hang handlers: those handlers run in signal
+    // context and have caused named dogfood bundles to crash while reporting.
     let isDev = AnalyticsManager.isDevBuild
     SentrySDK.start { options in
       options.dsn =
         "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
       options.debug = false
-      options.enableAutoSessionTracking = true
+      options.enableAutoSessionTracking = !isDev
+      options.enableCrashHandler = !isDev
+      options.enableAppHangTracking = !isDev
+      options.enableWatchdogTerminationTracking = !isDev
       options.environment = isDev ? "development" : "production"
       // Disable automatic HTTP client error capture — the SDK creates noisy events
       // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
@@ -324,7 +376,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
       // event volume without being individually actionable. Raise to 3s so only
       // sustained freezes — the ones users actually feel — are reported.
-      options.appHangTimeoutInterval = 3.0
+      options.appHangTimeoutInterval = isDev ? 0 : 3.0
       options.beforeSend = { event in
         // Allow user feedback through from all builds (dev + prod)
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
@@ -353,7 +405,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            let value = exc.value ?? ""
+            let value = exc.value
             return transientNetworkCodes.contains { entry in
               exc.type == entry.domain
                 && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
@@ -390,7 +442,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && (exc.value ?? "").contains("notSignedIn")
+            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
           })
         {
           return nil
@@ -398,16 +450,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return event
       }
     }
-    log("Sentry initialized (environment: \(isDev ? "development" : "production"))")
+    log(
+      "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
+    )
 
-    // Initialize Firebase
+    // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
+    // local dev uses Auth emulator REST + stored tokens instead).
     let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist")
 
-    if let path = plistPath,
+    if DesktopLocalProfile.isEnabled {
+      log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
+      AuthState.shared.isRestoringAuth = true
+      Task { @MainActor in
+        await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+        if AuthState.shared.isRestoringAuth {
+          log("Local harness auth watchdog: clearing stuck restoring_auth splash")
+          AuthState.shared.isRestoringAuth = false
+        }
+      }
+    } else if let path = plistPath,
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
       AuthService.shared.configure()
+    } else {
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
 
     // Initialize analytics (PostHog)
@@ -531,23 +600,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
-    // Start Sentry heartbeat timer (every 5 minutes) to capture breadcrumbs periodically
     startSentryHeartbeat()
+    startForegroundTracking()
 
-    // Activate app and show main window after a brief delay
+    // Apply initial main-window policy after SwiftUI has created the window.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
       log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      NSApp.activate()
+      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
+      if !shouldSuppressMainWindow {
+        NSApp.activate()
+      }
       var foundOmiWindow = false
       for window in NSApp.windows {
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if window.title.hasPrefix("Omi") {
+        if Self.isMainOmiWindow(window) {
           foundOmiWindow = true
-          window.makeKeyAndOrderFront(nil)
           window.appearance = NSAppearance(named: .darkAqua)
           // Ensure fullscreen always creates a dedicated Space
           window.collectionBehavior.insert(.fullScreenPrimary)
-          log("AppDelegate: Main window shown on launch")
+          if shouldSuppressMainWindow {
+            window.orderOut(nil)
+            log("AppDelegate: Main window suppressed after background update relaunch")
+          } else {
+            window.makeKeyAndOrderFront(nil)
+            log("AppDelegate: Main window shown on launch")
+          }
         }
       }
       if !foundOmiWindow {
@@ -558,18 +635,91 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
-  /// Start a timer that sends Sentry session snapshots every 5 minutes
-  /// This ensures we have breadcrumbs captured even without errors
+  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
+  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
   private func startSentryHeartbeat() {
-    // Now runs in dev builds too since Sentry is always initialized
+    guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      // Capture a session heartbeat event with current breadcrumbs
-      SentrySDK.capture(message: "Session Heartbeat") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "heartbeat", key: "event_type")
-      }
-      log("Sentry: Session heartbeat captured")
+      SentryHeartbeatTelemetry.recordSessionHeartbeat()
+      log("Sentry: Session heartbeat breadcrumb recorded")
     }
+  }
+
+  private func startForegroundTracking() {
+    Self.recordForegroundState()
+
+    let center = NotificationCenter.default
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+        Task { @MainActor in
+          await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
+            trigger: .appBecameActive,
+            auth: AuthService.shared
+          )
+        }
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+  }
+
+  static func shouldRestoreMainWindowAfterUpdateRelaunch() -> Bool {
+    let readState = {
+      Self.recordForegroundState()
+      return UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+        appIsActive: appIsActive,
+        frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+        mainWindowIsKey: mainWindowIsKey,
+        lastMainWindowForegroundAt: lastMainWindowForegroundAt
+      )
+    }
+
+    if Thread.isMainThread {
+      return readState()
+    }
+
+    return DispatchQueue.main.sync(execute: readState)
+  }
+
+  private static func recordForegroundState(now: Date = Date()) {
+    appIsActive = NSApp.isActive
+    mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
+
+    if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+      appIsActive: appIsActive,
+      frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+      mainWindowIsKey: mainWindowIsKey,
+      lastMainWindowForegroundAt: nil,
+      now: now
+    ) {
+      lastMainWindowForegroundAt = now
+    }
+  }
+
+  private static func frontmostApplicationMatchesBundle() -> Bool {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+  }
+
+  private static func isMainOmiWindow(_ window: NSWindow) -> Bool {
+    window.title.lowercased().hasPrefix("omi")
   }
 
   /// Strip com.apple.provenance extended attributes from our own bundle.
@@ -578,16 +728,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func stripProvenanceXattrs() {
     let bundlePath = Bundle.main.bundlePath
     DispatchQueue.global(qos: .utility).async {
-      let process = Process()
-      process.launchPath = "/usr/bin/xattr"
-      process.arguments = ["-cr", bundlePath]
-      process.standardOutput = nil
-      process.standardError = nil
-      try? process.run()
-      process.waitUntilExit()
-      if process.terminationStatus == 0 {
-        log("AppDelegate: Stripped provenance xattrs from bundle")
-      }
+      // A silent failure here breaks the code-signature seal and causes future
+      // Sparkle updates to fail, so surface it (BL-022) instead of dropping it.
+      SystemCommand.runLogging(
+        "AppDelegate: strip provenance xattrs",
+        executable: "/usr/bin/xattr", arguments: ["-cr", bundlePath])
     }
   }
 
@@ -605,54 +750,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
     DispatchQueue.global(qos: .utility).async {
-      // Unregister to clear stale icon entries
-      let unregister = Process()
-      unregister.executableURL = URL(fileURLWithPath: lsregister)
-      unregister.arguments = ["-u", appPath]
-      unregister.standardOutput = FileHandle.nullDevice
-      unregister.standardError = FileHandle.nullDevice
-      try? unregister.run()
-      unregister.waitUntilExit()
-
-      // Force re-register with updated icon
-      let register = Process()
-      register.executableURL = URL(fileURLWithPath: lsregister)
-      register.arguments = ["-f", appPath]
-      register.standardOutput = FileHandle.nullDevice
-      register.standardError = FileHandle.nullDevice
-      try? register.run()
-      register.waitUntilExit()
-
-      // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
-      let killIcons = Process()
-      killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-      killIcons.arguments = ["iconservicesagent"]
-      killIcons.standardOutput = FileHandle.nullDevice
-      killIcons.standardError = FileHandle.nullDevice
-      try? killIcons.run()
-      killIcons.waitUntilExit()
+      // Best-effort cosmetic maintenance. Capture each step's outcome instead of
+      // dropping it with `try?`, but keep it at info level — some steps exit
+      // non-zero benignly (e.g. killall when the agent isn't running), so this is
+      // not routed through the failure path (BL-022).
+      log(
+        "Icon cache: lsregister unregister \(SystemCommand.run(executable: lsregister, arguments: ["-u", appPath]).summary)"
+      )
+      log(
+        "Icon cache: lsregister register \(SystemCommand.run(executable: lsregister, arguments: ["-f", appPath]).summary)"
+      )
+      log(
+        "Icon cache: kill iconservicesagent \(SystemCommand.run(executable: "/usr/bin/killall", arguments: ["iconservicesagent"]).summary)"
+      )
 
       // Safety net: verify the Dock is still running after 2 seconds.
-      // iconservicesagent restart can occasionally crash the Dock.
+      // iconservicesagent restart can occasionally crash the Dock. pgrep exits
+      // non-zero when Dock isn't found, which is the signal we branch on.
       Thread.sleep(forTimeInterval: 2.0)
-      let dockCheck = Process()
-      dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-      dockCheck.arguments = ["-x", "Dock"]
-      dockCheck.standardOutput = FileHandle.nullDevice
-      dockCheck.standardError = FileHandle.nullDevice
-      try? dockCheck.run()
-      dockCheck.waitUntilExit()
+      let dockRunning = SystemCommand.run(
+        executable: "/usr/bin/pgrep", arguments: ["-x", "Dock"]
+      ).isSuccess
 
-      if dockCheck.terminationStatus != 0 {
+      if !dockRunning {
         // Dock is not running — restart it
         log("AppDelegate: Dock not running after icon cache reset, restarting")
-        let restartDock = Process()
-        restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        restartDock.arguments = ["-a", "Dock"]
-        restartDock.standardOutput = FileHandle.nullDevice
-        restartDock.standardError = FileHandle.nullDevice
-        try? restartDock.run()
-        restartDock.waitUntilExit()
+        log(
+          "Icon cache: restart Dock \(SystemCommand.run(executable: "/usr/bin/open", arguments: ["-a", "Dock"]).summary)"
+        )
       }
 
       log("AppDelegate: Icon cache reset complete")
@@ -741,12 +866,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           button.image = icon
         }
       } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_text_logo", withExtension: "png"),
+        forResource: "omi_menu_bar_icon", withExtension: "png"),
         let icon = NSImage(contentsOf: iconURL)
       {
         icon.isTemplate = true
-        let aspect = icon.size.width / icon.size.height
-        icon.size = NSSize(width: 16 * aspect, height: 16)
+        icon.size = NSSize(width: 18, height: 18)
         button.image = icon
       }
     }
@@ -798,7 +922,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let displayName =
       Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
 
-    // Set up the button with icon — use "omi" text logo (not a circle)
+    // Set up the button with compact circle mark.
     if let button = statusBarItem.button {
       if OMIApp.launchMode == .rewind {
         // Rewind mode uses SF Symbol
@@ -810,23 +934,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           log("AppDelegate: [MENUBAR] Rewind icon set successfully")
         }
       } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_text_logo", withExtension: "png"),
+        forResource: "omi_menu_bar_icon", withExtension: "png"),
         let icon = NSImage(contentsOf: iconURL)
       {
         icon.isTemplate = true
-        // Scale to menu bar height (16pt) with proportional width
-        let aspect = icon.size.width / icon.size.height
-        icon.size = NSSize(width: 16 * aspect, height: 16)
+        icon.size = NSSize(width: 18, height: 18)
         button.image = icon
         button.imagePosition = .imageOnly
-        log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
+        log("AppDelegate: [MENUBAR] Omi circle logo set successfully (size: \(icon.size))")
       } else {
         // Fallback to SF Symbol
         if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
           icon.isTemplate = true
           button.image = icon
         }
-        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
+        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_menu_bar_icon, using fallback")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
     } else {
@@ -1056,9 +1178,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return
       }
       if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-        // No permission — revert toggle and open preferences
+        // No permission — revert toggle, register + open preferences (PERM-02)
         sender.state = .off
-        ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
         return
       }
       AssistantSettings.shared.screenAnalysisEnabled = true
@@ -1201,17 +1323,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 
-    // Mark clean shutdown so next launch skips expensive DB integrity check
-    RewindDatabase.markCleanShutdown()
+    // Finalize the active Rewind MP4 chunk while the app is still alive.
+    // AVAssetWriter files are not readable until finishWriting writes the trailer.
+    let didFlushRewind = RewindShutdownFlush.flush(timeout: 5, context: "AppDelegate")
+
+    // Mark clean shutdown only after Rewind finalized its active MP4 chunk.
+    if didFlushRewind {
+      RewindDatabase.markCleanShutdown()
+    }
 
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")
     ResourceMonitor.shared.stop()
 
-    // Capture final session snapshot before termination (now enabled for dev builds too)
-    SentrySDK.capture(message: "App Terminating") { scope in
-      scope.setLevel(.info)
-      scope.setTag(value: "lifecycle", key: "event_type")
+    if !AnalyticsManager.isDevBuild {
+      SentrySDK.capture(message: "App Terminating") { scope in
+        scope.setLevel(.info)
+        scope.setTag(value: "lifecycle", key: "event_type")
+      }
     }
   }
 

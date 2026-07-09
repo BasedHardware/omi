@@ -1,4 +1,4 @@
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
 
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
@@ -24,6 +24,48 @@ PUSHER_CIRCUIT_BREAKER_REJECTIONS = Counter(
 PUSHER_SESSION_DEGRADED = Gauge(
     'pusher_sessions_degraded',
     'Number of sessions currently in degraded mode (pusher unavailable)',
+)
+
+LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
+    'llm_gateway_chat_extraction_requests_total',
+    'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
+    ['feature', 'mode', 'outcome', 'reason'],
+)
+
+LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS = Counter(
+    'llm_gateway_direct_exception_requests_total',
+    'Inventoried direct-provider surfaces used while gateway feature mode is active',
+    ['surface', 'reason'],
+)
+
+LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
+    'llm_gateway_chat_extraction_comparisons_total',
+    'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
+    ['feature', 'field', 'outcome'],
+)
+
+OMI_FALLBACK_TOTAL = Counter(
+    'omi_fallback_total',
+    'Fallback / resilience transitions by component, path, reason, and outcome',
+    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
+)
+
+OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
+    'omi_sync_dispatch_attempts_total',
+    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
+    ['mode'],
+)
+
+AUTH_FLOW_EVENTS = Counter(
+    'auth_flow_events_total',
+    'Auth flow events by provider, stage, outcome, and sanitized failure class',
+    ['provider', 'stage', 'outcome', 'failure_class'],
+)
+
+AUTH_FLOW_DURATION_SECONDS = Histogram(
+    'auth_flow_duration_seconds',
+    'Auth flow duration in seconds by provider and terminal state',
+    ['provider', 'terminal_state'],
 )
 
 
