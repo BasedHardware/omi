@@ -1,3 +1,0 @@
-{
-    "change": "Fixed connector import progress disappearing when the import window is closed and reopened — the running import, its result, and any error now stay visible, and an import can no longer be started twice"
-}
