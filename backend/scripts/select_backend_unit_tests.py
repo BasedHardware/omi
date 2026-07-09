@@ -75,6 +75,7 @@ MEMORY_POLICY_CORE_PATH_GLOBS = (
     'backend/models/product_memory.py',
     'backend/models/memory_search_gateway.py',
     'backend/routers/memory_*.py',
+    'backend/routers/memories.py',
 )
 
 MEMORY_POLICY_CORE_TESTS = (

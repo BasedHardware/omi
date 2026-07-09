@@ -57,13 +57,18 @@ def add_require_go_arg(parser: argparse.ArgumentParser) -> None:
 
 
 def collect_gates_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
-    """Collect gate-like status entries from a readiness artifact payload."""
+    """Collect gate-like status entries from a readiness artifact payload.
+
+    The overall artifact ``status`` is always collected as an ``overall`` gate so
+    that fail-closed ``--require-go`` behavior is not bypassed when a payload
+    also carries a ``gates`` dict.
+    """
     gates: dict[str, Any] = {}
+    if "status" in artifact:
+        gates["overall"] = {"status": artifact["status"]}
     artifact_gates = artifact.get("gates")
     if isinstance(artifact_gates, dict):
         gates.update(artifact_gates)
-    elif "status" in artifact:
-        gates["overall"] = {"status": artifact["status"]}
 
     proof_cases = artifact.get("proof_cases")
     if isinstance(proof_cases, dict):

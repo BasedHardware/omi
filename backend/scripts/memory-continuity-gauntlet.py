@@ -745,14 +745,18 @@ class MemoryContinuityGauntlet:
 
         try:
             for suite in sorted(self.suites):
-                suite_mode = mode if self.request_live else "hermetic"
-                if self.request_live and mode != "live":
-                    suite_mode = "not_run"
-                self.run_suite(suite, suite_mode, api_url)
+                self.run_suite(suite, mode, api_url)
         finally:
             if self._runtime is not None:
                 self._runtime.stop()
                 self._runtime = None
+
+        # Prerequisites (e.g. promote running capture internally) may leave
+        # non-selected suites stuck as RUNNING; mark them GO since they
+        # completed without raising.
+        for name, result in list(self.suite_results.items()):
+            if name not in self.suites and result.status == "RUNNING":
+                result.status = "GO"
 
         self.manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         self.manifest["suite_results"] = {
@@ -767,7 +771,13 @@ class MemoryContinuityGauntlet:
         }
         self.manifest["failures"] = self.failures
         self.manifest["warnings"] = self.warnings
-        self.manifest["passed"] = not self.failures
+        # A run where no selected suite reached GO (e.g. all NOT_RUN because
+        # the live environment was unavailable) must not be marked green even
+        # when there are zero failures.
+        at_least_one_go = any(
+            self.suite_results.get(s) is not None and self.suite_results[s].status == "GO" for s in self.suites
+        )
+        self.manifest["passed"] = not self.failures and at_least_one_go
         write_json(self.run_dir / "manifest.json", self.manifest)
         finalize_evidence_hygiene(self.run_dir, passed=self.manifest["passed"], git_sha_value=self.manifest["git"])
 

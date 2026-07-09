@@ -27,13 +27,11 @@ from tests.unit.fixtures.memory_adapter_fakes import (
     memory_item,
     stored_item,
 )
-from tests.unit.test_ws_i_write_convergence import (
-    _sample_memory_payload,
-    extraction_memory_id,
-)
+from tests.unit.test_ws_i_write_convergence import _sample_memory_payload
 from utils.memory.canonical_consolidation import ConsolidationAgentBatch
 from utils.memory.canonical_memory_adapter import (
     delete_canonical_memory,
+    extraction_memory_id,
     neutral_vector_id_for_memory,
     write_canonical_extraction_memory,
 )
@@ -400,7 +398,7 @@ def _vector_store(fake_index, namespace: str = "ns2") -> dict:
     return fake_index._vectors[namespace]
 
 
-def _invoke_surface_reader(surface_name, grant_consumer, *, uid, db, rollout, policy, now):
+def _invoke_surface_reader(surface_name, *, uid, db, rollout, policy, now):
     if surface_name == "chat_text":
         return search_memory_default_chat_memories_text(uid=uid, query="coffee", limit=10, db_client=db, now=now)
     if surface_name == "chat_list":
@@ -505,7 +503,6 @@ class TestSurfaceDefaultAccessMatrix:
         )
         result = _invoke_surface_reader(
             surface_name,
-            grant_consumer,
             uid=uid,
             db=db,
             rollout=rollout,
