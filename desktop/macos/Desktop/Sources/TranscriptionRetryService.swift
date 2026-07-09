@@ -10,6 +10,7 @@ class TranscriptionRetryService {
     private let retryInterval: TimeInterval = 60  // Check every 60 seconds
     private var consecutiveDBFailures = 0
     private let maxConsecutiveDBFailures = 3
+    private var isPausedForDBErrors = false
 
     private init() {}
 
@@ -18,14 +19,24 @@ class TranscriptionRetryService {
     /// Start the retry service (call on app launch)
     func start() {
         guard retryTimer == nil else { return }
+        isPausedForDBErrors = false
+        scheduleRetryTimer()
+    }
 
+    private func scheduleRetryTimer() {
         log("TranscriptionRetryService: Starting retry timer (interval: \(retryInterval)s)")
-
         retryTimer = Timer.scheduledTimer(withTimeInterval: retryInterval, repeats: true) { [weak self] _ in
             Task {
                 await self?.processRetryQueue()
             }
         }
+    }
+
+    /// Resume the retry timer after database recovery (e.g. ViewModelContainer retry).
+    func resumeAfterDatabaseRecovery() {
+        consecutiveDBFailures = 0
+        isPausedForDBErrors = false
+        start()
     }
 
     /// Stop the retry service (call on app termination)
@@ -96,16 +107,26 @@ class TranscriptionRetryService {
 
         do {
             _ = try await TranscriptionStorage.shared.getStats()
-            consecutiveDBFailures = 0 // DB query succeeded, reset counter
+            if consecutiveDBFailures > 0 || isPausedForDBErrors {
+                log("TranscriptionRetryService: DB healthy again — resuming retry timer")
+            }
+            consecutiveDBFailures = 0
+            if isPausedForDBErrors {
+                isPausedForDBErrors = false
+                start()
+            }
             await ConversationFinalizationService.shared.recoverPendingFinalizations()
 
         } catch {
             consecutiveDBFailures += 1
-            // Report to RewindDatabase for runtime corruption detection
             await RewindDatabase.shared.reportQueryError(error)
             if consecutiveDBFailures >= maxConsecutiveDBFailures {
-                log("TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, stopping timer to avoid error flood")
-                stop()
+                log(
+                    "TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, pausing timer "
+                        + "(failure_class=db_backoff recovery_action=pause_timer recovery_result=degraded)")
+                retryTimer?.invalidate()
+                retryTimer = nil
+                isPausedForDBErrors = true
             } else {
                 logError("TranscriptionRetryService: Queue processing failed (\(consecutiveDBFailures)/\(maxConsecutiveDBFailures))", error: error)
             }

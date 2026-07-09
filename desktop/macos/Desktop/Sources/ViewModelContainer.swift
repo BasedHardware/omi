@@ -151,6 +151,7 @@ class ViewModelContainer: ObservableObject {
             try await RewindDatabase.shared.initialize()
             databaseInitFailed = false
             warmupCoordinator.markDatabaseRetryComplete()
+            TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
             log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
             schedulePostInteractiveWarmup(dbAvailable: true)
             return true
