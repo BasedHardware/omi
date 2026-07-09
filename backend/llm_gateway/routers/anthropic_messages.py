@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
@@ -13,7 +12,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
-from llm_gateway.gateway.schemas import ProviderRef
 from llm_gateway.routers.dependencies import get_gateway_config
 
 router = APIRouter()
@@ -91,7 +89,7 @@ def _resolve_lane_provider_model(config: GatewayConfig, model: object) -> str:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f'active route missing for lane: {lane_id}',
         )
-    provider_ref = cast(ProviderRef, route.primary)
+    provider_ref = route.primary
     if provider_ref.provider != 'anthropic':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

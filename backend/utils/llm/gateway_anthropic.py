@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import anthropic
 import httpx
 
@@ -91,15 +93,15 @@ class _GatewayFirstAnthropicMessages:
     def __init__(
         self,
         *,
-        gateway_messages: anthropic.resources.messages.AsyncMessages,
-        legacy_messages: anthropic.resources.messages.AsyncMessages,
+        gateway_messages: Any,
+        legacy_messages: Any,
         agent_model: str,
     ) -> None:
         self._gateway_messages = gateway_messages
         self._legacy_messages = legacy_messages
         self._agent_model = agent_model
 
-    def stream(self, **kwargs):
+    def stream(self, **kwargs: Any) -> '_GatewayAnthropicStreamWithFallback':
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
         legacy_kwargs = dict(kwargs)
@@ -111,7 +113,7 @@ class _GatewayFirstAnthropicMessages:
             legacy_kwargs=legacy_kwargs,
         )
 
-    async def create(self, **kwargs):
+    async def create(self, **kwargs: Any) -> Any:
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
         try:
@@ -141,10 +143,10 @@ class _GatewayAnthropicStreamWithFallback:
     def __init__(
         self,
         *,
-        gateway_messages: anthropic.resources.messages.AsyncMessages,
-        legacy_messages: anthropic.resources.messages.AsyncMessages,
-        gateway_kwargs: dict,
-        legacy_kwargs: dict,
+        gateway_messages: Any,
+        legacy_messages: Any,
+        gateway_kwargs: dict[str, Any],
+        legacy_kwargs: dict[str, Any],
     ) -> None:
         self._gateway_messages = gateway_messages
         self._legacy_messages = legacy_messages
@@ -178,22 +180,22 @@ class _GatewayAnthropicStreamWithFallback:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
         if self._active is None:
             return None
         return await self._active.__aexit__(exc_type, exc, tb)
 
-    def __aiter__(self):
+    def __aiter__(self) -> Any:
         if self._active is None:
             raise RuntimeError('stream context is not active')
         return self._active.__aiter__()
 
-    async def get_final_message(self):
+    async def get_final_message(self) -> Any:
         if self._active is None:
             raise RuntimeError('stream context is not active')
         return await self._active.get_final_message()
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         if self._active is None:
             raise RuntimeError('stream context is not active')
         return await self._active.__anext__()
