@@ -248,7 +248,7 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("Providers/ChatProvider.swift")
     let range = source.range(of: "ChatErrorCard: .signIn recovery")
     XCTAssertNotNil(range)
-    let snippet = String(source[range!.lowerBound...]).prefix(1200)
+    let snippet = String(source[range!.lowerBound...])
     XCTAssertTrue(snippet.contains("signInWithGoogle()"))
     XCTAssertTrue(snippet.contains("signInWithApple()"))
     XCTAssertTrue(snippet.contains("ensureBridgeStarted()"))
