@@ -27,6 +27,8 @@ def write_yaml(path: Path, payload: dict) -> None:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
+        {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
