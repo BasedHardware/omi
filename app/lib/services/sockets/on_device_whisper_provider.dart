@@ -31,19 +31,19 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
       WhisperModel targetModel = WhisperModel.tiny;
 
-      if (filename.contains('tiny'))
+      if (filename.contains('tiny')) {
         targetModel = WhisperModel.tiny;
-      else if (filename.contains('base'))
+      } else if (filename.contains('base')) {
         targetModel = WhisperModel.base;
-      else if (filename.contains('small'))
+      } else if (filename.contains('small')) {
         targetModel = WhisperModel.small;
-      else if (filename.contains('medium'))
+      } else if (filename.contains('medium')) {
         targetModel = WhisperModel.medium;
-      else if (filename.contains('large-v1'))
+      } else if (filename.contains('large-v1')) {
         targetModel = WhisperModel.largeV1;
-      else if (filename.contains('large-v2'))
+      } else if (filename.contains('large-v2')) {
         targetModel = WhisperModel.largeV2;
-      else {
+      } else {
         CustomSttLogService.instance.warning(
           'OnDeviceWhisper',
           'Unknown model filename "$filename", defaulting to tiny.',
@@ -86,11 +86,11 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
         final res = await _whisper!.transcribe(transcribeRequest: req);
 
-        if (res.text == null || res.text!.isEmpty) {
+        if (res.text.isEmpty) {
           return null;
         }
 
-        String cleanText = res.text!.trim();
+        String cleanText = res.text.trim();
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
