@@ -6,6 +6,7 @@ import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
+import { parseOmiSseLine } from '../../../shared/omiSse'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
@@ -268,20 +269,6 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
-      // Each SSE line arrives as `data: <chunk>` (with `done:` marking the end).
-      // Strip the field prefix before appending, otherwise the literal "data:"
-      // leaks into the rendered reply. The backend also (a) emits ephemeral
-      // "thinking" status events whose payload starts with `think:` ("Checking
-      // action items", "Searching memories") — those aren't part of the reply,
-      // so drop them — and (b) encodes reply newlines as the literal token
-      // `__CRLF__` so they survive single-line SSE framing; restore those.
-      const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:')) return null
-        const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
-        if (content.startsWith('think:')) return null
-        return content.replace(/__CRLF__/g, '\n')
-      }
-
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -292,7 +279,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
-          const chunk = parseChunk(line)
+          const chunk = parseOmiSseLine(line)
           if (chunk === null) continue
           assistantText += chunk
           setHistory((h) => {
