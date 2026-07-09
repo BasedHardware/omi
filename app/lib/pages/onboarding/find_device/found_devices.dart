@@ -231,9 +231,9 @@ class _FoundDevicesState extends State<FoundDevices> {
             children: [
               !provider.isConnected
                   ? Text(
-                      visibleDevices.isEmpty
+                      provider.nearbyDeviceCount == 0
                           ? context.l10n.searchingForDevices
-                          : context.l10n.devicesFoundNearby(visibleDevices.length),
+                          : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
                       style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14, color: Color(0x66FFFFFF)),
                     )
                   : Text(
@@ -280,10 +280,20 @@ class _FoundDevicesState extends State<FoundDevices> {
   _devicesList(OnboardingProvider provider) {
     return (provider.visibleDeviceList.mapIndexed((index, device) {
       bool isConnecting = provider.connectingToDeviceId == device.id;
+      final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
       return GestureDetector(
         onTap: !provider.isClicked
             ? () async {
+                if (isOfflineSavedDevice) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(context.l10n.offline),
+                      action: SnackBarAction(label: context.l10n.retry, onPressed: () {}),
+                    ),
+                  );
+                  return;
+                }
                 if (device.type == DeviceType.appleWatch) {
                   await _handleAppleWatchOnboarding(device, provider);
                 } else {
@@ -348,7 +358,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            context.l10n.saved,
+                            isOfflineSavedDevice ? context.l10n.offline : context.l10n.saved,
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54),
                           ),
                         ),

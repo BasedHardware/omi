@@ -67,6 +67,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     unawaited(_autoConnectSavedDeviceIfVisible());
   }
 
+  bool isDeviceOnline(BtDevice device) => foundDevicesMap.containsKey(device.id);
+
+  int get nearbyDeviceCount => deviceList.length;
+
   void _syncSavedDevices() {
     savedDeviceList = SharedPreferencesUtil().btDevices.where((device) => device.id.isNotEmpty).toList();
   }
