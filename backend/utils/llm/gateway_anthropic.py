@@ -5,6 +5,7 @@ from __future__ import annotations
 import anthropic
 import httpx
 
+from utils.llm.gateway_byok import byok_gateway_default_headers
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
     feature_auto_lane_id,
@@ -23,10 +24,11 @@ def get_gateway_first_anthropic_client(
     *,
     legacy_client: anthropic.AsyncAnthropic,
     agent_model: str,
+    byok_api_key: str | None = None,
 ) -> anthropic.AsyncAnthropic | _GatewayFirstAnthropicClient:
     if not should_route_features_through_gateway():
         return legacy_client
-    gateway_client = _get_or_create_gateway_anthropic_client()
+    gateway_client = _get_or_create_gateway_anthropic_client(byok_api_key=byok_api_key)
     return _GatewayFirstAnthropicClient(
         gateway_client=gateway_client,
         legacy_client=legacy_client,
@@ -34,22 +36,31 @@ def get_gateway_first_anthropic_client(
     )
 
 
-def _get_or_create_gateway_anthropic_client() -> anthropic.AsyncAnthropic:
+def _get_or_create_gateway_anthropic_client(*, byok_api_key: str | None = None) -> anthropic.AsyncAnthropic:
     token = get_llm_gateway_service_token() or 'gateway-dev'
-    cached = _GATEWAY_CLIENT_CACHE.get(token)
+    byok_fingerprint = 'none'
+    if byok_api_key:
+        import hashlib
+
+        byok_fingerprint = hashlib.sha256(byok_api_key.encode()).hexdigest()[:16]
+    cache_key = f'{token}:{byok_fingerprint}'
+    cached = _GATEWAY_CLIENT_CACHE.get(cache_key)
     if cached is not None:
         return cached
+    default_headers = {
+        'Authorization': f'Bearer {token}',
+        'X-Omi-Service-Caller': 'backend',
+    }
+    if byok_api_key:
+        default_headers.update(byok_gateway_default_headers('anthropic', byok_api_key))
     client = anthropic.AsyncAnthropic(
         api_key='gateway-managed',
         base_url=get_llm_gateway_base_url(),
         timeout=120.0,
         max_retries=0,
-        default_headers={
-            'Authorization': f'Bearer {token}',
-            'X-Omi-Service-Caller': 'backend',
-        },
+        default_headers=default_headers,
     )
-    _GATEWAY_CLIENT_CACHE[token] = client
+    _GATEWAY_CLIENT_CACHE[cache_key] = client
     return client
 
 

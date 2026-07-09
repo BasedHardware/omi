@@ -56,6 +56,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
+    DirectUse('utils/llm/gateway_byok.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),

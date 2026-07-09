@@ -9,6 +9,7 @@ from llm_gateway.gateway.credentials import (
     build_omi_managed_credential_context,
     is_byok_failure_class,
     is_fallback_eligible_by_default,
+    parse_forwarded_byok_headers,
 )
 from llm_gateway.gateway.schemas import CredentialMode, CredentialPolicy, FailureClass
 
@@ -35,6 +36,19 @@ def test_byok_credential_context_exposes_presence_without_raw_keys():
     assert raw_secret not in repr(context)
     assert raw_secret not in str(context.safe_model_dump())
     assert raw_secret not in context.model_dump_json()
+    assert context.forwarded_key_for('openai') == raw_secret
+
+
+def test_parse_forwarded_byok_headers_extracts_provider_keys():
+    forwarded = parse_forwarded_byok_headers(
+        {
+            'X-Omi-Byok-OpenAI-Key': ' sk-openai ',
+            'X-Omi-Byok-Anthropic-Key': 'sk-ant',
+            'Authorization': 'Bearer service',
+        }
+    )
+
+    assert forwarded == {'openai': 'sk-openai', 'anthropic': 'sk-ant'}
 
 
 def test_key_reference_credential_context_exposes_references_not_raw_keys():

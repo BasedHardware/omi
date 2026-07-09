@@ -104,6 +104,14 @@ except ImportError:
 
 
 try:
+    from utils.llm.gateway_byok import get_or_create_omi_gateway_llm_for_byok
+except ImportError:
+
+    def get_or_create_omi_gateway_llm_for_byok(*_args, **_kwargs):
+        raise RuntimeError('BYOK gateway LangChain client is unavailable')
+
+
+try:
     from utils.llm.gateway_anthropic import get_gateway_first_anthropic_client
 except ImportError:
 
@@ -193,7 +201,14 @@ class _AnthropicClientProxy:
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
         if byok:
-            return _cached_anthropic(byok)
+            legacy = _cached_anthropic(byok)
+            if should_route_features_through_gateway():
+                return get_gateway_first_anthropic_client(
+                    legacy_client=legacy,
+                    agent_model=ANTHROPIC_AGENT_MODEL,
+                    byok_api_key=byok,
+                )
+            return legacy
         return get_gateway_first_anthropic_client(
             legacy_client=self._default,
             agent_model=ANTHROPIC_AGENT_MODEL,
@@ -474,9 +489,21 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             byok_key = byok_key_for_profile
 
     if byok_key and gateway_feature_mode:
-        raise_if_gateway_feature_mode_blocks_direct_model_surface(f'get_llm.{feature}.byok')
-
-    if byok_key:
+        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        if byok_client is None:
+            raise RuntimeError(f'BYOK is not supported for feature={feature} provider={provider}')
+        gateway_model = get_or_create_omi_gateway_llm_for_byok(
+            feature_auto_lane_id(feature),
+            provider=_effective_byok_provider(model, provider),
+            api_key=byok_key,
+            streaming=streaming,
+        )
+        result = wrap_gateway_with_legacy_fallback(
+            feature=feature,
+            gateway_model=gateway_model,
+            legacy_model=byok_client,
+        )
+    elif byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
         result = (
             byok_client

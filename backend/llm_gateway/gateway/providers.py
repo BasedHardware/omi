@@ -66,12 +66,11 @@ class OpenAICompatibleChatCompletionProvider:
         credentials: CredentialContext,
         timeout_ms: int,
     ) -> Mapping[str, Any]:
-        if credentials.mode == CredentialMode.BYOK:
-            raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
-
-        api_key = os.getenv(self._api_key_env, '').strip()
-        if not api_key:
-            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        api_key = _resolve_provider_api_key(
+            credentials=credentials,
+            provider_ref=provider_ref,
+            api_key_env=self._api_key_env,
+        )
 
         try:
             async with self._http_client.stream(
@@ -112,12 +111,11 @@ class OpenAICompatibleChatCompletionProvider:
         credentials: CredentialContext,
         timeout_ms: int,
     ):
-        if credentials.mode == CredentialMode.BYOK:
-            raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
-
-        api_key = os.getenv(self._api_key_env, '').strip()
-        if not api_key:
-            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        api_key = _resolve_provider_api_key(
+            credentials=credentials,
+            provider_ref=provider_ref,
+            api_key_env=self._api_key_env,
+        )
 
         try:
             async with self._http_client.stream(
@@ -301,6 +299,23 @@ def _openai_finish_reason(stop_reason: Any) -> str:
     if stop_reason == 'tool_use':
         return 'tool_calls'
     return 'stop'
+
+
+def _resolve_provider_api_key(
+    *,
+    credentials: CredentialContext,
+    provider_ref: ProviderRef,
+    api_key_env: str,
+) -> str:
+    if credentials.mode == CredentialMode.BYOK:
+        forwarded = credentials.forwarded_key_for(provider_ref.provider)
+        if not forwarded:
+            raise ProviderFailure(FailureClass.MISSING_BYOK_KEY)
+        return forwarded
+    api_key = os.getenv(api_key_env, '').strip()
+    if not api_key:
+        raise ProviderFailure(FailureClass.INVALID_CONFIG)
+    return api_key
 
 
 class FakeChatCompletionProvider:
