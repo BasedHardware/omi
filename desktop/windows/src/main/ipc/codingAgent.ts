@@ -10,7 +10,8 @@ import {
   type AdapterCommandOverrides
 } from '../codingAgent/adapterRegistry'
 import { PRODUCTION_ADAPTER_IDS } from '../codingAgent/interface'
-import { cancelTask, runCodingAgentTask } from '../codingAgent/taskRunner'
+import { cancelTask, runCodingAgentTask, testAgentConnection } from '../codingAgent/taskRunner'
+import type { ProductionAdapterId } from '../codingAgent/interface'
 import type {
   CodingAgentEvent,
   CodingAgentInfo,
@@ -50,4 +51,16 @@ export function registerCodingAgentHandlers(): void {
   )
 
   ipcMain.handle('codingAgent:cancel', (_e, taskId: string): boolean => cancelTask(taskId))
+
+  ipcMain.handle(
+    'codingAgent:test',
+    (
+      _e,
+      agentId: ProductionAdapterId,
+      commandOverrides?: AdapterCommandOverrides
+    ): Promise<{ ok: boolean; error?: string }> =>
+      testAgentConnection(agentId, commandOverrides ?? {}, (message) =>
+        console.log(`[codingAgent] ${message}`)
+      )
+  )
 }

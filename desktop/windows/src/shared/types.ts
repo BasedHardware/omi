@@ -301,6 +301,12 @@ export type OmiBridgeApi = {
    *  progress arrives via onCodingAgentEvent, keyed by taskId. */
   codingAgentRun: (args: CodingAgentRunArgs) => Promise<CodingAgentResult>
   codingAgentCancel: (taskId: string) => Promise<boolean>
+  /** Spawn the agent and complete the ACP handshake, then tear it down —
+   *  proves the configured command works (Settings → Agents "Test"). */
+  codingAgentTest: (
+    agentId: CodingAgentId,
+    commandOverrides?: CodingAgentCommandOverrides
+  ) => Promise<{ ok: boolean; error?: string }>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
 }
 

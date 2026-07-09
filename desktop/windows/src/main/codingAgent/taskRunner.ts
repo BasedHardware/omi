@@ -8,6 +8,7 @@ import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import {
   ADAPTER_PROFILES,
+  adapterActivationError,
   adapterConfiguredCommand,
   adapterIsActivated,
   type AdapterCommandOverrides
@@ -27,6 +28,48 @@ export function candidateAgents(
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
   if (!named) return [...connected]
   return [named, ...connected.filter((id) => id !== named)]
+}
+
+const CONNECTION_TEST_TIMEOUT_MS = 20_000
+
+/**
+ * Probe an agent by spawning its adapter and completing the ACP `initialize`
+ * handshake, then tearing it down. Proves the configured command actually
+ * launches and speaks ACP — the check behind Settings → Agents' Test button.
+ */
+export async function testAgentConnection(
+  agentId: ProductionAdapterId,
+  overrides: AdapterCommandOverrides = {},
+  log: (message: string) => void = () => {}
+): Promise<{ ok: boolean; error?: string }> {
+  if (!adapterIsActivated(agentId, overrides)) {
+    return { ok: false, error: adapterActivationError(agentId) ?? 'Not connected.' }
+  }
+  const adapter = ADAPTER_PROFILES[agentId].createAdapter({
+    log: (message) => log(`[${agentId}:test] ${message}`),
+    command: adapterConfiguredCommand(agentId, overrides)
+  })
+  // All production adapters are AcpRuntimeAdapter instances; `request` is the
+  // cheapest real round-trip (start + initialize) without opening a session.
+  const probe = adapter as unknown as {
+    request(method: string, params?: Record<string, unknown>): Promise<unknown>
+  }
+  try {
+    await Promise.race([
+      probe.request('initialize', { protocolVersion: 1 }),
+      new Promise((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error('The agent did not answer the ACP handshake in time.')),
+          CONNECTION_TEST_TIMEOUT_MS
+        )
+      )
+    ])
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: messageFrom(error) }
+  } finally {
+    void adapter.stop().catch(() => {})
+  }
 }
 
 type ActiveTask = {

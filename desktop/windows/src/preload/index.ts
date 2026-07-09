@@ -19,6 +19,7 @@ import type {
   StepResult,
   CodingAgentCommandOverrides,
   CodingAgentEvent,
+  CodingAgentId,
   CodingAgentRunArgs
 } from '../shared/types'
 
@@ -105,6 +106,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('codingAgent:list', commandOverrides),
   codingAgentRun: (args: CodingAgentRunArgs) => ipcRenderer.invoke('codingAgent:run', args),
   codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
+  codingAgentTest: (agentId: CodingAgentId, commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:test', agentId, commandOverrides),
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
     ipcRenderer.on('codingAgent:event', listener)
