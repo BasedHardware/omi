@@ -21,6 +21,17 @@ function feedUrl(): string | null {
 
 export function startWindowsUpdater(): void {
   if (updaterStarted) return
+  // The feed and packaging here are Windows-specific (NSIS artifacts on the
+  // GitHub release feed). Packaged macOS/Linux builds of this package must
+  // never initialize electron-updater or register periodic checks.
+  if (process.platform !== 'win32') {
+    addObservabilityBreadcrumb(
+      'updater.skipped',
+      { reason: 'unsupported_platform', platform: process.platform },
+      { category: 'updater' }
+    )
+    return
+  }
   if (!updatesEnabled()) {
     addObservabilityBreadcrumb('updater.skipped', { reason: 'disabled' }, { category: 'updater' })
     return
