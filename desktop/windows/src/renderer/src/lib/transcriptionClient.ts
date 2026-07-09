@@ -76,13 +76,24 @@ const QUOTA_MESSAGE =
   'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
 function modeForBackend(backend: TranscriptionBackend): SttMode {
-  return backend === 'local-parakeet' ? 'local-parakeet' : 'cloud'
+  if (backend !== 'local-parakeet') return 'cloud'
+  // Send the user's true preference to main: only an explicit Local Parakeet
+  // selection may trigger a first-use runtime/model install. Any other
+  // preference maps local attempts to 'auto', which main serves only from an
+  // already-installed runtime (falling back to cloud otherwise).
+  return (getPreferences().sttMode ?? 'auto') === 'local-parakeet' ? 'local-parakeet' : 'auto'
 }
 
-async function localSttAvailable(): Promise<boolean> {
+/**
+ * True only when the local Parakeet runtime is already installed and healthy.
+ * Deliberately ignores `runtime.canInstall`: a merely-installable runtime must
+ * not pull automatic modes onto the local path, because that would download
+ * native runtime artifacts and model files without an explicit user choice.
+ */
+async function localSttInstalled(): Promise<boolean> {
   try {
     const status = await window.omi.localSttStatus()
-    return status.available || status.runtime.canInstall
+    return status.available
   } catch {
     return false
   }
@@ -91,10 +102,10 @@ async function localSttAvailable(): Promise<boolean> {
 async function initialBackendOrder(): Promise<TranscriptionBackend[]> {
   const preference = getPreferences().sttMode ?? 'auto'
   if (preference === 'cloud') {
-    return (await localSttAvailable()) ? ['omi', 'local-parakeet'] : ['omi']
+    return (await localSttInstalled()) ? ['omi', 'local-parakeet'] : ['omi']
   }
   if (preference === 'local-parakeet') return ['local-parakeet', 'omi']
-  return (await localSttAvailable()) ? ['local-parakeet', 'omi'] : ['omi']
+  return (await localSttInstalled()) ? ['local-parakeet', 'omi'] : ['omi']
 }
 
 /**
@@ -111,6 +122,10 @@ async function startWithBackend(
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
   let outcome: 'pending' | 'connected' | 'failed' = 'pending'
+  // Main can answer a local-parakeet 'auto' attempt with the cloud backend
+  // (e.g. the installed runtime broke between checks). Track what actually
+  // connected so quota/close handling matches the live backend.
+  let effectiveBackend: TranscriptionBackend = backend
   return new Promise<OmiListenHandle | null>((resolve) => {
     let handle: OmiListenHandle | null = null
     const timeout = setTimeout(
@@ -129,6 +144,7 @@ async function startWithBackend(
         onConnected: (actualBackend) => {
           if (outcome !== 'pending') return
           outcome = 'connected'
+          effectiveBackend = actualBackend
           clearTimeout(timeout)
           cb.onBackend(actualBackend)
           resolve(handle)
@@ -139,7 +155,7 @@ async function startWithBackend(
         },
         onEvent: (ev) => {
           cb.onEvent?.(ev)
-          if (backend !== 'omi' || !isQuotaExhaustedEvent(ev)) return
+          if (effectiveBackend !== 'omi' || !isQuotaExhaustedEvent(ev)) return
           // Free quota is used up — the cloud STT will never emit transcripts.
           if (outcome === 'pending') {
             outcome = 'failed'
@@ -147,18 +163,18 @@ async function startWithBackend(
             void handle?.stop().catch(() => undefined)
             resolve(null)
           } else if (outcome === 'connected') {
-            onLost('Omi free quota exhausted', backend)
+            onLost('Omi free quota exhausted', effectiveBackend)
           }
         },
         onClosed: (code, reason) => {
           if (outcome !== 'connected') return
           const message =
-            backend === 'omi'
+            effectiveBackend === 'omi'
               ? isQuotaClose(code, reason)
                 ? QUOTA_MESSAGE
                 : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
               : `Local Parakeet STT closed (${code})${reason ? ` ${reason}` : ''}`
-          onLost(message, backend)
+          onLost(message, effectiveBackend)
         },
         onError: (err, fatal) => {
           if (outcome === 'pending' && fatal) {
@@ -170,11 +186,11 @@ async function startWithBackend(
             return
           }
           if (outcome === 'connected') {
-            if (backend === 'omi' && isTrialExpiredError(err)) {
-              onLost(QUOTA_MESSAGE, backend)
+            if (effectiveBackend === 'omi' && isTrialExpiredError(err)) {
+              onLost(QUOTA_MESSAGE, effectiveBackend)
               return
             }
-            onLost(err.message, backend)
+            onLost(err.message, effectiveBackend)
           }
         }
       },
@@ -200,10 +216,12 @@ async function startWithBackend(
 }
 
 /**
- * Begin transcribing one audio source. Auto mode uses local Parakeet only when a
- * healthy supported local runtime is present; otherwise it uses Omi /v4/listen.
- * Local model/runtime failure falls back to hosted cloud, and hosted startup/loss
- * can try local once when the runtime is available.
+ * Begin transcribing one audio source. Auto mode uses local Parakeet only when
+ * the local runtime is already installed and healthy; otherwise it uses Omi
+ * /v4/listen and never installs anything. Only the explicit 'local-parakeet'
+ * preference may trigger the first-use runtime/model install. Local
+ * model/runtime failure falls back to hosted cloud, and hosted startup/loss can
+ * try local once when the runtime is already installed.
  */
 export async function startTranscription(
   source: ListenSource,
@@ -220,7 +238,7 @@ export async function startTranscription(
       if (stopped) return
       const fallback: TranscriptionBackend = lostBackend === 'omi' ? 'local-parakeet' : 'omi'
       void (async () => {
-        if (fallback === 'local-parakeet' && !(await localSttAvailable())) {
+        if (fallback === 'local-parakeet' && !(await localSttInstalled())) {
           if (stopped) return
           cb.onError(new Error(`Transcription stopped: ${reason}`))
           return
