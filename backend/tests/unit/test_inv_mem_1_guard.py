@@ -199,6 +199,24 @@ def _v3_result(**overrides) -> V3ControlReadResult:
     return V3ControlReadResult(**values)
 
 
+_RATchet_PARSE_CACHE: dict[str, ast.Module] = {}
+_RATchet_TEXT_CACHE: dict[str, str] = {}
+
+
+def _file_text(path: Path) -> str:
+    key = path.as_posix()
+    if key not in _RATchet_TEXT_CACHE:
+        _RATchet_TEXT_CACHE[key] = path.read_text(encoding="utf-8")
+    return _RATchet_TEXT_CACHE[key]
+
+
+def _parsed_tree(path: Path) -> ast.Module:
+    key = path.as_posix()
+    if key not in _RATchet_PARSE_CACHE:
+        _RATchet_PARSE_CACHE[key] = ast.parse(_file_text(path))
+    return _RATchet_PARSE_CACHE[key]
+
+
 def _iter_ratchet_python_files() -> List[Path]:
     files: Set[Path] = set()
     for pattern in _RATchet_SCAN_GLOBS:
@@ -452,13 +470,13 @@ class TestInvMemSourceRatchet:
         offenders: List[str] = []
         for path in _iter_ratchet_python_files():
             rel_path = _relative_backend_path(path)
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = _parsed_tree(path)
             offenders.extend(_tier_assignment_offenders(tree, rel_path=rel_path))
         assert offenders == [], "INV-MEM-1 forbidden product tier literals:\n" + "\n".join(offenders)
 
     def test_default_read_paths_do_not_include_archive_without_explicit_mode(self):
         offenders: List[str] = []
         for path in _iter_ratchet_python_files():
-            text = path.read_text(encoding="utf-8")
+            text = _file_text(path)
             offenders.extend(_archive_default_read_offenders(path, text))
         assert offenders == [], "INV-MEM-1 forbidden archive in default-read paths:\n" + "\n".join(offenders)
