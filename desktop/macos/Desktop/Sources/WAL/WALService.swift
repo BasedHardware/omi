@@ -4,6 +4,13 @@ import OmiSupport
 import OmiWAL
 import os.log
 
+// MARK: - WAL Persistence State
+
+enum WALPersistenceState: Equatable {
+    case ready
+    case degraded(reason: String)
+}
+
 // MARK: - WAL Service
 
 /// Main coordinator for Write-Ahead Log sync operations
@@ -33,6 +40,9 @@ final class WALService: ObservableObject {
     /// Last error message
     @Published var errorMessage: String?
 
+    /// Local WAL directory health — `.degraded` when frames cannot be persisted safely.
+    @Published private(set) var persistenceState: WALPersistenceState = .ready
+
     // MARK: - Constants
 
     /// Chunk duration in seconds (create WAL every N seconds)
@@ -61,8 +71,11 @@ final class WALService: ObservableObject {
     var uploadLocalFilesHandler: ((URL) async throws -> UploadLocalFilesResult)?
 
     /// Test-only: point WAL I/O at a temp directory.
-    func setWalDirectoryForTesting(_ url: URL) {
+    func setWalDirectoryForTesting(_ url: URL?) {
         walDirectory = url
+        if url != nil {
+            persistenceState = .ready
+        }
     }
 
     func setWalsForTesting(_ entries: [WALEntry]) {
@@ -77,7 +90,17 @@ final class WALService: ObservableObject {
         flushToDisk()
     }
 
+    func createWalFromCurrentFramesForTesting() {
+        createWalFromCurrentFrames()
+    }
+
+    var currentFrameCountForTesting: Int {
+        currentFrames.count
+    }
+
     private var walDirectory: URL?
+    private var directoryRecreateAttempts = 0
+    private let maxDirectoryRecreateAttempts = 3
     private var flushTimer: Timer?
     private var chunkTimer: Timer?
 
@@ -105,13 +128,36 @@ final class WALService: ObservableObject {
     private func setupWalDirectory() {
         let walDir = DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("wals", isDirectory: true)
+        attemptWalDirectorySetup(at: walDir)
+    }
 
+    private func attemptWalDirectorySetup(at walDir: URL) {
         do {
             try fileManager.createDirectory(at: walDir, withIntermediateDirectories: true)
             walDirectory = walDir
+            persistenceState = .ready
+            directoryRecreateAttempts = 0
             logger.info("WAL directory: \(walDir.path)")
         } catch {
-            logger.error("Failed to create WAL directory: \(error.localizedDescription)")
+            directoryRecreateAttempts += 1
+            let reason = error.localizedDescription
+            persistenceState = .degraded(reason: reason)
+            errorMessage = "Audio backup storage unavailable. Recording continues locally in memory."
+            log(
+                "WALService: failed to create WAL directory "
+                    + "(failure_class=wal_persistence_degraded recovery_action=recreate_directory "
+                    + "recovery_result=degraded attempt=\(directoryRecreateAttempts)/\(maxDirectoryRecreateAttempts)): "
+                    + reason)
+            logError("WALService: failed to create WAL directory", error: error)
+            DesktopDiagnosticsManager.shared.recordWalPersistenceDegraded(
+                reason: reason,
+                recoveryAction: "recreate_directory",
+                recoveryResult: directoryRecreateAttempts < maxDirectoryRecreateAttempts ? "retrying" : "exhausted"
+            )
+            guard directoryRecreateAttempts < maxDirectoryRecreateAttempts else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(directoryRecreateAttempts)) { [weak self] in
+                self?.attemptWalDirectorySetup(at: walDir)
+            }
         }
     }
 
@@ -286,6 +332,21 @@ final class WALService: ObservableObject {
               let startTime = recordingStartTime,
               !currentFrames.isEmpty else { return }
 
+        guard walDirectory != nil else {
+            let reason = "wal_directory_unavailable"
+            persistenceState = .degraded(reason: reason)
+            errorMessage = "Audio backup storage unavailable. Recording continues locally in memory."
+            log(
+                "WALService: skipping WAL chunk — no directory "
+                    + "(failure_class=wal_persistence_degraded recovery_action=retain_frames recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordWalPersistenceDegraded(
+                reason: reason,
+                recoveryAction: "retain_frames",
+                recoveryResult: "degraded"
+            )
+            return
+        }
+
         // Calculate actual duration based on frames
         let framesPerSecond = codec == "opus_fs320" ? 50 : 100
         let seconds = max(1, currentFrames.count / framesPerSecond)
@@ -311,10 +372,22 @@ final class WALService: ObservableObject {
             logger.info("Created new WAL: \(wal.id) with \(self.currentFrames.count) frames")
         }
 
-        // Write frames to disk
-        writeFramesToDisk(frames: currentFrames, wal: wal)
+        let framesToWrite = currentFrames
+        let wrote = writeFramesToDiskAndWait(frames: framesToWrite, wal: wal)
+        guard wrote else {
+            errorMessage = "Failed to save audio backup. Recording continues in memory."
+            log(
+                "WALService: frame write failed — retaining \(framesToWrite.count) in-memory frames "
+                    + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordWalWriteFailed(
+                walId: wal.id,
+                reason: "frame_write_failed"
+            )
+            updatePendingWals()
+            return
+        }
 
-        // Clear current frames
+        // Clear current frames only after durable write succeeds (#9240).
         currentFrames = []
         currentFramesSynced = []
         recordingStartTime = Int(Date().timeIntervalSince1970)
@@ -324,7 +397,10 @@ final class WALService: ObservableObject {
     }
 
     private func writeFramesToDisk(frames: [Data], wal: WALEntry) {
-        guard let walDir = walDirectory else { return }
+        guard let walDir = walDirectory else {
+            recordFrameWriteFailure(walId: wal.id, reason: "wal_directory_unavailable")
+            return
+        }
 
         let fileName = wal.generateFileName()
         let fileUrl = walDir.appendingPathComponent(fileName)
@@ -359,16 +435,26 @@ final class WALService: ObservableObject {
                     }
                 }
             } catch {
-                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
+                let reason = error.localizedDescription
+                log(
+                    "WALService: Failed to write frames to disk "
+                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+                        + reason)
+                DispatchQueue.main.async {
+                    self?.recordFrameWriteFailure(walId: walId, reason: reason)
+                }
             }
         }
     }
 
     /// Synchronous variant that writes off-main but blocks the caller until the
-    /// file is on disk and filePath is set. Used by the BLE SD-card download path
-    /// (which already runs off-main) where syncToCloud must read filePath next.
-    private func writeFramesToDiskAndWait(frames: [Data], wal: WALEntry) {
-        guard let walDir = walDirectory else { return }
+    /// file is on disk and filePath is set. Returns false when persistence fails.
+    @discardableResult
+    private func writeFramesToDiskAndWait(frames: [Data], wal: WALEntry) -> Bool {
+        guard let walDir = walDirectory else {
+            recordFrameWriteFailure(walId: wal.id, reason: "wal_directory_unavailable")
+            return false
+        }
 
         let fileName = wal.generateFileName()
         let fileUrl = walDir.appendingPathComponent(fileName)
@@ -391,7 +477,12 @@ final class WALService: ObservableObject {
                 log("WALService: Wrote \(frameCount) frames to \(fileName)")
                 writeSucceeded = true
             } catch {
-                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
+                let reason = error.localizedDescription
+                log(
+                    "WALService: Failed to write frames to disk "
+                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+                        + reason)
+                writeSucceeded = false
             }
             group.leave()
         }
@@ -400,7 +491,22 @@ final class WALService: ObservableObject {
         if writeSucceeded, let index = wals.firstIndex(where: { $0.id == walId }) {
             wals[index].storage = .disk
             wals[index].filePath = fileName
+            return true
         }
+
+        if !writeSucceeded {
+            recordFrameWriteFailure(walId: walId, reason: "frame_write_failed")
+        }
+        return false
+    }
+
+    private func recordFrameWriteFailure(walId: String, reason: String) {
+        errorMessage = "Failed to save audio backup. Recording continues in memory."
+        persistenceState = .degraded(reason: reason)
+        log(
+            "WALService: frame write failed for \(walId) "
+                + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded reason=\(reason))")
+        DesktopDiagnosticsManager.shared.recordWalWriteFailed(walId: walId, reason: reason)
     }
 
     private func writeWalToDisk(at index: Int) {
@@ -544,6 +650,23 @@ final class WALService: ObservableObject {
     }
 
     private func uploadWalToCloud(_ wal: WALEntry) async throws {
+        do {
+            try await performWalUpload(wal)
+        } catch {
+            if case APIError.syncRateLimited = error {
+                throw error
+            }
+            let reason = String(describing: error)
+            log(
+                "WALService: upload failed for \(wal.id) "
+                    + "(failure_class=wal_upload_failed recovery_action=leave_pending recovery_result=degraded): "
+                    + reason)
+            DesktopDiagnosticsManager.shared.recordWalUploadFailed(walId: wal.id, reason: reason)
+            throw error
+        }
+    }
+
+    private func performWalUpload(_ wal: WALEntry) async throws {
         guard let walDir = walDirectory,
               let filePath = wal.filePath else {
             throw WALError.fileNotFound

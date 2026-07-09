@@ -13,6 +13,7 @@ final class WALServiceUploadTests: XCTestCase {
       .appendingPathComponent("wal-upload-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: walDir, withIntermediateDirectories: true)
 
+    DesktopDiagnosticsManager.shared.resetForTests()
     service = WALService(apiClient: APIClient(session: makeMockSession()))
     service.setWalDirectoryForTesting(walDir)
     service.setWalsForTesting([])
@@ -21,6 +22,7 @@ final class WALServiceUploadTests: XCTestCase {
 
   override func tearDown() async throws {
     service.uploadLocalFilesHandler = nil
+    DesktopDiagnosticsManager.shared.resetForTests()
     try? FileManager.default.removeItem(at: walDir)
   }
 
@@ -134,5 +136,48 @@ final class WALServiceUploadTests: XCTestCase {
     service.flushToDiskForTesting()
 
     XCTAssertEqual(service.wals.first?.storage, .disk)
+  }
+
+  func testDegradedDirectoryRetainsCurrentFramesAndRecordsHealth() throws {
+    service.setWalDirectoryForTesting(nil)
+    service.startRecording(device: "dev1", codec: "opus")
+    service.addFrame(Data([0x01, 0x02]))
+
+    service.createWalFromCurrentFramesForTesting()
+
+    XCTAssertEqual(service.currentFrameCountForTesting, 1)
+    XCTAssertEqual(service.persistenceState, .degraded(reason: "wal_directory_unavailable"))
+    XCTAssertNotNil(service.errorMessage)
+
+    let snapshot = try latestHealthSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "wal_persistence_degraded")
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "retain_frames")
+  }
+
+  func testUploadFailureRecordsHealthSnapshot() async throws {
+    let wal = try seedWalOnDisk()
+    service.uploadLocalFilesHandler = { _ in
+      throw APIError.syncUploadRejected(reason: "Server error")
+    }
+
+    do {
+      try await service.uploadWalToCloudForTesting(wal)
+      XCTFail("expected upload failure")
+    } catch {
+      // expected
+    }
+
+    let snapshot = try latestHealthSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "wal_upload_failed")
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "leave_pending")
+  }
+
+  private func latestHealthSnapshot() throws -> [String: Any] {
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    return try XCTUnwrap(snapshots.last)
   }
 }

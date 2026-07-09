@@ -6,6 +6,9 @@ enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
   case authSessionCleared = "auth_session_cleared"
   case transcriptionWsReconnectExhausted = "transcription_ws_reconnect_exhausted"
+  case walPersistenceDegraded = "wal_persistence_degraded"
+  case walWriteFailed = "wal_write_failed"
+  case walUploadFailed = "wal_upload_failed"
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -104,6 +107,41 @@ final class DesktopDiagnosticsManager {
         "failure_class": "ws_reconnect_exhausted",
         "recovery_action": "surface_error",
         "recovery_result": "exhausted",
+      ])
+  }
+
+  func recordWalPersistenceDegraded(reason: String, recoveryAction: String, recoveryResult: String) {
+    record(
+      .walPersistenceDegraded,
+      properties: [
+        "reason": reason,
+        "failure_class": "wal_persistence_degraded",
+        "recovery_action": recoveryAction,
+        "recovery_result": recoveryResult,
+      ])
+  }
+
+  func recordWalWriteFailed(walId: String, reason: String) {
+    record(
+      .walWriteFailed,
+      properties: [
+        "wal_id": walId,
+        "reason": reason,
+        "failure_class": "wal_write_failed",
+        "recovery_action": "retain_frames",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordWalUploadFailed(walId: String, reason: String) {
+    record(
+      .walUploadFailed,
+      properties: [
+        "wal_id": walId,
+        "reason": reason,
+        "failure_class": "wal_upload_failed",
+        "recovery_action": "leave_pending",
+        "recovery_result": "degraded",
       ])
   }
 
