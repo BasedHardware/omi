@@ -14,39 +14,20 @@ import XCTest
 final class MemoriesViewModelObserverTests: XCTestCase {
     private var testUserId: String!
     private var userDir: URL!
-    private var savedAuthSignedIn: Bool!
-    private var savedAuthUserId: String?
+    private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot!
 
     override func setUp() async throws {
         try await super.setUp()
-        testUserId = "memories-vm-observer-\(UUID().uuidString)"
-        RewindDatabase.currentUserId = testUserId
-        await MemoryStorage.shared.invalidateCache()
-        try await RewindDatabase.shared.initialize()
-
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        userDir = appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
-            .appendingPathComponent("users", isDirectory: true)
-            .appendingPathComponent(testUserId, isDirectory: true)
-
-        savedAuthSignedIn = AuthState.shared.isSignedIn
-        savedAuthUserId = UserDefaults.standard.string(forKey: "auth_userId")
-        AuthState.shared.update(isSignedIn: true)
-        UserDefaults.standard.set(testUserId, forKey: "auth_userId")
+        authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
+        let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-vm-observer")
+        testUserId = fixture.testUserId
+        userDir = fixture.userDir
+        RewindStorageTestIsolation.signInForTests(userId: testUserId)
     }
 
     override func tearDown() async throws {
-        await MemoryStorage.shared.invalidateCache()
-        if let userDir { try? FileManager.default.removeItem(at: userDir) }
-        RewindDatabase.currentUserId = nil
-        AuthState.shared.update(isSignedIn: savedAuthSignedIn)
-        if let savedAuthUserId {
-            UserDefaults.standard.set(savedAuthUserId, forKey: "auth_userId")
-        } else {
-            UserDefaults.standard.removeObject(forKey: "auth_userId")
-        }
+        RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+        await RewindStorageTestIsolation.tearDown(userDir: userDir)
         try await super.tearDown()
     }
 
