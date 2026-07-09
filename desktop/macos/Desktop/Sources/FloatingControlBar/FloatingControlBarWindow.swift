@@ -163,6 +163,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var pttHintCancellable: AnyCancellable?
     private var agentPillsCancellable: AnyCancellable?
     private var voiceResponseGlowCancellable: AnyCancellable?
+    private var draggableBarCancellable: AnyCancellable?
     private var previousVoiceResponseGlowActive = false
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -189,7 +190,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.isVoiceListening || state.isThinking || state.isVoiceResponseGlowActive
     }
     private var notchModeEnabled: Bool {
-        Self.screenHasCameraHousing(screenForPlacement) || barWantsActiveIsland
+        Self.shouldUseNotchIsland(
+            displayHasCameraHousing: Self.screenHasCameraHousing(screenForPlacement),
+            hasActiveIsland: barWantsActiveIsland,
+            draggableBarEnabled: ShortcutSettings.shared.draggableBarEnabled
+        )
     }
     /// Hardware-only notch detection (ignores the transient active-island state) —
     /// "does this display physically have a camera housing".
@@ -312,11 +317,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialSize = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+        let initialScreen = NSScreen.main ?? NSScreen.screens.first
+        let initialUsesNotchIsland = FloatingControlBarWindow.shouldUseNotchIsland(
+            displayHasCameraHousing: FloatingControlBarWindow.screenHasCameraHousing(initialScreen),
+            hasActiveIsland: false,
+            draggableBarEnabled: ShortcutSettings.shared.draggableBarEnabled
+        )
+        let initialSize = initialUsesNotchIsland
             ? NSSize(
-                width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
+                width: FloatingControlBarWindow.notchHiddenCenterWidth(for: initialScreen)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
-                height: FloatingControlBarWindow.notchChromeHeight(for: NSScreen.main ?? NSScreen.screens.first)
+                height: FloatingControlBarWindow.notchChromeHeight(for: initialScreen)
             )
             : FloatingControlBarWindow.minBarSize
         let initialRect = NSRect(origin: .zero, size: initialSize)
@@ -332,9 +343,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
-            ? .statusBar
-            : .floating
+        self.level = initialUsesNotchIsland ? .statusBar : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -403,6 +412,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return false
     }
 
+    /// A physical notch is fixed to the display, so the movable-bar preference
+    /// always opts into the pill presentation instead.
+    static func shouldUseNotchIsland(
+        displayHasCameraHousing: Bool,
+        hasActiveIsland: Bool,
+        draggableBarEnabled: Bool
+    ) -> Bool {
+        !draggableBarEnabled && (displayHasCameraHousing || hasActiveIsland)
+    }
+
     static func notchChromeHeight(for screen: NSScreen?) -> CGFloat {
         guard let screen else { return notchChromeHeight }
         if #available(macOS 12.0, *) {
@@ -465,6 +484,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.notchRevealProgress = 1
         }
         level = usesNotch ? .statusBar : .floating
+    }
+
+    private func refreshPresentationForDraggableBarPreference() {
+        let wasUsingNotchIsland = state.usesNotchIsland
+        updateNotchIslandState()
+        guard wasUsingNotchIsland != state.usesNotchIsland,
+              let screen = screenForPlacement
+        else { return }
+
+        let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
+        resizeToFrame(
+            targetFrame,
+            makeResizable: state.showingAIConversation && state.showingAIResponse,
+            animated: isVisible
+        )
     }
 
     override var canBecomeKey: Bool { true }
@@ -584,6 +618,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self?.performSpacesTransitionGrowIn()
             }
         }
+
+        draggableBarCancellable = ShortcutSettings.shared.$draggableBarEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshPresentationForDraggableBarPreference()
+                }
+            }
 
         // Follow cursor across monitors — poll mouse position to move bar instantly
         startCursorScreenTracking()
@@ -1950,7 +1992,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if Self.screenHasCameraHousing(screen) {
+        if notchModeEnabled {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")

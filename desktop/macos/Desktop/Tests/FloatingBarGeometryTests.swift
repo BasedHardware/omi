@@ -20,6 +20,30 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(frame.size, compactSize)
     }
 
+    func testDraggableBarForcesPillPresentationOnNotchedDisplays() {
+        XCTAssertFalse(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: false,
+                draggableBarEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: true,
+                draggableBarEnabled: true
+            )
+        )
+        XCTAssertTrue(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: false,
+                draggableBarEnabled: false
+            )
+        )
+    }
+
     func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {
         let compactFrame = NSRect(x: 586, y: 876, width: 268, height: 58)
         let expandedFrame = FloatingControlBarGeometry.topCenterAnchoredFrame(
