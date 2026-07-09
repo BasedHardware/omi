@@ -846,7 +846,11 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
         if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+            # Pass the just-installed app path so seed can resolve Team ID and
+            # clear any prior CLI-written Keychain item (apple-tool: partition).
+            # Tokens are seeded into UserDefaults; the app migrates them into
+            # Keychain on launch with the correct teamid: partition (no prompt).
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
                 auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
             else
                 echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."

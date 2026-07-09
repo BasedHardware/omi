@@ -223,6 +223,26 @@ final class AuthTokenStorageTests: XCTestCase {
       "ClientDeviceService must gate Keychain use to the production bundle only")
   }
 
+  /// Regression: named-bundle auth seed must NOT write tokens via `security
+  /// add-generic-password`. That stamps partition list `apple-tool:` only; the app's
+  /// SecItemCopyMatching then shows the login-keychain password sheet even when `-T`
+  /// TrustedApplication is set. Seed UserDefaults tokens and let AuthService migrate
+  /// into Keychain on launch (app-created items get the correct teamid: partition).
+  func testAuthSeedScriptDoesNotCLIWriteKeychainTokens() throws {
+    let source = try scriptFile("omi-auth-seed.sh")
+    // Match a real security invocation, not comments that name the forbidden command.
+    XCTAssertFalse(
+      source.contains("security\", \"add-generic-password")
+        || source.contains("security add-generic-password"),
+      "omi-auth-seed.sh must not CLI-write Keychain tokens (apple-tool: partition prompts the app)")
+    XCTAssertTrue(
+      source.contains("delete-generic-password"),
+      "omi-auth-seed.sh must clear any prior CLI-written Keychain item before launch")
+    XCTAssertTrue(
+      source.contains("auth_idToken"),
+      "omi-auth-seed.sh must seed auth_idToken into UserDefaults for app-side Keychain migrate")
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -230,6 +250,16 @@ final class AuthTokenStorageTests: XCTestCase {
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func scriptFile(_ name: String) throws -> String {
+    let scriptURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("scripts")
+      .appendingPathComponent(name)
+    return try String(contentsOf: scriptURL, encoding: .utf8)
   }
 
   private func clearAuthDefaults() {

@@ -237,7 +237,8 @@ Agents can and should self-test the running app — don't stop at a successful c
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once; `./run.sh` auto-clones auth/onboarding plus common shortcuts/settings into named bundles **before launch** (UserDefaults is read at startup). To do it manually:
    ```bash
    cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
-   ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle
+   ./scripts/omi-auth-seed.sh com.omi.omi-<feature> \
+     tmp/desktop-auth.json "/Applications/omi-<feature>.app"  # clears stale Keychain; UD→KC migrate
    ./scripts/omi-settings-seed.sh com.omi.omi-<feature>       # replay shortcuts/settings
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.
