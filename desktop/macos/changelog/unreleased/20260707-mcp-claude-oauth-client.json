@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Claude MCP connector setup to use the registered production OAuth client instead of a stale fallback"
-}
