@@ -66,6 +66,11 @@ class ChatToolExecutor {
     let hasReadableUserFileTarget: Bool
     let didCompleteSuccessfully: Bool
     let indexedFileCount: Int
+    /// User-file folders (e.g. "~/Downloads") the scan could not read because
+    /// access was denied. System targets like /Applications are excluded.
+    let deniedUserFolders: [String]
+    /// Agent-facing markdown scan report for the chat surface. UI surfaces
+    /// must compose their messages from the structured fields instead.
     let summaryText: String
   }
 
@@ -1294,6 +1299,7 @@ class ChatToolExecutor {
 
     // Pre-check folder access — this triggers macOS TCC dialogs
     var deniedFolders: [String] = []
+    var deniedUserFolders: [String] = []
     var accessibleFolders: [URL] = []
     var readableUserFileTargetCount = 0
     for target in scanTargets {
@@ -1312,6 +1318,9 @@ class ChatToolExecutor {
         if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
           // Permission denied — TCC dialog was shown or already denied
           deniedFolders.append(target.pathForUser)
+          if target.countsAsUserFileAccess {
+            deniedUserFolders.append(target.pathForUser)
+          }
         } else {
           // Other error (e.g. folder doesn't exist) — skip silently
           log("FileIndexer: Pre-check failed for \(target.label): \(error.localizedDescription)")
@@ -1326,9 +1335,14 @@ class ChatToolExecutor {
     )
 
     // Build results from database
-    let resultsStr = await getFileScanResultsFromDB()
-
-    var out = resultsStr
+    var didCompleteSuccessfully = true
+    var out: String
+    do {
+      out = try await getFileScanResultsFromDB()
+    } catch {
+      didCompleteSuccessfully = false
+      out = "Error: \(error.localizedDescription)"
+    }
 
     if !deniedFolders.isEmpty {
       out += "\n\n## FOLDER ACCESS DENIED\n"
@@ -1342,15 +1356,22 @@ class ChatToolExecutor {
 
     return LocalFileScanOutcome(
       hasReadableUserFileTarget: readableUserFileTargetCount > 0,
-      didCompleteSuccessfully: !resultsStr.lowercased().hasPrefix("error"),
+      didCompleteSuccessfully: didCompleteSuccessfully,
       indexedFileCount: count,
+      deniedUserFolders: deniedUserFolders,
       summaryText: out)
   }
 
+  private enum FileScanResultsError: LocalizedError {
+    case databaseNotAvailable
+
+    var errorDescription: String? { "database not available" }
+  }
+
   /// Get file scan results from the database
-  private static func getFileScanResultsFromDB() async -> String {
+  private static func getFileScanResultsFromDB() async throws -> String {
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
-      return "Error: database not available"
+      throw FileScanResultsError.databaseNotAvailable
     }
 
     do {
@@ -1474,7 +1495,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool get_file_scan_results failed", error: error)
-      return "Error: \(error.localizedDescription)"
+      throw error
     }
   }
 

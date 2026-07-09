@@ -1,0 +1,3 @@
+{
+    "change": "Local files connector now shows a concise status line instead of a raw scan report, with a clear message when folder access is denied"
+}
