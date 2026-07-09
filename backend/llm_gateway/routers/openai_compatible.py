@@ -10,7 +10,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
-from llm_gateway.gateway.credentials import CredentialContext, build_omi_managed_credential_context
+from llm_gateway.gateway.credentials import (
+    CredentialContext,
+    build_byok_credential_context,
+    build_omi_managed_credential_context,
+    parse_forwarded_byok_headers,
+)
 from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayErrorCode,
@@ -47,7 +52,7 @@ async def create_chat_completion(
     try:
         request_body = await _request_json(request)
         resolved_route = resolve_chat_completion_route(config, request_body)
-        credentials = build_omi_managed_credential_context(caller)
+        credentials = _resolve_credentials(request, caller)
         if resolved_route.validated_request.forwarded_params.get('stream') is True:
             return await _streaming_response(resolved_route, credentials, provider_registry)
         result = await execute_chat_completion(resolved_route, credentials, provider_registry)
@@ -82,6 +87,13 @@ async def _request_json(request: Request) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise GatewayInvalidRequestError('request body must be an object')
     return cast(dict[str, Any], body)
+
+
+def _resolve_credentials(request: Request, caller: ServiceAuthDependency) -> CredentialContext:
+    forwarded = parse_forwarded_byok_headers(request.headers)
+    if forwarded:
+        return build_byok_credential_context(caller, forwarded)
+    return build_omi_managed_credential_context(caller)
 
 
 def _error_response(exc: GatewayError) -> JSONResponse:

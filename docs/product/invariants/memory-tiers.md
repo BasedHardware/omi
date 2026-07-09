@@ -20,9 +20,11 @@ default access policy of Short-term + Long-term.
 
 ## Guard tests
 
-- Normative architecture and domain model are the contract; backend unit/contract
-  tests that pin tier vocabulary and default access must stay green when those
-  paths change. See linked docs for the authoritative schema and policy.
+- `backend/tests/unit/test_inv_mem_1_guard.py` — default access policy
+  (`short_term` + `long_term` only), canonical `memory_items` collection path,
+  source ratchet against new tier-store collections and non-canonical tier literals
+- Normative architecture and domain model remain the contract; see linked docs for
+  authoritative schema and policy
 
 ## Path globs
 

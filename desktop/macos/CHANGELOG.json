@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.63",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed desktop sign-in so expired sessions show a Sign in button instead of a dead-end AI error, and chat drafts are preserved when re-authenticating."
+      ]
+    },
+    {
       "version": "0.12.62",
       "date": "2026-07-09",
       "changes": [
