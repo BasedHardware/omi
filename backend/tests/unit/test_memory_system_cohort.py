@@ -84,9 +84,15 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
         assert resolve_memory_system("uid-memory-dogfood", db_client=_Db(db_docs)) == MemorySystem.LEGACY
 
 
-_EXPECTED_CANONICAL_OWNER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"  # david.d.zhang@gmail.com
+_EXPECTED_CANONICAL_COHORT_UIDS = frozenset(
+    {
+        "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com
+        # Next dogfood (re-enable with CANONICAL_MEMORY_USERS):
+        # "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com
+    }
+)
 
 
-def test_production_cohort_constant_contains_single_owner():
-    """Guardrail: canonical rollout stays intentionally limited to one production owner."""
-    assert CANONICAL_MEMORY_USERS == frozenset({_EXPECTED_CANONICAL_OWNER_UID})
+def test_production_cohort_constant_matches_approved_dogfood_uids():
+    """Guardrail: canonical rollout stays intentionally limited to approved dogfood UIDs."""
+    assert CANONICAL_MEMORY_USERS == _EXPECTED_CANONICAL_COHORT_UIDS
