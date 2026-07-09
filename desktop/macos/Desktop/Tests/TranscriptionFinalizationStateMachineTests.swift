@@ -108,6 +108,38 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
                     """.utf8
                 )
             )
+        } else if path == "/v1/conversations/client-recording-id/finalize" {
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(
+                self,
+                didLoad: Data(
+                    """
+                    {
+                      "conversation": {
+                        "id": "client-recording-id",
+                        "created_at": "2026-07-07T10:00:00Z",
+                        "started_at": "2026-07-07T10:00:00Z",
+                        "finished_at": "2026-07-07T10:01:00Z",
+                        "structured": {
+                          "title": "Exact recording recovery",
+                          "overview": "Recovered by client recording identity",
+                          "emoji": "",
+                          "category": "other",
+                          "action_items": [],
+                          "events": []
+                        },
+                        "status": "completed",
+                        "source": "desktop",
+                        "discarded": false,
+                        "deleted": false,
+                        "starred": false,
+                        "deferred": false
+                      }
+                    }
+                    """.utf8
+                )
+            )
         } else {
             let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -453,6 +485,47 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertEqual(json["client_conversation_id"] as? String, "client-fallback-id")
         let segments = try XCTUnwrap(json["transcript_segments"] as? [[String: Any]])
         XCTAssertEqual(segments.first?["text"] as? String, "saved transcript for recovery")
+    }
+
+    func testFinalizationRecoversStaleBackendBindingWithExactClientRecordingId() async throws {
+        FinalizationRecoveryURLStub.reset()
+        setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [FinalizationRecoveryURLStub.self]
+        let client = APIClient(session: URLSession(configuration: config))
+        await client.setTestAuthHeader("Bearer test-token")
+        await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+        addTeardownBlock {
+            await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+        }
+        defer {
+            unsetenv("OMI_PYTHON_API_URL")
+            FinalizationRecoveryURLStub.reset()
+        }
+
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            clientConversationId: "client-recording-id",
+            finalizationStrategy: .cloudReconcile
+        )
+        try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: "stale-backend-id")
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+
+        await ConversationFinalizationService.shared.finalizeSession(
+            id: sessionId,
+            reason: .userStop,
+            allowCloudForceProcess: true
+        )
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.backendId, "client-recording-id")
+        XCTAssertTrue(session.backendSynced)
+        XCTAssertEqual(
+            FinalizationRecoveryURLStub.requests.map(\.url.path),
+            ["/v1/conversations/client-recording-id/finalize"]
+        )
     }
 
     func testFreshUploadingSessionWaitsForStaleRecoveryWindow() async throws {
