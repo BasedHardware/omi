@@ -302,6 +302,28 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     expect((error as Error).message).toContain('cancelled')
   })
 
+  it('pre-aborted attempts still observe the in-flight request (no unhandled rejection)', async () => {
+    const adapter = makeAdapter()
+    scriptJsonRpc(proc, (message) => {
+      answerCommonHandshake(proc, message)
+      // session/prompt intentionally never answered.
+    })
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+
+    const abort = new AbortController()
+    abort.abort() // aborted BEFORE the attempt starts
+    const error = await adapter
+      .executeAttempt(makeAttemptContext(), () => {}, abort.signal)
+      .catch((e: Error) => e)
+    expect((error as Error).message).toContain('cancelled')
+
+    // The pending session/prompt request now rejects (process exit). It must
+    // already have handlers attached — an unhandled rejection here would fail
+    // the vitest run.
+    proc.emit('exit', 1)
+    await new Promise((resolve) => setImmediate(resolve))
+  })
+
   it('dispatches session/cancel on cancelAttempt', async () => {
     const adapter = makeAdapter()
     const cancels: unknown[] = []

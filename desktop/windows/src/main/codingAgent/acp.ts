@@ -559,15 +559,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
           fn()
         }
         const onAbort = (): void => finish(() => reject(new Error('ACP attempt cancelled')))
+        // Observe the in-flight request FIRST: even when already aborted, a
+        // later rejection of the underlying session/prompt promise must not
+        // surface as an unhandled rejection. finish() guards double-settling.
+        promise.then(
+          (value) => finish(() => resolve(value)),
+          (error) => finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+        )
         if (signal.aborted) {
           onAbort()
           return
         }
         signal.addEventListener('abort', onAbort, { once: true })
-        promise.then(
-          (value) => finish(() => resolve(value)),
-          (error) => finish(() => reject(error instanceof Error ? error : new Error(String(error))))
-        )
       })
     }
 
