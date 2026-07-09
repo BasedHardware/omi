@@ -6,6 +6,7 @@ import {
   ListChecks,
   LayoutGrid,
   History,
+  Bot,
   Monitor,
   Mic,
   PanelLeftClose,
@@ -22,6 +23,7 @@ const navItems = [
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
   { label: 'Rewind', to: '/rewind', Icon: History },
+  { label: 'AI Clone', to: '/clone', Icon: Bot },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid }
 ]
 
@@ -51,6 +53,18 @@ export function Sidebar(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+  }, [])
+
+  // Pending AI-clone drafts → count badge on the AI Clone nav item.
+  const [draftCount, setDraftCount] = useState(0)
+  useEffect(() => {
+    void window.omi
+      .aiCloneGetState()
+      .then((s) => setDraftCount(s.pendingDrafts.length))
+      .catch(() => {})
+    return window.omi.onAiCloneEvent((e) => {
+      if (e.kind === 'state') setDraftCount(e.state.pendingDrafts.length)
+    })
   }, [])
 
   const email = user?.email
@@ -200,6 +214,11 @@ export function Sidebar(): React.JSX.Element {
                     strokeWidth={1.75}
                   />
                   {label(text)}
+                  {to === '/clone' && draftCount > 0 && !collapsed && (
+                    <span className="ml-auto shrink-0 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
+                      {draftCount}
+                    </span>
+                  )}
                 </>
               )
             }}

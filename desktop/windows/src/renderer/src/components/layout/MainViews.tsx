@@ -9,6 +9,7 @@ import { Tasks } from '../../pages/Tasks'
 import { Goals } from '../../pages/Goals'
 import { Apps } from '../../pages/Apps'
 import { Rewind } from '../../pages/Rewind'
+import { AiClone } from '../../pages/AiClone'
 import { LiveConversation } from '../../pages/LiveConversation'
 
 // Every page stays mounted (inactive ones are just hidden) so switching tabs is
@@ -26,6 +27,7 @@ const TasksPanel = memo(Tasks)
 const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
+const AiClonePanel = memo(AiClone)
 
 function panelClass(active: boolean): string {
   return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
@@ -71,6 +73,7 @@ export function MainViews(): React.JSX.Element {
   const isGoals = pathname === '/goals'
   const isApps = pathname === '/apps'
   const isRewind = pathname === '/rewind'
+  const isAiClone = pathname === '/clone'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -88,6 +91,7 @@ export function MainViews(): React.JSX.Element {
       <div className={panelClass(isGoals)}>{(isGoals || hydrateAll) && <GoalsPanel />}</div>
       <div className={panelClass(isApps)}>{(isApps || hydrateAll) && <AppsPanel />}</div>
       <div className={panelClass(isRewind)}>{(isRewind || hydrateAll) && <RewindPanel />}</div>
+      <div className={panelClass(isAiClone)}>{(isAiClone || hydrateAll) && <AiClonePanel />}</div>
     </div>
   )
 }
