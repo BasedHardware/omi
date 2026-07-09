@@ -238,10 +238,13 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(snippet.contains("\"AI not available: Please sign in"))
   }
 
-  func testSendPreservesDraftOnAuthRequiredBridgeFailure() throws {
+  func testSendPreservesDraftUntilTurnIsAccepted() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
-    XCTAssertTrue(source.contains("if currentError == .authRequired"))
-    XCTAssertTrue(source.contains("draftText = trimmedText"))
+    XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
+    XCTAssertTrue(source.contains("onAccepted?()"))
+    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
+    XCTAssertTrue(source.contains("self.draftText == text else { return }"))
+    XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
 
   func testSignInRecoveryRetriesAfterOAuth() throws {

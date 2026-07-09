@@ -10,7 +10,9 @@ class TaskChatState: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isSending = false
     @Published var isStopping = false
-    @Published var draftText = ""
+    @Published var draftText: String {
+        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(taskId)) }
+    }
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
     /// Monotonic token that increments each time the local user sends a message
@@ -39,6 +41,7 @@ class TaskChatState: ObservableObject {
     init(taskId: String, workspacePath: String) {
         self.taskId = taskId
         self.workspacePath = workspacePath
+        self.draftText = ChatDraftStore.shared.text(for: .taskChat(taskId))
     }
 
     // MARK: - Persistence
@@ -125,6 +128,9 @@ class TaskChatState: ObservableObject {
         )
         messages.append(userMessage)
         persistMessage(userMessage)
+        if draftText == text {
+            draftText = ""
+        }
 
         // Create placeholder AI message
         let aiMessageId = UUID().uuidString

@@ -790,7 +790,6 @@ struct FloatingControlBarView: View {
             withAnimation(agentChatSwitchTransition) {
                 state.present(.agent(pill.id))
                 state.isAILoading = false
-                state.aiInputText = ""
             }
             barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
             completion?(true)
@@ -1383,6 +1382,10 @@ struct FloatingControlBarView: View {
                 set: { state.isAILoading = $0 }
             ),
             currentMessage: state.currentAIMessage(from: provider),
+            followUpText: Binding(
+                get: { state.aiInputText },
+                set: { state.aiInputText = $0 }
+            ),
             userInput: state.displayedQuery,
             chatHistory: state.derivedChatHistory(from: provider),
             isVoiceFollowUp: Binding(
@@ -1634,10 +1637,25 @@ private struct AgentMainChatView: View {
     let onEscape: () -> Void
     let onSpawnSibling: (UUID) -> Void
 
-    @State private var followUpText = ""
+    @State private var followUpText: String
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
+
+    init(
+        pill: AgentPill,
+        manager: AgentPillsManager,
+        onBackToAgentRows: @escaping () -> Void,
+        onEscape: @escaping () -> Void,
+        onSpawnSibling: @escaping (UUID) -> Void
+    ) {
+        self.pill = pill
+        self.manager = manager
+        self.onBackToAgentRows = onBackToAgentRows
+        self.onEscape = onEscape
+        self.onSpawnSibling = onSpawnSibling
+        _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
+    }
 
     private var isRecording: Bool {
         manager.recordingPillID == pill.id
@@ -2094,6 +2112,9 @@ private struct AgentMainChatView: View {
             }
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
+        .onChange(of: followUpText) { _, text in
+            ChatDraftStore.shared.setText(text, for: .floatingAgent(pill.id))
+        }
     }
 
     private var canSend: Bool {

@@ -163,7 +163,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var showingAIConversation: Bool = false
     @Published var showingAIResponse: Bool = false
     @Published var isAILoading: Bool = true
-    @Published var aiInputText: String = ""
+    @Published var aiInputText: String = "" {
+        didSet {
+            guard !isRestoringAIDraft else { return }
+            aiDraftRevision &+= 1
+            ChatDraftStore.shared.setText(aiInputText, for: activeAIDraftKey)
+        }
+    }
     /// Optimistic pending user text shown before/while the provider turn resolves.
     @Published var displayedQuery: String = ""
     @Published var inputViewHeight: CGFloat = 120
@@ -179,6 +185,42 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var lastConversationActivityAt: Date? = nil
     @Published var activeAgentChatPillID: UUID? = nil
     @Published var conversationSurface: FloatingConversationSurface = .closed
+    private var activeAIDraftKey = ChatDraftKey.floatingMain
+    private var isRestoringAIDraft = false
+    private var aiDraftRevision: UInt64 = 0
+    private var submittedAIDraft: (key: ChatDraftKey, text: String, revision: UInt64)?
+
+    override init() {
+        super.init()
+        isRestoringAIDraft = true
+        aiInputText = ChatDraftStore.shared.text(for: activeAIDraftKey)
+        isRestoringAIDraft = false
+    }
+
+    /// Onboarding demos reuse the real floating window but must not overwrite the
+    /// user's normal notch draft. Switching scopes restores each independently.
+    func switchAIDraft(to key: ChatDraftKey) {
+        guard key != activeAIDraftKey else { return }
+        activeAIDraftKey = key
+        aiDraftRevision &+= 1
+        isRestoringAIDraft = true
+        aiInputText = ChatDraftStore.shared.text(for: key)
+        isRestoringAIDraft = false
+    }
+
+    func markAIDraftSubmitted(_ text: String) {
+        submittedAIDraft = (activeAIDraftKey, text, aiDraftRevision)
+    }
+
+    func clearSubmittedAIDraftIfUnchanged(_ text: String) {
+        guard let submittedAIDraft,
+              submittedAIDraft.key == activeAIDraftKey,
+              submittedAIDraft.text == text,
+              submittedAIDraft.revision == aiDraftRevision,
+              aiInputText == text else { return }
+        self.submittedAIDraft = nil
+        aiInputText = ""
+    }
 
     /// Subagent switcher visibility state, shared by both display modes.
     /// On notched displays the menu opens on hover over the notch; on

@@ -457,7 +457,7 @@ struct ChatPage: View {
       onSend: { text in
         AnalyticsManager.shared.chatMessageSent(
           messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
-        Task { await chatProvider.sendMessage(text) }
+        Task { await chatProvider.sendMainDraft(text) }
       },
       onStop: {
         chatProvider.stopAgent(owner: .mainChat)

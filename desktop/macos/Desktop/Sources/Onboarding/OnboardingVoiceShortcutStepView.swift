@@ -97,6 +97,7 @@ struct OnboardingVoiceShortcutStepView: View {
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             resetFloatingBarConversation()
             FloatingControlBarManager.shared.hide()
             PushToTalkManager.shared.cleanup()
