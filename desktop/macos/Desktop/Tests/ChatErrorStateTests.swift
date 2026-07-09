@@ -286,16 +286,16 @@ final class ChatErrorStateTests: XCTestCase {
   func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
     let source = try sourceFile("AuthService.swift")
 
-    XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
+    XCTAssertTrue(source.contains("validateRestoredSession()"))
     XCTAssertTrue(source.contains("refreshSingleFlight(auth: self)"))
-    XCTAssertTrue(source.contains("Restored UserDefaults session validated via forced refresh"))
-    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred - preserving restored session"))
+    XCTAssertTrue(source.contains("Restored session validated via forced refresh"))
+    XCTAssertTrue(source.contains("Restored session validation deferred - preserving credentials for retry"))
     XCTAssertFalse(source.contains("cached ID token expired"))
   }
 
   func testRestoredSessionValidationDoesNotClearPersistedTokensOnTransientFailure() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationBlockRange = source.range(of: "Restored UserDefaults session validation deferred - preserving restored session")
+    let validationBlockRange = source.range(of: "Restored session validation deferred - preserving credentials for retry")
     XCTAssertNotNil(validationBlockRange)
     let snippet = String(source[validationBlockRange!.lowerBound...])
     let catchBlock = String(snippet[..<(snippet.range(of: "} catch {")?.lowerBound ?? snippet.endIndex)])
@@ -305,11 +305,11 @@ final class ChatErrorStateTests: XCTestCase {
 
   func testRestoredSessionInvalidatesWhenValidationClearedTokens() throws {
     let source = try sourceFile("AuthService.swift")
-    let range = source.range(of: "Restored UserDefaults session validation — tokens cleared, invalidating")
+    let range = source.range(of: "Restored session validation proved credentials absent")
     XCTAssertNotNil(range)
     let snippet = String(source[range!.lowerBound...]).prefix(200)
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .restoredSessionInvalid)"))
-    let methodStart = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    let methodStart = source.range(of: "private func validateRestoredSessionNow() async")
     XCTAssertNotNil(methodStart)
     let method = String(source[methodStart!.lowerBound...]).prefix(1200)
     XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
@@ -317,7 +317,7 @@ final class ChatErrorStateTests: XCTestCase {
 
   func testRestoredSessionValidationForceRefreshesOnLaunch() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
 
