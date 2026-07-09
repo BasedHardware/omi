@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.66",
+      "date": "2026-07-09",
+      "changes": [
+        "Made the draggable floating bar use the movable pill layout on notched Macs"
+      ]
+    },
+    {
       "version": "0.12.65",
       "date": "2026-07-09",
       "changes": [
