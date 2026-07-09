@@ -826,16 +826,45 @@ async def _stream_handler(
     # Stream transcript
     # Callback for when pusher finishes processing a conversation
     def on_conversation_processed(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=[]))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_created",
+                    memory=conversation,
+                    messages=[],
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     def on_conversation_processing_started(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_processing_started",
+                    memory=conversation,
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
@@ -885,7 +914,12 @@ async def _stream_handler(
                 if existing_conversation.get('status') == ConversationStatus.in_progress:
                     session.current_conversation_id = client_conversation_id
                     redis_db.set_in_progress_conversation_id(uid, session.current_conversation_id)
-                    _send_message_event(ConversationSessionEvent(conversation_id=session.current_conversation_id))
+                    _send_message_event(
+                        ConversationSessionEvent(
+                            conversation_id=session.current_conversation_id,
+                            recording_session_id=client_conversation_id,
+                        )
+                    )
                     logger.info(
                         f"Resuming client-scoped conversation {session.current_conversation_id} {uid} {session_id}"
                     )
@@ -952,7 +986,12 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         session.current_conversation_id = new_conversation_id
-        _send_message_event(ConversationSessionEvent(conversation_id=new_conversation_id))
+        _send_message_event(
+            ConversationSessionEvent(
+                conversation_id=new_conversation_id,
+                recording_session_id=client_conversation_id,
+            )
+        )
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -980,6 +1019,12 @@ async def _stream_handler(
 
     # Process existing conversations
     async def _prepare_in_progess_conversations() -> Optional[str]:
+        # A client-provided UUID is the durable identity of this recording.  It
+        # must win over the legacy, user-global in-progress pointer; otherwise a
+        # stale Redis/Firestore row can rebind a fresh desktop recording.
+        if client_conversation_id:
+            await _create_new_in_progress_conversation()
+            return None
 
         if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
