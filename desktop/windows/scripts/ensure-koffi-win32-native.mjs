@@ -12,6 +12,13 @@ const koffiRequire = createRequire(koffiEntry)
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'))
 const koffiPackage = readJson(join(koffiRoot, 'package.json'))
 
+// The win32/x64 native package is required on Windows (and when packaging a
+// Windows build, where verify-win-koffi-native.mjs re-checks the artifact).
+// On non-Windows dev installs it may legitimately be absent — npm does not
+// honor pnpm's supportedArchitectures — so postinstall must not hard-fail.
+// Set OMI_REQUIRE_WIN_KOFFI=1 to force the strict behavior anywhere.
+const required = process.platform === 'win32' || process.env.OMI_REQUIRE_WIN_KOFFI === '1'
+
 let nativePackageJson
 let source
 try {
@@ -19,6 +26,12 @@ try {
   nativePackageJson = join(dirname(nativeEntry), 'package.json')
   source = join(dirname(nativeEntry), 'win32_x64', 'koffi.node')
 } catch (error) {
+  if (!required) {
+    console.log(
+      `[ensure-koffi-win32-native] skipped: @koromix/koffi-win32-x64 not installed on ${process.platform} (Windows packaging re-verifies via verify-win-koffi-native.mjs)`
+    )
+    process.exit(0)
+  }
   throw new Error(
     [
       'Missing @koromix/koffi-win32-x64.',
