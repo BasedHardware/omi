@@ -50,16 +50,19 @@ FULL_RUN_PREFIXES = (
     'backend/testing/',
 )
 
+# Explicit cross-cutting paths only. Do not use `backend/*` or
+# `backend/utils/*.py` — those force the full suite for docs/AGENTS edits and
+# every flat utils module before AREA_TESTS can narrow.
 FULL_RUN_GLOBS = (
-    'backend/*',
+    'backend/main.py',
+    'backend/dependencies.py',
     'backend/scripts/update-python-lock.sh',
     'backend/scripts/sync-python-deps.sh',
     'backend/utils/executors.py',
     'backend/utils/log_sanitizer.py',
     'backend/utils/http_client.py',
-    'backend/utils/auth.py',
-    'backend/utils/secrets.py',
-    'backend/utils/*.py',
+    'backend/utils/async_tasks.py',
+    'backend/utils/encryption.py',
 )
 
 AREA_TESTS = (
@@ -222,6 +225,21 @@ def is_full_run_path(path: str) -> bool:
     return any(path_matches(path, pattern) for pattern in FULL_RUN_GLOBS)
 
 
+def is_selectable_backend_path(path: str) -> bool:
+    """Return True for backend paths that can select or force unit tests.
+
+    Docs, AGENTS, and chart/dashboard artifacts are ignored so editing them
+    does not trip the unmapped-path full-suite fallback.
+    """
+    if not path.startswith('backend/'):
+        return False
+    if path.endswith('.md'):
+        return False
+    if path.startswith('backend/docs/') or path.startswith('backend/charts/'):
+        return False
+    return True
+
+
 def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
 
@@ -254,13 +272,13 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
-    backend_paths = [path for path in changed_paths if path.startswith('backend/')]
+    backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 
     for path in changed_paths:
         selected.update(workflow_contract_tests_for_path(path, all_tests))
 
-    for path in changed_paths:
+    for path in backend_paths:
         if is_full_run_path(path):
             return all_tests, f'{path} requires the full backend unit suite'
 

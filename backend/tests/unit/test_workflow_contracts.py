@@ -20,7 +20,8 @@ def test_workflow_contract_sources_select_adjacent_tests():
     full_run_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/database/projection_repair.py": "tests/unit/test_memory_ledger.py",
-        "backend/utils/webhooks.py": "tests/unit/test_async_webhooks.py",
+        "backend/main.py": "tests/unit/test_vector_repair_outbox_worker.py",
+        "backend/utils/executors.py": "tests/unit/test_vector_repair_outbox_worker.py",
     }
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
@@ -41,6 +42,36 @@ def test_workflow_contract_sources_select_adjacent_tests():
         assert expected_test in selected, source_path
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
+
+
+def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
+    """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
+    selector = _load_script("select_backend_unit_tests")
+    all_tests = selector.discover_all_tests()
+
+    for path in (
+        "backend/AGENTS.md",
+        "backend/docs/runbooks/resilience-dashboards.md",
+        "backend/charts/monitoring/alerts/resilience.json",
+    ):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert selected == [], path
+        assert reason == "no backend files changed", (path, reason)
+
+    selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
+    # Not a FULL_RUN_GLOBS path; unmapped flat utils still use the fallback.
+    assert reason == "backend changes did not match a narrow area", reason
+    assert selected == all_tests
+
+    selected, reason = selector.tests_for_changed_paths(["backend/routers/sync.py"], all_tests)
+    assert "tests/unit/test_sync_v2.py" in selected
+    assert selected != all_tests
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+    for path in ("backend/main.py", "backend/dependencies.py", "backend/utils/executors.py"):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert selected == all_tests, path
+        assert reason == f"{path} requires the full backend unit suite"
 
 
 def test_workflow_contracts_static_check_accepts_current_allowlist():
