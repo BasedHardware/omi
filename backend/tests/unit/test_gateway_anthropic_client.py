@@ -27,7 +27,7 @@ async def test_gateway_anthropic_stream_uses_auto_lane_on_success(monkeypatch):
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setattr(gateway_anthropic, '_get_or_create_gateway_anthropic_client', lambda: gateway_client)
+    monkeypatch.setattr(gateway_anthropic, '_get_or_create_gateway_anthropic_client', lambda **kwargs: gateway_client)
     monkeypatch.setattr(
         gateway_anthropic,
         'record_gateway_request_result',
@@ -67,7 +67,7 @@ async def test_gateway_anthropic_stream_falls_back_on_transport_failure(monkeypa
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setattr(gateway_anthropic, '_get_or_create_gateway_anthropic_client', lambda: gateway_client)
+    monkeypatch.setattr(gateway_anthropic, '_get_or_create_gateway_anthropic_client', lambda **kwargs: gateway_client)
     monkeypatch.setattr(
         gateway_anthropic,
         'record_gateway_request_result',
