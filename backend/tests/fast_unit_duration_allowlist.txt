@@ -135,6 +135,7 @@ tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_partial_segment
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_target_conversation_id_forwarded
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_vad_errors_mark_failed
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_after_vad_completes
+tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
