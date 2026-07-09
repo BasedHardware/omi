@@ -71,6 +71,10 @@ enum AgentClient {
       try await bridge.restart()
     }
 
+    func prepareForCrashRecovery() async {
+      await bridge.prepareForCrashRecovery()
+    }
+
     func stop() async {
       await bridge.stop()
     }

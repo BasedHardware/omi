@@ -1298,10 +1298,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         if agentBridgeStarted {
             let alive = await resolvedAgentClient().isAlive
-            if !alive {
-                log("ChatProvider: agent bridge process died, will restart")
-                agentBridgeStarted = false
+            if alive {
+                return true
             }
+            log("ChatProvider: agent bridge process died, will restart")
+            agentBridgeStarted = false
+            await resolvedAgentClient().prepareForCrashRecovery()
         }
         guard !agentBridgeStarted else { return true }
         // Wait for API keys (Firebase, Calendar) before starting the bridge.

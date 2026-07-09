@@ -192,7 +192,17 @@ actor AgentRuntimeProcess {
   private var isRestarting = false
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
-  var isAlive: Bool { isRunning }
+  var isAlive: Bool {
+    let processRunning = process?.isRunning ?? false
+    if isRunning && !processRunning {
+      log(
+        "AgentRuntimeProcess: stale alive latch — process no longer running "
+          + "(failure_class=stale_alive_latch recovery_action=clear_latch recovery_result=degraded)")
+      DesktopDiagnosticsManager.shared.recordAgentRuntimeStaleAliveCheck()
+      isRunning = false
+    }
+    return isRunning && processRunning
+  }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
     guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
@@ -1479,6 +1489,14 @@ actor AgentRuntimeProcess {
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
 
+    log(
+      "AgentRuntimeProcess: process terminated "
+        + "(failure_class=\(likelyOOM ? "out_of_memory" : "process_exited") "
+        + "recovery_action=restart_on_next_send recovery_result=degraded code=\(exitCode))")
+    DesktopDiagnosticsManager.shared.recordAgentRuntimeUnexpectedExit(
+      exitCode: exitCode,
+      oom: likelyOOM
+    )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false

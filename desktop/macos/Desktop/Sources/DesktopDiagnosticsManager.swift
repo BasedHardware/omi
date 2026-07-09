@@ -9,6 +9,8 @@ enum DesktopHealthEventName: String {
   case walPersistenceDegraded = "wal_persistence_degraded"
   case walWriteFailed = "wal_write_failed"
   case walUploadFailed = "wal_upload_failed"
+  case agentRuntimeStaleAliveCheck = "agent_runtime_stale_alive_check"
+  case agentRuntimeUnexpectedExit = "agent_runtime_unexpected_exit"
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -141,6 +143,28 @@ final class DesktopDiagnosticsManager {
         "reason": reason,
         "failure_class": "wal_upload_failed",
         "recovery_action": "leave_pending",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeStaleAliveCheck() {
+    record(
+      .agentRuntimeStaleAliveCheck,
+      properties: [
+        "failure_class": "stale_alive_latch",
+        "recovery_action": "clear_latch",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeUnexpectedExit(exitCode: Int32, oom: Bool) {
+    record(
+      .agentRuntimeUnexpectedExit,
+      properties: [
+        "exit_code": Int(exitCode),
+        "oom": oom,
+        "failure_class": oom ? "out_of_memory" : "process_exited",
+        "recovery_action": "restart_on_next_send",
         "recovery_result": "degraded",
       ])
   }

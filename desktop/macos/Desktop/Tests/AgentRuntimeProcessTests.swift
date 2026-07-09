@@ -583,4 +583,40 @@ final class AgentRuntimeProcessTests: XCTestCase {
     oomDiagnosticLatch.reset(generation: processGeneration)
 """))
   }
+
+  func testIsAliveRequiresUnderlyingProcessRunning() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("let processRunning = process?.isRunning ?? false"))
+    XCTAssertTrue(source.contains("return isRunning && processRunning"))
+    XCTAssertTrue(source.contains("recordAgentRuntimeStaleAliveCheck"))
+  }
+
+  func testUnexpectedExitRecordsHealthEvent() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("recordAgentRuntimeUnexpectedExit"))
+    XCTAssertTrue(source.contains("recovery_action=restart_on_next_send"))
+  }
+
+  func testEnsureBridgeStartedPreparesCrashRecoveryBeforeRestart() throws {
+    let chatSource = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(chatSource.contains("prepareForCrashRecovery()"))
+    XCTAssertTrue(chatSource.contains("agent bridge process died, will restart"))
+
+    let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
+    XCTAssertTrue(bridgeSource.contains("func prepareForCrashRecovery()"))
+    XCTAssertTrue(bridgeSource.contains("registered = false"))
+  }
+
+  private func agentRuntimeSource() throws -> String {
+    try sourceFile("Chat/AgentRuntimeProcess.swift")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
 }
