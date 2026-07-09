@@ -3,7 +3,9 @@ FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Match notifications-job builder: full apt recommends so native wheels
+# (e.g. webrtcvad via requirements.txt) get libc headers under gcc.
+RUN apt-get update && apt-get install -y \
     git \
     gcc \
     && rm -rf /var/lib/apt/lists/*
