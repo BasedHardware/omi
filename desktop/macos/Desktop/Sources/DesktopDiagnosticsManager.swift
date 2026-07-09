@@ -3,6 +3,7 @@ import Sentry
 import Darwin
 
 enum DesktopHealthEventName: String {
+  case authTokenStorageFallback = "auth_token_storage_fallback"
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -42,6 +43,12 @@ private extension ISO8601DateFormatter {
   }()
 }
 
+/// Desktop health telemetry matrix (RealtimeHub pattern — copy for new surfaces):
+/// - **Local log** (`log`): always, with `failure_class` / `recovery_action` / `recovery_result`.
+/// - **Ring buffer** (`record*` → `writeDiagnosticsAttachment`): always via this manager.
+/// - **PostHog** (`desktopHealthEvent`): prod/beta when `trackRemotely` is true (default).
+/// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
+/// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
   static let shared = DesktopDiagnosticsManager()
 
@@ -55,6 +62,16 @@ final class DesktopDiagnosticsManager {
   private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
+
+  func recordAuthTokenStorageFallback(reason: String, updateChannel: String) {
+    record(
+      .authTokenStorageFallback,
+      properties: [
+        "storage": "user_defaults",
+        "reason": reason,
+        "update_channel": updateChannel,
+      ])
+  }
 
   func recordPTTStarted(mode: String, hubActive: Bool, micPermissionGranted: Bool) {
     record(

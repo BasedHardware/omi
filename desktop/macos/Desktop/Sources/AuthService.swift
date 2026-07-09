@@ -1902,13 +1902,9 @@ class AuthService {
 
     private func recordTokenStorageFallback(reason: String) {
         guard tokenStorageHooks.recordsFallbackTelemetry else { return }
-        AnalyticsManager.shared.desktopHealthEvent(
-            name: "auth_token_storage_fallback",
-            properties: [
-                "storage": "user_defaults",
-                "reason": reason,
-                "update_channel": AppBuild.currentUpdateChannel,
-            ]
+        DesktopDiagnosticsManager.shared.recordAuthTokenStorageFallback(
+            reason: reason,
+            updateChannel: AppBuild.currentUpdateChannel
         )
     }
 
