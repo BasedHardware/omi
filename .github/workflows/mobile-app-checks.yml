@@ -91,6 +91,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Free runner disk space
+        # ubuntu-latest ships with ~14GB free; the Gradle build runs out of
+        # space during stripDebugSymbols. Remove unused preinstalled toolchains
+        # (keep /usr/local/lib/android — the build needs the Android SDK).
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/local/share/chromium /usr/local/lib/node_modules
+          sudo docker image prune --all --force
+          df -h /
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -134,4 +144,6 @@ jobs:
           CM_KEYSTORE_PASSWORD: android
           CM_KEY_ALIAS: androiddebugkey
           CM_KEY_PASSWORD: android
-        run: flutter build apk --debug --flavor dev
+        # Single ABI: a compile smoke doesn't need arm + arm64 + x86_64 native
+        # libs, and the extra ABIs double disk usage during stripDebugSymbols.
+        run: flutter build apk --debug --flavor dev --target-platform android-arm64
