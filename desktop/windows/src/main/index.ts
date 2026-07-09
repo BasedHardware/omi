@@ -50,6 +50,11 @@ import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { startWindowsUpdater } from './updater'
+import {
+  addObservabilityBreadcrumb,
+  initMainObservability,
+  registerObservabilityIpc
+} from './observability'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -155,6 +160,9 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
+// After the sandbox block so the observability sink lands in the re-pinned
+// userData dir, not the production profile.
+initMainObservability()
 
 const iconPath = process.platform === 'win32' ? iconIcoPath : iconPngPath
 const trayIconPath = iconPngPath
@@ -301,6 +309,12 @@ function createTray(mainWindow: BrowserWindow): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   perfMark('main:ready')
+  registerObservabilityIpc()
+  addObservabilityBreadcrumb(
+    'app.ready',
+    { automationEnabled: AUTOMATION_ENABLED },
+    { category: 'app' }
+  )
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
