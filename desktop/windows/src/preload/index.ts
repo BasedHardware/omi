@@ -16,7 +16,10 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  AiCloneAuth,
+  AiCloneChatMode,
+  AiCloneEvent
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -150,6 +153,23 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
+  },
+  aiCloneGetState: () => ipcRenderer.invoke('ai-clone:getState'),
+  aiCloneConnect: (beeperToken: string) => ipcRenderer.invoke('ai-clone:connect', beeperToken),
+  aiCloneDisconnect: () => ipcRenderer.invoke('ai-clone:disconnect'),
+  aiCloneSetEnabled: (enabled: boolean, auth?: AiCloneAuth) =>
+    ipcRenderer.invoke('ai-clone:setEnabled', enabled, auth),
+  aiCloneListChats: () => ipcRenderer.invoke('ai-clone:listChats'),
+  aiCloneSetChatMode: (chatId: string, mode: AiCloneChatMode) =>
+    ipcRenderer.invoke('ai-clone:setChatMode', chatId, mode),
+  aiCloneApproveDraft: (draftId: string, editedText?: string) =>
+    ipcRenderer.invoke('ai-clone:approveDraft', draftId, editedText),
+  aiCloneDiscardDraft: (draftId: string) => ipcRenderer.invoke('ai-clone:discardDraft', draftId),
+  aiCloneProvideAuthToken: (auth: AiCloneAuth) => ipcRenderer.send('ai-clone:provideAuthToken', auth),
+  onAiCloneEvent: (cb: (e: AiCloneEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, ev: AiCloneEvent): void => cb(ev)
+    ipcRenderer.on('ai-clone:event', listener)
+    return () => ipcRenderer.removeListener('ai-clone:event', listener)
   }
 }
 

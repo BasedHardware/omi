@@ -10,6 +10,7 @@ import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
 import { registerIntegrationsHandlers } from './ipc/integrations'
+import { registerAiCloneHandlers } from './ipc/aiClone'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
 import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
@@ -347,6 +348,7 @@ app.whenReady().then(async () => {
   registerMemoryExportHandlers()
   registerKgHandlers()
   registerIntegrationsHandlers()
+  registerAiCloneHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
