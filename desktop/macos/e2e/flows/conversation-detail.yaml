@@ -6,7 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
-  - desktop/macos/Desktop/Sources/ConversationDetailAutomationState.swift
+  - desktop/macos/Desktop/Sources/Chat/ConversationDetailAutomationState.swift
 preconditions:
   - automation_bridge_ready
 

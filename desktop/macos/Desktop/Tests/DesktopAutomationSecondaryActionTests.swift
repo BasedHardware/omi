@@ -67,6 +67,28 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("ConversationDetailAutomationState.shared"))
   }
 
+  func testOpenConversationNavigatesToConversationsTabFirst() throws {
+    let source = try bridgeSource()
+    for action in ["open_conversation", "open_latest_conversation"] {
+      let body = try actionBody(named: action, in: source)
+      XCTAssertTrue(
+        body.contains("ensureConversationsTabVisibleForAutomation"),
+        "\(action) should navigate to Conversations before posting open request"
+      )
+    }
+  }
+
+  func testMemoryAutomationWaitsForAsyncSearchAndFilter() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    let source = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertTrue(source.contains("while !self.isSearching"))
+    XCTAssertTrue(source.contains("while !self.isLoadingFiltered"))
+    XCTAssertTrue(source.contains("filteredFromDatabase.first(where:"))
+  }
+
   func testMemoryCrudActionsUseNonProdGuard() throws {
     let source = try bridgeSource()
     for action in ["create_test_memory", "edit_test_memory", "delete_test_memory", "create_test_goal", "create_test_folder"] {

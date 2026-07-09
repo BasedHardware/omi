@@ -1268,6 +1268,13 @@ class MemoriesViewModel: ObservableObject {
       if let index = memories.firstIndex(where: { $0.id == memory.id }) {
         memories[index].visibility = newVisibility
       }
+      if let index = searchResults.firstIndex(where: { $0.id == memory.id }) {
+        searchResults[index].visibility = newVisibility
+      }
+      if let index = filteredFromDatabase.firstIndex(where: { $0.id == memory.id }) {
+        filteredFromDatabase[index].visibility = newVisibility
+      }
+      recomputeFilteredMemories()
       // Update selectedMemory if it's the same memory (reassign to trigger SwiftUI update)
       if var selected = selectedMemory, selected.id == memory.id {
         selected.visibility = newVisibility
@@ -1352,6 +1359,13 @@ class MemoriesViewModel: ObservableObject {
       guard let self else { return ["error": "memories view model deallocated"] }
       let query = params["query"] ?? ""
       self.searchText = query
+      let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty {
+        let startDeadline = Date().addingTimeInterval(2)
+        while !self.isSearching, Date() < startDeadline {
+          try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+      }
       let deadline = Date().addingTimeInterval(10)
       while self.isSearching, Date() < deadline {
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -1381,6 +1395,12 @@ class MemoriesViewModel: ObservableObject {
         tags = Set(parsed)
       }
       self.selectedTags = tags
+      if !tags.isEmpty {
+        let startDeadline = Date().addingTimeInterval(2)
+        while !self.isLoadingFiltered, Date() < startDeadline {
+          try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+      }
       let deadline = Date().addingTimeInterval(10)
       while self.isLoadingFiltered, Date() < deadline {
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -1423,6 +1443,7 @@ class MemoriesViewModel: ObservableObject {
       await self.toggleVisibility(memory)
       let updated = self.memories.first(where: { $0.id == memory.id })
         ?? self.searchResults.first(where: { $0.id == memory.id })
+        ?? self.filteredFromDatabase.first(where: { $0.id == memory.id })
       let newVisibility = updated?.visibility ?? (priorVisibility == "public" ? "private" : "public")
       return [
         "memory_id": memory.id,

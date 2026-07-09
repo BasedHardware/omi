@@ -480,6 +480,16 @@ actor DesktopAutomationTraceStore {
 /// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
 /// remove them with `unregister(_:)`.
 @MainActor
+private func ensureConversationsTabVisibleForAutomation() async {
+  NotificationCenter.default.post(
+    name: .navigateToSidebarItem,
+    object: nil,
+    userInfo: ["rawValue": SidebarNavItem.conversations.rawValue]
+  )
+  try? await Task.sleep(nanoseconds: 150_000_000)
+}
+
+@MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
 
@@ -1733,6 +1743,7 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing conversationId"]
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
+      await ensureConversationsTabVisibleForAutomation()
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,
         object: nil,
@@ -1759,6 +1770,7 @@ final class DesktopAutomationActionRegistry {
         return ["error": "no conversations available"]
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
+      await ensureConversationsTabVisibleForAutomation()
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,
         object: nil,
@@ -2901,6 +2913,7 @@ final class DesktopAutomationBridge {
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    await ensureConversationsTabVisibleForAutomation()
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,

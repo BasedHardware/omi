@@ -254,8 +254,6 @@ struct ConversationDetailView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 showTranscriptDrawer = true
             }
-            ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
-                true, conversationId: conversation.id)
         }
         .dismissableSheet(isPresented: $showAppSelector) {
             AppSelectorSheet(

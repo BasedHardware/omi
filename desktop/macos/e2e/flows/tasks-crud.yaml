@@ -39,7 +39,7 @@ steps:
     bridge.action:
       name: toggle_task
       params:
-        description: "[[MARKER:tasks-crud]]"
+        description: "[[MARKER:tasks-crud]] harness task"
     expect:
       result.detail.completed: "true"
 
@@ -48,7 +48,7 @@ steps:
     bridge.action:
       name: delete_task
       params:
-        description: "[[MARKER:tasks-crud]]"
+        description: "[[MARKER:tasks-crud]] harness task"
     expect:
       result.detail.deleted: "true"
 
