@@ -32,7 +32,7 @@ struct PluginURLCard: View {
                         .scaledFont(size: 13, weight: .medium)
                 }
                 .buttonStyle(.borderless)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(OmiColors.textPrimary)
             }
 
             // Auto-discovery banner

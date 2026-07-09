@@ -139,7 +139,7 @@ struct ConnectSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: plugin.systemImage)
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(OmiColors.textPrimary)
                 Text("Connect \(plugin.displayName)")
                     .scaledFont(size: 18, weight: .semibold)
                 Spacer()
@@ -551,7 +551,7 @@ struct ConnectSheet: View {
         var circleColor: Color {
             switch self {
             case .complete: return OmiColors.success
-            case .inProgress: return OmiColors.purplePrimary
+            case .inProgress: return OmiColors.info
             case .pending: return OmiColors.textTertiary.opacity(0.3)
             }
         }
