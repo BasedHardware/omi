@@ -147,7 +147,11 @@ export type ListenStartArgs = {
   token: string
   /** BCP-47-ish language code for transcription (e.g. 'en', 'es'). */
   language: string
-  /** 'auto' prefers local Parakeet only when the runtime is healthy and supported. */
+  /**
+   * 'auto' prefers local Parakeet only when the runtime is already installed
+   * and healthy; it never installs. Only the explicit 'local-parakeet' mode may
+   * trigger the first-use runtime/model download.
+   */
   sttMode?: SttMode
 }
 
