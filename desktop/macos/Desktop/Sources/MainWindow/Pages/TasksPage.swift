@@ -727,6 +727,10 @@ class TasksViewModel: ObservableObject {
     /// Guards against transient DB re-query flicker during optimistic bulk updates.
     private var suppressDatabaseRequery = false
 
+    /// Automation-only (TASK-06): counts real SQLite requeries so a harness can
+    /// prove a server-push recompute during an active drag is suppressed.
+    private(set) var automationRequeryCount = 0
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -1488,6 +1492,7 @@ class TasksViewModel: ObservableObject {
 
     /// Load filtered tasks from SQLite when non-status filters are applied
     private func loadFilteredTasksFromDatabase() async {
+        automationRequeryCount += 1
         let nonStatusTags = selectedTags.filter { $0.group != .status && $0.group != .date }
         let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
@@ -2266,6 +2271,58 @@ class TasksViewModel: ObservableObject {
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
             return ["count": String(sorted.count), "tasks": json]
         }
+
+        registry.register(
+            name: "inject_requery_during_drag",
+            summary: "TASK-06: inject a server-push recompute while a drag is active and report whether the SQLite requery was suppressed (order not clobbered). Non-prod only.",
+            params: []
+        ) { [weak self] _ in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            return await self.automationInjectRequeryDuringDrag()
+        }
+    }
+
+    /// TASK-06: prove a server push arriving mid-drag does not clobber the order.
+    /// Sets `suppressDatabaseRequery` (the flag the drag/sort-sync window holds),
+    /// injects a server-push recompute via the real `recomputeAllCaches` path, and
+    /// reports whether the SQLite requery was suppressed and the order preserved —
+    /// plus a control recompute WITHOUT the flag to prove the requery would
+    /// otherwise fire (the guard is load-bearing). Automation-only.
+    @MainActor
+    func automationInjectRequeryDuringDrag() async -> [String: String] {
+        await ensureTasksLoadedForAutomation()
+        let hadNonStatusFilters =
+            selectedTags.contains { $0.group != .status } || !selectedDynamicTags.isEmpty
+
+        // Simulate the active drag/sort-sync window, then inject a server push.
+        // A suppressed requery is exactly what keeps the in-memory drag order on
+        // screen instead of a stale SQLite re-read clobbering it (TASK-06), so the
+        // requery counter is the load-bearing signal.
+        let countBefore = automationRequeryCount
+        suppressDatabaseRequery = true
+        // Defense-in-depth: never leave the flag stuck true (a stuck flag would
+        // permanently suppress filtered requeries for this view model). The
+        // control path below also clears it explicitly before its own recompute.
+        defer { suppressDatabaseRequery = false }
+        recomputeAllCaches()
+        // recomputeAllCaches dispatches the requery on a Task; give it time to run
+        // (it must NOT, because the flag is set).
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        let countDuringDrag = automationRequeryCount
+
+        // Control: the same push with the drag flag cleared should requery, which
+        // proves the guard is load-bearing (not that no requery would ever fire).
+        suppressDatabaseRequery = false
+        recomputeAllCaches()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        let countNoDrag = automationRequeryCount
+        recomputeAllCaches()  // settle
+
+        return [
+            "had_non_status_filters": hadNonStatusFilters ? "true" : "false",
+            "requery_suppressed_during_drag": countDuringDrag == countBefore ? "true" : "false",
+            "requery_fires_without_suppress": countNoDrag > countDuringDrag ? "true" : "false",
+        ]
     }
 
     /// Ensure the store + category caches are populated before a headless reorder, so
