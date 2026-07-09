@@ -1,5 +1,7 @@
 allowBuilds:
   '@firebase/util': true
+  # Pure JS SDK; its only install-time script is a no-op echo, so never build it.
+  '@google/genai': false
   better-sqlite3: true
   electron: true
   electron-winstaller: true
