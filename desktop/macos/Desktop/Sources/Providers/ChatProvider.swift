@@ -877,6 +877,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // product flows, not error recovery surfaces.
     @Published var currentError: ChatErrorState?
 
+    /// Preferred user-visible error string for compact surfaces (floating bar).
+    var displayErrorMessage: String? {
+        if let currentError {
+            return currentError.userFacingSummary
+        }
+        return errorMessage
+    }
+
     /// Captured at the start of each sendMessage so the .retry recovery
     /// action can re-issue the user's last prompt. Cleared after a
     /// successful re-send or on dismiss to avoid stale retries.
@@ -1372,8 +1380,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } catch {
             logError("Failed to start agent bridge", error: error)
             let rawError = String(describing: error)
-            AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
-            errorMessage = "AI not available: \(error.localizedDescription)"
+            if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
+                currentError = card
+                errorMessage = nil
+            } else {
+                AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
+                errorMessage = "AI not available: \(error.localizedDescription)"
+            }
             return false
         }
     }
@@ -3528,7 +3541,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard await ensureBridgeStarted() else {
             tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            if errorMessage?.isEmpty ?? true {
+            if currentError == .authRequired {
+                draftText = trimmedText
+            } else if currentError == nil, errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
             releaseSendLock(sendGeneration: sendGen)
@@ -4354,6 +4369,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
                 lastFailedPrompt = trimmedText
+                if card == .authRequired {
+                    draftText = trimmedText
+                }
                 errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
@@ -5003,10 +5021,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatErrorCard: .signIn recovery — starting desktop OAuth")
             do {
                 try await AuthService.shared.signInWithGoogle()
-            } catch let signInError {
-                logError("ChatErrorCard: sign-in recovery failed", error: signInError)
-                currentError = error
-                errorMessage = signInError.localizedDescription
+            } catch let googleError {
+                log("ChatErrorCard: Google sign-in unavailable, trying Apple — \(googleError.localizedDescription)")
+                do {
+                    try await AuthService.shared.signInWithApple()
+                } catch let signInError {
+                    logError("ChatErrorCard: sign-in recovery failed", error: signInError)
+                    currentError = error
+                    errorMessage = signInError.localizedDescription
+                    return
+                }
+            }
+            _ = try? await AuthService.shared.getIdToken(forceRefresh: true)
+            _ = await ensureBridgeStarted()
+            if let prompt = promptToRetry, !prompt.isEmpty {
+                await sendMessage(prompt)
             }
         case .installRuntime:
             log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")

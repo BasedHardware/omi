@@ -228,6 +228,47 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
   }
 
+  func testEnsureBridgeStartedMapsAuthMissingToAuthRequired() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(source.contains("ChatErrorState.from(bridgeError)"))
+    let range = source.range(of: "Failed to start agent bridge")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(500)
+    XCTAssertTrue(snippet.contains("currentError = card"))
+    XCTAssertFalse(snippet.contains("\"AI not available: Please sign in"))
+  }
+
+  func testSendPreservesDraftOnAuthRequiredBridgeFailure() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(source.contains("if currentError == .authRequired"))
+    XCTAssertTrue(source.contains("draftText = trimmedText"))
+  }
+
+  func testSignInRecoveryRetriesAfterOAuth() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let range = source.range(of: "ChatErrorCard: .signIn recovery")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(1200)
+    XCTAssertTrue(snippet.contains("signInWithGoogle()"))
+    XCTAssertTrue(snippet.contains("signInWithApple()"))
+    XCTAssertTrue(snippet.contains("ensureBridgeStarted()"))
+    XCTAssertTrue(snippet.contains("await sendMessage(prompt)"))
+  }
+
+  func testDashboardShowsChatErrorCard() throws {
+    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    XCTAssertTrue(source.contains("dashboardChatErrorCard"))
+    XCTAssertTrue(source.contains("ChatErrorCard("))
+  }
+
+  func testFloatingBarReadsCurrentError() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(source.contains("var displayErrorMessage"))
+    XCTAssertTrue(source.contains("currentError.userFacingSummary"))
+    let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    XCTAssertTrue(floating.contains("displayErrorMessage"))
+  }
+
   func testChatSignInRecoveryUsesDesktopOAuthInsteadOfHomepage() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
 
