@@ -332,12 +332,16 @@ class TranscriptsResponse {
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
     return TranscriptsResponse(
-      deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics:
-          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      deepgram: _parseTranscriptSegments(json['deepgram']),
+      soniox: _parseTranscriptSegments(json['soniox']),
+      whisperx: _parseTranscriptSegments(json['whisperx']),
+      speechmatics: _parseTranscriptSegments(json['speechmatics']),
     );
+  }
+
+  static List<TranscriptSegment> _parseTranscriptSegments(dynamic value) {
+    if (value is! List) return const [];
+    return value.whereType<Map<String, dynamic>>().map(TranscriptSegment.fromJson).toList();
   }
 }
 
@@ -642,14 +646,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+    return const ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 

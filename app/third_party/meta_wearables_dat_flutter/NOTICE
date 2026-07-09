@@ -1,0 +1,56 @@
+meta_wearables_dat_flutter
+Copyright (c) 2026 iSee Labs
+
+This product is released under the MIT License (see LICENSE).
+
+It is an unofficial Flutter plugin and is not affiliated with, endorsed by,
+sponsored by, or otherwise officially connected to Meta Platforms, Inc.
+
+================================================================================
+Third-party software
+================================================================================
+
+This product is a thin bridge over the following third-party software, which
+is linked as a binary dependency at build time and is NOT redistributed by
+this repository.
+
+--------------------------------------------------------------------------------
+Meta Wearables Device Access Toolkit (iOS)
+--------------------------------------------------------------------------------
+Source:   https://github.com/facebook/meta-wearables-dat-ios
+Copyright (c) Meta Platforms, Inc. and affiliates.
+Licensed under the BSD-style license found in the LICENSE file of the upstream
+repository. The iOS plugin pulls `MWDATCore`, `MWDATCamera`, and (when mock is
+enabled) `MWDATMockDevice` via Swift Package Manager from the upstream URL
+above.
+
+--------------------------------------------------------------------------------
+Meta Wearables Device Access Toolkit (Android)
+--------------------------------------------------------------------------------
+Source:   https://github.com/facebook/meta-wearables-dat-android
+Copyright (c) Meta Platforms, Inc. and affiliates.
+Licensed under the BSD-style license found in the LICENSE file of the upstream
+repository. The Android plugin pulls `com.meta.wearable:mwdat-core`,
+`com.meta.wearable:mwdat-camera`, and (when mock is enabled)
+`com.meta.wearable:mwdat-mockdevice` from GitHub Packages Maven.
+
+================================================================================
+Trademarks
+================================================================================
+
+"Meta", "Ray-Ban Meta", "Oakley Meta", "Ray-Ban Display", and related logos
+are trademarks of Meta Platforms, Inc. and/or its affiliates and other
+respective owners. Use of these names in this repository is solely for the
+purpose of identifying the upstream SDKs and supported devices, and does not
+imply endorsement, sponsorship, or affiliation.
+
+================================================================================
+Architecture inspiration
+================================================================================
+
+Architectural patterns (texture bridge, `captureStreamFrame`, lifecycle
+ordering) draw inspiration from the community Flutter plugin
+`flutter_meta_wearables_dat` by rodcone
+(https://github.com/rodcone/flutter_meta_wearables_dat). No source code from
+that project is copied into this repository; only the design ideas are
+referenced.
