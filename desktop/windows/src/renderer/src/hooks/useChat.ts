@@ -293,7 +293,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           void persistChat(buildThread(assistantText))
         }
       }
-      const tail = parseChunk(buffer)
+      const tail = parseOmiSseLine(buffer)
       if (tail !== null) {
         assistantText += tail
         setHistory((h) => {
