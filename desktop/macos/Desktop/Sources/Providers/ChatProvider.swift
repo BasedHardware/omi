@@ -1384,7 +1384,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 currentError = card
                 errorMessage = nil
             } else {
-                AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
+                AnalyticsManager.shared.chatAgentError(
+                    error: "AI not available: bridge failed to start",
+                    rawError: rawError,
+                    errorKind: BridgeError.telemetryKind(for: error)
+                )
                 errorMessage = "AI not available: \(error.localizedDescription)"
             }
             return false
@@ -4342,7 +4346,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 rawError = "\(error)"
             }
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
+            AnalyticsManager.shared.chatAgentError(
+                error: error.localizedDescription,
+                rawError: rawError,
+                errorKind: BridgeError.telemetryKind(for: error)
+            )
 
             // Track onboarding errors with full context
             if isOnboarding {

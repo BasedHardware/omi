@@ -634,10 +634,13 @@ class AnalyticsManager {
   }
 
   /// Track when the Claude agent bridge fails to start or errors
-  func chatAgentError(error: String, rawError: String? = nil) {
+  func chatAgentError(error: String, rawError: String? = nil, errorKind: String? = nil) {
     var props: [String: Any] = ["error": error]
     if let raw = rawError, raw != error {
       props["raw_error"] = String(raw.prefix(500))
+    }
+    if let errorKind {
+      props["error_kind"] = errorKind
     }
     PostHogManager.shared.track("chat_agent_error", properties: props)
   }

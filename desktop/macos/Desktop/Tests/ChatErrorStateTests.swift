@@ -50,6 +50,29 @@ final class ChatErrorStateMappingTests: XCTestCase {
       BridgeError.quotaExceeded(plan: "free", unit: "msg", used: 100, limit: 100, resetAtUnix: nil)
     ))
   }
+
+  /// `chat_agent_error` telemetry categorization (issue #9342): the generic
+  /// "bridge failed to start" bucket must be split into distinct, stable
+  /// `error_kind` values so PostHog can tell missing-install / launch-failure /
+  /// crash / provider-config failures apart. Distinct causes → distinct kinds.
+  func testTelemetryKindDistinguishesFailureModes() {
+    XCTAssertEqual(BridgeError.telemetryKind(for: BridgeError.nodeNotFound), "bridge.node_not_found")
+    XCTAssertEqual(BridgeError.telemetryKind(for: BridgeError.bridgeScriptNotFound), "bridge.script_not_found")
+    XCTAssertEqual(BridgeError.telemetryKind(for: BridgeError.processExited), "bridge.process_exited")
+    XCTAssertEqual(BridgeError.telemetryKind(for: BridgeError.outOfMemory), "bridge.out_of_memory")
+    XCTAssertEqual(BridgeError.telemetryKind(for: BridgeError.agentError("boom")), "bridge.agent_error")
+
+    // Non-BridgeError launch failures (e.g. Process spawn ENOENT = missing
+    // executable) surface the NSError domain+code, not the opaque bucket.
+    let spawnError = NSError(domain: NSPOSIXErrorDomain, code: 2)
+    XCTAssertEqual(BridgeError.telemetryKind(for: spawnError), "\(NSPOSIXErrorDomain).2")
+
+    // A missing binary and a crash must NOT collapse to the same kind.
+    XCTAssertNotEqual(
+      BridgeError.telemetryKind(for: BridgeError.bridgeScriptNotFound),
+      BridgeError.telemetryKind(for: BridgeError.processExited)
+    )
+  }
 }
 
 final class ChatErrorStateTests: XCTestCase {

@@ -553,6 +553,35 @@ enum BridgeError: LocalizedError {
     }
   }
 
+  /// Stable, low-cardinality category for `chat_agent_error` telemetry so the
+  /// opaque "bridge failed to start" bucket can be split into missing-install /
+  /// launch-failure / crash / provider-config buckets in PostHog (issue #9342).
+  static func telemetryKind(for error: Error) -> String {
+    if let bridgeError = error as? BridgeError {
+      switch bridgeError {
+      case .nodeNotFound: return "bridge.node_not_found"
+      case .bridgeScriptNotFound: return "bridge.script_not_found"
+      case .notRunning: return "bridge.not_running"
+      case .encodingError: return "bridge.encoding_error"
+      case .timeout: return "bridge.timeout"
+      case .processExited: return "bridge.process_exited"
+      case .outOfMemory: return "bridge.out_of_memory"
+      case .stopped: return "bridge.stopped"
+      case .restarting: return "bridge.restarting"
+      case .requestAlreadyActive: return "bridge.request_already_active"
+      case .agentError: return "bridge.agent_error"
+      case .agentRuntimeFailure: return "bridge.agent_runtime_failure"
+      case .quotaExceeded: return "bridge.quota_exceeded"
+      case .authMissing: return "bridge.auth_missing"
+      }
+    }
+    // Non-BridgeError launch failures (e.g. Process spawn errors) carry an
+    // NSError domain+code — POSIX ENOENT distinguishes a missing executable
+    // (install problem) from other launch failures. Bounded cardinality.
+    let nsError = error as NSError
+    return "\(nsError.domain).\(nsError.code)"
+  }
+
   private static func isSessionAuthenticationFailureMessage(_ message: String) -> Bool {
     let normalized = message.lowercased()
     if normalized.contains("invalid_token") || normalized.contains("please sign in") {
