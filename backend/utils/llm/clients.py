@@ -96,6 +96,14 @@ except ImportError as exc:
 
 
 try:
+    from utils.llm.gateway_observability import record_direct_exception_surface
+except ImportError:
+
+    def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged') -> None:
+        return None
+
+
+try:
     from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
 except ImportError as exc:
     if exc.name != 'utils.llm.gateway_shadow':
@@ -579,6 +587,8 @@ def num_tokens_from_string(string: str) -> int:
 
 
 def generate_embedding(content: str) -> List[float]:
+    if should_route_features_through_gateway():
+        record_direct_exception_surface(surface='openai_embeddings', reason='out_of_scope')
     return embeddings.embed_documents([content])[0]
 
 
@@ -591,6 +601,8 @@ def gemini_embed_query(text: str) -> List[float]:
     Prefers the per-request BYOK Gemini key; falls back to the process-wide
     env key so non-BYOK callers behave exactly as before.
     """
+    if should_route_features_through_gateway():
+        record_direct_exception_surface(surface='gemini_screen_activity_query_embedding', reason='out_of_scope')
     api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
     url = 'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent'
     payload = {

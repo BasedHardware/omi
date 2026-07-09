@@ -28,8 +28,14 @@ PUSHER_SESSION_DEGRADED = Gauge(
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
-    'Chat extraction requests routed through or around the LLM gateway',
-    ['feature', 'outcome', 'reason'],
+    'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
+    ['feature', 'mode', 'outcome', 'reason'],
+)
+
+LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS = Counter(
+    'llm_gateway_direct_exception_requests_total',
+    'Inventoried direct-provider surfaces used while gateway feature mode is active',
+    ['surface', 'reason'],
 )
 
 LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(

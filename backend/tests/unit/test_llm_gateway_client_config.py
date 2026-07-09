@@ -222,6 +222,7 @@ def test_get_llm_feature_gateway_mode_falls_back_on_transport_failure(monkeypatc
             'outcome': 'fallback',
             'reason': 'request_error',
             'route': feature_auto_lane_id('conv_discard'),
+            'mode': 'fallback',
         }
     ]
 

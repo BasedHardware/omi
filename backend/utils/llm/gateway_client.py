@@ -11,7 +11,7 @@ from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from pydantic import BaseModel, ValidationError
 
-from utils.llm.gateway_observability import record_gateway_request_result
+from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -82,6 +82,7 @@ def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> N
     if not should_route_features_through_gateway():
         return
     if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
+        record_direct_exception_surface(surface=surface, reason='acknowledged')
         return
     raise RuntimeError(
         f'{surface} is a direct provider LLM surface and is blocked while '
@@ -156,8 +157,8 @@ def invoke_chat_structured_gateway(
         return None
 
 
-def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str) -> None:
-    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason)
+def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str, mode: str | None = None) -> None:
+    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
 def _gateway_headers() -> dict[str, str]:

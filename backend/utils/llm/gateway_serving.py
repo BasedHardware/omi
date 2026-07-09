@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 try:
     from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
@@ -148,6 +148,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                 outcome='fallback',
                 reason=_fallback_reason(exc),
                 route=feature_auto_lane_id(self.feature),
+                mode='fallback',
             )
             return self.legacy_model._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
@@ -156,6 +157,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
             outcome='success',
             reason='ok',
             route=feature_auto_lane_id(self.feature),
+            mode='serving',
         )
         return result
 
@@ -176,6 +178,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                 outcome='fallback',
                 reason=_fallback_reason(exc),
                 route=feature_auto_lane_id(self.feature),
+                mode='fallback',
             )
             return await self.legacy_model._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
@@ -184,6 +187,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
             outcome='success',
             reason='ok',
             route=feature_auto_lane_id(self.feature),
+            mode='serving',
         )
         return result
 
@@ -194,21 +198,22 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[Any]:
+        yielded = False
         try:
             stream = self.gateway_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
-            yielded = False
             for chunk in stream:
                 yielded = True
                 yield chunk
-            if yielded:
-                record_gateway_request_result(
-                    feature=self.feature,
-                    outcome='success',
-                    reason='ok',
-                    route=feature_auto_lane_id(self.feature),
-                )
-            return
+            record_gateway_request_result(
+                feature=self.feature,
+                outcome='success',
+                reason='ok',
+                route=feature_auto_lane_id(self.feature),
+                mode='serving',
+            )
         except Exception as exc:
+            if yielded:
+                raise
             if not is_gateway_transport_failure(exc):
                 raise
             record_gateway_request_result(
@@ -216,8 +221,44 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                 outcome='fallback',
                 reason=_fallback_reason(exc),
                 route=feature_auto_lane_id(self.feature),
+                mode='fallback',
             )
             yield from self.legacy_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Any]:
+        yielded = False
+        try:
+            stream = self.gateway_model._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+            async for chunk in stream:
+                yielded = True
+                yield chunk
+            record_gateway_request_result(
+                feature=self.feature,
+                outcome='success',
+                reason='ok',
+                route=feature_auto_lane_id(self.feature),
+                mode='serving',
+            )
+        except Exception as exc:
+            if yielded:
+                raise
+            if not is_gateway_transport_failure(exc):
+                raise
+            record_gateway_request_result(
+                feature=self.feature,
+                outcome='fallback',
+                reason=_fallback_reason(exc),
+                route=feature_auto_lane_id(self.feature),
+                mode='fallback',
+            )
+            async for chunk in self.legacy_model._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                yield chunk
 
     def with_structured_output(self, schema: dict[str, Any] | type, *, include_raw: bool = False, **kwargs: Any):
         gateway = self.gateway_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
@@ -242,6 +283,7 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                 outcome='fallback',
                 reason=_fallback_reason(exc),
                 route=feature_auto_lane_id(self._feature),
+                mode='fallback',
             )
             return self._legacy.invoke(input, config=config, **kwargs)
 
@@ -250,6 +292,7 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
             outcome='success',
             reason='ok',
             route=feature_auto_lane_id(self._feature),
+            mode='serving',
         )
         return result
 
@@ -264,6 +307,7 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                 outcome='fallback',
                 reason=_fallback_reason(exc),
                 route=feature_auto_lane_id(self._feature),
+                mode='fallback',
             )
             return await self._legacy.ainvoke(input, config=config, **kwargs)
 
@@ -272,5 +316,6 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
             outcome='success',
             reason='ok',
             route=feature_auto_lane_id(self._feature),
+            mode='serving',
         )
         return result
