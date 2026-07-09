@@ -23,6 +23,7 @@ jobs:
       has_python: ${{ steps.changes.outputs.has_python }}
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
       has_desktop_async_after_ratchet: ${{ steps.changes.outputs.has_desktop_async_after_ratchet }}
+      has_desktop_auth_session_ratchet: ${{ steps.changes.outputs.has_desktop_auth_session_ratchet }}
       has_desktop_defaults_ratchet: ${{ steps.changes.outputs.has_desktop_defaults_ratchet }}
     steps:
       - name: Checkout code
@@ -125,6 +126,10 @@ jobs:
       - name: Check desktop asyncAfter ratchet
         if: needs.changes.outputs.has_desktop_async_after_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-async-after-ratchet.py
+
+      - name: Check desktop auth session ratchet (INV-AUTH-1)
+        if: needs.changes.outputs.has_desktop_auth_session_ratchet == 'true'
+        run: python3 .github/scripts/check_desktop_auth_session.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'

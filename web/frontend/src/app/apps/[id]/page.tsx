@@ -156,8 +156,8 @@ function getPlatformLink(userAgent: string) {
   return isAndroid
     ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
     : isIOS
-      ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-      : 'https://omi.me';
+    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+    : 'https://omi.me';
 }
 
 // Helper function to format date
