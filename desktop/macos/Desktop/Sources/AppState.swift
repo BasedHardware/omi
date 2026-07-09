@@ -94,10 +94,14 @@ enum DesktopConversationMatchPolicy {
 
   static func shouldBindConversationSession(
     incomingBackendId: String,
+    expectedBackendId: String? = nil,
     activeBackendId: String?,
     ignoredRotatedBackendIds: Set<String>
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
+    if let expectedBackendId, !expectedBackendId.isEmpty, incomingBackendId != expectedBackendId {
+      return false
+    }
     if let activeBackendId, !activeBackendId.isEmpty {
       return incomingBackendId == activeBackendId
     }
@@ -105,6 +109,19 @@ enum DesktopConversationMatchPolicy {
       return false
     }
     return true
+  }
+
+  /// Identified listen sessions may only consume lifecycle events produced by
+  /// their own recording. Older backend versions omit `recording_session_id`,
+  /// so the matching conversation id remains the compatibility proof.
+  static func lifecycleEventBelongsToRecording(
+    memoryId: String,
+    recordingSessionId: String?,
+    expectedBackendId: String?
+  ) -> Bool {
+    guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
+    guard memoryId == expectedBackendId else { return false }
+    return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
   static func canCompleteBoundBackendConversation(
@@ -352,9 +369,13 @@ class AppState: ObservableObject {
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
+  /// The UUID created by desktop before opening an identified `/v4/listen` stream.
+  /// In the current compatible protocol it is also the backend conversation id.
+  var currentClientConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []
   var finishedSessionId: Int64?
+  var finishedClientConversationId: String?
   var finishedRecordingStartTime: Date?
 
   var willTerminateObserver: NSObjectProtocol? {

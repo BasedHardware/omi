@@ -82,6 +82,11 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing auth loading splash")
         }
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
         SignInView(authState: authState)
@@ -564,6 +569,7 @@ struct DesktopHomeView: View {
 
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
+    if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"

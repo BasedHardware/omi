@@ -63,6 +63,7 @@ extension AppState {
         debugForceCloud: debugForceCloud
       )
       let clientConversationId = UUID().uuidString.lowercased()
+      currentClientConversationId = useLocalSTT ? nil : clientConversationId
 
       if sttSession.useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
@@ -217,6 +218,7 @@ extension AppState {
             guard let candidate else { return nil }
             return DesktopConversationMatchPolicy.shouldBindConversationSession(
               incomingBackendId: candidate,
+              expectedBackendId: self.currentClientConversationId,
               activeBackendId: self.currentBackendConversationId,
               ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
             ) ? candidate : nil
@@ -871,6 +873,7 @@ extension AppState {
     // Capture state before rotation — memory_created event for this conversation
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
     finishedSessionId = currentSessionId
+    finishedClientConversationId = currentClientConversationId
     finishedRecordingStartTime = recordingStartTime
     let finishedUsesLocalSTT = sttSession.useLocalSTT
     let sessionToFinalize = currentSessionId
@@ -923,6 +926,7 @@ extension AppState {
       ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
     }
     currentBackendConversationId = nil
+    currentClientConversationId = nil
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 
@@ -980,6 +984,7 @@ extension AppState {
 
     // Reconnect transcription service for the next conversation
     let nextClientConversationId = sttSession.useLocalSTT ? nil : UUID().uuidString.lowercased()
+    currentClientConversationId = nextClientConversationId
     do {
       let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
       if sttSession.useLocalSTT {
@@ -1052,6 +1057,7 @@ extension AppState {
           guard let candidate else { return nil }
           return DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: candidate,
+            expectedBackendId: self.currentClientConversationId,
             activeBackendId: self.currentBackendConversationId,
             ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
           ) ? candidate : nil
@@ -1174,6 +1180,7 @@ extension AppState {
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
     currentSessionId = nil
+    currentClientConversationId = nil
     meetingEndFinalizationInProgress = false
 
     // Track transcription stopped

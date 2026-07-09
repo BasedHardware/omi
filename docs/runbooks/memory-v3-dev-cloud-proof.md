@@ -51,12 +51,11 @@ Promotion/consolidation maintenance runs from the dedicated hourly `memory-maint
 ### Post-merge dogfood checklist (dev only)
 
 1. Confirm auto-dev ran after merge (or dispatch: `gh workflow run "Deploy Memory Maintenance Job to Cloud RUN" -f environment=development -f branch=main`).
-2. **Before enabling the new Scheduler:** redeploy `notifications-job` once (`gh workflow run "Deploy Notifications Job to Cloud RUN" -f environment=development -f branch=main`) so the previously deployed image (which still invoked ST→LT) is retired.
-3. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
-4. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
-5. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
-6. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
-7. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
+2. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
+3. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
+4. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
+5. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
+6. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
 
 ```bash
 # Create (first time) — adjust SA email to the Cloud Run Job runtime identity used in based-hardware-dev
@@ -77,6 +76,7 @@ gcloud scheduler jobs update http memory-maintenance-hourly \
 ```
 
 Do **not** dispatch `notifications-job` for memory maintenance.
+Its independent deploy workflow explicitly removes only stale canonical-maintenance and Typesense bindings left by historical revisions. It merges the declared notification/X-sync config so unrelated live dependencies are not globally overwritten.
 
 This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled on `memory-maintenance-job`. Non-whitelisted users stay on legacy memory with Desktop lifecycle UI fail-closed.
 

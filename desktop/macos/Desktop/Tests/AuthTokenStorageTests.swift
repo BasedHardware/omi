@@ -85,6 +85,132 @@ final class AuthTokenStorageTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "existing-default-user")
   }
 
+  func testMigrationFailurePreservesLegacyTokensWhenFallbackIsDisabled() async throws {
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { false },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in false },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+
+    UserDefaults.standard.set("legacy-id-token", forKey: .authIdToken)
+    UserDefaults.standard.set("legacy-refresh-token", forKey: .authRefreshToken)
+    UserDefaults.standard.set(Date().addingTimeInterval(3600).timeIntervalSince1970, forKey: .authTokenExpiry)
+    UserDefaults.standard.set("legacy-user", forKey: .authTokenUserId)
+    UserDefaults.standard.set("legacy-user", forKey: .authUserId)
+
+    let idToken = try await auth.getIdToken()
+    XCTAssertEqual(idToken, "legacy-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "legacy-refresh-token")
+  }
+
+  func testKeychainReadBackMismatchNeverDeletesLegacyMigrationSource() async throws {
+    var keychainPayload: String?
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { false },
+      readKeychainString: { _, _ in keychainPayload },
+      writeKeychainString: { _, _, _ in
+        keychainPayload = #"{"idToken":"wrong","refreshToken":"wrong","expiryTime":0,"tokenUserId":"legacy-user"}"#
+        return true
+      },
+      deleteKeychainString: { _, _ in keychainPayload = nil },
+      recordsFallbackTelemetry: false
+    )
+
+    UserDefaults.standard.set("legacy-id-token", forKey: .authIdToken)
+    UserDefaults.standard.set("legacy-refresh-token", forKey: .authRefreshToken)
+    UserDefaults.standard.set(Date().addingTimeInterval(3600).timeIntervalSince1970, forKey: .authTokenExpiry)
+    UserDefaults.standard.set("legacy-user", forKey: .authTokenUserId)
+    UserDefaults.standard.set("legacy-user", forKey: .authUserId)
+
+    let idToken = try await auth.getIdToken()
+    XCTAssertEqual(idToken, "legacy-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "legacy-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "legacy-refresh-token")
+  }
+
+  func testKeychainReadBackMismatchRestoresPreviousKeychainOnlySession() {
+    let previousPayload = #"{"idToken":"old-id-token","refreshToken":"old-refresh-token","expiryTime":4102444800,"tokenUserId":"old-user"}"#
+    var keychainPayload: String? = previousPayload
+    var isFirstWrite = true
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { false },
+      readKeychainString: { _, _ in keychainPayload },
+      writeKeychainString: { value, _, _ in
+        if isFirstWrite {
+          isFirstWrite = false
+          keychainPayload = #"{"idToken":"wrong","refreshToken":"wrong","expiryTime":0,"tokenUserId":"new-user"}"#
+        } else {
+          keychainPayload = value
+        }
+        return true
+      },
+      deleteKeychainString: { _, _ in keychainPayload = nil },
+      recordsFallbackTelemetry: false
+    )
+
+    XCTAssertThrowsError(
+      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
+    )
+    XCTAssertEqual(keychainPayload, previousPayload)
+  }
+
+  func testRefreshPersistenceFailureUpdatesSameUserLegacySource() async throws {
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { false },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in false },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+
+    UserDefaults.standard.set("old-id-token", forKey: .authIdToken)
+    UserDefaults.standard.set("old-refresh-token", forKey: .authRefreshToken)
+    UserDefaults.standard.set(Date().addingTimeInterval(60).timeIntervalSince1970, forKey: .authTokenExpiry)
+    UserDefaults.standard.set("same-user", forKey: .authTokenUserId)
+    UserDefaults.standard.set("same-user", forKey: .authUserId)
+
+    XCTAssertNoThrow(
+      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "same-user")
+    )
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "new-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "new-refresh-token")
+  }
+
+  func testFailedAccountSwitchDoesNotOverwritePreviousUsersLegacyTokens() {
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { false },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in false },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+
+    UserDefaults.standard.set("old-id-token", forKey: .authIdToken)
+    UserDefaults.standard.set("old-refresh-token", forKey: .authRefreshToken)
+    UserDefaults.standard.set(Date().addingTimeInterval(3600).timeIntervalSince1970, forKey: .authTokenExpiry)
+    UserDefaults.standard.set("old-user", forKey: .authTokenUserId)
+    UserDefaults.standard.set("old-user", forKey: .authUserId)
+
+    XCTAssertThrowsError(
+      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
+    )
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "old-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "old-refresh-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), "old-user")
+  }
+
   func testKeychainSuccessClearsUserDefaultsFallbackTokensAndRetrievesFromKeychain() async throws {
     var keychainPayload: String?
     let auth = AuthService()

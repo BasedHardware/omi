@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-05-13 (PR #7142 — add Modulate Velma-2 STT, provider-agnostic architecture)
+> Last updated: 2026-07-09 (recording-scoped desktop listen lifecycle binding)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -26,16 +26,29 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-When `/v4/listen` creates or resumes the active in-progress conversation, it
-emits a `conversation_session` event to the client:
+When `/v4/listen` receives a client-generated `client_conversation_id`, that
+UUID is the authoritative identity for the recording. The backend creates or
+resumes that exact conversation and **does not** fall back to the legacy
+user-global in-progress pointer. This prevents a stale Redis or Firestore row
+from being rebound to a new desktop recording.
+
+The backend emits a `conversation_session` event carrying that recording
+identity:
 
 ```json
-{"type": "conversation_session", "conversation_id": "<uuid>", "status": "in_progress"}
+{
+  "type": "conversation_session",
+  "conversation_id": "<uuid>",
+  "recording_session_id": "<client_conversation_id>",
+  "status": "in_progress"
+}
 ```
 
-Clients that persist local recording sessions should bind that local session to
-`conversation_id` and prefer exact-id reconciliation on stop/retry before
-falling back to timestamp/source matching.
+Clients that persist local recording sessions must bind only when the returned
+`conversation_id` and `recording_session_id` match their persisted client UUID.
+For an identified session, lifecycle/finalization uses that exact identity; it
+must not timestamp-match or force-process a nearby user-global conversation.
+Timestamp/source matching is legacy-only compatibility behavior.
 
 ```mermaid
 sequenceDiagram
@@ -45,11 +58,11 @@ sequenceDiagram
     participant Pusher
     participant Firestore
 
-    Client->>Backend: WS connect (uid, language, sample_rate, codec)
+    Client->>Backend: WS connect (uid, language, sample_rate, codec, client_conversation_id)
     Backend->>Backend: Auth check (dev-token or Firebase)
     Backend->>Backend: Select STT provider (STT_SERVICE_MODELS + language)
-    Backend->>Firestore: Create stub conversation (status=in_progress)
-    Backend-->>Client: {type: "conversation_session", conversation_id, status: "in_progress"}
+    Backend->>Firestore: Create/resume exact client conversation (status=in_progress)
+    Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, status: "in_progress"}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
     Backend-->>Client: {type: "service_status", status: "ready"}
@@ -107,8 +120,8 @@ sequenceDiagram
         Pusher->>OpenAI: Extract memories
         Pusher->>Firestore: Save embedding vector
         Pusher-->>Backend: Opcode 201 (conversation processed callback)
-        Backend-->>Client: {type: "memory_processing_started"}
-        Backend-->>Client: {type: "memory_created", memory: {...}}
+        Backend-->>Client: {type: "memory_processing_started", recording_session_id, memory: {...}}
+        Backend-->>Client: {type: "memory_created", recording_session_id, memory: {...}}
     else Pusher disconnected (RECONNECT_BACKOFF / DEGRADED)
         Note over Backend: Request buffered in pending_conversation_requests<br/>Resent automatically when pusher reconnects
     end
@@ -268,8 +281,9 @@ sequenceDiagram
 | Event | Fields | When |
 |-------|--------|------|
 | `service_status` | `{type, status: "ready"}` | After WS connect, services initialized |
-| `memory_processing_started` | `{type}` | Conversation sent to pusher for LLM |
-| `memory_created` | `{type, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete |
+| `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
+| `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
+| `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |
 | `speaker_label_suggestion` | `{type, person_id, person_name, distance, segments}` | Speaker matched via embedding |
 
 ### Client → Server
@@ -310,4 +324,3 @@ Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supe
 - Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
 
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
-
