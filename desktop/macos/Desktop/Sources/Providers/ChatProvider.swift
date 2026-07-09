@@ -1587,7 +1587,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return first
         }
         guard completed else {
-            // Timeout: do NOT clear modeSwitchInProgress —
+            // Timeout: Do NOT clear modeSwitchInProgress —
             // the in-flight switchBridgeMode still owns the serialization lock.
             log(
                 "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
