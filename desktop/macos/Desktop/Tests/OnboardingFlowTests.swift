@@ -208,8 +208,31 @@ final class OnboardingFlowTests: XCTestCase {
       hasRemovedNotificationPermissionStep: false
     )
 
+    // Users paused on the removed notification-permission step (8) advance to
+    // Accessibility (still 8), not back to Microphone (7).
+    let migratedFromLegacyNotificationPermission = OnboardingFlow.migratedStep(
+      currentStep: 8,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
     XCTAssertEqual(migratedFromLegacyBYOK, 17)
     XCTAssertEqual(migratedFromLegacyTasks, 17)
+    XCTAssertEqual(migratedFromLegacyNotificationPermission, 8)
+    XCTAssertEqual(OnboardingFlow.steps[8], "Accessibility")
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
