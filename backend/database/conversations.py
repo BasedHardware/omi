@@ -46,6 +46,36 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
     return dt
 
 
+def _firestore_revision_datetime(value: Any) -> Optional[datetime]:
+    """Normalize Firestore snapshot metadata to an aware API datetime.
+
+    The production client exposes ``DatetimeWithNanoseconds`` (a datetime
+    subclass), while Firestore emulators and fakes may expose protobuf-like
+    ``seconds``/``nanos`` values. Keep that SDK variation at the database
+    boundary so response models always receive the same public type.
+    """
+    if isinstance(value, datetime):
+        return _ensure_timezone_aware(value)
+
+    to_datetime = getattr(value, 'ToDatetime', None)
+    if callable(to_datetime):
+        try:
+            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    try:
+        seconds = getattr(value, 'seconds')
+        nanos = getattr(value, 'nanos')
+        if isinstance(seconds, str) and isinstance(nanos, str):
+            timestamp = float(f'{seconds}.{nanos}')
+        else:
+            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+        return None
+
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -136,9 +166,9 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     data = document.to_dict()
     if data is None:
         return None
-    update_time = getattr(document, 'update_time', None)
-    if update_time is not None:
-        data['updated_at'] = update_time
+    revision = _firestore_revision_datetime(getattr(document, 'update_time', None))
+    if revision is not None:
+        data['updated_at'] = revision
     return data
 
 

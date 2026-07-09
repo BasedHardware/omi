@@ -15,6 +15,12 @@ class _Snapshot:
         return None if self._data is None else dict(self._data)
 
 
+class _TimestampLike:
+    def __init__(self, seconds, nanos):
+        self.seconds = seconds
+        self.nanos = nanos
+
+
 class _ConversationRef:
     def __init__(self, snapshot):
         self.snapshot = snapshot
@@ -68,6 +74,25 @@ def test_document_update_time_is_exposed_as_server_revision():
     result = conversations_db._document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
 
     assert result == {'id': 'conversation-1', 'updated_at': revision}
+
+
+def test_protobuf_like_document_update_time_is_normalized_for_api_models():
+    result = conversations_db._document_data_with_revision(
+        _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike('1783598400', '125000'))
+    )
+
+    assert result == {
+        'id': 'conversation-1',
+        'updated_at': datetime(2026, 7, 9, 12, 0, 0, 125000, tzinfo=timezone.utc),
+    }
+
+
+def test_protobuf_nanoseconds_use_the_official_integer_scale():
+    result = conversations_db._document_data_with_revision(
+        _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike(1783598400, 125_000_000))
+    )
+
+    assert result['updated_at'] == datetime(2026, 7, 9, 12, 0, 0, 125000, tzinfo=timezone.utc)
 
 
 def test_user_title_override_is_the_read_projection():
