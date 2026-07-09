@@ -133,8 +133,12 @@ for _pkg_name in ('google', 'google.cloud', 'google.api_core'):
     _pkg = sys.modules.get(_pkg_name)
     if isinstance(_pkg, ModuleType) and not hasattr(_pkg, '__path__'):
         _pkg.__path__ = []  # type: ignore[attr-defined]
-_api_core_exc = sys.modules.get('google.api_core.exceptions')
-if isinstance(_api_core_exc, ModuleType) and not hasattr(_api_core_exc, 'FailedPrecondition'):
+# AutoMockModule.__getattr__ invents MagicMocks for any name; those cannot be
+# used in except clauses. Reuse an existing Exception subclass if another test
+# already installed one so mcp_sse's bound name stays catchable.
+_api_core_exc = sys.modules['google.api_core.exceptions']
+_existing_fp = getattr(_api_core_exc, 'FailedPrecondition', None)
+if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseException)):
     _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):

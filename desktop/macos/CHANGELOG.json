@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.57",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed rare crashes when the app received data with duplicate ids (tasks, apps list, chat artifacts)",
+        "Fixed a data-loss bug where periodic WAL flush could mark a recording as saved to disk without actually persisting it, causing the audio to be lost during sync"
+      ]
+    },
+    {
       "version": "0.12.56",
       "date": "2026-07-09",
       "changes": [

@@ -94,4 +94,45 @@ final class WALServiceUploadTests: XCTestCase {
 
     XCTAssertEqual(service.wals.first?.status, .miss)
   }
+
+  // #9240: flush must not promote a `.memory` WAL to `.disk` when its frames were
+  // never persisted — doing so loses the recording and sends a filePath-less entry
+  // into the sync path where it fails with fileNotFound.
+  func testFlushDoesNotPromoteMemoryWalWithoutBackingFile() throws {
+    let wal = WALEntry(
+      timerStart: 1_700_000_100,
+      codec: "opus",
+      status: .miss,
+      storage: .memory,
+      filePath: nil,
+      seconds: 60,
+      device: "dev1",
+      deviceModel: "Omi"
+    )
+    service.setWalsForTesting([wal])
+
+    service.flushToDiskForTesting()
+
+    XCTAssertEqual(service.wals.first?.storage, .memory)
+  }
+
+  func testFlushPromotesMemoryWalOnceFileIsOnDisk() throws {
+    let fileName = "audio_dev1_opus_16000_1_fs80_1700000200.bin"
+    try Data([0x01, 0x02, 0x03]).write(to: walDir.appendingPathComponent(fileName))
+    let wal = WALEntry(
+      timerStart: 1_700_000_200,
+      codec: "opus",
+      status: .miss,
+      storage: .memory,
+      filePath: fileName,
+      seconds: 60,
+      device: "dev1",
+      deviceModel: "Omi"
+    )
+    service.setWalsForTesting([wal])
+
+    service.flushToDiskForTesting()
+
+    XCTAssertEqual(service.wals.first?.storage, .disk)
+  }
 }
