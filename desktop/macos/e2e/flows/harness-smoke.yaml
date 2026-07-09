@@ -6,6 +6,9 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
+  - desktop/macos/Desktop/Sources/ClientDeviceService.swift
+  - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
   - desktop/macos/Desktop/Sources/ViewExporter.swift
