@@ -100,6 +100,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
         errors.extend(
             _validate_cloud_run_workflows(
@@ -208,6 +209,135 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     cloud_run_services = _as_config_dict(cloud_run.get('services'))
     if cloud_run_services is None or not cloud_run_services:
         errors.append(ValidationError(env, 'cloud_run.services must be a non-empty mapping'))
+    return errors
+
+
+def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
+    entries = _as_config_dict(env_map) or {}
+    entry = _as_config_dict(entries.get(key))
+    if entry is None or 'value' not in entry:
+        return None
+    return str(entry['value'])
+
+
+def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
+    """Return (scope, env-map) for every surface that can enable canonical memory."""
+    surfaces: list[tuple[str, ConfigDict]] = []
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        env_map = _as_config_dict(service_config.get('env')) or {}
+        if 'MEMORY_MODE' in env_map:
+            surfaces.append((f'gke/{service}', env_map))
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    for service, raw_service in (_as_config_dict(cloud_run.get('services')) or {}).items():
+        service_config = _as_config_dict(raw_service) or {}
+        env_map = _as_config_dict(service_config.get('env')) or {}
+        if 'MEMORY_MODE' in env_map:
+            surfaces.append((f'cloud_run/{service}', env_map))
+    return surfaces
+
+
+def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require memory-maintenance-job to exist and stay aligned with MEMORY_MODE rollout.
+
+    Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
+    request-path surface without enabling the dedicated maintenance job fails validation
+    so Gate 3 cannot forget ST→LT hosting.
+    """
+    errors: list[ValidationError] = []
+    scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+    job = _as_config_dict(jobs.get('memory-maintenance-job'))
+    if job is None:
+        errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))
+        return errors
+
+    job_env = _as_config_dict(job.get('env')) or {}
+    job_secrets = _as_config_dict(job.get('secrets')) or {}
+    for required_env in (
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+    ):
+        if required_env not in job_env:
+            errors.append(ValidationError(scope, f'missing env {required_env}'))
+    for required_secret in (
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+        'PINECONE_API_KEY',
+        'TYPESENSE_HOST',
+        'TYPESENSE_API_KEY',
+    ):
+        if required_secret not in job_secrets:
+            errors.append(ValidationError(scope, f'missing secret {required_secret}'))
+
+    job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
+    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+    job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    read_surfaces = []
+    for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
+        surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
+        if surface_mode and surface_mode != 'off':
+            read_surfaces.append((surface_scope, surface_env, surface_mode))
+
+    if job_mode in ('', 'off'):
+        if job_cron == 'true':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false while MEMORY_MODE is off',
+                )
+            )
+        for surface_scope, _surface_env, surface_mode in read_surfaces:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
+                    'MEMORY_MODE=read and MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true '
+                    '(ST→LT is not hosted by notifications-job)',
+                )
+            )
+        return errors
+
+    # Canonical request-path is on somewhere — maintenance job must be fully enabled.
+    if job_mode != 'read':
+        errors.append(
+            ValidationError(scope, f'MEMORY_MODE must be read when enabling canonical memory (got {job_mode!r})')
+        )
+    if job_cron != 'true':
+        errors.append(
+            ValidationError(
+                scope,
+                'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be true when MEMORY_MODE is not off '
+                '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
+            )
+        )
+    if not job_users:
+        errors.append(ValidationError(scope, 'MEMORY_ENABLED_USERS must be non-empty when MEMORY_MODE is not off'))
+
+    for surface_scope, surface_env, surface_mode in read_surfaces:
+        if surface_mode != job_mode:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} must match memory-maintenance-job MEMORY_MODE={job_mode!r}',
+                )
+            )
+        surface_users = (_manifest_literal_env_value(surface_env, 'MEMORY_ENABLED_USERS') or '').strip()
+        if surface_users and surface_users != job_users:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist',
+                )
+            )
     return errors
 
 

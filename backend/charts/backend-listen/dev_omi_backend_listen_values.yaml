@@ -137,7 +137,7 @@ env:
   - name: MEMORY_MODE
     value: "read"
   - name: MEMORY_ENABLED_USERS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2"
   - name: MEMORY_V3_GET_ENABLED
     value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED

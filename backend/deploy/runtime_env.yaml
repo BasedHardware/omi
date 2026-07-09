@@ -46,7 +46,7 @@ environments:
             value: read
             category: memory_rollout
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
             value: 'true'
@@ -65,6 +65,8 @@ environments:
         - .github/workflows/gcp_backend_auto_dev.yml
         - .github/workflows/gcp_backend.yml
         - .github/workflows/gcp_notifications_job.yml
+        - .github/workflows/gcp_memory_maintenance_job.yml
+        - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       network:
         flags:
           --network: omi-dev-vpc-1
@@ -112,7 +114,7 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
@@ -186,7 +188,7 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
@@ -260,7 +262,7 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
@@ -301,11 +303,28 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+          secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+        memory-maintenance-job:
+          env:
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
             MEMORY_MODE:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
@@ -381,6 +400,7 @@ environments:
       workflow_files:
         - .github/workflows/gcp_backend.yml
         - .github/workflows/gcp_notifications_job.yml
+        - .github/workflows/gcp_memory_maintenance_job.yml
       network:
         flags:
           --network:
@@ -499,6 +519,21 @@ environments:
               version: latest
       jobs:
         notifications-job:
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+          secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+        memory-maintenance-job:
           env:
             OMI_ENV_STAGE:
               value: prod

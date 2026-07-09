@@ -120,17 +120,20 @@ Candidate: `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 
 ## First-user dev read proof lane
 
-The first-user dev/beta lane is a narrower operational proof for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` using runtime data/auth Firestore project `based-hardware` and dev deploy plane `based-hardware-dev`.
+The first-user / dogfood lane uses runtime data/auth Firestore project `based-hardware` and deploy plane `based-hardware-dev`, with approved UIDs:
+
+- `vi7SA9ckQCe4ccobWNxlbdcNdC23` (david.d.zhang@gmail.com)
+- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` (kodjima33@gmail.com)
 
 For this lane, checked-in dev runtime config may persist:
 
 - `MEMORY_MODE=read`;
-- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23`;
+- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2`;
 - `MEMORY_V3_GET_ENABLED=true`;
 - `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true`;
 - `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true`.
 
-Hourly ST→LT maintenance (TTL → consolidation → promotion) is hosted by `notifications-job` and must receive the same whitelist-scoped flags via the runtime env contract. Production must remain off with an empty cohort and `MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are satisfied.
+Hourly ST→LT maintenance (TTL → consolidation → promotion) is hosted by `memory-maintenance-job` and must receive the same whitelist-scoped flags via the runtime env contract. Production must remain off with an empty cohort and `MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are satisfied. Gate 3 must flip `cloud_run.jobs.memory-maintenance-job` together with request-path `MEMORY_MODE=read`; `validate-backend-runtime-env.py` fails if request-path read mode is enabled while the job stays off.
 
 First-user projection tooling may write only the compatibility projection state/items for the same UID after an explicit apply confirmation. Its dry-run and apply output must redact content and include a rollback manifest with exact touched doc paths. The first-user E2E proof is read-only and must report non-`/v3/memories` read surfaces as `not_checked` when they cannot be generically exercised.
 
