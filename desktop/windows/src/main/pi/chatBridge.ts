@@ -119,8 +119,20 @@ export type PiChatSendRequest = {
   skillIds?: string[]
 }
 
-export function isPiChatEnabled(): boolean {
-  return process.env.OMI_WINDOWS_PI_CHAT !== '0' && process.env.OMI_PI_CHAT !== '0'
+const TRUTHY_FLAG_VALUES = new Set(['1', 'true', 'yes', 'on'])
+
+function isTruthyFlag(value: string | undefined): boolean {
+  return value != null && TRUTHY_FLAG_VALUES.has(value.trim().toLowerCase())
+}
+
+/**
+ * Experimental Pi/Omi chat routing is fail-closed: it forwards chat history and
+ * the Firebase ID token to the desktop backend and exposes local tool access to
+ * the agent runtime, so it must stay off unless explicitly enabled via
+ * OMI_WINDOWS_PI_CHAT=1 (or OMI_PI_CHAT=1).
+ */
+export function isPiChatEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isTruthyFlag(env.OMI_WINDOWS_PI_CHAT) || isTruthyFlag(env.OMI_PI_CHAT)
 }
 
 function desktopApiBaseUrl(): string {
