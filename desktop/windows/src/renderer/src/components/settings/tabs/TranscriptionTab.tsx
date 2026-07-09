@@ -32,7 +32,12 @@ function localRuntimeSubtitle(sttMode: SttMode, status: LocalSttStatus | null): 
   if (status.runtime.installState === 'installing' || status.runtime.installState === 'starting') {
     return 'Preparing local Parakeet'
   }
-  if (status.runtime.canInstall) return 'Local Parakeet installs on first use'
+  if (status.runtime.canInstall) {
+    // Auto never downloads the runtime/model; only the explicit choice does.
+    return sttMode === 'local-parakeet'
+      ? 'Local Parakeet installs on first use'
+      : 'Hosted Omi until Local Parakeet is installed'
+  }
   return status.reason ?? 'Local Parakeet unavailable'
 }
 
