@@ -1350,6 +1350,7 @@ class MemoriesViewModel: ObservableObject {
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
+  let graphViewModel: MemoryGraphViewModel
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1948,7 +1949,7 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 14) {
-        MemoryGraphInlineCard()
+        MemoryGraphInlineCard(viewModel: graphViewModel)
 
         LazyVStack(spacing: 10) {
           ForEach(viewModel.filteredMemories) { memory in
