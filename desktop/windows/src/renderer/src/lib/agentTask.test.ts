@@ -58,19 +58,26 @@ describe('working-directory extraction', () => {
   })
 
   it('resolves: explicit path > hinted indexed folder > most recent folder > undefined', async () => {
+    const sqlQueries: string[] = []
     const deps = {
       searchFiles: async (q: string) =>
         q === 'omi' ? [{ folder: 'C:\\Users\\me\\projects\\omi' }] : [],
-      executeSql: async () => ({
-        columns: ['folder', 'last_modified'],
-        rows: [{ folder: 'C:\\Users\\me\\recent-project', last_modified: 123 }]
-      })
+      executeSql: async (sql: string) => {
+        sqlQueries.push(sql)
+        return {
+          columns: ['folder', 'last_modified'],
+          rows: [{ folder: 'C:\\Users\\me\\recent-project', last_modified: 123 }]
+        }
+      }
     }
     expect(await resolveTaskCwd('fix C:\\explicit\\path now', deps)).toBe('C:\\explicit\\path')
     expect(await resolveTaskCwd('fix the failing test in my omi repo', deps)).toBe(
       'C:\\Users\\me\\projects\\omi'
     )
     expect(await resolveTaskCwd('fix the failing test', deps)).toBe('C:\\Users\\me\\recent-project')
+    // The recency query must skip app shortcuts, or "most recent folder"
+    // resolves to a Start-Menu vendor folder (seen live: ...\Programs\McAfee).
+    expect(sqlQueries.at(-1)).toContain("file_type != 'application'")
 
     const failing = {
       searchFiles: async () => {

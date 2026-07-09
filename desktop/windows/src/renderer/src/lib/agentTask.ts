@@ -104,8 +104,11 @@ export async function resolveTaskCwd(
       const folder = files.find((f) => f.folder.toLowerCase().includes(hint.toLowerCase()))?.folder
       if (folder) return folder
     }
+    // Exclude app shortcuts: the index also scans Start-Menu folders (kind
+    // 'apps'), and without the filter "most recent folder" can resolve to
+    // C:\ProgramData\...\Start Menu\Programs\<vendor> (seen live).
     const recent = await deps.executeSql(
-      'SELECT folder, MAX(modified_at) AS last_modified FROM indexed_files GROUP BY folder ORDER BY last_modified DESC LIMIT 1'
+      "SELECT folder, MAX(modified_at) AS last_modified FROM indexed_files WHERE file_type != 'application' GROUP BY folder ORDER BY last_modified DESC LIMIT 1"
     )
     const folder = recent.rows[0]?.folder
     return typeof folder === 'string' && folder ? folder : undefined
