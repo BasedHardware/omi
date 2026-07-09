@@ -167,6 +167,7 @@
         "utils/llm/conversation_processing.py",
         "utils/llm/external_integrations.py",
         "utils/llm/gateway_shadow.py",
+        "utils/llm/gateway_serving.py",
         "utils/llm/providers.py",
         "utils/retrieval/agentic.py",
         "utils/retrieval/tools/preference_tools.py",
