@@ -240,8 +240,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       final cameraStatus = await connection.getCameraPermissionStatus();
       if (cameraStatus != 'granted') {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaImageCaptureUnavailable)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaImageCaptureUnavailable)));
         return;
       }
       await connection.capturePhoto();
@@ -250,7 +251,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red));
+        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
+      );
     }
   }
 

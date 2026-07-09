@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreGraphics
 import GRDB
 import UniformTypeIdentifiers
 
@@ -72,6 +73,94 @@ struct ToolCallInput {
 }
 
 /// A block of content within an AI message (text or tool call indicator)
+/// Stable identity for opening a background agent from the chat timeline.
+/// Prefer `sessionId` / `runId` for kernel hydrate; `pillId` is the UI cache key.
+struct AgentTimelineRef: Equatable {
+    var pillId: UUID?
+    var sessionId: String?
+    var runId: String?
+
+    var hasIdentity: Bool {
+        pillId != nil
+            || !(sessionId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || !(runId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    /// Kernel lookup prefers run, then session, then pill externalRefId.
+    var hydratePreference: AgentTimelineHydratePreference {
+        AgentTimelineHydratePreference.make(pillId: pillId, sessionId: sessionId, runId: runId)
+    }
+}
+
+/// Pure ordering for open-by-id hydrate (unit-testable without kernel I/O).
+struct AgentTimelineHydratePreference: Equatable {
+    enum Key: Equatable {
+        case runId(String)
+        case sessionId(String)
+        case pillId(UUID)
+    }
+
+    let keys: [Key]
+
+    static func make(pillId: UUID?, sessionId: String?, runId: String?) -> AgentTimelineHydratePreference {
+        var keys: [Key] = []
+        if let runId = sessionIdOrNil(runId) {
+            keys.append(.runId(runId))
+        }
+        if let sessionId = sessionIdOrNil(sessionId) {
+            keys.append(.sessionId(sessionId))
+        }
+        if let pillId {
+            keys.append(.pillId(pillId))
+        }
+        return AgentTimelineHydratePreference(keys: keys)
+    }
+
+    /// First preference key that matches the provided lookups (run → session → pill).
+    func firstMatchingKey(
+        runIdMatches: (String) -> Bool,
+        sessionIdMatches: (String) -> Bool,
+        pillIdMatches: (UUID) -> Bool
+    ) -> Key? {
+        for key in keys {
+            switch key {
+            case .runId(let runId) where runIdMatches(runId):
+                return key
+            case .sessionId(let sessionId) where sessionIdMatches(sessionId):
+                return key
+            case .pillId(let pillId) where pillIdMatches(pillId):
+                return key
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    private static func sessionIdOrNil(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// Applies timeline open result to card unavailable UI (unit-testable).
+enum AgentTimelineOpenFeedback {
+    /// Returns whether the card should show the unavailable message after an open attempt.
+    static func shouldShowUnavailable(succeeded: Bool) -> Bool {
+        !succeeded
+    }
+
+    /// Link-out opens a resolvable agent; hide it when open failed / unavailable / no callback / no id.
+    static func shouldShowLinkOut(
+        hasResolvableAgent: Bool,
+        hasOpenAction: Bool,
+        showUnavailable: Bool
+    ) -> Bool {
+        hasResolvableAgent && hasOpenAction && !showUnavailable
+    }
+}
+
 enum ChatContentBlock: Identifiable {
     case text(id: String, text: String)
     case toolCall(id: String, name: String, status: ToolCallStatus,
@@ -81,6 +170,24 @@ enum ChatContentBlock: Identifiable {
     case thinking(id: String, text: String)
     /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
     case discoveryCard(id: String, title: String, summary: String, fullText: String)
+    case agentSpawn(
+        id: String,
+        pillId: UUID?,
+        sessionId: String,
+        runId: String,
+        title: String,
+        objective: String
+    )
+    case agentCompletion(
+        id: String,
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?,
+        title: String,
+        promptSnippet: String,
+        output: String,
+        status: String
+    )
 
     var id: String {
         switch self {
@@ -88,6 +195,19 @@ enum ChatContentBlock: Identifiable {
         case .toolCall(let id, _, _, _, _, _): return id
         case .thinking(let id, _): return id
         case .discoveryCard(let id, _, _, _): return id
+        case .agentSpawn(let id, _, _, _, _, _): return id
+        case .agentCompletion(let id, _, _, _, _, _, _, _): return id
+        }
+    }
+
+    var agentTimelineRef: AgentTimelineRef? {
+        switch self {
+        case .agentSpawn(_, let pillId, let sessionId, let runId, _, _):
+            return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
+        case .agentCompletion(_, let pillId, let sessionId, let runId, _, _, _, _):
+            return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
+        default:
+            return nil
         }
     }
 
@@ -275,6 +395,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     struct Snapshot {
         let sqlRowsReturned: Int
         let sqlQueryCount: Int
+        let screenContext: ScreenContextChatCycleSnapshot
     }
 
     private let lock = NSLock()
@@ -282,6 +403,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     private var isGenerating = false
     private var sqlRowsReturned = 0
     private var sqlQueryCount = 0
+    private let screenContextMetrics = ScreenContextChatCycleMetrics()
 
     func markFirstOutputIfNeeded() -> Bool {
         lock.lock()
@@ -300,6 +422,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     }
 
     func recordToolResult(name: String, result: String) {
+        screenContextMetrics.recordToolResult(name: name, output: result)
         guard name == "execute_sql" else { return }
         let rowsReturned = Self.sqlRowsReturned(in: result)
         lock.lock()
@@ -308,10 +431,18 @@ final class ChatResponseMetrics: @unchecked Sendable {
         lock.unlock()
     }
 
+    func recordToolRequested(name: String) {
+        screenContextMetrics.recordToolRequested(name)
+    }
+
     func snapshot() -> Snapshot {
         lock.lock()
         defer { lock.unlock() }
-        return Snapshot(sqlRowsReturned: sqlRowsReturned, sqlQueryCount: sqlQueryCount)
+        return Snapshot(
+            sqlRowsReturned: sqlRowsReturned,
+            sqlQueryCount: sqlQueryCount,
+            screenContext: screenContextMetrics.snapshot()
+        )
     }
 
     private static func sqlRowsReturned(in result: String) -> Int {
@@ -504,8 +635,9 @@ struct ChatMessage: Identifiable {
     /// `attachments` for backwards compatibility.
     var resources: [ChatResource]
 
-    /// CHAT-06: which surface produced this turn. nil (history/restored rows)
-    /// renders as main chat.
+    /// Which surface produced this turn. This is only an ownership label for
+    /// interruption/cancellation policy; chat history is canonical and renders
+    /// every Omi turn in every full chat timeline.
     var turnOwner: ChatTurnOwner?
 
     init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil) {
@@ -560,6 +692,15 @@ extension ChatContentBlock {
         case .discoveryCard(_, let title, _, let fullText):
             let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .agentSpawn(_, _, _, _, let title, let objective):
+            let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
+            let body = [promptSnippet, output]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            return body.isEmpty ? title : "\(title)\n\(body)"
         case .toolCall:
             return nil
         }
@@ -577,23 +718,6 @@ enum ChatTurnOwner: Equatable {
     case floatingVoice
     case taskChat(String)
     case agentPill(UUID)
-
-    /// CHAT-06: turns owned by a floating-bar surface must not appear in the
-    /// main-chat transcript (and vice versa). taskChat/agentPill turns are NOT
-    /// floating-bar surfaces — they keep rendering with the main transcript
-    /// (pre-fix behavior) if they ever share this provider.
-    var isFloating: Bool {
-        switch self {
-        case .floatingDefault, .floatingVoice: return true
-        case .mainChat, .taskChat, .agentPill: return false
-        }
-    }
-
-    /// Pure per-surface transcript filter (unit-tested): nil owners are legacy/
-    /// restored history and belong to the main surface.
-    static func transcriptMessages(_ messages: [ChatMessage], floatingSurface: Bool) -> [ChatMessage] {
-        messages.filter { ($0.turnOwner?.isFloating ?? false) == floatingSurface }
-    }
 
     func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
         switch (self, activeOwner) {
@@ -616,6 +740,7 @@ extension ChatMessage {
     /// Convert a backend message to a local ChatMessage
     init(from db: ChatMessageDB) {
         let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
+        let contentBlocks = ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
         self.init(
             id: db.id,
             text: db.text,
@@ -624,6 +749,7 @@ extension ChatMessage {
             isStreaming: false,
             rating: db.rating,
             isSynced: true,
+            contentBlocks: contentBlocks,
             attachments: ChatMessage.decodeAttachments(from: db.metadata),
             resources: resources
         )
@@ -822,6 +948,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return session
     }
     lazy var kernelTurnProjection = KernelTurnProjection(host: self)
+    private var pendingSurfaceTurns: [String: PendingSurfaceTurn] = [:]
     private var agentBridgeStarted = false
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
     /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
@@ -1263,7 +1390,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private var runtimeOwnerId: String? {
-        AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId")
+        RuntimeOwnerIdentity.currentOwnerId()
     }
 
     private func mainChatRuntimeChatId(sessionId: String?) -> String {
@@ -2238,7 +2365,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
+                    let result = await ChatToolExecutor.execute(
+                        toolCall,
+                        originatingChatMode: currentChatMode,
+                        originatingSurfaceRef: .chatLab(labSessionId: labSessionId)
+                    )
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -2826,6 +2957,244 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
+    private struct PendingSurfaceTurn {
+        let continuityKey: String
+        var userMessageId: String?
+        var assistantMessageId: String?
+        var origin: String
+    }
+
+    /// Stage a turn in the UI immediately under a continuity key. Kernel
+    /// `turn_recorded` later promotes the same messages in place (no append).
+    @discardableResult
+    func stageOptimisticTurn(
+        continuityKey: String,
+        userText: String,
+        assistantText: String,
+        origin: String,
+        turnOwner: ChatTurnOwner? = nil,
+        contentBlocks: [ChatContentBlock] = [],
+        resources: [ChatResource] = []
+    ) -> (user: ChatMessage?, assistant: ChatMessage?) {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return (nil, nil) }
+        guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty else {
+            return (nil, nil)
+        }
+
+        if var pending = pendingSurfaceTurns[key] {
+            let userMessage = pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
+            var assistantMessage = pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
+            if var existing = assistantMessage {
+                assistantMessage = mergeOptimisticAssistantPayload(
+                    into: &existing,
+                    assistantText: assistant,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            } else if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+                assistantMessage = appendOptimisticAssistantMessage(
+                    continuityKey: key,
+                    assistantText: assistant,
+                    origin: origin,
+                    turnOwner: turnOwner,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+                pending.assistantMessageId = assistantMessage?.id
+                pendingSurfaceTurns[key] = pending
+            }
+            return (userMessage, assistantMessage)
+        }
+
+        let existingUser = messages.first { $0.clientTurnId == key && $0.sender == .user }
+        var existingAssistant = messages.first { $0.clientTurnId == key && $0.sender == .ai }
+        if existingUser != nil || existingAssistant != nil {
+            if var existing = existingAssistant {
+                existingAssistant = mergeOptimisticAssistantPayload(
+                    into: &existing,
+                    assistantText: assistant,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            } else if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+                existingAssistant = appendOptimisticAssistantMessage(
+                    continuityKey: key,
+                    assistantText: assistant,
+                    origin: origin,
+                    turnOwner: turnOwner,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            }
+            pendingSurfaceTurns[key] = PendingSurfaceTurn(
+                continuityKey: key,
+                userMessageId: existingUser?.id,
+                assistantMessageId: existingAssistant?.id,
+                origin: origin
+            )
+            return (existingUser, existingAssistant)
+        }
+
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        let logLabel = origin
+
+        var userMessage: ChatMessage?
+        var aiMessage: ChatMessage?
+        if !user.isEmpty {
+            let m = ChatMessage(
+                clientTurnId: key,
+                text: user,
+                sender: .user,
+                turnOwner: turnOwner
+            )
+            messages.append(m)
+            userMessage = m
+        }
+        if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+            let messageText = assistant.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty) ? "Done." : assistant
+            let m = ChatMessage(
+                clientTurnId: key,
+                text: messageText,
+                sender: .ai,
+                contentBlocks: contentBlocks,
+                resources: resources,
+                turnOwner: turnOwner
+            )
+            messages.append(m)
+            aiMessage = m
+        }
+
+        pendingSurfaceTurns[key] = PendingSurfaceTurn(
+            continuityKey: key,
+            userMessageId: userMessage?.id,
+            assistantMessageId: aiMessage?.id,
+            origin: origin
+        )
+
+        pendingSaves.begin()
+        Task { [weak self] in
+            if let userMessage {
+                await self?.persistRecordedTurnMessage(
+                    userMessage, text: user, sender: "human",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
+            }
+            if let aiMessage {
+                await self?.persistRecordedTurnMessage(
+                    aiMessage, text: aiMessage.text, sender: "ai",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
+            }
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+
+        return (userMessage, aiMessage)
+    }
+
+    func promoteOptimisticTurn(continuityKey: String, from turn: AgentRuntimeProcess.KernelTurnRecorded) {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, let pending = pendingSurfaceTurns.removeValue(forKey: key) else { return }
+
+        let kernelUser = turn.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kernelAssistant = turn.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let userId = pending.userMessageId,
+           let index = messages.firstIndex(where: { $0.id == userId }),
+           !kernelUser.isEmpty {
+            messages[index].text = kernelUser
+        }
+        if let assistantId = pending.assistantMessageId,
+           let index = messages.firstIndex(where: { $0.id == assistantId }),
+           !kernelAssistant.isEmpty {
+            messages[index].text = kernelAssistant
+        }
+    }
+
+    func hasOptimisticTurn(continuityKey: String) -> Bool {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return false }
+        return pendingSurfaceTurns[key] != nil
+    }
+
+    /// Create the assistant half of a staged turn when a later stage for the same
+    /// continuity key arrives with assistant payload after a user-only first stage.
+    private func appendOptimisticAssistantMessage(
+        continuityKey: String,
+        assistantText: String,
+        origin: String,
+        turnOwner: ChatTurnOwner?,
+        contentBlocks: [ChatContentBlock],
+        resources: [ChatResource]
+    ) -> ChatMessage {
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        let messageText =
+            assistantText.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty)
+            ? "Done."
+            : assistantText
+        let message = ChatMessage(
+            clientTurnId: continuityKey,
+            text: messageText,
+            sender: .ai,
+            contentBlocks: contentBlocks,
+            resources: resources,
+            turnOwner: turnOwner
+        )
+        messages.append(message)
+        pendingSaves.begin()
+        Task { [weak self] in
+            await self?.persistRecordedTurnMessage(
+                message,
+                text: message.text,
+                sender: "ai",
+                appId: capturedAppId,
+                sessionId: capturedSessionId,
+                logLabel: origin,
+                messageSource: origin
+            )
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+        return message
+    }
+
+    /// Merge later artifact/completion payload onto an already-staged assistant
+    /// message for the same continuity key (INV-6: one producing turn).
+    @discardableResult
+    private func mergeOptimisticAssistantPayload(
+        into message: inout ChatMessage,
+        assistantText: String,
+        contentBlocks: [ChatContentBlock],
+        resources: [ChatResource]
+    ) -> ChatMessage {
+        guard let index = messages.firstIndex(where: { $0.id == message.id }) else {
+            return message
+        }
+        if !assistantText.isEmpty,
+           messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || messages[index].text == "Done."
+        {
+            messages[index].text = assistantText
+        }
+        if !contentBlocks.isEmpty {
+            var blocks = messages[index].contentBlocks
+            let existingIds = Set(blocks.map(\.id))
+            for block in contentBlocks where !existingIds.contains(block.id) {
+                blocks.append(block)
+            }
+            messages[index].contentBlocks = blocks
+        }
+        if !resources.isEmpty {
+            messages[index].resources = mergedResources(
+                existing: messages[index].resources,
+                adding: resources
+            )
+        }
+        message = messages[index]
+        return message
+    }
+
     /// Record a completed turn that did not stream through `sendMessage`.
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
@@ -2834,15 +3203,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         userText: String,
         assistantText: String,
         logLabel: String = "completed",
-        messageSource: String = "desktop_chat"
+        messageSource: String = "desktop_chat",
+        continuityKey: String? = nil,
+        contentBlocks: [ChatContentBlock] = []
     ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty else {
+        guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty else {
             return (nil, nil)
         }
+
+        let trimmedContinuityKey = continuityKey?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let clientTurnId = trimmedContinuityKey.isEmpty ? nil : trimmedContinuityKey
 
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -2850,12 +3225,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var userMessage: ChatMessage?
         var aiMessage: ChatMessage?
         if !user.isEmpty {
-            let m = ChatMessage(text: user, sender: .user)
+            let m = ChatMessage(clientTurnId: clientTurnId, text: user, sender: .user)
             messages.append(m)
             userMessage = m
         }
-        if !assistant.isEmpty {
-            let m = ChatMessage(text: assistant, sender: .ai)
+        if !assistant.isEmpty || !contentBlocks.isEmpty {
+            let messageText = assistant.isEmpty && !contentBlocks.isEmpty ? "Done." : assistant
+            let m = ChatMessage(
+                clientTurnId: clientTurnId,
+                text: messageText,
+                sender: .ai,
+                contentBlocks: contentBlocks
+            )
             messages.append(m)
             aiMessage = m
         }
@@ -2895,7 +3276,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         messageSource: String
     ) async {
         do {
-            let metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
+            var metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
+            metadata = ChatContentBlockCodec.mergeIntoMessageMetadata(
+                metadata,
+                contentBlocks: message.contentBlocks
+            )
             let response = try await APIClient.shared.saveMessage(
                 text: text,
                 sender: sender,
@@ -3327,6 +3712,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var toolStartTimes: [String: Date] = [:]
         let responseMetrics = ChatResponseMetrics()
         var completedResponseText: String?
+        var screenContextEligibleForTurn = false
 
         // Stall detection.
         // The detector observes every bridge event (text deltas, tool
@@ -3397,6 +3783,50 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             }
+            if effectiveImageData == nil, let screenContextReason = ScreenContextAutoIncludePolicy.reason(
+                userText: trimmedText,
+                systemPromptStyle: systemPromptStyle,
+                turnOwner: turnOwner
+            ) {
+                let screenRecordingGranted = CGPreflightScreenCaptureAccess()
+                if !screenRecordingGranted && !screenContextReason.isExplicitScreenRequest {
+                    // Ambient floating/task-agent turns are allowed to use screen context when already granted,
+                    // but they must not manufacture a screen-permission request for generic utterances.
+                } else {
+                    screenContextEligibleForTurn = true
+                    let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+                    let screenContextPayload = screenContextReason.isExplicitScreenRequest
+                        ? rawScreenContextPayload
+                        : ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    let screenContextEnvelope: [String: Any] = [
+                        "permission": [
+                            "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
+                        ],
+                        "reason": screenContextReason.isExplicitScreenRequest
+                            ? "explicit_screen_request"
+                            : "ambient_surface_context",
+                        "context": screenContextPayload,
+                        "guidance": screenContextReason.isExplicitScreenRequest
+                            ? (screenRecordingGranted
+                                ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
+                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.")
+                            : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
+                    ]
+                    if let data = try? JSONSerialization.data(
+                        withJSONObject: screenContextEnvelope,
+                        options: [.prettyPrinted, .sortedKeys]
+                    ), let json = String(data: data, encoding: .utf8) {
+                        systemPrompt += "\n\n<auto_screen_context>\n\(json)\n</auto_screen_context>"
+                        responseMetrics.recordToolRequested(name: "get_work_context")
+                        if let contextData = try? JSONSerialization.data(
+                            withJSONObject: screenContextPayload,
+                            options: [.sortedKeys]
+                        ), let contextJSON = String(data: contextData, encoding: .utf8) {
+                            responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
+                        }
+                    }
+                }
+            }
 
             // Query the active bridge with streaming. Hermes and OpenClaw do not
             // accept Omi's Claude model aliases, so leave model choice to the
@@ -3434,11 +3864,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
             let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
+                responseMetrics.recordToolRequested(name: name)
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(
                     toolCall,
                     originatingChatMode: currentChatMode,
-                    originatingClientScope: currentToolClientScope)
+                    originatingClientScope: currentToolClientScope,
+                    originatingSurfaceRef: resolvedSurface)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
@@ -3483,6 +3915,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     )
                     if toolStatus == .running {
                         toolNames.append(name)
+                        responseMetrics.recordToolRequested(name: name)
                         toolStartTimes[trackedId] = Date()
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
@@ -3543,6 +3976,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    responseMetrics.recordToolResult(name: name, result: output)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
                     self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
@@ -3617,10 +4051,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Determine the final text to display and save
             let messageText: String
+            let metricsSnapshot = responseMetrics.snapshot()
+            if screenContextEligibleForTurn, !metricsSnapshot.screenContext.screenToolRequested {
+                ScreenContextToolTelemetry.trackInvariant(
+                    "eligible_run_missing_get_work_context",
+                    context: ScreenContextTelemetryContext.from(surfaceRef: resolvedSurface),
+                    toolName: "get_work_context"
+                )
+            }
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
-                let metricsSnapshot = responseMetrics.snapshot()
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 // Merge the parent agent's own artifacts with any produced by
@@ -3757,7 +4198,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 toolCallCount: toolNames.count,
                 toolNames: toolNames,
                 costUsd: queryResult.costUsd,
-                messageLength: responseLength
+                messageLength: responseLength,
+                screenToolRequested: metricsSnapshot.screenContext.screenToolRequested,
+                screenToolSucceeded: metricsSnapshot.screenContext.screenToolSucceeded,
+                screenToolApprovalRequired: metricsSnapshot.screenContext.screenToolApprovalRequired,
+                screenToolFailureCodes: metricsSnapshot.screenContext.screenToolFailureCodes
             )
 
             // Skip client-side cost telemetry for piMono because /v2/chat/completions
@@ -4075,6 +4520,85 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             toolUseId: toolUseId,
             extraTexts: [output]
         )
+        Self.materializeAgentSpawnBlockIfNeeded(
+            in: &messages[index].contentBlocks,
+            toolUseId: toolUseId,
+            toolName: name
+        )
+    }
+
+    /// When `spawn_agent` completes, append a structured `.agentSpawn` block so
+    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4).
+    nonisolated static func materializeAgentSpawnBlockIfNeeded(
+        in blocks: inout [ChatContentBlock],
+        toolUseId: String?,
+        toolName: String
+    ) {
+        let cleanName: String
+        if toolName.hasPrefix("mcp__") {
+            cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleanName = toolName
+        }
+        guard cleanName == "spawn_agent" else { return }
+
+        guard let toolIndex = blocks.lastIndex(where: { block in
+            guard case .toolCall(_, let name, let status, let existingToolUseId, _, let output) = block,
+                  !status.isInFlight,
+                  output != nil
+            else { return false }
+            let blockName: String
+            if name.hasPrefix("mcp__") {
+                blockName = String(name.split(separator: "__").last ?? Substring(name))
+            } else {
+                blockName = name
+            }
+            guard blockName == "spawn_agent" else { return false }
+            if let toolUseId, !toolUseId.isEmpty {
+                return existingToolUseId == toolUseId || existingToolUseId == nil
+            }
+            return true
+        }) else { return }
+
+        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return }
+        let spawnSource = blocks[toolIndex]
+        guard let pillId = spawnSource.spawnedAgentID else { return }
+        let sessionId = spawnSource.spawnedAgentSessionID ?? ""
+        let runId = spawnSource.spawnedAgentRunID ?? ""
+
+        // Idempotent: do not append a second spawn card for the same pill/run.
+        let alreadyPresent = blocks.contains { block in
+            if case .agentSpawn(_, let existingPill, _, let existingRun, _, _) = block {
+                if let existingPill, existingPill == pillId { return true }
+                if !runId.isEmpty, existingRun == runId { return true }
+            }
+            return false
+        }
+        guard !alreadyPresent else { return }
+
+        let titleFromOutput = ChatContentBlock.labeledSpawnValue(
+            in: spawnSource,
+            keys: ["title"]
+        )
+        let title = (titleFromOutput?.isEmpty == false)
+            ? (titleFromOutput ?? "Background agent")
+            : (input?.summary.isEmpty == false ? input!.summary : "Background agent")
+        let objective = (input?.details?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? (input?.details ?? "")
+            : (input?.summary ?? "")
+
+        let spawnBlock = ChatContentBlock.agentSpawn(
+            id: UUID().uuidString,
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId,
+            title: title,
+            objective: objective
+        )
+        // Keep the tool block for in-session progress; insert structured spawn
+        // immediately after it so reload/metadata durability has a first-class card.
+        let insertAt = min(toolIndex + 1, blocks.count)
+        blocks.insert(spawnBlock, at: insertAt)
     }
 
     private func attachGeneratedFileResources(
@@ -4294,8 +4818,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    /// Serialize tool calls and resource cards from a message into a JSON metadata string.
-    /// Returns nil if there are no tool calls and no resources.
+    /// Serialize tool calls, structured content blocks, and resource cards into
+    /// a JSON metadata string. Returns nil when there is nothing to persist.
     private func serializeMessagePersistenceMetadata(messageId: String) -> String? {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
 
@@ -4319,6 +4843,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         if !toolCalls.isEmpty {
             root["tool_calls"] = toolCalls
+        }
+
+        let structuredBlocks = messages[index].contentBlocks.filter { block in
+            if case .toolCall = block { return false }
+            return true
+        }
+        if !structuredBlocks.isEmpty {
+            root[ChatContentBlockCodec.messageMetadataKey] =
+                ChatContentBlockCodec.encodeArray(structuredBlocks)
         }
 
         if let resourcesMetadata = ChatResource.mergeResourcesIntoMessageMetadata(
@@ -4490,9 +5023,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Default chat mode: clear UI immediately, delete in background
             let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
             let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-            // CHAT-06: clearing the MAIN transcript must not wipe the floating
-            // bar's turns, which live in the same shared array.
-            messages = ChatTurnOwner.transcriptMessages(messages, floatingSurface: true)
+            messages = []
             resetMessagesPagination()
             AgentRuntimeStatusStore.shared.clear(surface: surface)
             await invalidateAgentSurface(surface: surface)
@@ -4518,9 +5049,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 sessions.removeAll { $0.id == session.id }
             }
             currentSession = nil
-            // CHAT-06: clearing the MAIN transcript must not wipe the floating
-            // bar's turns, which live in the same shared array.
-            messages = ChatTurnOwner.transcriptMessages(messages, floatingSurface: true)
+            messages = []
             resetMessagesPagination()
 
             // Delete old session in background (don't await — backend is slow)
@@ -4649,14 +5178,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Local automation (continuity gauntlet)
 
-  private static let automationAuthUserIdKey = "auth_userId"
-  /// Owner A's real uid, stashed by automationSwapTestOwner so restore_test_owner can
-  /// undo the swap. Without this the synthetic owner persists in UserDefaults across
-  /// relaunches and every backend-auth path breaks (mint, kernel persist, goals).
-  private static let automationOwnerABackupKey = "automation_swap_owner_a_backup"
-
-  /// Test-bundle-only owner swap: clear kernel state for owner A, register synthetic
-  /// owner B, and run one main-chat probe turn under a QueryTracer context.
+  /// Test-bundle-only owner swap: clear kernel state for owner A, apply a synthetic
+  /// owner-B override (without rewriting Firebase `auth_userId` / tokens), and run
+  /// one main-chat probe turn under a QueryTracer context.
   func automationSwapTestOwner(ownerBId: String, probeQuery: String) async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "swap_test_owner is disabled on production bundles"]
@@ -4665,7 +5189,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     let trimmedQuery = probeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedOwnerB.isEmpty else { return ["error": "missing 'owner_b'"] }
     guard !trimmedQuery.isEmpty else { return ["error": "missing 'query'"] }
-    guard let ownerA = runtimeOwnerId, !ownerA.isEmpty else {
+    // Real Firebase uid — never the automation override — so we refuse swapping
+    // when the session is not actually signed in.
+    guard let ownerA = UserDefaults.standard.string(forKey: .authUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !ownerA.isEmpty
+    else {
       return ["error": "owner A is not signed in"]
     }
     guard trimmedOwnerB != ownerA else {
@@ -4677,8 +5206,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
       await resolvedAgentClient().clearOwnerState()
     }
 
-    UserDefaults.standard.set(ownerA, forKey: Self.automationOwnerABackupKey)
-    UserDefaults.standard.set(trimmedOwnerB, forKey: Self.automationAuthUserIdKey)
+    RuntimeOwnerIdentity.applyAutomationOwnerOverride(trimmedOwnerB)
     resetSessionStateForAuthChange()
 
     let tracer = QueryTracer(query: trimmedQuery, inputMode: .text)
@@ -4690,20 +5218,24 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     detail["owner_a"] = ownerA
     detail["owner_b"] = trimmedOwnerB
     detail["probe_query"] = trimmedQuery
+    detail["auth_user_id"] = UserDefaults.standard.string(forKey: .authUserId) ?? ""
+    detail["owner_override"] = UserDefaults.standard.string(forKey: .automationOwnerOverride) ?? ""
     return detail
   }
 
-  /// Undo automationSwapTestOwner: restore the stashed real owner and reset session
-  /// state. Safe no-op when no swap is active. Harnesses must call this after the
-  /// owner suite (and may call it defensively pre-run).
+  /// Undo automationSwapTestOwner: clear the owner override (and heal a legacy
+  /// synthetic auth_userId if an older build left one). Safe no-op when no swap
+  /// is active. Harnesses must call this after the owner suite (and may call it
+  /// defensively pre-run).
   func automationRestoreTestOwner() async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "restore_test_owner is disabled on production bundles"]
     }
     let defaults = UserDefaults.standard
-    guard let ownerA = defaults.string(forKey: Self.automationOwnerABackupKey),
-          !ownerA.isEmpty
-    else {
+    let hadSwap =
+      (defaults.string(forKey: .automationOwnerOverride)?.isEmpty == false)
+      || (defaults.string(forKey: .automationOwnerABackup)?.isEmpty == false)
+    guard hadSwap else {
       return ["restored": "false", "note": "no owner swap active"]
     }
 
@@ -4712,28 +5244,31 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
       await resolvedAgentClient().clearOwnerState()
     }
 
-    defaults.set(ownerA, forKey: Self.automationAuthUserIdKey)
-    defaults.removeObject(forKey: Self.automationOwnerABackupKey)
+    let result = RuntimeOwnerIdentity.clearAutomationOwnerOverride()
     resetSessionStateForAuthChange()
-    return ["restored": "true", "owner_id": ownerA]
+    return [
+      "restored": result.restored ? "true" : "false",
+      "owner_id": result.ownerId ?? "",
+      "auth_user_id": defaults.string(forKey: .authUserId) ?? "",
+    ]
   }
 
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.
     func automationMainChatSnapshot(limit: Int) -> [String: String] {
-        automationChatSnapshot(limit: limit, floatingSurface: false)
+        automationChatSnapshot(limit: limit)
     }
 
-    /// CHAT-06: floating-bar transcript view — only turns owned by a floating
-    /// surface, so the harness can assert cross-surface isolation.
+    /// Snapshot for the floating-bar chat. It intentionally returns the same
+    /// canonical Omi chat timeline as main chat so typed notch, PTT, and
+    /// spawned-agent links can be verified from either surface.
     func automationFloatingChatSnapshot(limit: Int) -> [String: String] {
-        automationChatSnapshot(limit: limit, floatingSurface: true)
+        automationChatSnapshot(limit: limit)
     }
 
-    private func automationChatSnapshot(limit: Int, floatingSurface: Bool) -> [String: String] {
+    private func automationChatSnapshot(limit: Int) -> [String: String] {
         let boundedLimit = max(1, limit)
         let runtimeChatId = mainChatRuntimeChatId(sessionId: currentSessionId)
-        let transcript = ChatTurnOwner.transcriptMessages(messages, floatingSurface: floatingSurface)
-        let rows: [[String: String]] = transcript.suffix(boundedLimit).map { message in
+        let rows: [[String: String]] = messages.suffix(boundedLimit).map { message in
             [
                 "id": message.id,
                 "role": message.sender == .user ? "user" : "assistant",
@@ -4753,11 +5288,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "chat_session_id": currentSessionId ?? "",
             "runtime_chat_id": runtimeChatId,
             "is_sending": isSending ? "true" : "false",
-            "is_streaming": transcript.contains(where: { $0.isStreaming }) ? "true" : "false",
-            "message_count": "\(transcript.count)",
+            "is_streaming": messages.contains(where: { $0.isStreaming }) ? "true" : "false",
+            "message_count": "\(messages.count)",
             "messages_json": messagesJSON,
         ]
-        if let lastAssistant = transcript.last(where: { $0.sender != .user })?.copyableText {
+        if let lastAssistant = messages.last(where: { $0.sender != .user })?.copyableText {
             detail["last_assistant_text"] = lastAssistant
         }
         if let ownerId = runtimeOwnerId {

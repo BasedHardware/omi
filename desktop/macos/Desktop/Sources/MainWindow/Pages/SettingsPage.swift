@@ -132,6 +132,11 @@ struct SettingsContentView: View {
   // Ask Omi floating bar state
   @State var showAskOmiBar: Bool = false
 
+  // Grant for chat screenshot tools (capture_screen / get_screenshot);
+  // read by ChatToolExecutor.localPolicyDecision. Default on.
+  @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
+  var chatScreenshotSharingEnabled: Bool = true
+
   // Transcription state
   @State var isTranscribing: Bool
   @State var isTogglingTranscription: Bool = false

@@ -65,8 +65,32 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Compute short SHA
+        id: image-tag
+        run: |
+          # Use checked-out HEAD so the image tag matches the branch input, not
+          # the workflow-file ref (GITHUB_SHA), when they diverge.
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
+
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Render backend runtime env
+        id: runtime-env
+        env:
+          # Prod network flags are env_var-backed; without these the renderer
+          # exits before notifications_job_* outputs are emitted (same as gcp_backend.yml).
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+
+      - name: Validate backend runtime env before deploy
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
@@ -74,7 +98,9 @@ jobs:
           context: .
           file: ./backend/modal/Dockerfile.notifications_job
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -84,7 +110,10 @@ jobs:
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          env_vars: ${{ steps.runtime-env.outputs.notifications_job_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.notifications_job_secrets }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

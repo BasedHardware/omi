@@ -83,7 +83,8 @@
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",
-        "segment failures cannot be reported as completed work"
+        "segment failures cannot be reported as completed work",
+        "enqueued jobs retain staged blobs until handler completion"
       ]
     },
     {

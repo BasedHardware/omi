@@ -7,7 +7,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
-    XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
+    XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn,"))
+    XCTAssertTrue(source.contains("!voiceOutputCoordinator.snapshot().providerOutputSuppressed"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
     XCTAssertTrue(source.contains("output: \"Agent started.\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
@@ -26,6 +27,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("Started background agent"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
+    XCTAssertTrue(source.contains("self.acquireVoiceOutput(.deterministicAgentAck, reason: \"spawn_agent_success\")"))
     XCTAssertFalse(source.contains("speak(ack)"))
   }
 
@@ -49,6 +51,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(reply)"))
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)"))
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck, reason: \"directed_provider_unavailable\")"))
+  }
+
+  func testRealtimeHubAudibleOutputIsLeaseGated() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("private var voiceOutputCoordinator = PTTVoiceOutputCoordinator()"))
+    XCTAssertTrue(source.contains("_ = voiceOutputCoordinator.beginTurn()"))
+    XCTAssertTrue(source.contains("voiceOutputCoordinator.endTurn()"))
+    XCTAssertTrue(source.contains("private func acquireVoiceOutput(_ lane: PTTVoiceOutputLane, reason: String)"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.nativeRealtime, reason: \"provider_audio\")"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck, reason: \"spawn_agent_success\")"))
+    XCTAssertTrue(source.contains("providerOutputSuppressed"))
+    XCTAssertFalse(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()\n        var toolArgs"))
   }
 
   func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {

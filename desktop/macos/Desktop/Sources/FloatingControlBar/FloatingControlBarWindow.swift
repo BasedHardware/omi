@@ -70,9 +70,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
-    /// Wider lobes while "thinking" so the right lobe fits the word alongside the
-    /// spinning Omi mark on the left.
-    static let notchThinkingSideWidth: CGFloat = 62
+    /// Thinking keeps the compact active lobe width: the visible state is the
+    /// spinning Omi mark only, without a right-side text label.
+    static let notchThinkingSideWidth: CGFloat = notchActiveSideWidth
     static let defaultNotchChromeHeight: CGFloat = 34
     static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17
@@ -1154,6 +1154,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 state.aiInputText = ""
             }
             resizeToResponseHeight(animated: true)
+            // Mid-stream close cancels the floating binder; re-subscribe so the
+            // restored viewport tracks provider updates within the 10-min window.
+            FloatingControlBarManager.shared.reobserveStreamingTurnIfNeeded(in: self)
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
@@ -1172,7 +1175,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 state.present(.mainInput)
                 state.isAILoading = false
                 state.aiInputText = ""
-                state.currentAIMessage = nil
+                state.setLocalAnswerOverride(nil)
                 // Match the explicit resize height so the observer doesn't immediately override it
                 state.inputViewHeight = inputPanelHeight
             }
@@ -1309,19 +1312,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 }
                 resizeToResponseHeight(animated: true)
             }
-            state.aiResponseText += text
+            state.appendLocalAnswerText(text)
         case "done":
             withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             if !text.isEmpty {
-                state.aiResponseText = text
+                state.replaceLocalAnswerText(text)
             }
         case "error":
             withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
-            state.aiResponseText = text.isEmpty ? "An unknown error occurred." : text
+            state.replaceLocalAnswerText(text.isEmpty ? "An unknown error occurred." : text)
         default:
             break
         }
@@ -2127,9 +2130,8 @@ class FloatingControlBarManager {
     }
 
     private var window: FloatingControlBarWindow?
-    /// On notched displays the notch is not shown at launch — it reveals only
-    /// after the user's first Push-to-Talk press. Tracks whether that reveal has
-    /// happened this session so `showInitial()` can gate the launch presentation.
+    /// Tracks whether the deferred notch reveal has happened this session for
+    /// explicit opt-in contexts such as onboarding/demo/minimal mode.
     private var hasRevealedNotchThisSession = false
     private var snoozeTimer: Timer?
     private var recordingCancellable: AnyCancellable?
@@ -2145,6 +2147,61 @@ class FloatingControlBarManager {
     /// floating bar, so viewed-pill expiration can skip the one the user is
     /// actively reading.
     var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
+
+    func openAgentChatFromTimeline(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
+        openAgentChatFromTimeline(
+            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),
+            completion: completion
+        )
+    }
+
+    func openAgentChatFromTimeline(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
+        guard let window else {
+            completion?(false)
+            return
+        }
+        activeQueryGeneration += 1
+        let generation = activeQueryGeneration
+        Task { @MainActor in
+            let resolved = await AgentPillsManager.shared.resolveAndPresentAgent(
+                pillId: ref.pillId,
+                sessionId: ref.sessionId,
+                runId: ref.runId
+            )
+            guard isActiveQueryGeneration(generation) else { return }
+            guard resolved else {
+                log(
+                    "FloatingControlBarManager: agent link unavailable after hydrate "
+                        + "pillId=\(ref.pillId?.uuidString ?? "nil") "
+                        + "sessionId=\(ref.sessionId ?? "nil") "
+                        + "runId=\(ref.runId ?? "nil")"
+                )
+                completion?(false)
+                return
+            }
+            let pillID = AgentPillsManager.shared.pills.first(where: { pill in
+                if let pillId = ref.pillId, pill.id == pillId { return true }
+                if let runId = ref.runId, pill.canonicalRunId == runId { return true }
+                if let sessionId = ref.sessionId, pill.canonicalSessionId == sessionId { return true }
+                return false
+            })?.id ?? ref.pillId
+            guard let pillID else {
+                log("FloatingControlBarManager: agent hydrate succeeded but pill id missing")
+                completion?(false)
+                return
+            }
+            AgentPillsManager.shared.markViewed(pillID: pillID)
+            window.state.setNotchHoverMenuOpen(false)
+            window.makeKeyAndOrderFront(nil)
+            withAnimation(.easeOut(duration: 0.10)) {
+                window.state.present(.agent(pillID))
+                window.state.isAILoading = false
+                window.state.aiInputText = ""
+            }
+            window.resizeForActiveAgentChatPublic(pillID: pillID, animated: true)
+            completion?(true)
+        }
+    }
 
     /// Called when a pill is dismissed while it is the one shown in the Ask Omi
     /// surface. Leaves the agent surface so conversationSurface resets instead
@@ -2162,7 +2219,6 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var activeQueryGeneration: Int = 0
     private var deliveredAgentArtifactKeys: Set<String> = []
-    private var projectedPillCompletionKeys: Set<String> = []
 
     private var selectedFloatingModel: String {
         let selected = ShortcutSettings.shared.selectedModel
@@ -2302,29 +2358,12 @@ class FloatingControlBarManager {
             }
         }
 
-        barWindow.onShareLink = { [weak barWindow] in
-            guard let barWindow = barWindow else { return nil }
-            // Share the visible floating-bar exchange history in chat order.
-            var messageIds: [String] = []
-            for exchange in barWindow.state.chatHistory {
-                if let questionMessageId = exchange.questionMessageId {
-                    messageIds.append(questionMessageId)
-                }
-                if exchange.aiMessage.isSynced {
-                    messageIds.append(exchange.aiMessage.id)
-                }
-            }
-            if let currentQuestionMessageId = barWindow.state.currentQuestionMessageId {
-                messageIds.append(currentQuestionMessageId)
-            }
-            if let current = barWindow.state.currentAIMessage, current.isSynced {
-                messageIds.append(current.id)
-            }
-            let orderedUniqueMessageIds = messageIds.reduce(into: [String]()) { ids, messageId in
-                if !ids.contains(messageId) {
-                    ids.append(messageId)
-                }
-            }
+        barWindow.onShareLink = { [weak self, weak barWindow] in
+            guard let self, let barWindow = barWindow else { return nil }
+            // Share synced message ids from the viewport cursor over the shared provider.
+            let orderedUniqueMessageIds = barWindow.state.syncedShareMessageIds(
+                from: self.historyChatProvider
+            )
             guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
                 let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
@@ -2586,13 +2625,34 @@ class FloatingControlBarManager {
         }
     }
 
-    /// Launch-time presentation. On notched displays the notch stays hidden until
-    /// the user's first Push-to-Talk press (which calls `show()`); on other
-    /// displays it behaves exactly like `show()`.
-    func showInitial() {
+    /// Apply the product-level launch presentation policy.
+    ///
+    /// Normal signed-in Desktop launch must show the floating bar when enabled;
+    /// deferred reveal is reserved for explicit opt-in contexts such as onboarding
+    /// or a future minimal mode.
+    func presentForLaunch(context: FloatingBarLaunchContext) {
+        let presentation = FloatingBarLaunchPolicy.presentation(
+            isEnabled: isEnabled,
+            context: context,
+            displayHasNotch: window?.usesNotchIslandForCurrentScreen == true
+        )
+
+        switch presentation {
+        case .hidden:
+            return
+        case .showImmediately:
+            show()
+        case .deferUntilFirstPushToTalk:
+            showDeferredUntilFirstPushToTalk()
+        }
+    }
+
+    /// Opt-in presentation for contexts where the notch should stay hidden until
+    /// the user's first Push-to-Talk press (which calls `show()`).
+    func showDeferredUntilFirstPushToTalk() {
         if window?.usesNotchIslandForCurrentScreen == true, !hasRevealedNotchThisSession {
             isEnabled = true
-            log("FloatingControlBarManager: showInitial() — notch hidden until first Push-to-Talk")
+            log("FloatingControlBarManager: showDeferredUntilFirstPushToTalk() — notch hidden until first Push-to-Talk")
             return
         }
         show()
@@ -2723,6 +2783,74 @@ class FloatingControlBarManager {
         }
         if !keepVoiceAlive {
             FloatingBarVoicePlaybackService.shared.stop()
+        }
+    }
+
+    /// After mid-stream close → restore, re-bind the floating viewport to the
+    /// still-streaming provider turn so answer text/blocks keep updating.
+    func reobserveStreamingTurnIfNeeded(in barWindow: FloatingControlBarWindow) {
+        guard let provider = historyChatProvider else { return }
+        let turnId = barWindow.state.chatViewport.activeClientTurnId
+        let answer = barWindow.state.currentAIMessage(from: provider)
+        guard FloatingControlBarState.shouldReobserveStreamingTurn(
+            activeClientTurnId: turnId,
+            answerMessage: answer
+        ), let turnId else {
+            // Refresh a completed/partial answer that advanced while the surface was closed.
+            if let message = answer {
+                barWindow.state.bindAnswerMessage(message)
+            }
+            return
+        }
+
+        let generation = activeQueryGeneration
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
+        chatCancellable?.cancel()
+        var hasSetUpResponseHeight = barWindow.state.showingAIResponse
+        chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak barWindow] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
+                guard let aiMessage = messages.last(where: {
+                    $0.clientTurnId == turnId && $0.sender == .ai
+                }) else { return }
+
+                barWindow?.state.bindAnswerMessage(aiMessage)
+                if let userMessage = messages.last(where: {
+                    $0.clientTurnId == turnId && $0.sender == .user
+                }) {
+                    barWindow?.state.bindQuestionMessageId(userMessage.id)
+                }
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
+
+                if aiMessage.isStreaming {
+                    barWindow?.state.isAILoading = false
+                    if let barWindow, !hasSetUpResponseHeight {
+                        hasSetUpResponseHeight = true
+                        if !barWindow.state.showingAIResponse {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                                barWindow.state.present(.mainResponse)
+                            }
+                        }
+                        barWindow.resizeToResponseHeightPublic(animated: true)
+                    }
+                } else {
+                    barWindow?.state.isAILoading = false
+                    self.chatCancellable?.cancel()
+                    self.chatCancellable = nil
+                }
+            }
+
+        if let answer {
+            barWindow.state.bindAnswerMessage(answer)
+            barWindow.state.isAILoading = false
         }
     }
 
@@ -3008,10 +3136,12 @@ class FloatingControlBarManager {
         origin: String,
         idempotencyKey: String
     ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
-        let turn = provider.recordCompletedTurn(
+        let turn = provider.stageOptimisticTurn(
+            continuityKey: idempotencyKey,
             userText: userText,
             assistantText: assistantText,
-            logLabel: origin
+            origin: origin,
+            turnOwner: .floatingDefault
         )
         await recordSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
@@ -3180,7 +3310,8 @@ class FloatingControlBarManager {
         if !displayed.isEmpty {
             return displayed
         }
-        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+        let history = barWindow.state.derivedChatHistory(from: historyChatProvider)
+        return history.reversed().compactMap { exchange in
             exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
         }.first { !$0.isEmpty }
     }
@@ -3216,8 +3347,8 @@ class FloatingControlBarManager {
             chatCancellable = nil
             barWindow.state.aiInputText = ""
             barWindow.state.displayedQuery = ""
-            barWindow.state.currentQuestionMessageId = nil
-            barWindow.state.currentAIMessage = message
+            barWindow.state.bindQuestionMessageId(nil)
+            barWindow.state.setLocalAnswerOverride(message)
             barWindow.state.isAILoading = false
             barWindow.state.currentQueryFromVoice = false
             barWindow.state.clearVoiceResponseState()
@@ -3297,7 +3428,21 @@ class FloatingControlBarManager {
         chatCancellable = nil
         barWindow.state.aiInputText = ""
         barWindow.state.displayedQuery = userText
-        barWindow.state.currentAIMessage = assistantMessage
+        // Provider timeline is SoT: enrich the existing message in place (e.g. spawn_agent
+        // tool block), then bindAnswerMessage only. localAnswerOverride is reserved for
+        // ephemeral UI that never lands on the provider.
+        if let provider = historyChatProvider,
+           let index = provider.messages.firstIndex(where: { $0.id == assistantMessage.id })
+        {
+            provider.messages[index].isStreaming = false
+            provider.messages[index].contentBlocks = assistantMessage.contentBlocks
+            if !assistantMessage.text.isEmpty {
+                provider.messages[index].text = assistantMessage.text
+            }
+            barWindow.state.bindAnswerMessage(provider.messages[index])
+        } else {
+            barWindow.state.setLocalAnswerOverride(assistantMessage)
+        }
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.state.currentQueryFromVoice = false
@@ -3326,18 +3471,8 @@ class FloatingControlBarManager {
         }
         guard let provider = activeFloatingProvider() else { return }
 
-        // Archive current exchange
-        if let currentMessage = window.state.currentAIMessage,
-           !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
-            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-            window.state.chatHistory.append(
-                FloatingChatExchange(
-                    question: currentQuery.isEmpty ? nil : currentQuery,
-                    questionMessageId: window.state.currentQuestionMessageId,
-                    aiMessage: currentMessage
-                )
-            )
-        }
+        // Archive current exchange as viewport id anchors (content stays on provider).
+        window.state.archiveCurrentExchange(using: provider)
 
         if provider.isSending {
             let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
@@ -3438,26 +3573,41 @@ class FloatingControlBarManager {
     private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
         guard storedNotificationMessages[notification.id] == nil else { return }
 
-        // Also append the notification as an assistant message in the shared
-        // main chat provider so it is visible on both the home-page chat and the
-        // floating/notch chat without waiting for backend polling.
+        // Stage under a continuity key so kernel promote / later projection can
+        // share the same logical turn (INV-6). Notifications are assistant-only.
         let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageText = bodyText.isEmpty ? notification.title : bodyText
-        let messageClientTurnId = "notification:\(notification.id.uuidString)"
-        let storedMessage = historyChatProvider?.appendAssistantMessage(
-            messageText,
-            clientTurnId: messageClientTurnId
+        let continuityKey = "notification:\(notification.id.uuidString)"
+        let staged = historyChatProvider?.stageOptimisticTurn(
+            continuityKey: continuityKey,
+            userText: "",
+            assistantText: messageText,
+            origin: "proactive_notification",
+            turnOwner: .mainChat
         )
-            ?? ChatMessage(text: messageText, sender: .ai)
+        let storedMessage = staged?.assistant
+            ?? ChatMessage(clientTurnId: continuityKey, text: messageText, sender: .ai)
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
             notification: notification,
             context: notification.context,
-            messageClientTurnId: messageClientTurnId,
+            messageClientTurnId: continuityKey,
             message: storedMessage,
             createdAt: Date()
         )
         mostRecentNotificationID = notification.id
+
+        if let provider = historyChatProvider {
+            Task {
+                await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                    surface: provider.mainChatSurfaceReference(),
+                    userText: "",
+                    assistantText: messageText,
+                    origin: "proactive_notification",
+                    idempotencyKey: continuityKey
+                )
+            }
+        }
     }
 
     func mainChatSurfaceReference() -> AgentSurfaceReference {
@@ -3534,18 +3684,66 @@ class FloatingControlBarManager {
             messageText = "Done. The background agent produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
         }
 
-        let historyMessage = historyChatProvider?.appendAssistantMessage(
-            messageText,
+        let continuityKey: String
+        if let runId, !runId.isEmpty {
+            continuityKey = "pill_completion:\(runId)"
+        } else {
+            continuityKey = "pill_completion:\(pillID.uuidString)"
+        }
+
+        // Assistant-only projection: the spawn handoff already recorded the user's
+        // request on main_chat; repeating it here would double-spend the voice seed budget.
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let summary = requestSnippet.isEmpty
+            ? "[Background agent id=\(pillID.uuidString)] \(messageText)"
+            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(messageText)"
+
+        let completionBlock = ChatContentBlock.agentCompletion(
+            id: UUID().uuidString,
+            pillId: pillID,
+            sessionId: AgentPillsManager.shared.pills.first(where: { $0.id == pillID })?.canonicalSessionId,
+            runId: runId,
+            title: trimmedTitle.isEmpty ? "Background agent" : trimmedTitle,
+            promptSnippet: requestSnippet.isEmpty ? "Background agent" : requestSnippet,
+            output: messageText,
+            status: "completed"
+        )
+
+        let staged = historyChatProvider?.stageOptimisticTurn(
+            continuityKey: continuityKey,
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            turnOwner: .mainChat,
+            contentBlocks: [completionBlock],
             resources: resources
         )
-        let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
-        deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+        // Bind the staged provider message (same id) so floating and timeline share
+        // one answer — bracket text + agentCompletion + resources. Do not mint a
+        // second ChatMessage id and setLocalAnswerOverride over the staged row.
+        if let stagedAssistant = staged?.assistant {
+            deliverAgentArtifactCompletionToFloatingSurface(stagedAssistant)
+        } else {
+            deliverAgentArtifactCompletionToFloatingSurface(
+                ChatMessage(
+                    text: summary,
+                    sender: .ai,
+                    contentBlocks: [completionBlock],
+                    resources: resources
+                )
+            )
+        }
         Task {
-            await recordPillTerminalCompletion(
-                pillID: pillID,
-                runId: runId,
-                userText: userText,
-                assistantText: messageText
+            guard let provider = historyChatProvider else { return }
+            await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                surface: provider.mainChatSurfaceReference(),
+                userText: "",
+                assistantText: summary,
+                origin: "pill_completion",
+                idempotencyKey: continuityKey
             )
         }
     }
@@ -3567,19 +3765,49 @@ class FloatingControlBarManager {
         } else {
             idempotencyKey = "pill_completion:\(pillID.uuidString)"
         }
-        guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
-        projectedPillCompletionKeys.insert(idempotencyKey)
 
-        // Assistant-only projection: the spawn handoff (Fix A) already recorded the user's
+        // Assistant-only projection: the spawn handoff already recorded the user's
         // request on main_chat; repeating it here would double-spend the voice seed budget.
         let requestSnippet = trimmedUser.count > 120
             ? String(trimmedUser.prefix(120)) + "…"
             : trimmedUser
         let summary = requestSnippet.isEmpty
-            ? trimmedAssistant
-            : "[Background agent — \(requestSnippet)] \(trimmedAssistant)"
+            ? "[Background agent id=\(pillID.uuidString)] \(trimmedAssistant)"
+            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
+
+        let completionBlock = ChatContentBlock.agentCompletion(
+            id: UUID().uuidString,
+            pillId: pillID,
+            sessionId: AgentPillsManager.shared.pills.first(where: { $0.id == pillID })?.canonicalSessionId,
+            runId: runId,
+            title: "Background agent",
+            promptSnippet: requestSnippet.isEmpty ? "Background agent" : requestSnippet,
+            output: trimmedAssistant,
+            status: "completed"
+        )
 
         guard let provider = historyChatProvider else { return }
+        if provider.hasOptimisticTurn(continuityKey: idempotencyKey)
+            || provider.messages.contains(where: { $0.clientTurnId == idempotencyKey }) {
+            // Artifact path already staged this key; only project to kernel.
+            await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                surface: provider.mainChatSurfaceReference(),
+                userText: "",
+                assistantText: summary,
+                origin: "pill_completion",
+                idempotencyKey: idempotencyKey
+            )
+            return
+        }
+
+        _ = provider.stageOptimisticTurn(
+            continuityKey: idempotencyKey,
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            turnOwner: .mainChat,
+            contentBlocks: [completionBlock]
+        )
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: "",
@@ -3626,11 +3854,13 @@ class FloatingControlBarManager {
         window.state.isAILoading = false
         window.state.aiInputText = ""
         if !shouldRestoreVisibleConversation {
-            window.state.chatHistory = []
-            window.state.displayedQuery = ""
-            window.state.currentQuestionMessageId = nil
+            window.state.clearViewport()
         }
-        window.state.currentAIMessage = notificationMessage
+        if self.historyChatProvider?.messages.contains(where: { $0.id == notificationMessage.id }) == true {
+            window.state.bindAnswerMessage(notificationMessage)
+        } else {
+            window.state.setLocalAnswerOverride(notificationMessage)
+        }
         window.state.markConversationActivity()
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
@@ -3653,19 +3883,9 @@ class FloatingControlBarManager {
     }
 
     private func archiveVisibleConversationIfNeeded(in window: FloatingControlBarWindow) {
-        guard let currentMessage = window.state.currentAIMessage else { return }
-        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
-
-        let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        window.state.chatHistory.append(
-            FloatingChatExchange(
-                question: currentQuery.isEmpty ? nil : currentQuery,
-                questionMessageId: window.state.currentQuestionMessageId,
-                aiMessage: currentMessage
-            )
-        )
+        window.state.archiveCurrentExchange(using: self.historyChatProvider)
         window.state.displayedQuery = ""
-        window.state.currentQuestionMessageId = nil
+        window.state.bindQuestionMessageId(nil)
     }
 
     private func purgeExpiredNotificationMessages() {
@@ -3691,20 +3911,15 @@ class FloatingControlBarManager {
         var completedMessage = message
         completedMessage.isStreaming = false
 
-        if let current = window.state.currentAIMessage {
-            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-            window.state.chatHistory.append(
-                FloatingChatExchange(
-                    question: currentQuery.isEmpty ? nil : currentQuery,
-                    questionMessageId: window.state.currentQuestionMessageId,
-                    aiMessage: current
-                )
-            )
-        }
+        window.state.archiveCurrentExchange(using: self.historyChatProvider)
 
-        window.state.currentAIMessage = completedMessage
+        if self.historyChatProvider?.messages.contains(where: { $0.id == completedMessage.id }) == true {
+            window.state.bindAnswerMessage(completedMessage)
+        } else {
+            window.state.setLocalAnswerOverride(completedMessage)
+        }
         window.state.displayedQuery = ""
-        window.state.currentQuestionMessageId = nil
+        window.state.bindQuestionMessageId(nil)
         window.state.isAILoading = false
         if window.state.conversationSurface == .mainInput || window.state.conversationSurface == .mainResponse {
             window.state.present(.mainResponse)
@@ -3863,10 +4078,10 @@ class FloatingControlBarManager {
                 guard isActiveQueryGeneration(generation) else { return }
                 barWindow.state.isAILoading = false
                 barWindow.state.present(.mainResponse)
-                barWindow.state.currentAIMessage = ChatMessage(
+                barWindow.state.setLocalAnswerOverride(ChatMessage(
                     text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
                     sender: .ai
-                )
+                ))
                 barWindow.resizeToResponseHeightPublic(animated: true)
                 NotificationCenter.default.post(
                     name: .showUsageLimitPopup,
@@ -3913,10 +4128,9 @@ class FloatingControlBarManager {
 
         let clientTurnId = UUID().uuidString
 
-        // Observe messages for streaming response
+        // Observe messages for streaming response — bind viewport ids only.
         chatCancellable?.cancel()
-        barWindow.state.currentAIMessage = nil
-        barWindow.state.currentQuestionMessageId = nil
+        barWindow.state.beginTurn(clientTurnId: clientTurnId)
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
@@ -3927,8 +4141,13 @@ class FloatingControlBarManager {
                     $0.clientTurnId == clientTurnId && $0.sender == .ai
                 }) else { return }
 
-                // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
-                barWindow?.state.currentAIMessage = aiMessage
+                // Viewport cursor over provider messages (preserves contentBlocks via id lookup)
+                barWindow?.state.bindAnswerMessage(aiMessage)
+                if let userMessage = messages.last(where: {
+                    $0.clientTurnId == clientTurnId && $0.sender == .user
+                }) {
+                    barWindow?.state.bindQuestionMessageId(userMessage.id)
+                }
                 if shouldPlayVoice {
                     FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
                         aiMessage,
@@ -3973,12 +4192,12 @@ class FloatingControlBarManager {
         if let syncedUserMessage = provider.messages.last(where: {
             $0.clientTurnId == clientTurnId && $0.sender == .user && $0.isSynced
         }) {
-            barWindow.state.currentQuestionMessageId = syncedUserMessage.id
+            barWindow.state.bindQuestionMessageId(syncedUserMessage.id)
         }
         if let finalAIMessage = provider.messages.last(where: {
             $0.clientTurnId == clientTurnId && $0.sender == .ai
         }) {
-            barWindow.state.currentAIMessage = finalAIMessage
+            barWindow.state.bindAnswerMessage(finalAIMessage)
         }
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -3989,16 +4208,28 @@ class FloatingControlBarManager {
         barWindow.state.isAILoading = false
 
         if let errorText = provider.errorMessage {
-            // Provider reported an error (timeout, bridge crash, etc.)
-            // Show it even if there's partial content — append to existing or create new message
-            if barWindow.state.currentAIMessage != nil && !barWindow.state.aiResponseText.isEmpty {
-                barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
+            // Provider reported an error (timeout, bridge crash, etc.).
+            // Prefer mutating the provider-backed answer in place; only use
+            // localAnswerOverride when there is no provider message to update.
+            if let existing = barWindow.state.currentAIMessage(from: provider),
+               let index = provider.messages.firstIndex(where: { $0.id == existing.id })
+            {
+                let existingText = provider.messages[index].text
+                provider.messages[index].text = existingText.isEmpty
+                    ? "⚠️ \(errorText)"
+                    : existingText + "\n\n⚠️ \(errorText)"
+                provider.messages[index].isStreaming = false
+                barWindow.state.bindAnswerMessage(provider.messages[index])
             } else {
-                barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
+                barWindow.state.setLocalAnswerOverride(ChatMessage(text: "⚠️ \(errorText)", sender: .ai))
             }
-        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
-            // No error message and no response — something else went wrong
-            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        } else if barWindow.state.shouldPresentEmptyResponseFailure(from: provider) {
+            // No error and no provider-backed answer content (text/blocks/resources).
+            // Never call setLocalAnswerOverride when an answerMessageId is already
+            // bound — that would clear the provider answer (including block-only).
+            barWindow.state.setLocalAnswerOverride(
+                ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+            )
         }
 
         // Ensure the response view is visible and resized (handles the case where
@@ -4012,7 +4243,7 @@ class FloatingControlBarManager {
 
         if shouldPlayVoice {
             FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-                barWindow.state.currentAIMessage,
+                barWindow.state.currentAIMessage(from: provider),
                 isFinal: true
             )
         }
@@ -4200,8 +4431,8 @@ extension FloatingControlBarWindow {
         state.currentQueryFromVoice = fromVoice
         state.aiInputText = ""
         state.displayedQuery = message
-        state.currentQuestionMessageId = nil
-        state.currentAIMessage = nil
+        state.clearCurrentAnswerAnchors()
+        // clearCurrentAnswerAnchors keeps archived exchanges; sendAIQuery binds the real turn id.
         state.isAILoading = true
         state.isVoiceFollowUp = false
         state.voiceFollowUpTranscript = ""

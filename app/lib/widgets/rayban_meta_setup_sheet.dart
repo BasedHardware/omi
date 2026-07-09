@@ -175,13 +175,19 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
       case _SetupStep.audioOnly:
         return [
-          Text(context.l10n.raybanMetaAudioOnlyTitle,
-              style: responsive.titleLarge.copyWith(height: 1.2), textAlign: TextAlign.center),
+          Text(
+            context.l10n.raybanMetaAudioOnlyTitle,
+            style: responsive.titleLarge.copyWith(height: 1.2),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 16),
           Text(context.l10n.raybanMetaAudioOnlyExplanation, style: responsive.bodyLarge, textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          Text(context.l10n.raybanMetaMusicPauseNote,
-              style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary), textAlign: TextAlign.center),
+          Text(
+            context.l10n.raybanMetaMusicPauseNote,
+            style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 32),
           _primaryButton(context.l10n.raybanMetaContinue, () => Navigator.of(context).pop(true)),
           const SizedBox(height: 12),
@@ -190,8 +196,11 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
       case _SetupStep.register:
         return [
-          Text(context.l10n.connectRayBanMeta,
-              style: responsive.titleLarge.copyWith(height: 1.2), textAlign: TextAlign.center),
+          Text(
+            context.l10n.connectRayBanMeta,
+            style: responsive.titleLarge.copyWith(height: 1.2),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 16),
           Text(context.l10n.raybanMetaSetupDescription, style: responsive.bodyLarge, textAlign: TextAlign.center),
           const SizedBox(height: 32),
@@ -202,8 +211,11 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
       case _SetupStep.waitingForMetaAi:
         return [
-          Text(context.l10n.connectRayBanMeta,
-              style: responsive.titleLarge.copyWith(height: 1.2), textAlign: TextAlign.center),
+          Text(
+            context.l10n.connectRayBanMeta,
+            style: responsive.titleLarge.copyWith(height: 1.2),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 16),
           Text(context.l10n.raybanMetaWaitingForMetaAI, style: responsive.bodyLarge, textAlign: TextAlign.center),
           const SizedBox(height: 24),
@@ -214,8 +226,11 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
       case _SetupStep.cameraPermission:
         return [
-          Text(context.l10n.raybanMetaAllowCamera,
-              style: responsive.titleLarge.copyWith(height: 1.2), textAlign: TextAlign.center),
+          Text(
+            context.l10n.raybanMetaAllowCamera,
+            style: responsive.titleLarge.copyWith(height: 1.2),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 16),
           Text(context.l10n.raybanMetaCameraExplanation, style: responsive.bodyLarge, textAlign: TextAlign.center),
           const SizedBox(height: 32),
@@ -248,10 +263,7 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
       height: 52,
       child: TextButton(
         onPressed: onPressed,
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 16, color: ResponsiveHelper.textTertiary),
-        ),
+        child: Text(label, style: const TextStyle(fontSize: 16, color: ResponsiveHelper.textTertiary)),
       ),
     );
   }

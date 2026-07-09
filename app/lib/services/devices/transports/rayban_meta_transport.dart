@@ -170,18 +170,9 @@ class RayBanMetaTransport extends DeviceTransport {
 
     _updateState(DeviceTransportState.disconnecting);
 
-    await _runNativeTeardownStep(
-      label: 'stopping audio during disconnect',
-      action: _hostAPI.stopAudioCapture,
-    );
-    await _runNativeTeardownStep(
-      label: 'stopping camera during disconnect',
-      action: _hostAPI.stopCamera,
-    );
-    await _runNativeTeardownStep(
-      label: 'disconnecting native session',
-      action: _hostAPI.disconnect,
-    );
+    await _runNativeTeardownStep(label: 'stopping audio during disconnect', action: _hostAPI.stopAudioCapture);
+    await _runNativeTeardownStep(label: 'stopping camera during disconnect', action: _hostAPI.stopCamera);
+    await _runNativeTeardownStep(label: 'disconnecting native session', action: _hostAPI.disconnect);
 
     for (final controller in _streamControllers.values) {
       _audioControllers.remove(controller);
@@ -193,10 +184,7 @@ class RayBanMetaTransport extends DeviceTransport {
     _updateState(DeviceTransportState.disconnected);
   }
 
-  Future<void> _runNativeTeardownStep({
-    required String label,
-    required Future<void> Function() action,
-  }) async {
+  Future<void> _runNativeTeardownStep({required String label, required Future<void> Function() action}) async {
     try {
       await action();
     } catch (e) {

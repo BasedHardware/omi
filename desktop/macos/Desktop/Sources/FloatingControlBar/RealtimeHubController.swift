@@ -12,7 +12,7 @@ import Foundation
 //   • executes the model's tool calls against EXISTING app code / endpoints:
 //       ask_higher_model → POST /v2/chat/completions (Claude, prompt-cached)
 //       spawn_agent      → canonical background agent + floating pill projection
-//       screenshot       → ScreenCaptureManager (+ inject into the session)
+//       screenshot       → ScreenCaptureManager (+ inject into the session when explicitly requested)
 //       point_click      → local CGEvent click
 //
 // This BYPASSES the Haiku classify() router — routing is the model's tool choice.
@@ -69,6 +69,94 @@ enum RealtimeHubCommitResult: Equatable {
   case accepted
   case deferredForReplacement
   case rejectedNoSession
+}
+
+enum RealtimeHubToolFailureKind: String, Equatable {
+  case backendUnauthorized = "backend_unauthorized"
+  case backendRateLimited = "backend_rate_limited"
+  case backendClientRejected = "backend_client_rejected"
+  case backendServerError = "backend_server_error"
+  case backendTransport = "backend_transport"
+  case responseDecode = "response_decode"
+  case providerCredential = "provider_credential"
+  case toolExecution = "tool_execution"
+
+  static func classify(_ error: Error) -> RealtimeHubToolFailureKind {
+    if error is DecodingError { return .responseDecode }
+    if let apiError = error as? APIError {
+      switch apiError {
+      case .unauthorized:
+        return .backendUnauthorized
+      case .syncRateLimited:
+        return .backendRateLimited
+      case .invalidResponse, .decodingError:
+        return .responseDecode
+      case .httpError(let statusCode, _):
+        switch statusCode {
+        case 401, 403:
+          return .backendUnauthorized
+        case 408, 425, 429:
+          return .backendRateLimited
+        case 400..<500:
+          return .backendClientRejected
+        case 500..<600:
+          return .backendServerError
+        default:
+          return .backendTransport
+        }
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected:
+        return .backendClientRejected
+      }
+    }
+    if let credentialError = error as? CredentialHealthError {
+      switch credentialError.failureClass {
+      case .requiresLogin, .backendUnauthorized:
+        return .backendUnauthorized
+      case .paywalled, .byokEnrollmentMismatch, .providerAuthFailed, .providerQuotaExceeded:
+        return .providerCredential
+      case .backendTransient:
+        return .backendServerError
+      case .providerTransient, .providerPolicyClose, .unknown:
+        return .backendTransport
+      }
+    }
+    let nsError = error as NSError
+    if nsError.domain == NSURLErrorDomain { return .backendTransport }
+    return .toolExecution
+  }
+
+  var userFacingReason: String {
+    switch self {
+    case .backendUnauthorized:
+      return "Sign-in or account access needs attention."
+    case .backendRateLimited:
+      return "The service is rate limited; try again shortly."
+    case .backendClientRejected:
+      return "The request was rejected."
+    case .backendServerError:
+      return "The backend is temporarily unavailable."
+    case .backendTransport:
+      return "The network request failed."
+    case .responseDecode:
+      return "The response could not be read."
+    case .providerCredential:
+      return "The provider credential needs attention."
+    case .toolExecution:
+      return "The tool failed while running."
+    }
+  }
+}
+
+struct RealtimeHubToolFailure: Equatable {
+  let kind: RealtimeHubToolFailureKind
+
+  static func classify(_ error: Error) -> RealtimeHubToolFailure {
+    RealtimeHubToolFailure(kind: RealtimeHubToolFailureKind.classify(error))
+  }
+
+  func userFacingOutput(base: String) -> String {
+    "\(base) \(kind.userFacingReason)"
+  }
 }
 
 private struct PendingBargeInReplacementTurn {
@@ -173,10 +261,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var assistantText = ""
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
+  private var geminiScreenFrameSentThisTurn = false
   private var audioReceivedThisTurn = false
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
+  private var voiceOutputCoordinator = PTTVoiceOutputCoordinator()
   /// Guards against recording the same turn to the kernel twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
@@ -185,9 +275,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
   private var prefetchedFloatingAgentStatus = ""
+  private var voiceTurnScreenContextSentEpoch: Int?
   /// Seed baked into the current warm session's system instructions.
   private var sessionVoiceSeedContextSnapshot = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
+  private var voiceScreenContextPrefetchTask: Task<String, Never>?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
   private var pendingBargeInAuth: HubAuth?
@@ -278,10 +370,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       self?.aboutUserCard = await AboutUserCard.build()
     }
   }
-
-  /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
-  /// spawn creates its own provider; warming this one primes node/auth caches.
-  private var warmProvider: ChatProvider?
 
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
@@ -713,6 +801,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Prefetch the canonical screen context on PTT key-down. This keeps voice-turn
+  /// latency low without letting stale screenshot OCR become current-screen truth.
+  func prefetchVoiceTurnScreenContextIfNeeded() {
+    voiceScreenContextPrefetchTask?.cancel()
+    voiceScreenContextPrefetchTask = Task {
+      await Self.voiceTurnScreenContextEnvelopeJSON()
+    }
+  }
+
   private func refreshVoiceSeedContext() async {
     voiceSeedPrefetchTask?.cancel()
     voiceSeedPrefetchTask = nil
@@ -730,6 +827,66 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub: voice seed changed — reconnecting warm session "
         + "(was \(sessionVoiceSeedContextSnapshot.count) chars, now \(current.count))")
     teardownSession()
+  }
+
+  private func sendVoiceTurnScreenContextIfNeeded(epoch: Int) async {
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    guard let targetSession = session else { return }
+
+    let json: String
+    if let prefetchTask = voiceScreenContextPrefetchTask {
+      json = await prefetchTask.value
+    } else {
+      json = await Self.voiceTurnScreenContextEnvelopeJSON()
+    }
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    guard self.session === targetSession else { return }
+    let sent = await targetSession.sendTurnContextText("<auto_voice_screen_context>\n\(json)\n</auto_voice_screen_context>")
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard self.session === targetSession else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    if sent {
+      voiceTurnScreenContextSentEpoch = epoch
+    }
+  }
+
+  private static func voiceTurnScreenContextEnvelopeJSON() async -> String {
+    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: [
+      "minutes": 10,
+      "max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
+    ])
+    var context = rawPayload
+    context["recent_activity"] = rawPayload["timeline"] ?? []
+    context["transcription_vocabulary"] = [
+      "source": "ptt_transcript_corrector_only",
+      "current_screen_truth": false,
+      "note":
+        "PTT transcription vocabulary is built separately from immediate OCR, user vocabulary, and fresh recent activity. Do not use it as evidence for what is currently on screen.",
+    ]
+    let envelope: [String: Any] = [
+      "permission": [
+        "screen_recording": CGPreflightScreenCaptureAccess() ? "granted" : "not_granted"
+      ],
+      "reason": "ambient_voice_turn_context",
+      "context_contract": [
+        "screen_now": "Current screen state. If stale/missing or raw pixels matter, call capture_screen.",
+        "recent_activity": "Bounded activity timeline, useful for recent-work context but not current-screen truth.",
+        "transcription_vocabulary":
+          "STT correction hints only. Never treat vocabulary terms as visual evidence.",
+      ],
+      "context": context,
+      "guidance":
+        "Hidden current-work context for this push-to-talk turn. Use screen_now silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. Recent activity is supporting context only. For voice turns, finalized screen context older than 15 seconds is treated as stale. If screen_now.source is live_capture_stale_rewind or raw pixels are needed, call the screenshot tool before answering current screen contents. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{}"
+    }
+    return json
   }
 
   private func recordTurnToKernel(
@@ -924,10 +1081,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingBargeInReplacement = nil
     if pending.pendingBegin {
       pending.pendingBegin = false
-      session?.beginInputTurn(interrupting: false)
-    }
-    if provider == .gemini, let speculativeScreenshot {
-      session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
+      if let live = session {
+        live.beginInputTurn(interrupting: false)
+        attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+      }
     }
     flushBargeInReplacementAudioBuffer(pending.audioBuffer)
     if pending.pendingCommit {
@@ -969,10 +1126,40 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       Task { @MainActor in
         guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }
         self.realtimePlaybackActive = false
+        if let lease = self.voiceOutputCoordinator.snapshot().activeLease,
+          lease.lane == .nativeRealtime
+        {
+          self.voiceOutputCoordinator.release(lease)
+        }
         self.clearResponseGlowIfRealtimeAudioIdle()
       }
     }
     return player
+  }
+
+  private func acquireVoiceOutput(_ lane: PTTVoiceOutputLane, reason: String) -> PTTVoiceLease? {
+    guard let turnID = voiceOutputCoordinator.snapshot().turnID else {
+      log("RealtimeHub[\(providerTag)]: dropping \(lane.rawValue) output with no active PTT turn reason=\(reason)")
+      return nil
+    }
+    switch voiceOutputCoordinator.acquire(lane, turnID: turnID) {
+    case .acquired(let lease):
+      return lease
+    case .denied(let active):
+      log(
+        "RealtimeHub[\(providerTag)]: dropping \(lane.rawValue) output reason=\(reason) "
+          + "active_lane=\(active.lane.rawValue)"
+      )
+      return nil
+    case .staleTurn:
+      log("RealtimeHub[\(providerTag)]: dropping stale \(lane.rawValue) output reason=\(reason)")
+      return nil
+    }
+  }
+
+  private func releaseVoiceOutputIfActive(_ lane: PTTVoiceOutputLane) {
+    guard let lease = voiceOutputCoordinator.snapshot().activeLease, lease.lane == lane else { return }
+    voiceOutputCoordinator.release(lease)
   }
 
   // MARK: - PTT integration
@@ -986,6 +1173,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking
     let bargeIn = responding || realtimePlaybackActive || voicePlaybackActive
     let interruptedTurn = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
+    _ = voiceOutputCoordinator.beginTurn()
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
@@ -995,6 +1183,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     assistantText = ""
     speculativeWarmDone = false
     speculativeScreenshot = nil
+    geminiScreenFrameSentThisTurn = false
     audioReceivedThisTurn = false
     turnGeneration &+= 1
     let screenshotTurnGeneration = turnGeneration
@@ -1024,6 +1213,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
+    voiceTurnScreenContextSentEpoch = nil
     lastTurnAt = Date()
     inputTurnInProgress = true
     inputTurnActivityStartPending = false
@@ -1064,7 +1254,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.ensureWarm()
         if ownsInputTurn {
           if await self.waitUntilActive(timeout: 15) {
-            self.session?.beginInputTurn(interrupting: interrupting)
+            if let live = self.session {
+              live.beginInputTurn(interrupting: interrupting)
+              self.attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+            }
+            await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
           } else {
             self.inputTurnActivityStartPending = true
             self.pendingInputTurnInterrupting = interrupting
@@ -1076,22 +1270,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else {
       ensureWarm()
       if !replacementSessionOwnsInputTurn {
-        session?.beginInputTurn(interrupting: providerResponseInFlight)
+        if let live = session {
+          live.beginInputTurn(interrupting: providerResponseInFlight)
+          attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+        }
+        Task { @MainActor in
+          await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
+        }
       }
     }
-    // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
-    // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
-    // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
-    // the model starts generating before it decodes and answers blind on the first turn
-    // (correct only on the next turn, once the frame is in context). Non-blocking.
+    // Capture locally at turn START so Gemini can receive pixels inside the active
+    // activity window before commit. Gemini Live does not reliably ground on video
+    // frames sent after activityEnd, so current-screen voice turns cannot depend on a
+    // post-commit screenshot tool call.
     Task.detached(priority: .utility) {
       let jpeg = ScreenCaptureManager.captureScreenJPEG()
       await MainActor.run {
         guard self.turnGeneration == screenshotTurnGeneration else { return }
         self.speculativeScreenshot = jpeg
-        if self.sessionProvider == .gemini, let jpeg {
-          self.session?.sendVideoFrame(jpeg, mime: "image/jpeg")
-        }
       }
     }
   }
@@ -1201,6 +1397,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return .accepted
   }
 
+  private func attachGeminiScreenFrameAfterActivityStartIfNeeded(session s: RealtimeHubSession) {
+    guard sessionProvider == .gemini else { return }
+    guard !geminiScreenFrameSentThisTurn else { return }
+    guard CGPreflightScreenCaptureAccess() else {
+      log("RealtimeHub[\(providerTag)]: skipping early screen frame — screen permission not granted")
+      return
+    }
+    guard let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG() else {
+      log("RealtimeHub[\(providerTag)]: skipping early screen frame — capture failed")
+      return
+    }
+    geminiScreenFrameSentThisTurn = true
+    s.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: false)
+    log("RealtimeHub[\(providerTag)]: attached early in-turn screen frame after activityStart (\(shot.count) bytes)")
+  }
+
+  private func screenshotToolResultTextForCurrentProvider(capturedBytes: Int?) -> String {
+    switch sessionProvider {
+    case .openai:
+      return capturedBytes == nil ? "Could not capture the screen." : "Screen captured."
+    case .gemini:
+      if geminiScreenFrameSentThisTurn {
+        return "The current screen frame was already attached near the start of this voice turn. Use that image for current screen details."
+      }
+      return "Could not attach a new screenshot after the Gemini voice turn closed. Ask the user to try again if current screen pixels are required."
+    case .none:
+      return "Could not capture the screen."
+    }
+  }
+
   /// Await a task's value with a REAL deadline on return time. A plain withTaskGroup
   /// race is not enough: the group awaits its remaining children at scope exit and
   /// `Task<T, Never>.value` is not cancellation-interruptible, so the "timeout" would
@@ -1236,6 +1462,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     clearBargeInReplacementState()
+    voiceOutputCoordinator.endTurn()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.
@@ -1278,8 +1505,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if inputTurnInProgress,
       inputTurnActivityStartPending || sessionProvider == .gemini
     {
-      session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)
+      if let live = session {
+        live.beginInputTurn(interrupting: pendingInputTurnInterrupting)
+        attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+      }
       inputTurnActivityStartPending = false
+      Task { @MainActor in
+        await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
+      }
     }
   }
 
@@ -1306,12 +1539,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
-    guard !suppressAssistantOutputForCurrentTurn else { return }
+    guard !suppressAssistantOutputForCurrentTurn,
+      !voiceOutputCoordinator.snapshot().providerOutputSuppressed
+    else { return }
+    guard acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") != nil else { return }
     // If PTT muted music/system output while listening, make sure the model's
     // reply is audible even if capture teardown restore is delayed by hardware.
     SystemAudioMuteController.shared.restore()
     guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else {
       log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
+      releaseVoiceOutputIfActive(.nativeRealtime)
       return
     }
     audioReceivedThisTurn = true
@@ -1322,7 +1559,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
-    guard !suppressAssistantOutputForCurrentTurn else { return }
+    guard !suppressAssistantOutputForCurrentTurn,
+      !voiceOutputCoordinator.snapshot().providerOutputSuppressed
+    else { return }
     if !text.isEmpty {
       assistantText += text
     }
@@ -1331,7 +1570,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
       // spoken audio (played by StreamingPCMPlayer) so this stays unused.
-      if !audioReceivedThisTurn, !reply.isEmpty {
+      if !audioReceivedThisTurn, !reply.isEmpty,
+        acquireVoiceOutput(.selectedVoiceFallback, reason: "text_no_native_audio") != nil
+      {
         responseGlowGate.markPlaybackActive()
         FloatingBarVoicePlaybackService.shared.speakOneShot(reply)
       }
@@ -1352,10 +1593,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     Task { [weak self] in
       guard let self else { return }
       var out: String
-      do { out = try await body() } catch { out = errorText }
-      if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
       let suffix = detail.isEmpty ? "" : " \(detail)"
-      log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
+      do {
+        out = try await body()
+        if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
+        log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
+      } catch {
+        let failure = RealtimeHubToolFailure.classify(error)
+        out = failure.userFacingOutput(base: errorText)
+        log(
+          "RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) FAILED "
+            + "failure_type=\(failure.kind.rawValue)"
+        )
+      }
       self.sendToolResultIfCurrent(
         source: source, callId: callId, name: name, output: out, expectedTurnEpoch: expectedTurnEpoch)
     }
@@ -1378,6 +1628,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .askHigherModel:
       let query = arg("query")
       let context = (arguments["context"] as? String) ?? ""
+      if RealtimeHubTools.shouldRejectEscalationQueryForLanguage(
+        query, userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+      {
+        log(
+          "RealtimeHub[\(providerTag)]: tool ask_higher_model rejected unexpected-language query=\"\(query.prefix(80))\""
+        )
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "I may have misheard that. Please ask again.",
+          expectedTurnEpoch: toolTurnEpoch)
+        return
+      }
       log(
         "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (\(ModelQoS.Claude.defaultSelection)) query=\"\(query.prefix(80))\""
       )
@@ -1507,7 +1769,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ) {
         try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
       }
-    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle, .runAgentAndWait:
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
       runToolAndSpeak(
         source: source,
         callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
@@ -1631,29 +1893,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         errorText: "Could not start the background agent right now.",
         expectedTurnEpoch: toolTurnEpoch
       ) {
-        if !objective.isEmpty {
-          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-        }
         var toolArgs = arguments
         toolArgs["objective"] = objective
         let result = try await self.agentControlService.executeVoiceTool(name: "spawn_agent", arguments: toolArgs)
+        if !objective.isEmpty,
+          self.acquireVoiceOutput(.deterministicAgentAck, reason: "spawn_agent_success") != nil
+        {
+          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+        }
         await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
         return result
       }
     case .screenshot:
-      // Gemini: the screen is already attached to every turn (see commitTurn), so the
-      // tool is just an ack — pushing another image here is the broken path (mid-tool-call
-      // injection self-interrupts the turn / closes the socket 1007). OpenAI: add the image
-      // as an ordered conversation item (that path works for OpenAI).
-      let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
-      if sessionProvider == .openai, let shot { session?.injectImage(shot) }
+      // Raw pixels enter provider context only after an explicit screenshot tool call.
+      let shot: Data?
+      switch sessionProvider {
+      case .openai:
+        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()
+        if let shot { session?.injectImage(shot) }
+      case .gemini:
+        shot = nil
+      case .none:
+        shot = nil
+      }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: shot == nil ? "Could not capture the screen." : "Screen captured.")
+        output: screenshotToolResultTextForCurrentProvider(capturedBytes: shot?.count))
     case .pointClick:
-      let x = (arguments["x"] as? Double) ?? (arguments["x"] as? NSNumber)?.doubleValue ?? 0
-      let y = (arguments["y"] as? Double) ?? (arguments["y"] as? NSNumber)?.doubleValue ?? 0
+      guard
+        let x = Self.finiteCoordinate(arguments["x"]),
+        let y = Self.finiteCoordinate(arguments["y"])
+      else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Could not click: point_click requires finite numeric x and y coordinates.")
+        return
+      }
       let ok = Self.click(at: CGPoint(x: x, y: y))
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
@@ -1721,7 +1997,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         let setupPrompt = availability.setupPrompt
         assistantText = setupPrompt
         barState?.isVoiceResponseActive = true
-        if !audioReceivedThisTurn {
+        if !audioReceivedThisTurn,
+          acquireVoiceOutput(.deterministicAgentAck, reason: "directed_provider_unavailable") != nil
+        {
           FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)
         }
         suppressAssistantOutputForCurrentTurn = true
@@ -1857,6 +2135,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaAckIds.removeAll()
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
+    voiceOutputCoordinator.endTurn()
     exitVoiceUI()
   }
 
@@ -1981,6 +2260,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+    voiceOutputCoordinator.endTurn()
     exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // Provider switching changes the user's voice identity and can fragment model-local
@@ -2097,9 +2377,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func speculativelyWarmAgent() {
-    if warmProvider == nil { warmProvider = ChatProvider() }
-    let provider = warmProvider
-    Task { await provider?.warmupBridge() }
+    // Must warm the live main chat provider — a second ChatProvider would attach
+    // another KernelTurnProjection handler to the shared AgentRuntimeProcess and
+    // double-apply every turn_recorded into chat / pill_completion cards.
+    guard let provider = ChatProvider.mainInstance else {
+      log("RealtimeHub: speculative warm skipped — main ChatProvider unavailable")
+      return
+    }
+    Task { await provider.warmupBridge() }
     log("RealtimeHub: speculatively warming agent bridge (action-y intent)")
   }
 
@@ -2116,6 +2401,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
     return true
+  }
+
+  nonisolated static func finiteCoordinate(_ value: Any?) -> Double? {
+    let coordinate: Double?
+    switch value {
+    case is Bool:
+      coordinate = nil
+    case let number as NSNumber:
+      coordinate = number.doubleValue
+    case let double as Double:
+      coordinate = double
+    case let int as Int:
+      coordinate = Double(int)
+    default:
+      coordinate = nil
+    }
+    guard let coordinate, coordinate.isFinite else { return nil }
+    return coordinate
   }
 }
 

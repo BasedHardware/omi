@@ -28,17 +28,19 @@ Expected status without a fully specified dev target is `BLOCKED` with missing-e
 
 The first-user dev/beta read proof uses deploy plane `based-hardware-dev` and runtime data/auth Firestore project `based-hardware`.
 
-Checked-in dev runtime config intentionally preserves the first-user read baseline across future dev deploys:
+Checked-in dev runtime config intentionally preserves the first-user full canonical baseline across future dev deploys:
 
 ```text
 MEMORY_MODE=read
 MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
 MEMORY_V3_GET_ENABLED=true
-MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false
-MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false
+MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true
 ```
 
-This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled.
+Promotion/consolidation maintenance runs from the hourly `notifications-job` Cloud Run job (not request-path backend). That job is part of `backend/deploy/runtime_env.yaml` and is deployed via `.github/workflows/gcp_notifications_job.yml` with the same whitelist-scoped `MEMORY_*` flags plus consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense, `SERVICE_ACCOUNT_JSON`).
+
+This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled. Non-whitelisted users stay on legacy memory with Desktop lifecycle UI fail-closed.
 
 ## First-user projection operator
 

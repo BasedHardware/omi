@@ -225,7 +225,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
-    guard result.memories > 0 else {
+    guard case .imported(let memories, let profileSummary) = result else {
       lastActionError =
         "Couldn’t extract durable memories from the pasted \(source.displayName) log."
       return
@@ -234,15 +234,15 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let defaults = UserDefaults.standard
     switch source {
     case .chatgpt:
-      chatGPTImportedMemoriesCount = result.memories
-      chatGPTImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: chatGPTImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: chatGPTImportSummaryKey)
+      chatGPTImportedMemoriesCount = memories
+      chatGPTImportSummary = profileSummary
+      defaults.set(memories, forKey: chatGPTImportedMemoriesKey)
+      defaults.set(profileSummary, forKey: chatGPTImportSummaryKey)
     case .claude:
-      claudeImportedMemoriesCount = result.memories
-      claudeImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: claudeImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: claudeImportSummaryKey)
+      claudeImportedMemoriesCount = memories
+      claudeImportSummary = profileSummary
+      defaults.set(memories, forKey: claudeImportedMemoriesKey)
+      defaults.set(profileSummary, forKey: claudeImportSummaryKey)
     }
 
     await saveGraph(

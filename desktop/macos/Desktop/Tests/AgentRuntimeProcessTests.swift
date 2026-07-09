@@ -3,6 +3,58 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  // MARK: - CHAT-02 agent stall hook
+
+  func testSuspendStreamNoOpsWithoutRunningProcess() async {
+    // External contract: the debug suspend never reports success without a real
+    // suspend — it returns an error (prod-gated in the test host, or no running
+    // process on a dev bundle), never suspended:true, and never SIGSTOPs a bogus pid.
+    let result = await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: 190_000)
+    XCTAssertNotEqual(result["suspended"], "true")
+    XCTAssertNotNil(result["error"])
+  }
+
+  func testResumeStreamNoOpsWithoutProcess() async {
+    let result = await AgentRuntimeProcess.shared.debugResumeStream()
+    XCTAssertNotEqual(result["resumed"], "true")
+    XCTAssertNotNil(result["error"])
+  }
+
+  func testAgentStallHookIsNonProdGatedAndSafe() throws {
+    let processSource = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"),
+      encoding: .utf8)
+    // Production gate, live-process guard, real signals, bounded window, and a
+    // generation-guarded auto-resume so a forgotten resume can't wedge the agent.
+    for needle in [
+      "func debugSuspendStream(durationMs: Int)",
+      "guard AppBuild.isNonProduction else",
+      "process.isRunning, process.processIdentifier > 0",
+      "kill(pid, SIGSTOP)",
+      "kill(pid, SIGCONT)",
+      "min(durationMs, 300_000)",
+      "generation == debugSuspendGeneration",
+    ] {
+      XCTAssertTrue(processSource.contains(needle), "AgentRuntimeProcess missing stall-hook invariant: \(needle)")
+    }
+
+    let bridgeSource = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Sources/DesktopAutomationBridge.swift"),
+      encoding: .utf8)
+    for needle in ["name: \"suspend_agent_stream\"", "name: \"resume_agent_stream\""] {
+      XCTAssertTrue(bridgeSource.contains(needle), "bridge missing action: \(needle)")
+    }
+    // Both actions must be behind the non-prod guard.
+    let suspendIdx = bridgeSource.range(of: "name: \"suspend_agent_stream\"")!.lowerBound
+    let afterSuspend = String(bridgeSource[suspendIdx...].prefix(600))
+    XCTAssertTrue(afterSuspend.contains("AppBuild.isNonProduction"),
+      "suspend_agent_stream must be gated to non-production bundles")
+  }
+
   func testV2ResultParsingPreservesCanonicalAndAdapterIds() {
     let line = """
       {"type":"result","protocolVersion":2,"requestId":"req-1","clientId":"client-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","adapterSessionId":"acp-1","terminalStatus":"succeeded","text":"done","costUsd":1.25,"inputTokens":3,"outputTokens":4,"cacheReadTokens":5,"cacheWriteTokens":6}
@@ -48,6 +100,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "control-1"))
     XCTAssertEqual(message?.payload["name"] as? String, "inspect_agent_artifacts")
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
+  }
+
+  func testUnroutedToolCallsFailClosed() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("Self.unroutedToolCallError(toolName: name)"))
+    XCTAssertTrue(processSource.contains(#""code": "unrouted_tool_call""#))
+    XCTAssertFalse(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
   }
 
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {

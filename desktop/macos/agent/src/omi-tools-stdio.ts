@@ -77,6 +77,9 @@ function activeOmiContext(): Record<string, unknown> {
     sessionId: process.env.OMI_SESSION_ID,
     runId: process.env.OMI_RUN_ID,
     attemptId: process.env.OMI_ATTEMPT_ID,
+    surfaceKind: process.env.OMI_SURFACE_KIND,
+    externalRefKind: process.env.OMI_EXTERNAL_REF_KIND,
+    externalRefId: process.env.OMI_EXTERNAL_REF_ID,
     adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
   };
 }
@@ -165,13 +168,14 @@ async function requestSwiftTool(
 // --- MCP tool definitions ---
 
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
+const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
 
 // Tool order is owned by the canonical manifest projection.
-const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
 const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
-const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
 
 // --- JSON-RPC handling ---
 

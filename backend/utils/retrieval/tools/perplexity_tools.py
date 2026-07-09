@@ -70,6 +70,13 @@ async def _perplexity_gateway_search(query: str) -> str:
             timeout=30.0,
         )
 
+        if response.status_code in {502, 503, 504}:
+            logger.warning(
+                "perplexity_web_search_tool - gateway transport failure %s; falling back to legacy",
+                response.status_code,
+            )
+            return await _perplexity_legacy_search(query)
+
         if response.status_code != 200:
             logger.error(
                 f"❌ perplexity_web_search_tool - Gateway API error: {response.status_code} - "
@@ -79,11 +86,11 @@ async def _perplexity_gateway_search(query: str) -> str:
 
         return _format_perplexity_response(response.json())
     except httpx.TimeoutException:
-        logger.warning("❌ perplexity_web_search_tool - Request timeout")
-        return "Error: Request to Perplexity API timed out. Please try again later."
+        logger.warning("❌ perplexity_web_search_tool - Gateway timeout; falling back to legacy")
+        return await _perplexity_legacy_search(query)
     except httpx.HTTPError as e:
-        logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
-        return f"Error: Failed to connect to Perplexity API. {str(e)}"
+        logger.error(f"❌ perplexity_web_search_tool - Gateway request error: {e}; falling back to legacy")
+        return await _perplexity_legacy_search(query)
     except (ValueError, IndexError, KeyError, TypeError):
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"

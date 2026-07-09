@@ -2542,6 +2542,22 @@ async def _stream_handler(
             except Exception as e:
                 logger.error(f"Error processing multi-channel conversation: {e} {uid} {session_id}")
 
+        # Flush any remaining mixed audio to pusher before closing the socket
+        if should_flush_final_multi_channel_mix(
+            is_multi_channel=is_multi_channel,
+            audio_bytes_enabled=audio_bytes_send is not None,
+            buffers=channel_mix_buffers,
+        ):
+            try:
+                mixed = mix_n_channel_buffers(channel_mix_buffers)
+                if mixed:
+                    if audio_bytes_send is not None:
+                        audio_bytes_send(mixed, time.time())
+            except Exception as e:
+                logger.error(f"Error flushing final multi-channel mix to pusher: {e} {uid} {session_id}")
+            for buf in channel_mix_buffers:
+                buf.clear()
+
         # Pusher sockets
         if pusher_close is not None:
             try:
@@ -2554,22 +2570,6 @@ async def _stream_handler(
             onboarding_handler.cleanup()
 
         await task_supervisor.drain_all(timeout=5.0, cancel=True)
-
-        # Flush any remaining mixed audio to pusher
-        if should_flush_final_multi_channel_mix(
-            is_multi_channel=is_multi_channel,
-            audio_bytes_enabled=audio_bytes_send is not None,
-            buffers=channel_mix_buffers,
-        ):
-            try:
-                mixed = mix_n_channel_buffers(channel_mix_buffers)
-                if mixed:
-                    if audio_bytes_send is not None:
-                        audio_bytes_send(mixed, time.time())
-            except Exception:
-                pass
-            for buf in channel_mix_buffers:
-                buf.clear()
 
         # Clean up collections and heavy objects to aid garbage collection
         try:

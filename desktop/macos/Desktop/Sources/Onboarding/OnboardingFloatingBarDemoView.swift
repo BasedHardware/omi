@@ -149,7 +149,7 @@ struct OnboardingFloatingBarDemoView: View {
         for _ in 0..<120 {
             try? await Task.sleep(nanoseconds: 500_000_000)
             if barState.showingAIResponse,
-               let msg = barState.currentAIMessage,
+               let msg = barState.currentAIMessage(from: FloatingControlBarManager.shared.sharedFloatingProvider),
                !msg.isStreaming {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showContinue = true

@@ -18,6 +18,7 @@ import {
   withMergedOwnerGuard,
 } from "../src/runtime/control-tools.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
+import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -1287,7 +1288,7 @@ describe("agent control tools", () => {
     ]);
     expect(adapter.executed).toHaveLength(2);
     expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
-    expect(adapter.executed[1].metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed[1].metadata).not.toMatchObject({ disableSwiftBackedTools: true });
 
     const listed = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
@@ -1563,11 +1564,16 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("passes only non-Swift-backed MCP tools into delegated child bindings", async () => {
+  it("keeps Swift-backed MCP tools available in delegated child bindings", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const buildMcpServers = vi.fn(() => [
-      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
     ]);
 
@@ -1590,9 +1596,19 @@ describe("agent control tools", () => {
       clientId: "delegate-client",
       adapterId: "fake",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
+      screenContext: true,
     });
+    expect(toolNamesForAdapter("omi-tools-stdio", { screenContext: true })).toEqual(
+      expect.arrayContaining(["get_work_context", "request_permission", "check_permission_status", "capture_screen"]),
+    );
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       {
         name: "playwright",
         command: "node",
@@ -1600,7 +1616,7 @@ describe("agent control tools", () => {
         env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
       },
     ]);
-    expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed.at(-1)?.metadata).not.toMatchObject({ disableSwiftBackedTools: true });
     store.close();
   });
 
@@ -1633,8 +1649,28 @@ describe("agent control tools", () => {
       clientId: "delegate-client",
       adapterId: "openclaw",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
+      screenContext: true,
     });
+    store.close();
+  });
+
+  it("rejects non-run parent ids before creating delegated child work", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "run_agent_and_wait", {
+        parentRunId: "ctx_73609606effbbf6d",
+        objective: "try the invalid parent id",
+        requestId: "delegate-invalid-parent-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(false);
+    expect(delegated.error.code).toBe("control_tool_failed");
+    expect(delegated.error.message).toContain("parentRunId must be a canonical Omi run_id");
     store.close();
   });
 
@@ -1665,6 +1701,61 @@ describe("agent control tools", () => {
     ]);
     expect(row.external_ref_kind).toBe("pill");
     expect(row.external_ref_id).toBe(spawned.session.externalRefId);
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.ok).toBe(true);
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: spawned.session.externalRefId,
+        sessionId: spawned.session.sessionId,
+        runId: spawned.run.runId,
+        status: expect.any(String),
+        query: "summarize inbox",
+      }),
+    );
+    store.close();
+  });
+
+  it("projects typed failure details for accepted visible spawned agents", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    adapter.failNextExecutionError = new Error("spawn bridge failed after acceptance");
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "summarize inbox",
+        visible: true,
+        externalRefId: "11111111-2222-4333-8444-555555555555",
+        requestId: "spawn-visible-failure-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "failed";
+    });
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: "11111111-2222-4333-8444-555555555555",
+        runId: spawned.run.runId,
+        status: "failed",
+        errorCode: "adapter_execution_failed",
+        errorMessage: expect.stringContaining("spawn bridge failed after acceptance"),
+        latestActivity: expect.stringContaining("spawn bridge failed after acceptance"),
+      }),
+    );
     store.close();
   });
 
@@ -1672,9 +1763,10 @@ describe("agent control tools", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     adapter.deferResult();
+    const buildMcpServers = vi.fn(() => []);
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "run in the background",
         visible: false,
@@ -1688,6 +1780,18 @@ describe("agent control tools", () => {
     expect(spawned.result).toBeUndefined();
     expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
     expect(spawned.run.status).toBe("queued");
+    expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
+      ownerId: "owner",
+      requestId: "delegate-spawn-1",
+      clientId: "delegate-client",
+      adapterId: "acp",
+      protocolVersion: 2,
+      surfaceKind: "delegated_agent",
+      externalRefKind: undefined,
+      externalRefId: undefined,
+      includeSwiftBackedTools: true,
+      screenContext: true,
+    });
     await waitUntil(() => adapter.executed.length === 2);
 
     const running = parseToolResult(

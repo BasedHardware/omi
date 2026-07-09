@@ -9,6 +9,8 @@ covers:
   - desktop/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
   - desktop/Desktop/Sources/AppState/AppState+SystemActions.swift
   - desktop/Desktop/Sources/AppState/AppState+TrialPaywall.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/Desktop/Sources/MainWindow/RewindOnlyView.swift
 preconditions:
   - auth_ready
 

@@ -151,9 +151,9 @@ final class FloatingControlBarStateTests: XCTestCase {
     /// Thread 3: leaveAgentSurface lands on .mainResponse when there IS a main conversation.
     func testLeaveAgentSurfaceLandsOnMainResponseWhenMainConversationExists() {
         let state = FloatingControlBarState()
-        // Seed a main conversation
+        // Seed a main conversation via viewport anchors / optimistic query
         state.displayedQuery = "What is the weather?"
-        state.currentAIMessage = ChatMessage(text: "Sunny.", sender: .ai)
+        state.bindAnswerMessage(ChatMessage(text: "Sunny.", sender: .ai))
 
         let agentID = UUID()
         state.present(.agent(agentID))
@@ -164,6 +164,267 @@ final class FloatingControlBarStateTests: XCTestCase {
                        "Backing out with a main conversation should land on .mainResponse")
         XCTAssertNil(state.activeAgentChatPillID)
         XCTAssertTrue(state.showingAIResponse)
+    }
+
+    /// Phase 3: floating bar derives answer/history from provider messages by viewport ids.
+    func testViewportDerivesCurrentAnswerAndHistoryFromProviderMessages() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+
+        let question = ChatMessage(id: "q1", clientTurnId: "turn-1", text: "Hello?", sender: .user, isSynced: true)
+        let answer = ChatMessage(id: "a1", clientTurnId: "turn-1", text: "Hi there.", sender: .ai, isSynced: true)
+        let followUpQ = ChatMessage(id: "q2", clientTurnId: "turn-2", text: "More?", sender: .user, isSynced: true)
+        let followUpA = ChatMessage(id: "a2", clientTurnId: "turn-2", text: "Sure.", sender: .ai, isSynced: true)
+        provider.messages = [question, answer, followUpQ, followUpA]
+
+        state.bindQuestionMessageId("q1")
+        state.bindAnswerMessage(answer)
+        state.archiveCurrentExchange(using: provider)
+        state.displayedQuery = "More?"
+        state.beginTurn(clientTurnId: "turn-2")
+        state.bindQuestionMessageId("q2")
+        state.bindAnswerMessage(followUpA)
+
+        let current = state.currentAIMessage(from: provider)
+        XCTAssertEqual(current?.id, "a2")
+        XCTAssertEqual(current?.text, "Sure.")
+
+        let history = state.derivedChatHistory(from: provider)
+        XCTAssertEqual(history.count, 1)
+        XCTAssertEqual(history[0].questionMessageId, "q1")
+        XCTAssertEqual(history[0].aiMessage.id, "a1")
+        XCTAssertEqual(history[0].question, "Hello?")
+
+        let shareIds = state.syncedShareMessageIds(from: provider)
+        XCTAssertEqual(shareIds, ["q1", "a1", "q2", "a2"])
+
+        // Mutating provider message text is reflected without copying into state.
+        provider.messages[3].text = "Sure — updated."
+        XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Sure — updated.")
+    }
+
+    /// Close/restore uses activity + viewport anchors, not copied transcript text.
+    func testCanRestoreUsesViewportAnchorsAndActivityWindow() {
+        let state = FloatingControlBarState()
+        XCTAssertFalse(state.canRestoreVisibleConversation)
+
+        state.displayedQuery = "pending"
+        state.markConversationActivity(at: Date())
+        XCTAssertTrue(state.canRestoreVisibleConversation)
+
+        state.clearVisibleConversation(cancelInFlightWork: false)
+        XCTAssertFalse(state.canRestoreVisibleConversation)
+        XCTAssertFalse(state.chatViewport.hasAnchors)
+        XCTAssertTrue(state.displayedQuery.isEmpty)
+    }
+
+    /// Bind answer + archived exchanges; restore stays valid within the activity
+    /// window, and clearVisibleConversation wipes all viewport anchors.
+    func testBindAnswerAndArchivedExchangesRestoreThenClearWipesAnchors() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let question = ChatMessage(id: "q1", clientTurnId: "turn-1", text: "Hi?", sender: .user)
+        let answer = ChatMessage(id: "a1", clientTurnId: "turn-1", text: "Hello.", sender: .ai)
+        let followUp = ChatMessage(id: "a2", clientTurnId: "turn-2", text: "More.", sender: .ai)
+        provider.messages = [question, answer, followUp]
+
+        state.bindQuestionMessageId("q1")
+        state.bindAnswerMessage(answer)
+        state.archiveCurrentExchange(using: provider)
+        state.bindAnswerMessage(followUp)
+        state.markConversationActivity(at: Date())
+        state.present(.mainResponse)
+
+        XCTAssertTrue(state.chatViewport.hasAnchors)
+        XCTAssertEqual(state.chatViewport.archivedExchanges.count, 1)
+        XCTAssertEqual(state.chatViewport.answerMessageId, "a2")
+        XCTAssertTrue(state.canRestoreVisibleConversation)
+
+        state.clearVisibleConversation(cancelInFlightWork: false)
+        XCTAssertFalse(state.chatViewport.hasAnchors)
+        XCTAssertTrue(state.chatViewport.archivedExchanges.isEmpty)
+        XCTAssertNil(state.chatViewport.answerMessageId)
+        XCTAssertNil(state.lastConversationActivityAt)
+        XCTAssertFalse(state.canRestoreVisibleConversation)
+    }
+
+    /// Closing mid-stream keeps viewport anchors + activity so restore works;
+    /// clear then makes restore impossible.
+    func testCloseMidStreamKeepsAnchorsRestorableUntilClear() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let answer = ChatMessage(
+            id: "a-stream",
+            clientTurnId: "turn-stream",
+            text: "Partial…",
+            sender: .ai,
+            isStreaming: true
+        )
+        provider.messages = [answer]
+
+        state.beginTurn(clientTurnId: "turn-stream")
+        state.bindAnswerMessage(answer)
+        state.present(.mainResponse)
+        state.isAILoading = true
+        state.markConversationActivity(at: Date())
+
+        // Simulate closeAIConversation: hide surface but keep viewport anchors.
+        state.hideConversationSurface()
+
+        XCTAssertEqual(state.chatViewport.answerMessageId, "a-stream")
+        XCTAssertTrue(state.chatViewport.hasAnchors)
+        XCTAssertNotNil(state.lastConversationActivityAt)
+        XCTAssertTrue(state.canRestoreVisibleConversation)
+
+        state.clearVisibleConversation(cancelInFlightWork: false)
+        XCTAssertFalse(state.canRestoreVisibleConversation)
+        XCTAssertNil(state.chatViewport.answerMessageId)
+        XCTAssertFalse(state.chatViewport.hasAnchors)
+    }
+
+    /// Mid-stream restore must re-subscribe when the bound answer is still streaming.
+    func testShouldReobserveStreamingTurnAfterMidStreamClose() {
+        let streaming = ChatMessage(
+            id: "a-stream",
+            clientTurnId: "turn-stream",
+            text: "Partial…",
+            sender: .ai,
+            isStreaming: true
+        )
+        XCTAssertTrue(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "turn-stream",
+                answerMessage: streaming
+            )
+        )
+
+        var completed = streaming
+        completed.isStreaming = false
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "turn-stream",
+                answerMessage: completed
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "other-turn",
+                answerMessage: streaming
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: nil,
+                answerMessage: streaming
+            )
+        )
+    }
+
+    /// currentAIMessage prefers the provider message when override is nil and id is bound.
+    func testCurrentAIMessagePrefersProviderWhenOverrideNilAndIdBound() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let answer = ChatMessage(id: "a1", clientTurnId: "t1", text: "From provider", sender: .ai)
+        provider.messages = [answer]
+
+        state.bindAnswerMessage(answer)
+        XCTAssertNil(state.localAnswerOverride)
+        XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "From provider")
+
+        provider.messages[0].text = "Updated in provider"
+        XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Updated in provider")
+    }
+
+    /// Ephemeral override (no answer id) is returned; when both are somehow set,
+    /// a bound answerMessageId wins (provider SoT).
+    func testCurrentAIMessageEphemeralOverrideVsProviderBoundWins() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let answer = ChatMessage(id: "a1", clientTurnId: "t1", text: "Provider answer", sender: .ai)
+        provider.messages = [answer]
+        let ephemeral = ChatMessage(text: "Usage limit reached", sender: .ai)
+
+        state.setLocalAnswerOverride(ephemeral)
+        XCTAssertNil(state.chatViewport.answerMessageId)
+        XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Usage limit reached")
+
+        // Force both set (should not happen via normal APIs after bind).
+        var viewport = state.chatViewport
+        viewport.answerMessageId = answer.id
+        state.chatViewport = viewport
+        XCTAssertNotNil(state.localAnswerOverride)
+        XCTAssertEqual(
+            state.currentAIMessage(from: provider)?.text,
+            "Provider answer",
+            "Bound answerMessageId must win over localAnswerOverride"
+        )
+    }
+
+    /// Block-only answers (empty text, non-empty contentBlocks) are not empty failures.
+    func testBlockOnlyAnswerIsNotEmptyResponseFailure() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let blockOnly = ChatMessage(
+            id: "a-blocks",
+            clientTurnId: "turn-blocks",
+            text: "",
+            sender: .ai,
+            contentBlocks: [.text(id: "b1", text: "Structured only")]
+        )
+        provider.messages = [blockOnly]
+
+        XCTAssertTrue(FloatingControlBarState.messageHasAnswerContent(blockOnly))
+        state.bindAnswerMessage(blockOnly)
+        XCTAssertTrue(state.hasProviderBackedAnswerContent(from: provider))
+        XCTAssertFalse(
+            state.shouldPresentEmptyResponseFailure(from: provider),
+            "Bound provider answer with contentBlocks must not be treated as failed empty"
+        )
+        XCTAssertTrue(state.aiResponseText(from: provider).isEmpty)
+
+        // Truly empty: no message at all.
+        let emptyState = FloatingControlBarState()
+        XCTAssertTrue(emptyState.shouldPresentEmptyResponseFailure(from: provider))
+
+        // Unbound empty-text message with no blocks/resources is a failure.
+        let emptyText = ChatMessage(id: "a-empty", text: "", sender: .ai)
+        provider.messages = [emptyText]
+        emptyState.beginTurn(clientTurnId: "t-empty")
+        // Resolve via activeClientTurnId without binding answer id.
+        var viewport = emptyState.chatViewport
+        viewport.activeClientTurnId = "t-empty"
+        emptyState.chatViewport = viewport
+        let emptyTurnMessage = ChatMessage(
+            id: "a-empty-turn",
+            clientTurnId: "t-empty",
+            text: "",
+            sender: .ai
+        )
+        provider.messages = [emptyTurnMessage]
+        XCTAssertTrue(emptyState.shouldPresentEmptyResponseFailure(from: provider))
+    }
+
+    /// Resource-only answers also count as provider-backed content.
+    func testResourceOnlyAnswerIsNotEmptyResponseFailure() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let resource = ChatResource.localGeneratedFile(
+            id: "res-1",
+            title: "out.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/out.txt"
+        )
+        let resourceOnly = ChatMessage(
+            id: "a-res",
+            clientTurnId: "turn-res",
+            text: "",
+            sender: .ai,
+            resources: [resource]
+        )
+        provider.messages = [resourceOnly]
+        state.bindAnswerMessage(resourceOnly)
+        XCTAssertFalse(state.shouldPresentEmptyResponseFailure(from: provider))
     }
 
     /// Thread 2: isAgentSwitcherExpanded reflects pinned and hovering states.
@@ -209,5 +470,49 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.isVoiceFollowUp)
         XCTAssertEqual(state.voiceFollowUpTranscript, "")
         XCTAssertFalse(state.hasVisibleConversation)
+    }
+
+    /// INV-6: notch/floating viewport only surfaces resources from viewport
+    /// message ids — historical timeline artifacts must not appear as orphans.
+    func testViewportDisplayResourcesOnlyFromAnchoredMessageIds() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+
+        let historical = ChatResource.localGeneratedFile(
+            id: "historical-artifact",
+            title: "old.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/old.txt"
+        )
+        let current = ChatResource.localGeneratedFile(
+            id: "viewport-artifact",
+            title: "now.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/now.txt"
+        )
+
+        let oldAnswer = ChatMessage(
+            id: "old-answer",
+            text: "older turn",
+            sender: .ai,
+            resources: [historical]
+        )
+        let newAnswer = ChatMessage(
+            id: "new-answer",
+            text: "current turn",
+            sender: .ai,
+            resources: [current]
+        )
+        provider.messages = [oldAnswer, newAnswer]
+
+        state.bindAnswerMessage(newAnswer)
+        let visible = state.viewportDisplayResources(from: provider)
+        XCTAssertEqual(visible.map(\.id), ["viewport-artifact"])
+
+        // Clearing the viewport cursor must hide all resources (no orphan strip).
+        state.clearCurrentAnswerAnchors()
+        XCTAssertTrue(state.viewportDisplayResources(from: provider).isEmpty)
     }
 }

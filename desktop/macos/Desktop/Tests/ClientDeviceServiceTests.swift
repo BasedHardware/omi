@@ -40,6 +40,22 @@ final class ClientDeviceServiceTests: XCTestCase {
     )
   }
 
+  func testDesktopDevBundleAlsoUsesUserDefaultsInstallId() {
+    // Omi Dev must not touch the shared login-keychain device-id item either.
+    let suiteName = "ClientDeviceServiceTests.dev.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer {
+      defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    let service = ClientDeviceService(
+      bundleIdentifier: AppBuild.desktopDevBundleIdentifier,
+      userDefaults: defaults
+    )
+    _ = service.deviceIdHash
+    XCTAssertNotNil(defaults.string(forKey: "dev-client-device-install-uuid"))
+  }
+
   func testNamedDevelopmentBundlesDoNotShareInstallIds() {
     let firstSuiteName = "ClientDeviceServiceTests.first.\(UUID().uuidString)"
     let secondSuiteName = "ClientDeviceServiceTests.second.\(UUID().uuidString)"

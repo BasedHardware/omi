@@ -11,7 +11,7 @@ Do **not** put external promotion readiness here. Fleet health/readiness checks 
 - Stable promotion is roll-forward-oriented. Recovery usually means promoting a newer fixed desktop release or performing a separately approved manual infrastructure rollback.
 - Do not manually edit a GitHub desktop release to stable. The promotion workflow owns stable release metadata and Firestore promotion.
 - Do not use hotfix/cherry-pick branches for normal desktop rollouts. Use the latest eligible mainline `v*-macos` artifact.
-- When promoting the release that ships the desktop-agent-platonic branch, record the concrete ship+2 burn version numbers in the G6 table of `.cursor/plans/desktop-agent-platonic-gap-closure.plan.md` (legacy shims, `legacy_default` grant source, sqlite legacy columns).
+- When promoting the release that ships the desktop-agent-platonic branch, record the concrete ship+2 burn version numbers for gap-closure G6 (legacy shims, `legacy_default` grant source, sqlite legacy columns) in the release notes or a maintainer tracking issue.
 
 ## 1. Discover release state
 

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.api_core.exceptions import NotFound
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -140,7 +141,7 @@ class _DocRef:
 
     def update(self, data):
         if self.path not in self._db.docs:
-            raise KeyError(self.path)
+            raise NotFound(f"Document {self.path} not found")
         self._db.docs[self.path] = self._db.docs[self.path] | data
 
 

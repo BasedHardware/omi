@@ -310,7 +310,7 @@ struct RewindSettingsView: View {
                 .foregroundColor(.white.opacity(0.8))
 
             Button {
-                ScreenCaptureService.openScreenRecordingPreferences()
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             } label: {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")

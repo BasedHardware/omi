@@ -2,6 +2,93 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.55",
+      "date": "2026-07-09",
+      "changes": [
+        "Hardened screen-aware agent launches, tool schemas, and realtime tool error reporting.",
+        "Improved desktop chat screen-context detection and diagnostics",
+        "Background agent chat links now reopen from the timeline even after pills dismiss",
+        "Fixed Background agent cards so the header collapses again, markdown renders in the expanded body, and the open-agent link hides when the agent is unavailable",
+        "Fixed floating bar treating block-only or artifact answers as failed empty responses",
+        "Fixed silent agent-link opens and restored background-agent chat continuity after pills dismiss",
+        "Fixed a main-thread freeze where chat text selection wrapped agent card headers and pegged CPU",
+        "Show typed notch, notch PTT, and spawned-agent link turns in the shared Omi chat history",
+        "Background agent cards and proactive notifications now stay consistent across chat surfaces after reload",
+        "Fixed continuity review findings: restage can create a missing assistant after a user-only stage, owner-swap clear no longer clobbers a mid-session auth uid, agent open ordering is generation-guarded, and agent cards hide dead Open links / avoid false-success status icons",
+        "Floating bar chat now reads from the shared chat timeline instead of keeping a separate copy",
+        "Attach Gemini push-to-talk screen frames immediately after activity start instead of at commit so current-screen questions have time to ground on the image",
+        "Send Gemini push-to-talk screen frames inside the active voice turn before commit so screen questions ground on current pixels instead of a too-late screenshot tool call",
+        "Fixed Home chat input focus after expansion and added Escape-to-Home navigation on secondary Home pages",
+        "Polished the desktop Home stage layout, wider chat surface, responsive ask bar, and icon-only notch thinking state",
+        "Fixed notch and chat so agent artifacts stay attached to the turn that produced them, old orphan artifact cards no longer appear in the floating viewport, and agent list/card previews show the prompt instead of the response",
+        "Fixed a test-owner swap that could wipe sign-in tokens and break chat loading until relaunch",
+        "Make push-to-talk screen context fresher and less brittle by prefetching canonical voice-turn screen context while the user speaks and preventing stale screenshot OCR from biasing transcript correction",
+        "Made push-to-talk screen context prefer live capture when finalized screen frames are more than a few seconds old",
+        "PTT now tries available Omi context before asking follow-up questions and delegates larger work to background agents when a short voice answer is not the right surface",
+        "Fixed duplicate chat messages after push-to-talk",
+        "Buffered push-to-talk screen context until realtime sessions are ready so cold starts and reconnects do not drop it",
+        "Fixed subagent chats so completed agents show their final output and stop showing stale Running or Working indicators",
+        "Keep main chat subagent links visible without showing completed implementation-only tool logs, and keep externally spawned agent pills synced to terminal runtime state"
+      ]
+    },
+    {
+      "version": "0.12.54",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed connector import progress disappearing when the import window is closed and reopened — the running import, its result, and any error now stay visible, and an import can no longer be started twice",
+        "Local files connector now shows a concise status line instead of a raw scan report, with a clear message when folder access is denied",
+        "The ChatGPT/Claude import button now stays disabled until you paste something, instead of showing an error after the click",
+        "Tidied the ChatGPT/Claude paste box: it starts compact and grows as you add text, and the placeholder now lines up with the cursor",
+        "ChatGPT/Claude memory imports now say whether the pasted text had nothing to extract or the import itself failed, instead of one ambiguous error",
+        "Sign-in tokens are now stored in the macOS Keychain on every build; dev and beta builds no longer fall back to keeping credentials in plaintext UserDefaults",
+        "Fixed macOS Keychain password prompts for Beta/Prod and local contributor builds by isolating sign-in and device-id secrets per signing team and bundle, and never querying the old shared Keychain items"
+      ]
+    },
+    {
+      "version": "0.12.53",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.52",
+      "date": "2026-07-08",
+      "changes": [
+        "Ask Omi can see your screen again when you ask about it — screenshot sharing in chat was accidentally dead since June 29; a new \"Screen Sharing in Chat\" toggle in Settings → Floating Bar (on by default) controls it"
+      ]
+    },
+    {
+      "version": "0.12.51",
+      "date": "2026-07-08",
+      "changes": [
+        "Centered the Home content vertically so it no longer sits low on tall windows"
+      ]
+    },
+    {
+      "version": "0.12.50",
+      "date": "2026-07-08",
+      "changes": [
+        "Fixed WiFi SD-card sync not uploading downloaded recordings to the cloud"
+      ]
+    },
+    {
+      "version": "0.12.49",
+      "date": "2026-07-08",
+      "changes": [
+        "Restored normal launch visibility for the enabled floating bar on notched Macs while keeping deferred reveal scoped to explicit opt-in contexts.",
+        "Improved push-to-talk reliability by preventing realtime and fallback voices from speaking over each other",
+        "Reduced random-language push-to-talk replies by tightening short speech detection and rejecting misheard realtime tool queries"
+      ]
+    },
+    {
+      "version": "0.12.48",
+      "date": "2026-07-08",
+      "changes": [
+        "Fixed the Screen Recording permission flow so Omi reliably appears in the Screen Recording list when you click Open Settings, instead of sometimes needing a second attempt"
+      ]
+    },
+    {
       "version": "0.12.47",
       "date": "2026-07-08",
       "changes": [

@@ -572,12 +572,7 @@ struct ScreenRecordingPermissionSection: View {
                             // Reset stale state so Grant flow works fresh
                             appState.isScreenRecordingStale = false
                             appState.screenRecordingGrantAttempts = 0
-                            // Open Settings FIRST so it's visible before system dialog
-                            ScreenCaptureService.openScreenRecordingPreferences()
-                            // Then request permission (may show system dialog)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                ScreenCaptureService.requestAllScreenCapturePermissions()
-                            }
+                            ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "checkmark.shield")
@@ -625,14 +620,7 @@ struct ScreenRecordingPermissionSection: View {
                 )
 
             Button(action: {
-                // Open System Settings FIRST so it's visible before any system dialog appears
-                ScreenCaptureService.openScreenRecordingPreferences()
-                // Then trigger screen capture to make app appear in the list
-                // (CGRequestScreenCaptureAccess may show a system dialog that steals focus,
-                //  so we open Settings before triggering it)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    appState.triggerScreenRecordingPermission()
-                }
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 // Track attempt — if still not granted on next check, show recovery instructions
                 appState.screenRecordingGrantAttempts += 1
             }) {
