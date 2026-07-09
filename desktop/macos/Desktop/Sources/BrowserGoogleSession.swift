@@ -16,16 +16,41 @@ struct BrowserGoogleSession: Equatable {
         try:
             from Cryptodome.Cipher import AES
         except ImportError:
-            import subprocess
-            def decrypt_aes_cbc(key, iv, data):
-                p = subprocess.run(['openssl', 'enc', '-aes-128-cbc', '-d', '-K', key.hex(), '-iv', iv.hex(), '-nopad'],
-                                   input=data, capture_output=True)
-                return p.stdout
-            USE_OPENSSL = True
+            # No Python AES module (the system python3 the app runs has neither
+            # PyCrypto nor Cryptodome). Use macOS CommonCrypto via ctypes: native
+            # AES-128-CBC in one call, ~1000x faster than spawning an openssl
+            # process per cookie. Fall back to openssl only if CommonCrypto can't
+            # be loaded, so decryption still works everywhere.
+            try:
+                import ctypes, ctypes.util
+                _cc = ctypes.CDLL(ctypes.util.find_library('System') or '/usr/lib/libSystem.dylib')
+                _CCCrypt = _cc.CCCrypt
+                _CCCrypt.restype = ctypes.c_int32
+                # Pin the signature so the size_t lengths marshal as 64-bit
+                # pointers/sizes regardless of architecture, not the default c_int.
+                _CCCrypt.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                     ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p,
+                                     ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p,
+                                     ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+                def decrypt_aes_cbc(key, iv, data):
+                    out = ctypes.create_string_buffer(len(data) + 16)
+                    moved = ctypes.c_size_t(0)
+                    # op=kCCDecrypt(1), alg=kCCAlgorithmAES128(0), options=0 (CBC,
+                    # no padding — the caller strips PKCS7 itself).
+                    status = _CCCrypt(1, 0, 0, key, len(key), iv, data, len(data),
+                                      out, len(data) + 16, ctypes.byref(moved))
+                    return out.raw[:moved.value] if status == 0 else b''
+            except Exception:
+                import subprocess
+                def decrypt_aes_cbc(key, iv, data):
+                    p = subprocess.run(['openssl', 'enc', '-aes-128-cbc', '-d', '-K', key.hex(), '-iv', iv.hex(), '-nopad'],
+                                       input=data, capture_output=True)
+                    return p.stdout
+            USE_FUNC_DECRYPT = True
         else:
-            USE_OPENSSL = False
+            USE_FUNC_DECRYPT = False
     else:
-        USE_OPENSSL = False
+        USE_FUNC_DECRYPT = False
 
     GOOGLE_AUTH_COOKIE_NAMES = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
 
@@ -39,7 +64,11 @@ struct BrowserGoogleSession: Equatable {
             row = c.fetchone()
             db_version = int(row[0]) if row else 0
             host_filter = "host_key LIKE '%google.com%' OR host_key LIKE '%gmail.com%'" if include_gmail_hosts else "host_key LIKE '%google.com%'"
-            c.execute(f"SELECT host_key, name, encrypted_value, path, is_secure, expires_utc FROM cookies WHERE {host_filter}")
+            # CAST encrypted_value to BLOB: some profiles store it with a TEXT
+            # storage class, and the default text factory then fails to UTF-8
+            # decode the binary ciphertext ("Could not decode to UTF-8"). Reading
+            # it as a BLOB returns raw bytes and avoids that decode entirely.
+            c.execute(f"SELECT host_key, name, CAST(encrypted_value AS BLOB), path, is_secure, expires_utc FROM cookies WHERE {host_filter}")
             rows = c.fetchall()
             conn.close()
         except Exception as e:
@@ -59,7 +88,7 @@ struct BrowserGoogleSession: Equatable {
             if enc[:3] in (b'v10', b'v11'):
                 ciphertext = enc[3:]
                 try:
-                    if USE_OPENSSL:
+                    if USE_FUNC_DECRYPT:
                         decrypted = decrypt_aes_cbc(key, iv, ciphertext)
                     else:
                         cipher = AES.new(key, AES.MODE_CBC, IV=iv)

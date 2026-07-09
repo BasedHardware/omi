@@ -12,33 +12,36 @@ struct GmailEmail: Identifiable {
 }
 
 enum GmailReaderError: LocalizedError {
-  case noBrowserFound
-  case noGmailCookies
-  case notSignedIn
-  case sessionExpired
-  case cookieDecryptionFailed(String)
-  case networkError(String)
-  case authFailed
+  case provider(GmailFailureClass, message: String)
+  case helper(message: String)
   case pythonNotFound
 
   var errorDescription: String? {
     switch self {
-    case .noBrowserFound:
-      return "No browser with Gmail session found. Log into Gmail in Chrome, Arc, Brave, or Edge."
-    case .noGmailCookies:
-      return "No Gmail session cookies found. Make sure you're logged into Gmail."
-    case .notSignedIn:
-      return "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
-    case .sessionExpired:
-      return "Your Gmail session expired. Reload mail.google.com in your browser to refresh it, then try again."
-    case .cookieDecryptionFailed(let msg):
-      return "Cookie decryption failed: \(msg)"
-    case .networkError(let msg):
-      return "Network error: \(msg)"
-    case .authFailed:
-      return "Gmail authentication failed. Try refreshing your Gmail session in the browser."
+    case .provider(_, let message), .helper(let message):
+      return message
     case .pythonNotFound:
       return "Python 3 not found. Install it via Homebrew: brew install python3"
+    }
+  }
+
+  var failureClass: GmailFailureClass? {
+    if case .provider(let cls, _) = self { return cls }
+    return nil
+  }
+
+  var needsSignIn: Bool {
+    failureClass?.needsSignIn == true
+  }
+
+  var classification: String {
+    switch self {
+    case .provider(let cls, _):
+      return cls.rawValue
+    case .helper:
+      return "helper_failed"
+    case .pythonNotFound:
+      return "python_not_found"
     }
   }
 }
@@ -85,21 +88,29 @@ enum GmailFailureClass: String, Equatable {
   case network = "network"
   case unknown = "unknown"
 
-  var asError: GmailReaderError {
-    asError(summary: nil)
+  var needsSignIn: Bool {
+    switch self {
+    case .noBrowser, .notSignedIn, .sessionExpired:
+      return true
+    case .decryptFailed, .network, .unknown:
+      return false
+    }
   }
 
-  func asError(summary: String?) -> GmailReaderError {
+  var defaultMessage: String {
     switch self {
-    case .noBrowser: return .noBrowserFound
-    case .notSignedIn: return .notSignedIn
-    case .sessionExpired: return .sessionExpired
+    case .noBrowser:
+      return "Open Gmail in Chrome, Arc, Brave, or Edge and sign in, then try again."
+    case .notSignedIn:
+      return "This account isn't signed into Gmail. Sign in through your browser, then try again."
+    case .sessionExpired:
+      return "This account's Gmail sign-in has expired. Reload Gmail in your browser, then try again."
     case .decryptFailed:
-      return .cookieDecryptionFailed(summary ?? "browser session could not be decrypted")
+      return "Could not connect this account. Make sure it is signed in and reload Gmail in your browser, then try again."
     case .network:
-      return .networkError(summary ?? "please check your connection and try again")
+      return "Couldn't reach Gmail. Check your connection and try again."
     case .unknown:
-      return .networkError(summary ?? "unexpected error")
+      return "Couldn't read Gmail. Try again."
     }
   }
 }
@@ -125,7 +136,7 @@ enum GmailOutcomeParser {
     let cls = GmailFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
     let summary =
       (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-      ?? cls.asError.errorDescription ?? "Unknown error"
+      ?? cls.defaultMessage
     return .failure(cls, summary: summary, attempts: attempts)
   }
 
@@ -183,14 +194,11 @@ actor GmailReaderService {
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
-      switch error {
-      case .notSignedIn, .noBrowserFound, .noGmailCookies:
-        return .needsSignIn(message: error.errorDescription ?? "Sign into Gmail to connect.")
-      case .sessionExpired, .authFailed:
-        return .needsSignIn(message: error.errorDescription ?? "Your Gmail session expired.")
-      default:
-        return .error(message: error.errorDescription ?? "Couldn't verify the connection.")
+      let message = error.errorDescription ?? "Couldn't verify the connection."
+      if error.needsSignIn {
+        return .needsSignIn(message: message)
       }
+      return .error(message: message)
     } catch {
       return .error(message: error.localizedDescription)
     }
@@ -412,7 +420,7 @@ actor GmailReaderService {
     let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService")
 
     guard !browserConfigs.isEmpty else {
-      throw GmailReaderError.noBrowserFound
+      throw GmailReaderError.provider(.noBrowser, message: GmailFailureClass.noBrowser.defaultMessage)
     }
 
     let configJSON: String
@@ -420,14 +428,15 @@ actor GmailReaderService {
       let data = try JSONSerialization.data(withJSONObject: browserConfigs)
       configJSON = String(data: data, encoding: .utf8) ?? "[]"
     } catch {
-      throw GmailReaderError.networkError("Failed to serialize browser configs")
+      throw GmailReaderError.helper(message: "Couldn't prepare Gmail import. Try again.")
     }
 
     let pythonScript = """
       \(BrowserGoogleSession.chromiumCookiePythonSupport)
       import xml.etree.ElementTree as ET
-      from urllib.parse import quote
+      from urllib.parse import quote, urlparse
       from urllib.request import Request, build_opener, HTTPCookieProcessor
+      from urllib.error import HTTPError
 
       browsers = json.loads(sys.stdin.read())
       max_results = int(sys.argv[1]) if len(sys.argv) > 1 else 50
@@ -435,17 +444,42 @@ actor GmailReaderService {
       use_bootstrap = (sys.argv[3] if len(sys.argv) > 3 else '1') == '1'
       feed_path = sys.argv[4] if len(sys.argv) > 4 else ''
 
-      def fetch_home_page(jar):
-          opener = build_opener(HTTPCookieProcessor(jar))
-          req = Request('https://mail.google.com/mail/u/0/')
+      def http_get(opener, url):
+          # Returns (status, final_url, body). opener.open raises HTTPError for
+          # non-2xx (e.g. 401/403 on an expired session); we catch it and keep the
+          # real status + body so auth failures are not mislabeled as network
+          # errors. Only a genuine connectivity failure (URLError: DNS, timeout,
+          # refused) yields a None status.
+          req = Request(url)
           req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
           try:
               resp = opener.open(req, timeout=30)
-              status = resp.getcode()
-              body = resp.read()
-              return status, body
+              return resp.getcode(), resp.geturl(), resp.read()
+          except HTTPError as e:
+              try:
+                  body = e.read()
+              except Exception:
+                  body = b''
+              final = e.geturl() if hasattr(e, 'geturl') else url
+              return e.code, final, body
           except Exception as e:
-              return None, str(e)
+              return None, None, str(e).encode('utf-8', 'replace')
+
+      def fetch_home_page(jar):
+          opener = build_opener(HTTPCookieProcessor(jar))
+          return http_get(opener, 'https://mail.google.com/mail/u/0/')
+
+      def is_mail_google_url(url):
+          try:
+              host = (urlparse(url).hostname or '').lower()
+          except Exception:
+              return False
+          return host == 'mail.google.com' or host.endswith('.mail.google.com')
+
+      def is_login_redirect(final_url):
+          if not final_url:
+              return False
+          return not is_mail_google_url(final_url)
 
       def parse_bootstrap_page(html_bytes, max_results):
           try:
@@ -561,15 +595,7 @@ actor GmailReaderService {
                   url = f'{url}{separator}q={quote(query)}'
           else:
               url = f'https://mail.google.com/mail/feed/atom?q={quote(query)}'
-          req = Request(url)
-          req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
-          try:
-              resp = opener.open(req, timeout=30)
-              status = resp.getcode()
-              body = resp.read()
-              return status, body
-          except Exception as e:
-              return None, str(e)
+          return http_get(opener, url)
 
       def parse_atom(xml_bytes, max_results):
           ns = {'atom': 'http://purl.org/atom/ns#'}
@@ -632,14 +658,27 @@ actor GmailReaderService {
       def classify(attempts):
           if not attempts:
               return 'no_browser', 'No supported browser with a readable Gmail session was found.'
-          if any(a['stage'] == 'fetch' and a.get('http') in (401, 403) for a in attempts):
-              return 'session_expired', 'Your Gmail session expired. Reload mail.google.com to refresh it.'
-          if any(a['stage'] == 'fetch' for a in attempts):
-              detail = next(a['reason'] for a in attempts if a['stage'] == 'fetch')
-              return 'network', f'Could not reach Gmail ({detail}).'
+          fetches = [a for a in attempts if a['stage'] == 'fetch']
+          if fetches:
+              # Only a confirmed auth failure — an explicit 401/403, or Gmail
+              # bouncing us to a sign-in page — means the sign-in expired.
+              if any(a.get('http') in (401, 403) or a.get('login_redirect') for a in fetches):
+                  return 'session_expired', 'This account is signed out of Gmail or its session expired. Reload Gmail in the browser, then try again.'
+              # Anything else (no response, 429, 5xx, or an unexpected body) is not
+              # an auth problem — we can't confirm the sign-in expired, so treat it
+              # as a transient reach/read failure the user can just retry rather
+              # than telling them to sign in again.
+              return 'network', 'Could not reach Gmail. Check your connection and try again.'
           if any(a['stage'] == 'auth' for a in attempts):
-              return 'not_signed_in', 'No browser is signed into Gmail. Sign into mail.google.com and try again.'
-          return 'decrypt_failed', 'Your browser session could not be read.'
+              return 'not_signed_in', 'This account is not signed into Gmail in the browser. Sign in, then try again.'
+          # decrypt-stage failures collapse several distinct causes — split them
+          # by the recorded reason so the message is accurate, not a catch-all.
+          decrypt_reasons = ' '.join((a.get('reason') or '').lower() for a in attempts if a['stage'] == 'decrypt')
+          if 'locked' in decrypt_reasons or 'busy' in decrypt_reasons:
+              return 'decrypt_failed', 'Your browser is busy right now. Wait a moment, then try again.'
+          if 'no cookies' in decrypt_reasons:
+              return 'not_signed_in', 'This account is not signed into Gmail. Sign in through your browser, then try again.'
+          return 'decrypt_failed', 'Could not connect this account. Make sure it is signed in and reload Gmail in your browser, then try again.'
 
       # Try each browser/profile and keep every non-sensitive attempt.
       for browser in browsers:
@@ -656,16 +695,12 @@ actor GmailReaderService {
               continue
 
           jar = make_cookie_jar(cookies)
-          status, body = fetch_home_page(jar)
-          if use_bootstrap and status == 200:
-              emails, parse_err = parse_bootstrap_page(body, max_results)
-              if not parse_err and emails:
-                  attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
-                  write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'bootstrap',
-                                                   'emails': emails, 'count': len(emails), 'attempts': attempts})
-                  sys.exit(0)
 
-          status, body = fetch_atom_feed(jar)
+          # Atom feed first: ~16 KB, returns recent messages in ~0.4 s, and a
+          # valid session (even an empty inbox) counts as success. This is the
+          # fast path. The ~3 MB Gmail home page is only fetched as a fallback
+          # below, so a normal Connect no longer waits several seconds on it.
+          status, final, body = fetch_atom_feed(jar)
           if status == 200:
               emails, parse_err = parse_atom(body, max_results)
               if not parse_err and emails is not None:
@@ -673,11 +708,30 @@ actor GmailReaderService {
                   write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'atom',
                                                    'emails': emails, 'count': len(emails), 'attempts': attempts})
                   sys.exit(0)
-
-          reason = f'HTTP {status}' if status else str(body)
+          # A redirect off the mail.google.com host means Gmail bounced us to sign-in.
+          login_redirect = is_login_redirect(final)
+          reason = f'HTTP {status}' if status else 'no HTTP response'
           attempts.append({'browser': browser['name'], 'stage': 'fetch',
-                           'reason': reason or 'unknown fetch error',
-                           'had_auth': True, 'http': status})
+                           'reason': reason, 'had_auth': True,
+                           'http': status, 'login_redirect': login_redirect})
+
+          # Fallback to the richer bootstrap home page whenever the caller allows
+          # it. Some sessions can read the web UI while Atom/feed access is
+          # restricted, so Atom 401/403 is not definitive until bootstrap fails too.
+          if use_bootstrap:
+              status, final, body = fetch_home_page(jar)
+              if status == 200:
+                  emails, parse_err = parse_bootstrap_page(body, max_results)
+                  if not parse_err and emails:
+                      attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
+                      write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'bootstrap',
+                                                       'emails': emails, 'count': len(emails), 'attempts': attempts})
+                      sys.exit(0)
+              login_redirect = is_login_redirect(final)
+              reason = f'HTTP {status}' if status else 'no HTTP response'
+              attempts.append({'browser': browser['name'], 'stage': 'fetch',
+                               'reason': reason, 'had_auth': True,
+                               'http': status, 'login_redirect': login_redirect})
 
       error_class, summary = classify(attempts)
       write_json_result('omi_gmail_', {'ok': False, 'error_class': error_class, 'summary': summary,
@@ -699,7 +753,7 @@ actor GmailReaderService {
     } catch BrowserPythonRunnerError.pythonNotFound {
       throw GmailReaderError.pythonNotFound
     } catch {
-      throw GmailReaderError.networkError(error.localizedDescription)
+      throw GmailReaderError.helper(message: "Couldn't read Gmail. Try again.")
     }
 
     let errOutput = String(data: result.stderr, encoding: .utf8) ?? ""
@@ -711,15 +765,13 @@ actor GmailReaderService {
       String(data: result.stdout, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
       ?? ""
     guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
-      throw GmailReaderError.networkError(
-        "Gmail helper did not produce output file (stdout: \(outputPath.prefix(200)))")
+      throw GmailReaderError.helper(message: "Couldn't read Gmail. Try again.")
     }
     defer { try? FileManager.default.removeItem(atPath: outputPath) }
 
     let output = try Data(contentsOf: URL(fileURLWithPath: outputPath))
     guard let json = try? JSONSerialization.jsonObject(with: output) as? [String: Any] else {
-      let raw = String(data: output, encoding: .utf8) ?? "(empty)"
-      throw GmailReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
+      throw GmailReaderError.helper(message: "Couldn't read Gmail. Try again.")
     }
 
     let outcome = GmailOutcomeParser.parse(json)
@@ -729,7 +781,7 @@ actor GmailReaderService {
       log(
         "GmailReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(GmailOutcomeParser.diagnosticsLine(attempts))")
-      throw cls.asError(summary: summary)
+      throw GmailReaderError.provider(cls, message: summary)
     case let .success(emails, browserName, sourceName):
       log("GmailReaderService: Got \(emails.count) emails from \(browserName) via \(sourceName)")
       emailDicts = emails

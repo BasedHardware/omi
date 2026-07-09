@@ -22,6 +22,27 @@ final class GmailOutcomeParserTests: XCTestCase {
     XCTAssertEqual(emails.count, 1)
   }
 
+  func testBootstrapSuccessAfterAtomAuthFailureIsStillSuccess() {
+    let json: [String: Any] = [
+      "ok": true,
+      "browser": "Chrome",
+      "source": "bootstrap",
+      "emails": [["id": "m1", "subject": "Hello"]],
+      "attempts": [
+        ["browser": "Chrome", "stage": "fetch", "reason": "HTTP 401", "had_auth": true, "http": 401],
+        ["browser": "Chrome", "stage": "ok", "reason": "ok", "had_auth": true],
+      ],
+    ]
+
+    guard case let .success(emails, browser, source) = GmailOutcomeParser.parse(json) else {
+      return XCTFail("expected success")
+    }
+
+    XCTAssertEqual(browser, "Chrome")
+    XCTAssertEqual(source, "bootstrap")
+    XCTAssertEqual(emails.count, 1)
+  }
+
   func testNotSignedInRetainsEveryProfileAttempt() {
     let json: [String: Any] = [
       "ok": false,
@@ -41,11 +62,11 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(cls, .notSignedIn)
-    XCTAssertEqual(cls.asError.errorDescription, GmailReaderError.notSignedIn.errorDescription)
+    XCTAssertTrue(cls.needsSignIn)
     XCTAssertEqual(attempts.count, 2)
   }
 
-  func testSessionExpiredMapsToReloginError() {
+  func testClassifiedFailurePreservesProviderSummary() {
     let json: [String: Any] = [
       "ok": false,
       "error_class": "session_expired",
@@ -60,7 +81,10 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(cls, .sessionExpired)
-    XCTAssertEqual(cls.asError(summary: summary).errorDescription, GmailReaderError.sessionExpired.errorDescription)
+    let error = GmailReaderError.provider(cls, message: summary)
+    XCTAssertEqual(error.errorDescription, summary)
+    XCTAssertEqual(error.classification, "session_expired")
+    XCTAssertTrue(error.needsSignIn)
   }
 
   func testNoBrowserAndUnknownFallbacks() {
@@ -87,7 +111,7 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(unknownClass, .unknown)
-    XCTAssertFalse(summary.isEmpty)
+    XCTAssertEqual(summary, GmailFailureClass.unknown.defaultMessage)
   }
 
   func testDiagnosticsLineCarriesOnlyNonSensitiveFields() {
