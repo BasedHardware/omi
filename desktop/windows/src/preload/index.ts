@@ -17,7 +17,6 @@ import type {
   InsightPayload,
   AutomationPlan,
   StepResult,
-  McpKeyRecord,
   McpKeyCopyRequest,
   McpKeyCopyResult
 } from '../shared/types'
@@ -79,7 +78,11 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
-  mcpKeyCreate: (key: McpKeyRecord) => ipcRenderer.invoke('mcpKey:create', key),
+  // NOTE: key creation happens entirely in main (mcpKey:createAndStore). The
+  // renderer passes the Firebase ID token and gets masked metadata back — the
+  // raw MCP key is never returned to renderer code. The only channel the secret
+  // transits is mcpKey:copy, which gates on a native confirmation dialog in main.
+  mcpKeyCreateAndStore: (token: string) => ipcRenderer.invoke('mcpKey:createAndStore', token),
   mcpKeyRead: () => ipcRenderer.invoke('mcpKey:read'),
   mcpKeyCopy: (request: McpKeyCopyRequest) =>
     ipcRenderer.invoke('mcpKey:copy', request) as Promise<McpKeyCopyResult>,
