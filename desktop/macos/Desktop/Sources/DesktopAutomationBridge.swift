@@ -2335,7 +2335,7 @@ final class DesktopAutomationActionRegistry {
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
-        "multi_chat_enabled": UserDefaults.standard.bool(forKey: "multiChatEnabled") ? "true" : "false",
+        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }
 
@@ -2344,9 +2344,9 @@ final class DesktopAutomationActionRegistry {
       summary: "Return AI Chat settings safe fields (provider mode, working directory presence)",
       params: []
     ) { _ in
-      let bridgeMode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-      let workingDirectory = UserDefaults.standard.string(forKey: "aiChatWorkingDirectory") ?? ""
-      let multiChat = UserDefaults.standard.bool(forKey: "multiChatEnabled")
+      let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
+      let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
+      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
       return [
         "bridge_mode": bridgeMode,
         "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
