@@ -3,16 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesNineteenSteps() {
+  func testMergedFlowUsesEighteenSteps() {
     XCTAssertEqual(
       OnboardingFlow.steps,
       [
         "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
         "FullDiskAccess", "FileScan", "Microphone", "Accessibility", "Automation",
         "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "DataSources",
-        "Exports", "Goal", "BringYourOwnKeys", "Tasks",
+        "Exports", "Goal", "Tasks",
       ])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 18)
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -121,9 +121,49 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(migratedResearch, 15)
     XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
     XCTAssertEqual(migratedGoal, 17)
-    // Tasks moved from index 17 to 18 when BringYourOwnKeys was inserted at 17;
-    // a legacy user on the old Tasks step still lands on Tasks.
-    XCTAssertEqual(migratedTasks, 18)
+    // After Research removal and BYOK removal, legacy Tasks (19) lands on Tasks (17).
+    XCTAssertEqual(migratedTasks, 17)
+  }
+
+  func testMigrationRemovesBYOKStepAndKeepsUsersOnTasks() {
+    let migratedFromBYOK = OnboardingFlow.migratedStep(
+      currentStep: 17,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    let migratedFromTasks = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    XCTAssertEqual(migratedFromBYOK, 17)
+    XCTAssertEqual(migratedFromTasks, 17)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {

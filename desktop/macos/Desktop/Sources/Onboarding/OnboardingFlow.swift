@@ -19,7 +19,6 @@ enum OnboardingFlow {
     "DataSources",
     "Exports",
     "Goal",
-    "BringYourOwnKeys",
     "Tasks",
   ]
   static let introStepCount = 13
@@ -40,7 +39,8 @@ enum OnboardingFlow {
     hasInsertedExportsStep: Bool = true,
     hasInsertedSecondBrainStep: Bool = false,
     hasRemovedResearchStep: Bool = false,
-    hasInsertedBYOKStep: Bool = true
+    hasInsertedBYOKStep: Bool = true,
+    hasRemovedBYOKStep: Bool = true
   ) -> Int {
     var migratedStep = currentStep
 
@@ -99,6 +99,12 @@ enum OnboardingFlow {
     // push users who were on Tasks forward by one so they still land on Tasks.
     if !hasInsertedBYOKStep, migratedStep >= 17 {
       migratedStep += 1
+    }
+
+    // BringYourOwnKeys step removed; users on BYOK (17) stay on Tasks (17),
+    // and users already on Tasks (18+) shift down by one.
+    if !hasRemovedBYOKStep, migratedStep > 17 {
+      migratedStep -= 1
     }
 
     // Only reorder for existing users who already had the old Trust-first layout.
