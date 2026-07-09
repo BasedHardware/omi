@@ -106,6 +106,7 @@ struct OnboardingVoiceDemoView: View {
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             resetFloatingBarConversation()
             refreshOutputReadiness()
             if let barState = FloatingControlBarManager.shared.barState {

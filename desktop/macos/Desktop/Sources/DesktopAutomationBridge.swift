@@ -1166,6 +1166,61 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "set_chat_drafts",
+      summary: "Set main and floating composer drafts without sending (non-prod persistence harness)",
+      params: ["main", "floating"],
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "local",
+      sideEffects: ["local_storage"],
+      examples: ["./scripts/omi-ctl action set_chat_drafts main=main-draft floating=notch-draft"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "set_chat_drafts is disabled on production bundles"]
+      }
+      if let main = params["main"] {
+        if let provider = ChatProvider.mainInstance {
+          provider.draftText = main
+        } else {
+          ChatDraftStore.shared.setText(main, for: .mainChat(contextID: "omi:default"))
+        }
+      }
+      if let floating = params["floating"] {
+        if let barState = FloatingControlBarManager.shared.barState {
+          barState.switchAIDraft(to: .floatingMain)
+          barState.aiInputText = floating
+        } else {
+          ChatDraftStore.shared.setText(floating, for: .floatingMain)
+        }
+      }
+      ChatDraftStore.shared.flush()
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
+      name: "chat_drafts_snapshot",
+      summary: "Read current main and floating composer drafts (non-prod persistence harness)",
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "read_only"
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "chat_drafts_snapshot is disabled on production bundles"]
+      }
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
       name: "clear_owner_surface_state",
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
       params: ["chatId"]

@@ -238,10 +238,26 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(snippet.contains("\"AI not available: Please sign in"))
   }
 
-  func testSendPreservesDraftOnAuthRequiredBridgeFailure() throws {
+  func testSendPreservesDraftUntilTurnIsAccepted() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
-    XCTAssertTrue(source.contains("if currentError == .authRequired"))
-    XCTAssertTrue(source.contains("draftText = trimmedText"))
+    XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
+    XCTAssertTrue(source.contains("onAccepted?()"))
+    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
+    XCTAssertTrue(source.contains("self.draftText == text else { return }"))
+    XCTAssertFalse(source.contains("draftText = trimmedText"))
+  }
+
+  func testTerminationFlushesDraftsBeforeAsyncAgentShutdown() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let observerStart = try XCTUnwrap(source.range(of: "terminationObserver = NotificationCenter.default.addObserver"))
+    let observerTail = String(source[observerStart.lowerBound...])
+    let observerEnd = try XCTUnwrap(observerTail.range(of: "private var terminationObserver"))
+    let observer = String(observerTail[..<observerEnd.lowerBound])
+    let flush = try XCTUnwrap(observer.range(of: "ChatDraftStore.shared.flush()"))
+    let asyncShutdown = try XCTUnwrap(observer.range(of: "Task { @MainActor in"))
+
+    XCTAssertTrue(observer.contains("MainActor.assumeIsolated"))
+    XCTAssertLessThan(flush.lowerBound, asyncShutdown.lowerBound)
   }
 
   func testSignInRecoveryRetriesAfterOAuth() throws {
