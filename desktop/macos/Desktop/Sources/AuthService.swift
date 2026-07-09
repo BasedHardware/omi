@@ -619,6 +619,11 @@ class AuthService {
         AuthState.shared.userEmail = nil
         AuthState.shared.isRestoringAuth = false
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
+        // Also clear the Firebase SDK session so that restoreAuthState() and the
+        // auth-state listener do not re-create the ghost session on the next
+        // launch. Unlike signOut(), this does NOT tear down storage caches or
+        // stop background services — it only clears the Firebase SDK user.
+        try? Auth.auth().signOut()
     }
 
     // MARK: - Configuration (call after FirebaseApp.configure())
@@ -2319,8 +2324,6 @@ class AuthService {
     // MARK: - Sign Out
 
     func signOut() throws {
-        sessionCoordinator.resetAfterNuclearSignOut()
-
         // Track sign out and reset analytics
         AnalyticsManager.shared.signedOut()
         AnalyticsManager.shared.reset()
@@ -2331,6 +2334,11 @@ class AuthService {
         }
 
         try Auth.auth().signOut()
+        // Reset coordinator only after Firebase sign-out succeeds so the state
+        // transition is atomic — if signOut() throws (e.g. keychain error), the
+        // coordinator stays in its previous phase rather than falsely reporting
+        // .signedOut while local tokens remain intact.
+        sessionCoordinator.resetAfterNuclearSignOut()
         isSignedIn = false
         CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()

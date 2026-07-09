@@ -19,7 +19,9 @@ final class APIClientAuthRecoveryTests: XCTestCase {
     XCTAssertNotNil(deleteRange)
     let snippet = String(source[deleteRange!.lowerBound...]).prefix(500)
     XCTAssertTrue(snippet.contains("performVoidRequest"))
-    XCTAssertFalse(snippet.contains("throw APIError.unauthorized\n    }\n\n    guard (200...299)"))
+    // Whitespace-agnostic check: the old pattern of throwing .unauthorized
+    // before the status-code guard should not reappear in the delete method.
+    XCTAssertFalse(snippet.contains("throw APIError.unauthorized"))
   }
 
   func testAuthBackoffTrackerFullyRemoved() throws {

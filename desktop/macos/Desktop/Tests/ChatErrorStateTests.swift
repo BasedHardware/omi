@@ -315,7 +315,6 @@ final class ChatErrorStateTests: XCTestCase {
     let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
-      .prefix(900)
 
     XCTAssertTrue(snippet.contains("storedRefreshToken != nil") || snippet.contains("storedIdToken != nil"))
     XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))

@@ -5021,7 +5021,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatErrorCard: .signIn recovery — starting desktop OAuth")
             do {
                 try await AuthService.shared.signInWithGoogle()
+            } catch AuthError.cancelled {
+                // User explicitly cancelled — don't auto-pivot to a different provider.
+                log("ChatErrorCard: Google sign-in cancelled by user — not retrying with Apple")
+                currentError = error
+                errorMessage = AuthError.cancelled.localizedDescription
+                return
             } catch let googleError {
+                // Google unavailable/misconfigured — try Apple as fallback provider.
                 log("ChatErrorCard: Google sign-in unavailable, trying Apple — \(googleError.localizedDescription)")
                 do {
                     try await AuthService.shared.signInWithApple()
