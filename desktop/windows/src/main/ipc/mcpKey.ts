@@ -12,6 +12,7 @@ const MCP_KEY_PLACEHOLDER = 'YOUR_OMI_MCP_KEY'
 const DEFAULT_OMI_API_BASE = 'https://api.omi.me'
 const HOSTED_MCP_TIMEOUT_MS = 15_000
 const MCP_KEY_CLIPBOARD_CLEAR_MS = 60_000
+const MCP_KEY_NAME = 'Omi Windows'
 
 let clipboardClearTimer: NodeJS.Timeout | null = null
 
@@ -113,6 +114,62 @@ function parseHostedMcpMemoryCount(payload: unknown): number {
   return memories.length
 }
 
+function parseCreatedMcpKey(payload: unknown): McpKeyRecord {
+  const record = payload as Partial<McpKeyRecord> | null
+  if (
+    !record ||
+    typeof record !== 'object' ||
+    typeof record.id !== 'string' ||
+    record.id.length === 0 ||
+    typeof record.name !== 'string' ||
+    record.name.length === 0 ||
+    typeof record.key !== 'string' ||
+    record.key.length === 0
+  ) {
+    throw new Error('MCP key creation returned an invalid key record.')
+  }
+  return { id: record.id, name: record.name, key: record.key }
+}
+
+// Create a hosted MCP key against the Omi API and persist it — entirely in the
+// main process. The renderer only supplies the Firebase ID token and only ever
+// receives masked metadata back; the raw bearer key never crosses IPC toward
+// renderer code (the confirmed mcpKey:copy path is the sole way it leaves main).
+// Deliberately no retries: POST /v1/mcp/keys is non-idempotent.
+async function createAndStoreMcpKey(token: string): Promise<McpKeyMetadata> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), HOSTED_MCP_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch(`${mcpBaseURL()}v1/mcp/keys`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ name: MCP_KEY_NAME })
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('MCP key creation timed out.')
+    }
+    throw new Error(`MCP key creation failed: ${(error as Error).message}`)
+  } finally {
+    clearTimeout(timeout)
+  }
+  if (!response.ok) throw new Error(`MCP key creation returned HTTP ${response.status}.`)
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error('MCP key creation returned invalid JSON.')
+  }
+  const record = parseCreatedMcpKey(payload)
+  saveMcpKey(record)
+  return metadataFor(record)
+}
+
 async function testHostedMcpConnection(key: string): Promise<McpKeyTestResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), HOSTED_MCP_TIMEOUT_MS)
@@ -154,10 +211,16 @@ async function testHostedMcpConnection(key: string): Promise<McpKeyTestResult> {
 }
 
 export function registerMcpKeyHandlers(): void {
-  ipcMain.handle('mcpKey:create', async (event, record: McpKeyRecord): Promise<void> => {
-    assertTrustedSender(event)
-    saveMcpKey(record)
-  })
+  ipcMain.handle(
+    'mcpKey:createAndStore',
+    async (event, token: unknown): Promise<McpKeyMetadata> => {
+      assertTrustedSender(event)
+      if (typeof token !== 'string' || token.length === 0) {
+        throw new Error('Invalid auth token for MCP key creation')
+      }
+      return createAndStoreMcpKey(token)
+    }
+  )
 
   ipcMain.handle('mcpKey:read', async (event): Promise<McpKeyMetadata | null> => {
     assertTrustedSender(event)
