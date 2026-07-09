@@ -377,6 +377,22 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+          MCP_OAUTH_CLAUDE_CLIENT_ID:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MCP_OAUTH_CLAUDE_CLIENT_ID
+          MCP_OAUTH_CLAUDE_CLIENT_NAME:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+          MCP_OAUTH_CLIENTS_JSON:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MCP_OAUTH_CLIENTS_JSON
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
@@ -416,6 +432,18 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
+            MCP_OAUTH_CLAUDE_CLIENT_ID:
+              secret: MCP_OAUTH_CLAUDE_CLIENT_ID
+              version: latest
+            MCP_OAUTH_CLAUDE_CLIENT_NAME:
+              secret: MCP_OAUTH_CLAUDE_CLIENT_NAME
+              version: latest
+            MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+              secret: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+              version: latest
+            MCP_OAUTH_CLIENTS_JSON:
+              secret: MCP_OAUTH_CLIENTS_JSON
+              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
