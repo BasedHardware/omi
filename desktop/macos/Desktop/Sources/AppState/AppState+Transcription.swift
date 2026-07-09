@@ -63,7 +63,7 @@ extension AppState {
         debugForceCloud: debugForceCloud
       )
       let clientConversationId = UUID().uuidString.lowercased()
-      currentClientConversationId = useLocalSTT ? nil : clientConversationId
+      currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
 
       if sttSession.useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
