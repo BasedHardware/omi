@@ -71,10 +71,11 @@ def wrap_gateway_with_legacy_fallback(
 
 def is_gateway_transport_failure(exc: BaseException) -> bool:
     """Return True for gateway unreachable / hard HTTP failures that should fall back."""
-    if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response is not None and exc.response.status_code in _TRANSPORT_STATUS_CODES
+    if httpx is not None:
+        if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response is not None and exc.response.status_code in _TRANSPORT_STATUS_CODES
 
     status_code = getattr(exc, 'status_code', None)
     if isinstance(status_code, int) and status_code in _TRANSPORT_STATUS_CODES:
@@ -104,13 +105,11 @@ def is_gateway_transport_failure(exc: BaseException) -> bool:
 
 
 def _fallback_reason(exc: BaseException) -> str:
-    if (
-        isinstance(exc, httpx.TimeoutException)
-        or 'timeout' in str(exc).casefold()
-        or 'timed out' in str(exc).casefold()
-    ):
+    if 'timeout' in str(exc).casefold() or 'timed out' in str(exc).casefold():
         return 'timeout'
-    if isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError)):
+    if httpx is not None and isinstance(exc, httpx.TimeoutException):
+        return 'timeout'
+    if httpx is not None and isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError)):
         return 'request_error'
     status_code = getattr(exc, 'status_code', None)
     if not isinstance(status_code, int):
