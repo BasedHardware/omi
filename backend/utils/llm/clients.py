@@ -104,6 +104,14 @@ except ImportError:
 
 
 try:
+    from utils.llm.gateway_anthropic import get_gateway_first_anthropic_client
+except ImportError:
+
+    def get_gateway_first_anthropic_client(*, legacy_client, agent_model):
+        return legacy_client
+
+
+try:
     from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
 except ImportError as exc:
     if exc.name != 'utils.llm.gateway_shadow':
@@ -186,7 +194,10 @@ class _AnthropicClientProxy:
         byok = get_byok_key('anthropic')
         if byok:
             return _cached_anthropic(byok)
-        return self._default
+        return get_gateway_first_anthropic_client(
+            legacy_client=self._default,
+            agent_model=ANTHROPIC_AGENT_MODEL,
+        )
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
