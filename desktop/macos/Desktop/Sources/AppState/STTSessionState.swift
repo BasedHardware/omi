@@ -71,6 +71,9 @@ struct STTSessionState: Equatable {
   mutating func beginLocalToCloudFallback() {
     fallbackInProgress = true
     appRunForceCloud = true
+    // Clear a stale session-local preference so resolveMode honors the cloud
+    // fallback instead of resolving back to .local.
+    sessionForceLocal = false
   }
 
   func canBeginCloudToLocalFallback(

@@ -102,15 +102,20 @@ async def refresh_oauth_token(
             expires_in = token_data.get('expires_in')
             if not new_access_token:
                 raise HTTPException(status_code=401, detail=f"Failed to refresh {name} token")
-            updated_integration = integration.copy()
-            updated_integration['access_token'] = new_access_token
+            # Narrow update payload — only write the fields that changed so a
+            # stale snapshot doesn't clobber concurrent changes to workspace_gid,
+            # project_gid, etc. via Firestore set(merge=True).
+            update_payload: dict = {
+                'access_token': new_access_token,
+                'connected': True,
+            }
             if new_refresh_token:
-                updated_integration['refresh_token'] = new_refresh_token
+                update_payload['refresh_token'] = new_refresh_token
             if expires_in:
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                updated_integration['expires_at'] = expires_at.isoformat()
-            await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
-            return updated_integration
+                update_payload['expires_at'] = expires_at.isoformat()
+            await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, update_payload)
+            return {**integration, **update_payload}
         else:
             error_text = token_response.text
             logger.error(
@@ -137,9 +142,8 @@ async def refresh_oauth_token(
                     if 'invalid_grant' in lower_text or 'invalid_refresh_token' in lower_text:
                         should_disconnect = True
                 if should_disconnect:
-                    updated_integration = integration.copy()
-                    updated_integration['connected'] = False
-                    await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
+                    disconnect_payload = {'connected': False}
+                    await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, disconnect_payload)
             raise HTTPException(status_code=401, detail=f"Failed to refresh {name} token")
     except HTTPException:
         raise
@@ -163,19 +167,23 @@ async def ensure_valid_oauth_token(
         if refresh_if_missing_expires_at or integration.get('refresh_token'):
             return await refresh_oauth_token(uid, app_key, integration, client=client)
         return integration
+    # Parse/compare the expiry — a malformed timestamp should trigger a refresh,
+    # but refresh_oauth_token failures must propagate (not be caught and retried
+    # with a stale dict that may have already rotated the refresh token).
+    need_refresh = False
     try:
         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
         buffer_time = timedelta(minutes=5)
         if datetime.now(timezone.utc) + buffer_time >= expires_at:
-            if integration.get('refresh_token'):
-                return await refresh_oauth_token(uid, app_key, integration, client=client)
-            updated_integration = integration.copy()
-            updated_integration['connected'] = False
-            await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
-            return updated_integration
-    except Exception:
+            need_refresh = True
+    except (ValueError, TypeError):
+        need_refresh = True
+    if need_refresh:
         if integration.get('refresh_token'):
             return await refresh_oauth_token(uid, app_key, integration, client=client)
+        disconnect_payload = {'connected': False}
+        await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, disconnect_payload)
+        return {**integration, 'connected': False}
     return integration
 
 
@@ -223,7 +231,9 @@ async def create_task_internal(
             refresh_if_missing_expires_at=(app_key == 'google_tasks'),
             client=client,
         )
-        if not integration.get('connected'):
+        # Use `is False` so a missing key (None) falls through to access_token
+        # validation below instead of blocking valid tokens on legacy records.
+        if integration.get('connected') is False:
             name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
             return {"success": False, "error": f"{name} token refresh failed", "error_code": "token_refresh_failed"}
 
@@ -278,11 +288,18 @@ async def create_task_internal(
             if project_gid:
                 task_data['projects'] = [project_gid]
 
-            response = await client.post(
-                'https://app.asana.com/api/1.0/tasks',
-                headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
-                json={'data': task_data},
+            async def _asana_post(c, token):
+                return await c.post(
+                    'https://app.asana.com/api/1.0/tasks',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json={'data': task_data},
+                )
+
+            response, integration, retry_err = await perform_request_with_token_retry(
+                uid, app_key, integration, _asana_post
             )
+            if retry_err:
+                return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -305,11 +322,22 @@ async def create_task_internal(
             if due_date:
                 task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            response = await client.post(
-                f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
-                headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
-                json=task_data,
+            async def _google_tasks_post(c, token):
+                return await c.post(
+                    f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json=task_data,
+                )
+
+            response, integration, retry_err = await perform_request_with_token_retry(
+                uid, app_key, integration, _google_tasks_post
             )
+            if retry_err:
+                return {
+                    "success": False,
+                    "error": "Google Tasks token refresh failed",
+                    "error_code": "token_refresh_failed",
+                }
 
             if response.status_code in [200, 201]:
                 result = response.json()

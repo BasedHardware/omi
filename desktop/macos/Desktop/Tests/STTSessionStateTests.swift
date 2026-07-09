@@ -191,4 +191,18 @@ final class STTSessionStateTests: XCTestCase {
       )
     )
   }
+
+  func testLocalToCloudFallback_clearsStaleSessionForceLocal() {
+    // When cloud->local fallback set sessionForceLocal, a subsequent
+    // local->cloud fallback must clear it so resolveMode honors the cloud path.
+    var session = STTSessionState()
+    session.beginCloudToLocalFallback()
+    XCTAssertTrue(session.sessionForceLocal)
+
+    session.completeFallback()
+    session.beginLocalToCloudFallback()
+    XCTAssertFalse(session.sessionForceLocal)
+    XCTAssertTrue(session.appRunForceCloud)
+    XCTAssertTrue(session.fallbackInProgress)
+  }
 }

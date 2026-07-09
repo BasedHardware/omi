@@ -59,7 +59,9 @@ def project_listen_connect_decisions(
     user_language_preference = transcription_prefs.get('language', '')
 
     single_language_mode = should_force_single_language(onboarding_mode, single_language_mode)
-    vocabulary = list({'Omi'} | set(vocabulary))
+    # Order-preserving dedup: "Omi" must stay first, and user terms retain
+    # their priority order (downstream STT only uses vocabulary[:100]).
+    vocabulary = list(dict.fromkeys(['Omi'] + vocabulary))
     normalized_language = normalize_language(language)
     translation_language = select_translation_language(
         single_language_mode=single_language_mode,

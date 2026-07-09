@@ -133,7 +133,9 @@ class TestSyncV2Structure:
         """Background worker must clean up files in finally block."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -146,7 +148,9 @@ class TestSyncV2Structure:
         """DG usage must be recorded after processing, not before."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -159,7 +163,9 @@ class TestSyncV2Structure:
         """Background worker must run decode and VAD (#7281 — moved from inline)."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -173,7 +179,9 @@ class TestSyncV2Structure:
         """Background worker must heartbeat with stage info during decode and VAD."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -205,7 +213,9 @@ class TestSyncV2Structure:
         """Background worker must fetch transcription prefs and build person embeddings cache."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]

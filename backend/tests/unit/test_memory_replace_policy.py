@@ -140,3 +140,50 @@ def test_legacy_reextract_failure_preserves_existing_memories(extractor_side_eff
 
     legacy_delete.assert_not_called()
     legacy_save.assert_not_called()
+
+
+@pytest.mark.parametrize("extractor_side_effect", [Exception("llm down"), []])
+def test_canonical_reextract_failure_preserves_existing_memories(extractor_side_effect, monkeypatch):
+    """Canonical path: extraction failure or empty result must not retract or write."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+
+    # Intercept the MemoryService created inside _extract_memories_canonical
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+
+    monkeypatch.setattr(
+        pc,
+        "new_memories_extractor",
+        MagicMock(
+            side_effect=extractor_side_effect if isinstance(extractor_side_effect, Exception) else lambda *a, **k: []
+        ),
+    )
+    monkeypatch.setattr(
+        pc,
+        "memory_system_request_scope",
+        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
+    )
+    monkeypatch.setattr(pc, "canonical_write_enabled", lambda *a, **k: True)
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-canonical-preserve",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[],
+    )
+
+    if isinstance(extractor_side_effect, Exception):
+        with pytest.raises(Exception, match="llm down"):
+            pc._extract_memories_inner("uid-canonical-preserve", conversation)
+    else:
+        pc._extract_memories_inner("uid-canonical-preserve", conversation)
+
+    mock_service.retract_conversation_memories.assert_not_called()
+    mock_service.write.assert_not_called()

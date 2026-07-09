@@ -591,7 +591,7 @@ def process_segment(
                     response.setdefault('_merged', {})[closest_memory['id']] = language
         return True
     except Exception as e:
-        error_msg = f'Failed to process segment {path}: {e}'
+        error_msg = f'Failed to process segment {path}: {sanitize(e)}'
         logger.error(error_msg)
         with lock:
             errors.append(error_msg)

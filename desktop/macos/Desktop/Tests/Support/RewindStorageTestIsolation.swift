@@ -41,23 +41,23 @@ enum RewindStorageTestIsolation {
   static func captureAuthSnapshot() -> AuthSnapshot {
     AuthSnapshot(
       isSignedIn: AuthState.shared.isSignedIn,
-      userId: UserDefaults.standard.string(forKey: "auth_userId")
+      userId: UserDefaults.standard.string(forKey: .authUserId)
     )
   }
 
   @MainActor
   static func signInForTests(userId: String) {
     AuthState.shared.update(isSignedIn: true)
-    UserDefaults.standard.set(userId, forKey: "auth_userId")
+    UserDefaults.standard.set(userId, forKey: .authUserId)
   }
 
   @MainActor
   static func restoreAuthSnapshot(_ snapshot: AuthSnapshot) {
     AuthState.shared.update(isSignedIn: snapshot.isSignedIn)
     if let userId = snapshot.userId {
-      UserDefaults.standard.set(userId, forKey: "auth_userId")
+      UserDefaults.standard.set(userId, forKey: .authUserId)
     } else {
-      UserDefaults.standard.removeObject(forKey: "auth_userId")
+      UserDefaults.standard.removeObject(forKey: .authUserId)
     }
   }
 

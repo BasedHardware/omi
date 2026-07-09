@@ -5,6 +5,15 @@ import Foundation
 struct OmiHTTPTransport {
   let session: URLSession
   let decoder: JSONDecoder
+  let encoder: JSONEncoder
+
+  // Cached formatters — avoid allocating per-field on large payloads.
+  private static let isoFractional: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private static let isoStandard = ISO8601DateFormatter()
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String?
@@ -14,12 +23,14 @@ struct OmiHTTPTransport {
     config.timeoutIntervalForRequest = 30
     self.session = URLSession(configuration: config)
     self.decoder = Self.makeDecoder()
+    self.encoder = Self.makeEncoder()
   }
 
   /// Test-only initializer that accepts a custom URLSession for request interception.
   init(session: URLSession) {
     self.session = session
     self.decoder = Self.makeDecoder()
+    self.encoder = Self.makeEncoder()
   }
 
   static func makeDecoder() -> JSONDecoder {
@@ -31,15 +42,12 @@ struct OmiHTTPTransport {
       let dateString = try container.decode(String.self)
 
       // Try with fractional seconds first (API returns dates like "2026-01-25T22:51:07.159249Z")
-      let isoWithFractional = ISO8601DateFormatter()
-      isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-      if let date = isoWithFractional.date(from: dateString) {
+      if let date = isoFractional.date(from: dateString) {
         return date
       }
 
       // Fallback to standard ISO8601 without fractional seconds
-      let iso = ISO8601DateFormatter()
-      if let date = iso.date(from: dateString) {
+      if let date = isoStandard.date(from: dateString) {
         return date
       }
 
@@ -47,6 +55,16 @@ struct OmiHTTPTransport {
         in: container, debugDescription: "Invalid date format: \(dateString)")
     }
     return decoder
+  }
+
+  static func makeEncoder() -> JSONEncoder {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .custom { date, encoder in
+      var container = encoder.singleValueContainer()
+      let formatted = isoFractional.string(from: date)
+      try container.encode(formatted)
+    }
+    return encoder
   }
 
   // MARK: - Request Building
@@ -106,7 +124,9 @@ struct OmiHTTPTransport {
     requireAuth: Bool = true,
     includeBYOK: Bool = true
   ) async throws -> T {
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
@@ -121,12 +141,14 @@ struct OmiHTTPTransport {
     requireAuth: Bool = true,
     includeBYOK: Bool = true
   ) async throws -> T {
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
-    request.httpBody = try JSONEncoder().encode(body)
+    request.httpBody = try encoder.encode(body)
 
     return try await performRequest(request)
   }
@@ -137,7 +159,9 @@ struct OmiHTTPTransport {
     requireAuth: Bool = true,
     includeBYOK: Bool = true
   ) async throws -> T {
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
@@ -151,7 +175,9 @@ struct OmiHTTPTransport {
     requireAuth: Bool = true,
     includeBYOK: Bool = true
   ) async throws {
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
