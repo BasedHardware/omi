@@ -1,4 +1,0 @@
-{
-  "type": "fixed",
-  "change": "Send Gemini push-to-talk screen frames inside the active voice turn before commit so screen questions ground on current pixels instead of a too-late screenshot tool call"
-}

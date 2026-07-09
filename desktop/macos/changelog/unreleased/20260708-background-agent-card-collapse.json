@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Background agent cards so the header collapses again, markdown renders in the expanded body, and the open-agent link hides when the agent is unavailable"
-}

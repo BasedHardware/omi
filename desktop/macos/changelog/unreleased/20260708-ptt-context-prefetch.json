@@ -1,4 +1,0 @@
-{
-  "type": "fixed",
-  "change": "Make push-to-talk screen context fresher and less brittle by prefetching canonical voice-turn screen context while the user speaks and preventing stale screenshot OCR from biasing transcript correction"
-}

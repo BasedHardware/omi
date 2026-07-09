@@ -1,4 +1,0 @@
-{
-  "type": "fixed",
-  "change": "Buffered push-to-talk screen context until realtime sessions are ready so cold starts and reconnects do not drop it"
-}
