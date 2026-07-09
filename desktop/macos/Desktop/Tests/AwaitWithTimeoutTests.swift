@@ -53,7 +53,12 @@ final class AwaitWithTimeoutTests: XCTestCase {
     guard let range = source.range(of: "private func liveAutomationSnapshot()") else {
       throw XCTSkip("liveAutomationSnapshot not found")
     }
-    let body = String(source[range.lowerBound...].prefix(900))
+    // Bound to exactly this function (up to the next top-level func) rather than a
+    // fixed char count, so growth here can't silently push the patterns out of the
+    // window, and the assertions can't match strings from later functions.
+    let rest = source[range.upperBound...]
+    let bodyEnd = rest.range(of: "\nprivate func ")?.lowerBound ?? rest.endIndex
+    let body = String(rest[..<bodyEnd])
     XCTAssertTrue(
       body.contains("awaitWithTimeout(liveSnapshotMainActorTimeout"),
       "/state must bound the MainActor hop with awaitWithTimeout")

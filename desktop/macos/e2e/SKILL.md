@@ -226,7 +226,7 @@ cd desktop/macos
 #   expect snapshotStale=true during the wedge (cached fallback), false again once it clears
 ```
 Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
-Hermetic ratchet for the timeout itself: `xcrun swift test --filter AwaitWithTimeoutTests`.
+Hermetic ratchet for the timeout itself: `xcrun swift test --package-path Desktop --filter AwaitWithTimeoutTests`.
 
 ### The full loop
 ```bash

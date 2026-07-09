@@ -15,20 +15,17 @@ steps:
       state.snapshotStale: false
 
   - id: S2
-    name: Wedge the main thread for 8s
+    name: Wedge the main thread; /state then answers from the cached (stale) snapshot, not hanging
     bridge.action:
       name: debug_block_main_thread
       params:
         durationMs: "8000"
     expect:
       result.detail.blocking_main_thread_ms: "8000"
-
-  - id: S3
-    name: /state still answers from the cached snapshot (stale) instead of hanging
-    state.expect:
+    wait:
       state.snapshotStale: true
 
-  - id: S4
+  - id: S3
     name: Bridge logged the timed-out live refresh
     log.expect:
       contains:

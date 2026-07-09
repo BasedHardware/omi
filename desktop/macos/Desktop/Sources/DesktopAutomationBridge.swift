@@ -1815,7 +1815,11 @@ final class DesktopAutomationActionRegistry {
         return ["error": "debug_block_main_thread is disabled on production bundles"]
       }
       let durationMs = min(max(intParam(params["durationMs"], default: 5000), 100), 20000)
-      DispatchQueue.main.async {
+      // Delay the wedge briefly so this action's own POST /action response (which
+      // itself builds a live snapshot via a MainActor hop) returns *before* the
+      // main thread blocks — otherwise the response would be queued behind the
+      // sleep and take the full 3s /state fallback, which looks like a hang.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
         Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
       }
       return ["blocking_main_thread_ms": "\(durationMs)"]
