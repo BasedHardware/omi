@@ -221,8 +221,9 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const named = agents.find((a) => a.id === detection.agentId)
       if (named && !named.connected) {
         finish(
-          `${named.displayName} isn't connected yet. ${named.installHint ?? ''}`.trim() +
-            ' You can connect it in Settings → Agents.'
+          `**${named.displayName}** isn't connected yet. ${
+            named.installHint ?? 'You can connect it in Settings → Agents.'
+          }`
         )
         return true
       }

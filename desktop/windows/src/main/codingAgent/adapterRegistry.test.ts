@@ -47,7 +47,9 @@ describe('adapterRegistry', () => {
   })
 
   it('produces an install hint for unconnected external adapters', () => {
-    expect(adapterActivationError('hermes')).toContain('Hermes is not connected')
-    expect(adapterActivationError('hermes')).toContain('OMI_HERMES_ADAPTER_COMMAND')
+    expect(adapterActivationError('hermes')).toContain('Install Hermes first')
+    // Backtick-escaped: chat renders markdown, and bare underscores would be
+    // eaten as italics (seen live: "OMIHERMESADAPTER_COMMAND").
+    expect(adapterActivationError('hermes')).toContain('`OMI_HERMES_ADAPTER_COMMAND`')
   })
 })

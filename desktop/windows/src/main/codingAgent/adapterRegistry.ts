@@ -98,9 +98,11 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
   return ADAPTER_PROFILES[adapterId]
 }
 
-/** User-facing hint shown when a named agent isn't connected yet. */
+/** User-facing hint shown when a named agent isn't connected yet. Rendered as
+ *  markdown in chat, so the env var is backtick-escaped (bare underscores
+ *  would be eaten as italics). */
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const profile = ADAPTER_PROFILES[adapterId]
   if (!profile.activationEnv) return undefined
-  return `${profile.displayName} is not connected. Install ${profile.displayName} first, then add its command in Omi's Agents settings (or set ${profile.activationEnv}).`
+  return `Install ${profile.displayName} first, then add its launch command in Settings → Agents (or set \`${profile.activationEnv}\`).`
 }
