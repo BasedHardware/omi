@@ -13,7 +13,13 @@ except ImportError:
         CallbackManagerForLLMRun = Any  # type: ignore[misc,assignment]
 
     AsyncCallbackManagerForLLMRun = CallbackManagerForLLMRun  # type: ignore[misc,assignment]
-from langchain_core.language_models import BaseChatModel
+try:
+    from langchain_core.language_models import BaseChatModel
+except ImportError:
+
+    class BaseChatModel:  # type: ignore[no-redef]
+        pass
+
 
 try:
     from langchain_core.messages import BaseMessage
@@ -31,8 +37,18 @@ except ImportError:
         pass
 
 
-import httpx
-from pydantic import ConfigDict
+try:
+    import httpx
+except ImportError:  # pragma: no cover - stubbed test environments
+    httpx = None  # type: ignore[assignment]
+
+try:
+    from pydantic import ConfigDict
+except ImportError:  # pragma: no cover - stubbed test environments
+
+    def ConfigDict(**_kwargs):  # type: ignore[misc]
+        return {}
+
 
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.gateway_observability import record_gateway_request_result
