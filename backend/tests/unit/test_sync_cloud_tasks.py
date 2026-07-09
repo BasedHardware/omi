@@ -376,6 +376,7 @@ def _load_sync_router_for_fast_path():
         'utils',
         'utils.analytics',
         'utils.byok',
+        'utils.client_device',
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
@@ -451,6 +452,12 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=True)
     sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
     sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
+    sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
+    sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
 
     sync_dispatch_fallback_calls = []
     sync_dispatch_attempt_modes = []
@@ -569,6 +576,36 @@ async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch
         assert fallback_calls == []
         assert attempt_modes == ['cloud_tasks']
         module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.resolve_client_device.return_value = types.SimpleNamespace(client_device_id='ios_a1b2c3d4', platform='ios')
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            x_app_platform='ios',
+            x_device_id_hash='a1b2c3d4',
+        )
+
+        assert response.status_code == 202
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['client_device_id'] == 'ios_a1b2c3d4'
+        assert payload['client_platform'] == 'ios'
     finally:
         sys.modules.pop('routers.sync', None)
         for mod_name, orig in saved_modules.items():

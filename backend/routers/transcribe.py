@@ -82,7 +82,11 @@ from utils.conversations.process_conversation import retrieve_in_progress_conver
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
-from utils.client_device import resolve_client_device_from_headers
+from utils.client_device import (
+    ClientDeviceContext,
+    resolve_client_device_from_headers,
+    resolve_client_device_from_websocket_auth_message,
+)
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
@@ -329,6 +333,7 @@ async def _stream_handler(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    client_device_context: Optional[ClientDeviceContext] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -336,7 +341,7 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
     client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
-    client_device_context = resolve_client_device_from_headers(websocket.headers)
+    client_device_context = client_device_context or resolve_client_device_from_headers(websocket.headers)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -2798,6 +2803,8 @@ async def web_listen_handler(
         await websocket.close(code=1008, reason="Auth error")
         return
 
+    client_device_context = resolve_client_device_from_websocket_auth_message(first_message)
+
     # Send success response
     await websocket.send_json({"type": "auth_response", "success": True})
     logger.info(f"web_listen_handler authenticated {uid}")
@@ -2821,5 +2828,6 @@ async def web_listen_handler(
         onboarding_mode=onboarding_mode,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        client_device_context=client_device_context,
     )
     logger.info(f"web_listen_handler ended {uid}")
