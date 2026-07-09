@@ -364,6 +364,14 @@ class TestSyncEndpointCodeStructure:
             return f.read()
 
     @staticmethod
+    def _read_pipeline_source():
+        import os
+
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        with open(pipeline_path, encoding='utf-8') as f:
+            return f.read()
+
+    @staticmethod
     def _function_body(source, marker):
         start = source.find(marker)
         assert start != -1, f'{marker} not found in sync.py'
@@ -392,8 +400,8 @@ class TestSyncEndpointCodeStructure:
         assert 'should_lock' in source
 
     def test_is_locked_passed_to_create_conversation(self):
-        """sync.py passes is_locked to CreateConversation."""
-        source = self._read_sync_source()
+        """sync pipeline passes is_locked to CreateConversation."""
+        source = self._read_pipeline_source()
         assert 'is_locked=is_locked' in source
 
     def test_hard_restricted_gate_exists(self):
