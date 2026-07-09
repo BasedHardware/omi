@@ -536,6 +536,9 @@ struct DashboardPage: View {
                 )
             )
 
+            dashboardChatErrorCard
+                .padding(.horizontal, 30)
+
             ChatInputView(
                 onSend: { text in
                     AnalyticsManager.shared.chatMessageSent(
@@ -721,6 +724,10 @@ struct DashboardPage: View {
             homeAskBar
                 .frame(width: askBarWidth)
                 .padding(.top, 22)
+
+            dashboardChatErrorCard
+                .frame(width: askBarWidth)
+                .padding(.top, 8)
         }
     }
 
@@ -811,6 +818,10 @@ struct DashboardPage: View {
             )
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
+
+            dashboardChatErrorCard
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
         }
         // Barely-there card so the chat reads as a bounded surface while still
         // dissolving into the ambient Home canvas.
@@ -898,6 +909,21 @@ struct DashboardPage: View {
     }
 
     // MARK: Ask bar + suggestions
+
+    @ViewBuilder
+    private var dashboardChatErrorCard: some View {
+        if let cardState = chatProvider.currentError {
+            ChatErrorCard(
+                state: cardState,
+                onRecover: {
+                    Task { await chatProvider.recoverFromError() }
+                },
+                onDismiss: {
+                    chatProvider.dismissCurrentError()
+                }
+            )
+        }
+    }
 
     private var homeAskBar: some View {
         HomeAskBar(

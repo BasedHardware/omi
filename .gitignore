@@ -245,3 +245,4 @@ builds-snapshot.md
 
 .hermes/
 backend/.venv
+backend/.harness/

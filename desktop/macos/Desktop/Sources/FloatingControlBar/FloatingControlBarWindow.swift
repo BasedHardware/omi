@@ -4224,7 +4224,7 @@ class FloatingControlBarManager {
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
 
-        if let errorText = provider.errorMessage {
+        if let errorText = provider.displayErrorMessage {
             // Provider reported an error (timeout, bridge crash, etc.).
             // Prefer mutating the provider-backed answer in place; only use
             // localAnswerOverride when there is no provider message to update.
@@ -4347,7 +4347,7 @@ class FloatingControlBarManager {
             $0.clientTurnId == clientTurnId && $0.sender == .ai
         }) {
             FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
-        } else if let errorText = provider.errorMessage, !errorText.isEmpty {
+        } else if let errorText = provider.displayErrorMessage, !errorText.isEmpty {
             FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
         } else {
             FloatingBarVoicePlaybackService.shared.speakOneShot("I couldn't get a response. Please try again.")

@@ -6,6 +6,8 @@ Full Oracle milestone reviews and implementation journals live in the benchmark 
 
 **Status:** production rollout remains **BLOCKED / NO-GO**; `production_rollout_approved=false`.
 
+Readiness scripts default to read-only inventory mode (exit `0`, JSON on stdout). For CI or gate checks that must fail closed, pass `--require-go` so the script exits non-zero unless every evaluated gate status is `GO`. This does not change reported gate statuses or claim production approval.
+
 ---
 
 ## Rollout schema (P1-1)

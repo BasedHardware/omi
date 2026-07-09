@@ -225,9 +225,6 @@ class TasksStore: ObservableObject {
         refreshInvocations += 1
         // Skip if not signed in
         guard AuthService.shared.isSignedIn else { return }
-        // Skip if in auth backoff period (recent 401 errors)
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
-
         // Skip if page is not visible
         guard isActive else { return }
 
@@ -298,11 +295,7 @@ class TasksStore: ObservableObject {
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
             await loadDashboardTasks()
-            AuthBackoffTracker.shared.reportSuccess()
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
-            }
             // Benign sign-out race: the isSignedIn guard above passed, but the
             // token was cleared by the time the request ran. Expected, not a bug
             // — log quietly (breadcrumb only) instead of flooding Sentry.

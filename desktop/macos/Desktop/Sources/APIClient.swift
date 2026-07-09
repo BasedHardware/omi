@@ -223,16 +223,13 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      do {
-        retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      } catch AuthError.notSignedIn {
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
-      } catch {
-        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
       }
-
       do {
         let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
@@ -244,6 +241,11 @@ actor APIClient {
       } catch {
         throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
       }
+    }
+
+    if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
+      throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
@@ -302,11 +304,28 @@ actor APIClient {
     }
   }
 
+  private func performVoidRequest(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws {
+    let (_, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
+    }
+  }
+
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    authPolicy: RequestAuthPolicy = .default
   ) async throws {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
@@ -314,53 +333,120 @@ actor APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
-    let (_, httpResponse) = try await performAuthenticatedData(for: request)
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
+    try await performVoidRequest(request, authPolicy: authPolicy)
   }
 
   // MARK: - Request Execution
 
+  /// When false, a post-refresh HTTP 401 throws `.unauthorized` without invalidating the
+  /// Firebase session (e.g. background polling that should not sign the user out).
+  struct RequestAuthPolicy: Sendable {
+    var signOutOn401: Bool
+
+    static let `default` = RequestAuthPolicy(signOutOn401: true)
+    static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
+  }
+
+  private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
+    guard signOutOn401 else { return }
+    await MainActor.run {
+      AuthSessionCoordinator.shared.handleHTTPUnauthorized(
+        endpoint: endpoint,
+        signOutOn401: true,
+        auth: AuthService.shared
+      )
+    }
+  }
+
+  private func endpointLabel(for request: URLRequest) -> String {
+    request.url?.path ?? request.url?.absoluteString ?? "unknown"
+  }
+
+  /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
+  private func authorizedRetryRequest(
+    from request: URLRequest,
+    retriedAuth: Bool,
+    signOutOn401: Bool
+  ) async throws -> URLRequest? {
+    if retriedAuth {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+    let authService = await MainActor.run { AuthService.shared }
+    do {
+      var retry = request
+      retry.setValue(
+        try await authService.getAuthHeader(forceRefresh: true),
+        forHTTPHeaderField: "Authorization"
+      )
+      return retry
+    } catch AuthError.notSignedIn {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+  }
+
   private func performAuthenticatedData(
     for request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
     retriedAuth: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    let endpoint = request.url?.path ?? "unknown"
+    let endpoint = endpointLabel(for: request)
     let (data, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
-    if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+    if httpResponse.statusCode == 401 {
+      if !retriedAuth {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: authPolicy.signOutOn401
+      ) else {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        throw APIError.unauthorized
+      }
       do {
-        let result = try await performAuthenticatedData(for: retryRequest, retriedAuth: true)
+        let result = try await performAuthenticatedData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true
+        )
         let (_, retryResponse) = result
         let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
         return result
       } catch {
+        if case APIError.unauthorized = error {
+          throw error
+        }
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
         throw error
       }
     }
 
-    if httpResponse.statusCode == 401 {
-      DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
-      throw APIError.unauthorized
-    }
-
     return (data, httpResponse)
   }
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
+  private func performRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> T {
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = Self.extractErrorDetail(from: data)
@@ -2100,12 +2186,17 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
       return try await performMemoryListRequest(retry, retriedAuth: true)
     }
     if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
       throw APIError.unauthorized
     }
 
@@ -5341,13 +5432,7 @@ extension APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(MessageDeleteResponse.self, from: data)
+    return try await performRequest(request)
   }
 
   /// Fetch messages for a specific session
@@ -5423,11 +5508,7 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-    return try decoder.decode([ChatFileResponse].self, from: data)
+    return try await performRequest(request)
   }
 
   // MARK: - Sync local files (WAL upload)
@@ -6246,18 +6327,20 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
 
       let (retryData, retryResponse) = try await session.data(for: retryRequest)
       guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
         throw APIError.invalidResponse
       }
       guard retryHttpResponse.statusCode != 401 else {
+        await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
         throw APIError.unauthorized
       }
       guard (200...299).contains(retryHttpResponse.statusCode) else {

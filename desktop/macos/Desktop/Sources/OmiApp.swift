@@ -654,6 +654,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        Task { @MainActor in
+          await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
+            trigger: .appBecameActive,
+            auth: AuthService.shared
+          )
+        }
       })
     windowObservers.append(
       center.addObserver(
