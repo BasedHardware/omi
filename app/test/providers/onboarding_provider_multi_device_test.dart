@@ -51,5 +51,20 @@ void main() {
       expect(provider.visibleDeviceList[1].name, 'Saved Online');
       expect(provider.visibleDeviceList[1].rssi, -30);
     });
+
+    test('nearby count and online state ignore saved devices that are not advertising', () async {
+      final savedOffline = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Saved Offline');
+      final liveNew = _device(id: 'AA:AA:AA:AA:AA:02', name: 'New Nearby', rssi: -45);
+
+      await SharedPreferencesUtil().btDeviceSet(savedOffline);
+
+      final provider = OnboardingProvider();
+      provider.onDevices([liveNew]);
+
+      expect(provider.visibleDeviceList.map((device) => device.id), [savedOffline.id, liveNew.id]);
+      expect(provider.nearbyDeviceCount, 1);
+      expect(provider.isDeviceOnline(savedOffline), isFalse);
+      expect(provider.isDeviceOnline(liveNew), isTrue);
+    });
   });
 }
