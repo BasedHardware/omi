@@ -237,7 +237,7 @@
         }
       ],
       "title": "Sync dispatch — enqueue_failed share (PAGE SLO)",
-      "description": "**Scrape gap:** `omi_sync_dispatch_attempts_total` and `omi_fallback_total{component=\"sync_dispatch\"}` are emitted by Cloud Run `backend-sync`, but GKE Prometheus only scrapes backend-listen and pusher. This panel may show no data until Cloud Run custom metrics are exported. Until then, use Cloud Logging for `omi_fallback_event component=sync_dispatch reason=enqueue_failed`. PAGE alert is paused.",
+      "description": "**Scrape gap:** Metric definitions and emit sites live in-repo (`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE Prometheus only scrapes backend-listen and pusher — so this panel may be empty until Cloud Run custom metrics are exported. Until then, use Cloud Logging for `omi_fallback_event component=sync_dispatch reason=enqueue_failed`. PAGE alert is paused.",
       "type": "timeseries"
     },
     {

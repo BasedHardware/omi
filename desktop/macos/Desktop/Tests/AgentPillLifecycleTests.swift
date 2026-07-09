@@ -757,10 +757,10 @@ final class AgentPillLifecycleTests: XCTestCase {
       hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
       "Mint failure must clear minting before failover starts the alternate provider")
     XCTAssertTrue(
-      hubSource.contains("if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider() { return }"),
+      hubSource.contains("if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider(reason: \"auth\") { return }"),
       "Provider auth failures should try alternate provider before stopping reconnect")
     XCTAssertTrue(
-      hubSource.contains("if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider() { return }"),
+      hubSource.contains("if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider(reason: \"quota\") { return }"),
       "Provider quota failures should try alternate provider regardless of socket age")
     XCTAssertTrue(
       hubSource.contains("let shouldRedactProviderMessage: Bool"),

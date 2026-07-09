@@ -7,7 +7,7 @@
 - `byok` — expected; BYOK keys cannot follow a Cloud Task. Not actionable.
 - `dispatch_disabled` — `SYNC_DISPATCH_MODE` is not `cloud_tasks`. Not actionable in prod.
 
-**Prometheus scrape gap:** `omi_sync_dispatch_attempts_total` and `omi_fallback_total{component="sync_dispatch"}` are emitted by Cloud Run `backend-sync`, but GKE Prometheus only scrapes `backend-listen` and `pusher`. The Grafana sync panel and the PAGE alert for enqueue_failed share are **paused** until Cloud Run custom metrics are exported into Prometheus.
+**Prometheus scrape gap:** Metric definitions and emit sites live in-repo (`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE Prometheus only scrapes `backend-listen` and `pusher`. The Grafana sync panel and the PAGE alert for enqueue_failed share are **paused** until Cloud Run custom metrics are exported into Prometheus.
 
 **Operator signal (until scrape exists):** Cloud Logging on `backend-sync` for structured events matching `omi_fallback_event component=sync_dispatch reason=enqueue_failed` (and `reason=byok` / `dispatch_disabled` for context).
 

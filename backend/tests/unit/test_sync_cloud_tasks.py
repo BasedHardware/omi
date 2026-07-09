@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sys
+import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -469,8 +470,15 @@ def _load_sync_router_for_fast_path():
 
     mock_counter = MagicMock()
     mock_counter.labels = _counter_labels
+    # Re-assign after the MagicMock loop so submodule imports resolve as a package.
+    obs_pkg = types.ModuleType('utils.observability')
+    obs_pkg.__path__ = []  # type: ignore[attr-defined]
+    fallback_mod = types.ModuleType('utils.observability.fallback')
+    fallback_mod.record_fallback = _track_record_fallback
+    sys.modules['utils.observability'] = obs_pkg
+    sys.modules['utils.observability.fallback'] = fallback_mod
+    obs_pkg.fallback = fallback_mod
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
-    sys.modules['utils.observability.fallback'] = MagicMock(record_fallback=_track_record_fallback)
 
     class _AudioPrecacheResponse(BaseModel):
         pass

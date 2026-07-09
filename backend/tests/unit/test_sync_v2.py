@@ -14,6 +14,7 @@ import re
 import sys
 import threading
 import time
+import types
 import unittest
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -1297,6 +1298,8 @@ class TestAsyncCoordinatorBehavioral:
             'utils.fair_use',
             'utils.subscription',
             'utils.observability',
+            'utils.observability.fallback',
+            'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.request_validation',
@@ -1316,6 +1319,16 @@ class TestAsyncCoordinatorBehavioral:
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+
+        # Keep observability importable as a package (sync imports utils.observability.fallback).
+        obs_pkg = types.ModuleType('utils.observability')
+        obs_pkg.__path__ = []  # type: ignore[attr-defined]
+        fallback_mod = types.ModuleType('utils.observability.fallback')
+        fallback_mod.record_fallback = MagicMock()
+        sys.modules['utils.observability'] = obs_pkg
+        sys.modules['utils.observability.fallback'] = fallback_mod
+        obs_pkg.fallback = fallback_mod
+        sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
 
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
@@ -1840,6 +1853,8 @@ class TestV2EndpointExecution:
             'utils.fair_use',
             'utils.subscription',
             'utils.observability',
+            'utils.observability.fallback',
+            'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.request_validation',
@@ -1859,6 +1874,16 @@ class TestV2EndpointExecution:
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+
+        # Keep observability importable as a package (sync imports utils.observability.fallback).
+        obs_pkg = types.ModuleType('utils.observability')
+        obs_pkg.__path__ = []  # type: ignore[attr-defined]
+        fallback_mod = types.ModuleType('utils.observability.fallback')
+        fallback_mod.record_fallback = MagicMock()
+        sys.modules['utils.observability'] = obs_pkg
+        sys.modules['utils.observability.fallback'] = fallback_mod
+        obs_pkg.fallback = fallback_mod
+        sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
 
         # Stub utils.executors with real-ish executor mocks
         import contextvars
