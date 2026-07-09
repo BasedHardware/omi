@@ -244,6 +244,12 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
     request-path surface without enabling the dedicated maintenance job fails validation
     so Gate 3 cannot forget ST→LT hosting.
+
+    Also rejects:
+    - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+      (ST→LT cron must run only on memory-maintenance-job);
+    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
+    - mismatched MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED between job and read surfaces.
     """
     errors: list[ValidationError] = []
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
@@ -279,11 +285,43 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
     job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+    job_fast_track = (
+        (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '').strip().lower()
+    )
     job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
+    for other_job_name, raw_other_job in jobs.items():
+        if other_job_name == 'memory-maintenance-job':
+            continue
+        other_job = _as_config_dict(raw_other_job) or {}
+        other_env = _as_config_dict(other_job.get('env')) or {}
+        other_cron = (
+            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+        )
+        if other_cron == 'true':
+            errors.append(
+                ValidationError(
+                    f'{env}/cloud_run/jobs/{other_job_name}',
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false; '
+                    'ST→LT cron is hosted only by memory-maintenance-job',
+                )
+            )
 
     read_surfaces = []
     for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
         surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
+        surface_cron = (
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+        )
+        if surface_cron == 'true':
+            errors.append(
+                ValidationError(
+                    surface_scope,
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false on request-path surfaces; '
+                    'ST→LT cron is hosted only by memory-maintenance-job',
+                )
+            )
         if surface_mode and surface_mode != 'off':
             read_surfaces.append((surface_scope, surface_env, surface_mode))
 
@@ -331,11 +369,25 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
             )
         surface_users = (_manifest_literal_env_value(surface_env, 'MEMORY_ENABLED_USERS') or '').strip()
-        if surface_users and surface_users != job_users:
+        if surface_users != job_users:
             errors.append(
                 ValidationError(
                     scope,
-                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist',
+                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
+                    '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
+                )
+            )
+        surface_fast_track = (
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '')
+            .strip()
+            .lower()
+        )
+        if surface_fast_track and job_fast_track and surface_fast_track != job_fast_track:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED={surface_fast_track!r} '
+                    f'must match memory-maintenance-job ({job_fast_track!r})',
                 )
             )
     return errors

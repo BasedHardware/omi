@@ -39,9 +39,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "read"},
-        {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2"},
+        {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
-        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "true"},
+        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "true"},'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
@@ -699,12 +699,51 @@ def test_memory_maintenance_job_contract_rejects_missing_job(tmp_path):
     assert any('missing cloud_run.jobs.memory-maintenance-job' in error.message for error in errors)
 
 
+def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
+    backend_env['MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any('request-path surfaces' in error.message for error in errors)
+
+
+def test_memory_maintenance_job_contract_rejects_empty_surface_allowlist(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
+    backend_env['MEMORY_ENABLED_USERS'] = {'value': '', 'category': 'memory_rollout'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any('must match memory-maintenance-job allowlist' in error.message for error in errors)
+
+
+def test_memory_maintenance_job_contract_rejects_fast_track_mismatch(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'] = {
+        'value': 'false',
+        'category': 'memory_rollout',
+    }
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any('FAST_TRACK_ENABLED' in error.message for error in errors)
+
+
 def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     workflow = ROOT.parent / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
     text = workflow.read_text(encoding='utf-8')
     assert 'SERVICE: memory-maintenance-job' in text
     assert 'branches: [ "main" ]' in text
+    assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
+    assert "id-token: 'write'" not in text
+    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'

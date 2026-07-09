@@ -32,26 +32,31 @@ Checked-in dev runtime config intentionally preserves the first-user full canoni
 
 ```text
 MEMORY_MODE=read
-MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
+# Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
 MEMORY_V3_GET_ENABLED=true
-MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+# Request-path CRON stays false; only memory-maintenance-job sets CRON=true.
+MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false   # request-path / GKE
 MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true
+# memory-maintenance-job: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
 ```
 
 Dev dogfood cohort (code `CANONICAL_MEMORY_USERS` + env allowlist):
 
-- `vi7SA9ckQCe4ccobWNxlbdcNdC23` — david.d.zhang@gmail.com
-- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` — kodjima33@gmail.com
+- `vi7SA9ckQCe4ccobWNxlbdcNdC23` — david.d.zhang@gmail.com (active)
+- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` — kodjima33@gmail.com (commented out for this PR; re-enable soon)
 
-Promotion/consolidation maintenance runs from the dedicated hourly `memory-maintenance-job` Cloud Run Job (not request-path backend, not `notifications-job`). That job is part of `backend/deploy/runtime_env.yaml` and is deployed via `.github/workflows/gcp_memory_maintenance_job.yml` (manual) and `.github/workflows/gcp_memory_maintenance_job_auto_dev.yml` (auto on push to `main` for memory/job paths) with the same whitelist-scoped `MEMORY_*` flags plus consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense, `SERVICE_ACCOUNT_JSON`).
+Promotion/consolidation maintenance runs from the dedicated hourly `memory-maintenance-job` Cloud Run Job (not request-path backend, not `notifications-job`). That job is part of `backend/deploy/runtime_env.yaml` and is deployed via `.github/workflows/gcp_memory_maintenance_job.yml` (manual) and `.github/workflows/gcp_memory_maintenance_job_auto_dev.yml` (auto on push to `main` for `backend/**`) with the same whitelist-scoped `MEMORY_*` flags plus consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense, `SERVICE_ACCOUNT_JSON`).
 
 ### Post-merge dogfood checklist (dev only)
 
 1. Confirm auto-dev ran after merge (or dispatch: `gh workflow run "Deploy Memory Maintenance Job to Cloud RUN" -f environment=development -f branch=main`).
-2. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
-3. Execute once: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev`
-4. Assert first-user watermark / ST→LT movement for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
-5. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
+2. **Before enabling the new Scheduler:** redeploy `notifications-job` once (`gh workflow run "Deploy Notifications Job to Cloud RUN" -f environment=development -f branch=main`) so the previously deployed image (which still invoked ST→LT) is retired.
+3. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
+4. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
+5. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
+6. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
+7. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
 
 ```bash
 # Create (first time) — adjust SA email to the Cloud Run Job runtime identity used in based-hardware-dev

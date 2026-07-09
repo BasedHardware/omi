@@ -122,15 +122,15 @@ Candidate: `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 
 The first-user / dogfood lane uses runtime data/auth Firestore project `based-hardware` and deploy plane `based-hardware-dev`, with approved UIDs:
 
-- `vi7SA9ckQCe4ccobWNxlbdcNdC23` (david.d.zhang@gmail.com)
-- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` (kodjima33@gmail.com)
+- `vi7SA9ckQCe4ccobWNxlbdcNdC23` (david.d.zhang@gmail.com) — active in this PR
+- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` (kodjima33@gmail.com) — commented out for this PR; re-enable soon
 
 For this lane, checked-in dev runtime config may persist:
 
 - `MEMORY_MODE=read`;
-- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2`;
+- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23`;
 - `MEMORY_V3_GET_ENABLED=true`;
-- `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true`;
+- request-path `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false` (cron lives only on `memory-maintenance-job`);
 - `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true`.
 
 Hourly ST→LT maintenance (TTL → consolidation → promotion) is hosted by `memory-maintenance-job` and must receive the same whitelist-scoped flags via the runtime env contract. Production must remain off with an empty cohort and `MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are satisfied. Gate 3 must flip `cloud_run.jobs.memory-maintenance-job` together with request-path `MEMORY_MODE=read`; `validate-backend-runtime-env.py` fails if request-path read mode is enabled while the job stays off.

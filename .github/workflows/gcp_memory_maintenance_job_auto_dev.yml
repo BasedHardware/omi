@@ -4,12 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'backend/modal/memory_maintenance_job.py'
-      - 'backend/modal/Dockerfile.memory_maintenance_job'
-      - 'backend/utils/memory/**'
-      - 'backend/deploy/runtime_env.yaml'
-      - 'backend/scripts/render_backend_runtime_env.py'
-      - 'backend/scripts/validate-backend-runtime-env.py'
+      - 'backend/**'
       - '.github/workflows/gcp_memory_maintenance_job.yml'
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
 
@@ -22,7 +17,6 @@ jobs:
     environment: development
     permissions:
       contents: 'read'
-      id-token: 'write'
 
     runs-on: ubuntu-latest
     steps:
@@ -88,6 +82,7 @@ jobs:
           region: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}
 

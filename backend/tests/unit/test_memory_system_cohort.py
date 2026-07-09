@@ -87,7 +87,8 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
 _EXPECTED_CANONICAL_COHORT_UIDS = frozenset(
     {
         "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com
-        "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com
+        # Next dogfood (re-enable with CANONICAL_MEMORY_USERS):
+        # "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com
     }
 )
 

@@ -1,4 +1,11 @@
-"""Cloud Run Job entrypoint for canonical short-term memory maintenance."""
+"""Cloud Run Job entrypoint for canonical short-term memory maintenance.
+
+Concurrency: Cloud Run Jobs default to max-retries / single-execution semantics per
+execution ID. Overlapping Scheduler + manual runs are still possible; maintenance
+ops are designed to be idempotent (TTL/consolidation/promotion + watermarks), and
+operators should prefer ``gcloud run jobs execute ... --wait`` before asserting
+state. A distributed lease can be added later if overlap becomes observable.
+"""
 
 from __future__ import annotations
 

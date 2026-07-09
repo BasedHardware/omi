@@ -46,13 +46,14 @@ environments:
             value: read
             category: memory_rollout
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
             value: 'true'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-            value: 'true'
+            value: 'false'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
             value: 'true'
@@ -114,13 +115,14 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'true'
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: 'true'
@@ -188,13 +190,14 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'true'
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: 'true'
@@ -262,13 +265,14 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'true'
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
               value: 'true'
@@ -303,6 +307,10 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # X connector sync still indexes via Pinecone (not memory maintenance).
+            PINECONE_INDEX_NAME:
+              value: memories-backend-dev
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -312,6 +320,9 @@ environments:
               version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
           env:
@@ -324,7 +335,8 @@ environments:
               value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               value: 'true'
@@ -523,6 +535,10 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            # X connector sync still indexes via Pinecone (not memory maintenance).
+            PINECONE_INDEX_NAME:
+              value: memories-backend
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -532,6 +548,9 @@ environments:
               version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
           env:

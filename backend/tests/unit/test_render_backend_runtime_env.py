@@ -59,7 +59,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23,viUv7GtdoHXbK1UBCDlPuTDuPgJ2' in memory_env
+    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in memory_env
     assert 'MEMORY_MODE=read' in memory_env
 
     assert 'memory_maintenance_job_secrets<<' in out
@@ -70,7 +70,8 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' not in notifications_env
     assert 'MEMORY_MODE' not in notifications_env
-    assert 'PINECONE_INDEX_NAME' not in notifications_env
+    assert 'PINECONE_INDEX_NAME=memories-backend-dev' in notifications_env
+    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in out
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
@@ -121,5 +122,7 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'memory_maintenance_job_secrets' in text
     assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
+    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert "id-token: 'write'" not in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text

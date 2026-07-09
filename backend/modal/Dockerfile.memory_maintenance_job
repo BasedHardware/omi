@@ -3,7 +3,7 @@ FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gcc \
     && rm -rf /var/lib/apt/lists/*
@@ -16,7 +16,8 @@ FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
+# No ffmpeg/curl/unzip: ST→LT maintenance is Firestore/LLM/vector only.
+# Keep the runtime stage minimal vs notifications-job (which still needs media tooling).
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
