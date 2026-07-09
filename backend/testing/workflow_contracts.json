@@ -49,6 +49,30 @@
   },
   "workflows": [
     {
+      "id": "desktop_update_channel_promotion",
+      "risk": "high",
+      "sources": [
+        "backend/database/desktop_update_channels.py",
+        "backend/utils/desktop_update_resolver.py",
+        "backend/routers/updates.py",
+        ".github/workflows/desktop_promote_beta.yml",
+        ".github/workflows/desktop_promote_prod.yml"
+      ],
+      "tests": [
+        "tests/unit/test_desktop_update_channels.py",
+        "tests/unit/test_desktop_update_resolver.py",
+        "tests/unit/test_desktop_updates.py",
+        "tests/unit/test_desktop_release_scripts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "stable never resolves or downloads a beta release",
+        "validated pointer LKG precedes exact-channel legacy fallback",
+        "immutable manifests are registered before atomic pointer promotion",
+        "beta visibility requires exact-tag T2 qualification evidence"
+      ]
+    },
+    {
       "id": "legacy_memory_backfill",
       "risk": "high",
       "sources": ["backend/utils/memory/legacy_backfill.py", "backend/scripts/backfill_legacy_memories.py"],
