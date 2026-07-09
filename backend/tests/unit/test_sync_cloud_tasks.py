@@ -349,6 +349,7 @@ def _load_sync_router_for_fast_path():
     import contextvars
     import importlib.util
     from io import BytesIO
+    from fastapi.routing import APIRoute
     from pydantic import BaseModel
 
     saved_modules = {}
@@ -394,6 +395,7 @@ def _load_sync_router_for_fast_path():
         'utils.metrics',
         'utils.log_sanitizer',
         'utils.http_client',
+        'utils.multipart',
         'utils.request_validation',
         'utils.sync',
         'utils.sync.files',
@@ -409,6 +411,10 @@ def _load_sync_router_for_fast_path():
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
 
+    sys.modules['utils'].__path__ = []
+    sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+    sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+    sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
     sys.modules['python_multipart'].__version__ = '0.0.99'
     sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
