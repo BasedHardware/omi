@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a data-loss bug where periodic WAL flush could mark a recording as saved to disk without actually persisting it, causing the audio to be lost during sync"
-}
