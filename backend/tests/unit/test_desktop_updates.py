@@ -426,12 +426,18 @@ class TestResolveDesktopReleases:
             "version_info": {"version": "0.12.0+12000", "build": "12000"},
             "metadata": {"edSignature": "legacy"},
         }
+        older_legacy_stable = {
+            "channel": "stable",
+            "release": {"published_at": "2026-01-01T00:00:00Z", "assets": [_zip_asset(), _dmg_asset()]},
+            "version_info": {"version": "0.11.99+11999", "build": "11999"},
+            "metadata": {"edSignature": "older-legacy"},
+        }
         with (
             patch("routers.updates.resolve_pointer_release", side_effect=resolve),
             patch(
                 "routers.updates._get_legacy_live_desktop_releases",
                 new_callable=AsyncMock,
-                return_value=[legacy_stable],
+                return_value=[legacy_stable, older_legacy_stable],
             ),
             patch("routers.updates.record_fallback") as fallback,
         ):
@@ -439,6 +445,7 @@ class TestResolveDesktopReleases:
 
         by_channel = {entry["channel"]: entry for entry in result}
         assert by_channel["stable"]["source"] == "legacy_fallback"
+        assert by_channel["stable"]["version_info"]["build"] == "12000"
         assert by_channel["beta"]["source"] == "pointer"
         fallback.assert_called_once()
         assert fallback.call_args.kwargs == {

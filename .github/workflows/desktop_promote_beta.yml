@@ -94,21 +94,6 @@ jobs:
             > /tmp/desktop-manifest-response.json
           python3 -m json.tool /tmp/desktop-manifest-response.json
 
-      - name: Mark GitHub release live beta
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
-          python3 .github/scripts/mark-desktop-release-beta.py \
-            --input /tmp/release-body.md \
-            --output /tmp/release-body-beta.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" \
-            --title "Omi Desktop ${RELEASE_TAG#v}" \
-            --notes-file /tmp/release-body-beta.md
-
       - name: Advance explicit beta pointer
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -129,6 +114,21 @@ jobs:
             https://api.omi.me/v2/desktop/channels/promote \
             > /tmp/desktop-pointer-response.json
           python3 -m json.tool /tmp/desktop-pointer-response.json
+
+      - name: Mark GitHub release live beta
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
+          python3 .github/scripts/mark-desktop-release-beta.py \
+            --input /tmp/release-body.md \
+            --output /tmp/release-body-beta.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" \
+            --title "Omi Desktop ${RELEASE_TAG#v}" \
+            --notes-file /tmp/release-body-beta.md
 
       - name: Bridge beta for legacy desktop clients
         env:

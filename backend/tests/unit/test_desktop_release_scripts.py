@@ -5,6 +5,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
+PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_beta.yml"
 
 
 def _load(name: str, filename: str):
@@ -78,3 +79,13 @@ def test_prepare_manifest_rejects_unblessed_candidate():
             "b" * 64,
             "c" * 64,
         )
+
+
+def test_beta_pointer_advances_before_legacy_visibility():
+    workflow = PROMOTE_BETA_WORKFLOW.read_text()
+    manifest = workflow.index("      - name: Register immutable release manifest")
+    pointer = workflow.index("      - name: Advance explicit beta pointer")
+    github = workflow.index("      - name: Mark GitHub release live beta")
+    bridge = workflow.index("      - name: Bridge beta for legacy desktop clients")
+
+    assert manifest < pointer < github < bridge

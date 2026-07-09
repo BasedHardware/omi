@@ -294,8 +294,18 @@ def _reconciliation_sample_rate() -> float:
         return 0.01
 
 
+def _newest_release_by_channel(entries: List[Dict]) -> Dict[str, Dict]:
+    newest: Dict[str, Dict] = {}
+    for entry in entries:
+        channel = entry["channel"]
+        current = newest.get(channel)
+        if current is None or entry["release"].get("published_at", "") > current["release"].get("published_at", ""):
+            newest[channel] = entry
+    return newest
+
+
 def _record_pointer_mismatches(platform: str, pointer_entries: List[Dict], legacy_entries: List[Dict]) -> None:
-    legacy_by_channel = {entry["channel"]: entry for entry in legacy_entries}
+    legacy_by_channel = _newest_release_by_channel(legacy_entries)
     for pointer in pointer_entries:
         channel = pointer["channel"]
         legacy = legacy_by_channel.get(channel)
@@ -363,7 +373,7 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         _record_pointer_mismatches(platform, pointer_entries, legacy_entries)
 
     resolved = list(pointer_entries)
-    legacy_by_channel = {entry["channel"]: entry for entry in legacy_entries}
+    legacy_by_channel = _newest_release_by_channel(legacy_entries)
     for channel, reason in missing.items():
         legacy = legacy_by_channel.get(channel)
         if legacy is None:

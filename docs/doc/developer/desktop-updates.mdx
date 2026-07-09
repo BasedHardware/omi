@@ -29,7 +29,7 @@ Run:
 desktop/macos/scripts/bless-release.sh vX.Y.Z+BUILD-macos
 ```
 
-The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and dispatches beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, changes GitHub metadata to live beta, advances the beta pointer, and maintains the old-client Firestore bridge. Stable remains a separate manual production workflow.
+The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and dispatches beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Stable remains a separate manual production workflow.
 
 ## Developer head-of-main
 
