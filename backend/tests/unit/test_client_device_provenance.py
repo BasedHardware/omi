@@ -1,6 +1,7 @@
 """Unit tests for client device identity contract and registry."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from models.memories import Evidence
@@ -138,3 +139,13 @@ def test_ordered_capture_devices_uses_earliest_evidence_not_alphabetical():
     device_ids, primary = _ordered_capture_devices_from_evidence(raw_evidence)
     assert device_ids == ["macos_aaaaaaaa", "ios_zzzzzzzz"]
     assert primary == "macos_aaaaaaaa"
+
+
+def test_listen_conversation_stamps_websocket_device_provenance():
+    source = (Path(__file__).resolve().parents[2] / "routers" / "transcribe.py").read_text(encoding="utf-8")
+    stream_handler = source.split("async def _stream_handler(", 1)[1].split("\n\nasync def _listen(", 1)[0]
+    stub_conversation = stream_handler.split("stub_conversation = Conversation(", 1)[1].split("\n        )", 1)[0]
+
+    assert "resolve_client_device_from_headers(websocket.headers)" in stream_handler
+    assert "client_device_id=client_device_context.client_device_id" in stub_conversation
+    assert "client_platform=client_device_context.platform" in stub_conversation

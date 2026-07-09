@@ -391,6 +391,15 @@ class TranscriptionService {
         // Create URL request with authorization header
         var request = URLRequest(url: url)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Keep capture provenance on the WebSocket upgrade as well as regular
+        // API requests. The backend stamps this onto the conversation, which
+        // flows through evidence into canonical memory device filtering.
+        request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+        request.setValue(ClientDeviceService.shared.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
+        request.setValue(
+          Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+          forHTTPHeaderField: "X-App-Version"
+        )
 
         // BYOK: attach user keys so the transcription backend can use the user's
         // Deepgram token for this session (and any downstream LLM calls).

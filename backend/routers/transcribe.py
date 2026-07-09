@@ -82,6 +82,7 @@ from utils.conversations.process_conversation import retrieve_in_progress_conver
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
+from utils.client_device import resolve_client_device_from_headers
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
@@ -335,6 +336,7 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
     client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
+    client_device_context = resolve_client_device_from_headers(websocket.headers)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -941,6 +943,8 @@ async def _stream_handler(
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
+            client_device_id=client_device_context.client_device_id,
+            client_platform=client_device_context.platform,
         )
         if client_conversation_id and new_conversation_id == client_conversation_id:
             conversations_db.create_conversation_if_absent(uid, stub_conversation.model_dump())
