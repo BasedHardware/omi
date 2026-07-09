@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.64",
+      "date": "2026-07-09",
+      "changes": [
+        "Protected signed-in sessions across app updates and added a clear recovery screen when credentials cannot be verified"
+      ]
+    },
+    {
       "version": "0.12.63",
       "date": "2026-07-09",
       "changes": [
