@@ -8,6 +8,11 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
+  - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
@@ -41,6 +46,28 @@ steps:
       result.detail.segment_count: "1"
 
   - id: S3
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S4
+    name: Reconcile cached list and canonical detail
+    bridge.action:
+      name: conversation_reconciliation_snapshot
+    expect:
+      result.detail.list_loaded: "true"
+      result.detail.cached_projection_seen: "true"
+      result.detail.detail_id_matches: "true"
+      result.detail.detail_has_revision: "true"
+      result.detail.detail_transcript_included: "true"
+      result.detail.cache_id_matches: "true"
+      result.detail.cache_revision_matches: "true"
+      result.detail.opened_detail: "true"
+
+  - id: S5
     name: Assert conversation list reflects new capture
     bridge.action:
       name: conversation_list_snapshot
@@ -50,7 +77,7 @@ steps:
       ok: true
       result.detail.is_transcribing: "false"
 
-  - id: S4
+  - id: S6
     name: Logs clean
     log.expect:
       absent:
