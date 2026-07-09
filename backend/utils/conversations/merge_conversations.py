@@ -25,8 +25,11 @@ from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
+    compute_audio_files_fingerprint,
     delete_conversation_audio_files,
+    enqueue_conversation_artifact_build,
     list_audio_chunks,
     _get_storage_client,
     private_cloud_sync_bucket,
@@ -259,6 +262,15 @@ def perform_merge_async(
 
         # 7. Save stub conversation to database
         conversations_db.upsert_conversation(uid, new_conversation.model_dump())
+
+        # Build the conversation-level playback artifact for the merged conversation.
+        # Fingerprint-named task: dedups with the enqueue process_conversation may
+        # also fire on the reprocess path.
+        if merged_audio_files and is_audio_merge_dispatch_enabled():
+            files_payload = [af.model_dump() for af in merged_audio_files]
+            enqueue_conversation_artifact_build(
+                uid, new_conversation_id, compute_audio_files_fingerprint(files_payload), caller='merge_conversations'
+            )
 
         # Store photos in subcollection if any
         if merged_photos:
