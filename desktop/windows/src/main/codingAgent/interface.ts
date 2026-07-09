@@ -107,7 +107,7 @@ const knownLimitation = (reason: string, followUpTicket: string): AdapterCapabil
 })
 
 export const ADAPTER_CAPABILITY_MATRIX = {
-  // "acp" is Claude Code: the bundled @zed-industries/claude-agent-acp bridge
+  // "acp" is Claude Code: the bundled @agentclientprotocol/claude-agent-acp bridge
   // spawned as a node subprocess. The id stays "acp" for parity with macOS.
   acp: {
     adapterId: 'acp',

@@ -38,7 +38,7 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
     description: "OpenAI's Codex agent, driven through the official codex-acp bridge.",
     installSteps: ['npm install -g @openai/codex', 'codex login'],
     suggestedCommand: 'npx @agentclientprotocol/codex-acp',
-    docsUrl: 'https://github.com/zed-industries/codex-acp'
+    docsUrl: 'https://github.com/agentclientprotocol/codex-acp'
   }
 }
 

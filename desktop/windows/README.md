@@ -52,7 +52,7 @@ hands the task over, streaming the agent's progress into the conversation. If
 the agent you named fails to start, Omi falls back to the next connected one;
 if it isn't connected at all, the reply tells you how to set it up.
 
-- **Claude Code** ships built in (the `@zed-industries/claude-agent-acp`
+- **Claude Code** ships built in (the `@agentclientprotocol/claude-agent-acp`
   bridge, spawned as a Node child process) — no separate install. It uses your
   Claude sign-in (`claude` CLI credentials or `ANTHROPIC_API_KEY`).
 - **OpenClaw / Hermes / Codex** are external CLIs you install yourself, then
