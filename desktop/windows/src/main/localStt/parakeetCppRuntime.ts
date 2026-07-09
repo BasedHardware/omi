@@ -157,17 +157,30 @@ export async function getManagedParakeetStatus(deps: RuntimeDeps = {}): Promise<
   }
 }
 
+export type EnsureRuntimeOptions = {
+  /**
+   * When false, resolve an already-installed runtime but never download or
+   * install anything — reject instead. Only an explicit Local Parakeet
+   * selection may install; 'auto' must fail closed to the hosted cloud path.
+   */
+  allowInstall?: boolean
+}
+
 export async function ensureManagedParakeetRuntime(
-  deps: RuntimeDeps = {}
+  deps: RuntimeDeps = {},
+  options: EnsureRuntimeOptions = {}
 ): Promise<ManagedParakeetRuntime> {
   if (installPromise) return installPromise
-  installPromise = installManagedRuntime(deps).finally(() => {
+  installPromise = installManagedRuntime(deps, options.allowInstall ?? true).finally(() => {
     installPromise = null
   })
   return installPromise
 }
 
-async function installManagedRuntime(deps: RuntimeDeps): Promise<ManagedParakeetRuntime> {
+async function installManagedRuntime(
+  deps: RuntimeDeps,
+  allowInstall: boolean
+): Promise<ManagedParakeetRuntime> {
   const selection = await selectRuntime(deps)
   if (!selection.supported || !selection.variant) {
     throw new Error(selection.reason ?? 'local Parakeet runtime is not supported')
@@ -178,6 +191,14 @@ async function installManagedRuntime(deps: RuntimeDeps): Promise<ManagedParakeet
     installError = null
     installState = activeSessions > 0 ? 'running' : 'installed'
     return existing
+  }
+
+  if (!allowInstall) {
+    // Fail closed without touching installState: nothing was attempted, so the
+    // status should keep reporting 'not_installed', not an install error.
+    throw new Error(
+      'local Parakeet runtime is not installed; select Local Parakeet in Settings to install it'
+    )
   }
 
   installState = 'installing'
