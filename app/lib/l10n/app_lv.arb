@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Savienojiet savas Meta Glasses",
+    "pairingDescMetaGlasses": "Sapārojiet brilles lietotnē Meta AI, pēc tam Omi pieskarieties Savienot. Varat sasaistīt vairākus pārus un izvēlēties aktīvo.",
+    "metaGlassesUnavailable": "Lietotne Meta AI nav atrasta. Lai savienotu brilles, instalējiet Meta AI un ieslēdziet izstrādātāja režīmu.",
+    "metaGlassesRegistering": "Pabeidziet savienošanu lietotnē Meta AI un atgriezieties Omi.",
+    "metaGlassesCameraPermission": "Atļaujiet piekļuvi kamerai lietotnē Meta AI",
+    "metaGlassesCaptureModeLabel": "Tveršanas režīms",
+    "metaGlassesModeCameraMic": "Kamera + mikrofons",
+    "metaGlassesModeMicOnly": "Tikai mikrofons",
+    "metaGlassesStartCapture": "Sākt tveršanu",
+    "metaGlassesStopCapture": "Apturēt tveršanu",
+    "metaGlassesGestureHint": "Žestu vadība Meta brillēm šajā būvējumā netiek atbalstīta.",
+    "connectAnotherDevice": "Savienot citu ierīci",
+    "myDevices": "Manas ierīces",
+    "metaGlassesAutoCapture": "Automātiska tveršana pēc savienošanas",
+    "metaGlassesShowPreview": "Tiešais priekšskatījums",
+    "metaGlassesPendingPhotos": "{count} fotoattēli gaida sinhronizāciju",
+    "metaGlassesPairInMetaAI": "Iestatiet lietotnē Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Brilles atdziest — tveršana apturēta",
+    "metaGlassesFolded": "Atlokiet brilles, lai turpinātu tveršanu",
+    "metaGlassesCaptureFrequency": "Uzņemšanas biežums",
+    "metaGlassesEvery10s": "Ik pēc 10 s",
+    "metaGlassesEvery30s": "Ik pēc 30 s",
+    "metaGlassesEvery1min": "Ik pēc 1 min",
+    "metaGlassesEvery5min": "Ik pēc 5 min",
+    "metaGlassesGestures": "Žesti"
 }

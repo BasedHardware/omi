@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Sambungkan Meta Glasses anda",
+    "pairingDescMetaGlasses": "Gandingkan cermin mata anda dalam aplikasi Meta AI, kemudian ketik Sambung dalam Omi. Anda boleh memautkan lebih daripada satu pasang dan memilih yang aktif.",
+    "metaGlassesUnavailable": "Aplikasi Meta AI tidak ditemui. Pasang Meta AI dan aktifkan Mod Pembangun untuk menyambungkan cermin mata anda.",
+    "metaGlassesRegistering": "Selesaikan sambungan dalam aplikasi Meta AI, kemudian kembali ke Omi.",
+    "metaGlassesCameraPermission": "Benarkan akses kamera dalam aplikasi Meta AI",
+    "metaGlassesCaptureModeLabel": "Mod rakaman",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Mikrofon sahaja",
+    "metaGlassesStartCapture": "Mula merakam",
+    "metaGlassesStopCapture": "Henti merakam",
+    "metaGlassesGestureHint": "Kawalan gerak isyarat untuk cermin mata Meta tidak disokong dalam binaan ini.",
+    "connectAnotherDevice": "Sambungkan peranti lain",
+    "myDevices": "Peranti Saya",
+    "metaGlassesAutoCapture": "Rakaman automatik apabila disambungkan",
+    "metaGlassesShowPreview": "Pratonton langsung",
+    "metaGlassesPendingPhotos": "{count} foto menunggu penyegerakan",
+    "metaGlassesPairInMetaAI": "Sediakan dalam aplikasi Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Cermin mata sedang menyejuk — tangkapan dijeda",
+    "metaGlassesFolded": "Buka cermin mata untuk terus menangkap",
+    "metaGlassesCaptureFrequency": "Kekerapan tangkapan",
+    "metaGlassesEvery10s": "Setiap 10 s",
+    "metaGlassesEvery30s": "Setiap 30 s",
+    "metaGlassesEvery1min": "Setiap 1 min",
+    "metaGlassesEvery5min": "Setiap 5 min",
+    "metaGlassesGestures": "Gerak isyarat"
 }

@@ -3177,5 +3177,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Połącz swoje Meta Glasses",
+    "pairingDescMetaGlasses": "Sparuj okulary w aplikacji Meta AI, a następnie stuknij Połącz w Omi. Możesz połączyć więcej niż jedną parę i wybrać aktywną.",
+    "metaGlassesUnavailable": "Nie znaleziono aplikacji Meta AI. Zainstaluj Meta AI i włącz tryb programisty, aby połączyć okulary.",
+    "metaGlassesRegistering": "Dokończ łączenie w aplikacji Meta AI, a następnie wróć do Omi.",
+    "metaGlassesCameraPermission": "Zezwól na dostęp do kamery w aplikacji Meta AI",
+    "metaGlassesCaptureModeLabel": "Tryb nagrywania",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Tylko mikrofon",
+    "metaGlassesStartCapture": "Rozpocznij nagrywanie",
+    "metaGlassesStopCapture": "Zatrzymaj nagrywanie",
+    "metaGlassesGestureHint": "Sterowanie gestami dla okularów Meta nie jest obsługiwane w tej kompilacji.",
+    "connectAnotherDevice": "Połącz kolejne urządzenie",
+    "myDevices": "Moje urządzenia",
+    "metaGlassesAutoCapture": "Automatyczne nagrywanie po połączeniu",
+    "metaGlassesShowPreview": "Podgląd na żywo",
+    "metaGlassesPendingPhotos": "{count} zdjęć czeka na synchronizację",
+    "metaGlassesPairInMetaAI": "Skonfiguruj w aplikacji Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Okulary się chłodzą — przechwytywanie wstrzymane",
+    "metaGlassesFolded": "Rozłóż okulary, aby kontynuować przechwytywanie",
+    "metaGlassesCaptureFrequency": "Częstotliwość zdjęć",
+    "metaGlassesEvery10s": "Co 10 s",
+    "metaGlassesEvery30s": "Co 30 s",
+    "metaGlassesEvery1min": "Co 1 min",
+    "metaGlassesEvery5min": "Co 5 min",
+    "metaGlassesGestures": "Gesty"
 }

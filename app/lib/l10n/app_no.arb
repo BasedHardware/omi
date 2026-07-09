@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Koble til dine Meta Glasses",
+    "pairingDescMetaGlasses": "Par brillene i Meta AI-appen, og trykk deretter på Koble til i Omi. Du kan koble til flere par og velge hvilket som er aktivt.",
+    "metaGlassesUnavailable": "Fant ikke Meta AI-appen. Installer Meta AI og aktiver utviklermodus for å koble til brillene.",
+    "metaGlassesRegistering": "Fullfør tilkoblingen i Meta AI-appen, og gå tilbake til Omi.",
+    "metaGlassesCameraPermission": "Tillat kameratilgang i Meta AI-appen",
+    "metaGlassesCaptureModeLabel": "Opptaksmodus",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Kun mikrofon",
+    "metaGlassesStartCapture": "Start opptak",
+    "metaGlassesStopCapture": "Stopp opptak",
+    "metaGlassesGestureHint": "Bevegelseskontroller for Meta-briller støttes ikke i denne versjonen.",
+    "connectAnotherDevice": "Koble til en annen enhet",
+    "myDevices": "Mine enheter",
+    "metaGlassesAutoCapture": "Automatisk opptak ved tilkobling",
+    "metaGlassesShowPreview": "Direkte forhåndsvisning",
+    "metaGlassesPendingPhotos": "{count} bilder venter på synkronisering",
+    "metaGlassesPairInMetaAI": "Konfigurer i Meta AI-appen",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Brillene kjøles ned — opptak satt på pause",
+    "metaGlassesFolded": "Brett ut brillene for å fortsette opptaket",
+    "metaGlassesCaptureFrequency": "Opptaksfrekvens",
+    "metaGlassesEvery10s": "Hvert 10. s",
+    "metaGlassesEvery30s": "Hvert 30. s",
+    "metaGlassesEvery1min": "Hvert 1. min",
+    "metaGlassesEvery5min": "Hvert 5. min",
+    "metaGlassesGestures": "Bevegelser"
 }

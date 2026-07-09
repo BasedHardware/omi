@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Поврзете ги вашите Meta Glasses",
+    "pairingDescMetaGlasses": "Спарете ги очилата во апликацијата Meta AI, а потоа допрете Поврзи во Omi. Може да поврзете повеќе пара и да изберете кој е активен.",
+    "metaGlassesUnavailable": "Апликацијата Meta AI не е пронајдена. Инсталирајте Meta AI и вклучете режим за програмери за да ги поврзете очилата.",
+    "metaGlassesRegistering": "Завршете го поврзувањето во апликацијата Meta AI и вратете се во Omi.",
+    "metaGlassesCameraPermission": "Дозволете пристап до камерата во апликацијата Meta AI",
+    "metaGlassesCaptureModeLabel": "Режим на снимање",
+    "metaGlassesModeCameraMic": "Камера + микрофон",
+    "metaGlassesModeMicOnly": "Само микрофон",
+    "metaGlassesStartCapture": "Започни снимање",
+    "metaGlassesStopCapture": "Запри снимање",
+    "metaGlassesGestureHint": "Контролите со гестови за Meta очилата не се поддржани во оваа верзија.",
+    "connectAnotherDevice": "Поврзи друг уред",
+    "myDevices": "Мои уреди",
+    "metaGlassesAutoCapture": "Автоматско снимање при поврзување",
+    "metaGlassesShowPreview": "Преглед во живо",
+    "metaGlassesPendingPhotos": "{count} фотографии чекаат синхронизација",
+    "metaGlassesPairInMetaAI": "Поставете во апликацијата Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Очилата се ладат — снимањето е паузирано",
+    "metaGlassesFolded": "Расклопете ги очилата за да продолжи снимањето",
+    "metaGlassesCaptureFrequency": "Честота на снимање",
+    "metaGlassesEvery10s": "На секои 10 с",
+    "metaGlassesEvery30s": "На секои 30 с",
+    "metaGlassesEvery1min": "На секоја 1 мин",
+    "metaGlassesEvery5min": "На секои 5 мин",
+    "metaGlassesGestures": "Гестови"
 }

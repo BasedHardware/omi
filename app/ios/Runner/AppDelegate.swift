@@ -4,6 +4,7 @@ import UserNotifications
 import app_links
 import WatchConnectivity
 import AVFoundation
+import MediaPlayer
 import Speech
 import WidgetKit
 
@@ -87,6 +88,8 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private let audioInterruptionManager = AudioInterruptionManager()
+  private var metaGesturesChannel: FlutterMethodChannel?
+  private var metaGesturesListening = false
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -188,6 +191,20 @@ final class QuickActionsIconPatcher: NSObject {
     // UI state and restart capture once iOS signals the interruption has
     // ended — flutter_sound does not auto-resume on its own.
     audioInterruptionManager.register(with: controller!.binaryMessenger)
+
+    metaGesturesChannel = FlutterMethodChannel(name: "com.omi/meta_gestures", binaryMessenger: controller!.binaryMessenger)
+    metaGesturesChannel?.setMethodCallHandler { [weak self] (call, result) in
+        switch call.method {
+        case "startListening":
+            self?.startMetaGestureListening()
+            result(true)
+        case "stopListening":
+            self?.stopMetaGestureListening()
+            result(true)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+    }
 
     // Audio session configuration for Bluetooth microphone support
     let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
@@ -641,6 +658,53 @@ extension AppDelegate: WCSessionDelegate {
                 print("Unknown background method: \(method)")
             }
         }
+    }
+
+    private func startMetaGestureListening() {
+        let center = MPRemoteCommandCenter.shared()
+        let commands: [(String, MPRemoteCommand)] = [
+            ("togglePlayPause", center.togglePlayPauseCommand),
+            ("play", center.playCommand),
+            ("pause", center.pauseCommand),
+            ("nextTrack", center.nextTrackCommand),
+            ("previousTrack", center.previousTrackCommand),
+        ]
+        for (name, command) in commands {
+            command.removeTarget(nil)
+            command.isEnabled = true
+            command.addTarget { [weak self] _ in
+                NSLog("[OmiMetaGestures] command=%@ -> onGesture(tap)", name)
+                DispatchQueue.main.async {
+                    self?.metaGesturesChannel?.invokeMethod("onGesture", arguments: ["type": "tap", "command": name])
+                }
+                return .success
+            }
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: "Omi capture",
+            MPMediaItemPropertyArtist: "Meta glasses",
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0,
+        ]
+        MPNowPlayingInfoCenter.default().playbackState = .playing
+        metaGesturesListening = true
+        NSLog("[OmiMetaGestures] listening-started (Now Playing claimed)")
+    }
+
+    private func stopMetaGestureListening() {
+        guard metaGesturesListening else { return }
+        let center = MPRemoteCommandCenter.shared()
+        for command in [
+            center.togglePlayPauseCommand, center.playCommand, center.pauseCommand,
+            center.nextTrackCommand, center.previousTrackCommand,
+        ] {
+            command.removeTarget(nil)
+            command.isEnabled = false
+        }
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        metaGesturesListening = false
+        NSLog("[OmiMetaGestures] listening-stopped")
     }
 }
 

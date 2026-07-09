@@ -3111,5 +3111,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Свържете вашите Meta Glasses",
+    "pairingDescMetaGlasses": "Сдвоете очилата си в приложението Meta AI, след което натиснете „Свързване“ в Omi. Можете да свържете повече от един чифт и да изберете кой е активен.",
+    "metaGlassesUnavailable": "Приложението Meta AI не е открито. Инсталирайте Meta AI и активирайте режим за разработчици, за да свържете очилата си.",
+    "metaGlassesRegistering": "Завършете свързването в приложението Meta AI и се върнете в Omi.",
+    "metaGlassesCameraPermission": "Разрешете достъп до камерата в приложението Meta AI",
+    "metaGlassesCaptureModeLabel": "Режим на запис",
+    "metaGlassesModeCameraMic": "Камера + микрофон",
+    "metaGlassesModeMicOnly": "Само микрофон",
+    "metaGlassesStartCapture": "Старт на записа",
+    "metaGlassesStopCapture": "Стоп на записа",
+    "metaGlassesGestureHint": "Управлението с жестове за очила Meta не се поддържа в тази версия.",
+    "connectAnotherDevice": "Свързване на друго устройство",
+    "myDevices": "Моите устройства",
+    "metaGlassesAutoCapture": "Автоматичен запис при свързване",
+    "metaGlassesShowPreview": "Преглед на живо",
+    "metaGlassesPendingPhotos": "{count} снимки чакат синхронизация",
+    "metaGlassesPairInMetaAI": "Настройте в приложението Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Очилата се охлаждат — заснемането е поставено на пауза",
+    "metaGlassesFolded": "Разгънете очилата, за да продължите заснемането",
+    "metaGlassesCaptureFrequency": "Честота на заснемане",
+    "metaGlassesEvery10s": "На всеки 10 с",
+    "metaGlassesEvery30s": "На всеки 30 с",
+    "metaGlassesEvery1min": "На всяка минута",
+    "metaGlassesEvery5min": "На всеки 5 мин",
+    "metaGlassesGestures": "Жестове"
 }

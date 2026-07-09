@@ -3238,5 +3238,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Csatlakoztasd a Meta Glasses szemüvegedet",
+    "pairingDescMetaGlasses": "Párosítsd a szemüveget a Meta AI alkalmazásban, majd koppints a Csatlakozás gombra az Omiban. Több szemüveget is összekapcsolhatsz, és kiválaszthatod az aktívat.",
+    "metaGlassesUnavailable": "A Meta AI alkalmazás nem található. A szemüveg csatlakoztatásához telepítsd a Meta AI-t, és kapcsold be a fejlesztői módot.",
+    "metaGlassesRegistering": "Fejezd be a csatlakozást a Meta AI alkalmazásban, majd térj vissza az Omiba.",
+    "metaGlassesCameraPermission": "Engedélyezd a kamera-hozzáférést a Meta AI alkalmazásban",
+    "metaGlassesCaptureModeLabel": "Rögzítési mód",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Csak mikrofon",
+    "metaGlassesStartCapture": "Rögzítés indítása",
+    "metaGlassesStopCapture": "Rögzítés leállítása",
+    "metaGlassesGestureHint": "A Meta szemüveg gesztusvezérlése ebben a buildben nem támogatott.",
+    "connectAnotherDevice": "Másik eszköz csatlakoztatása",
+    "myDevices": "Eszközeim",
+    "metaGlassesAutoCapture": "Automatikus rögzítés csatlakozáskor",
+    "metaGlassesShowPreview": "Élő előnézet",
+    "metaGlassesPendingPhotos": "{count} fotó vár szinkronizálásra",
+    "metaGlassesPairInMetaAI": "Állítsd be a Meta AI alkalmazásban",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "A szemüveg hűl — a rögzítés szünetel",
+    "metaGlassesFolded": "Hajtsd ki a szemüveget a rögzítés folytatásához",
+    "metaGlassesCaptureFrequency": "Rögzítési gyakoriság",
+    "metaGlassesEvery10s": "10 mp-enként",
+    "metaGlassesEvery30s": "30 mp-enként",
+    "metaGlassesEvery1min": "1 percenként",
+    "metaGlassesEvery5min": "5 percenként",
+    "metaGlassesGestures": "Gesztusok"
 }

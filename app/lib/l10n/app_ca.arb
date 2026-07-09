@@ -3111,5 +3111,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Connecta les teves Meta Glasses",
+    "pairingDescMetaGlasses": "Vincula les ulleres a l'aplicació Meta AI i després toca Connecta a Omi. Pots enllaçar més d'un parell i triar quin és actiu.",
+    "metaGlassesUnavailable": "No s'ha detectat l'aplicació Meta AI. Instal·la Meta AI i activa el mode de desenvolupador per connectar les ulleres.",
+    "metaGlassesRegistering": "Acaba la connexió a l'aplicació Meta AI i torna a Omi.",
+    "metaGlassesCameraPermission": "Permet l'accés a la càmera a l'aplicació Meta AI",
+    "metaGlassesCaptureModeLabel": "Mode de captura",
+    "metaGlassesModeCameraMic": "Càmera + micròfon",
+    "metaGlassesModeMicOnly": "Només micròfon",
+    "metaGlassesStartCapture": "Inicia la captura",
+    "metaGlassesStopCapture": "Atura la captura",
+    "metaGlassesGestureHint": "Els controls de gestos per a les ulleres Meta no són compatibles en aquesta versió.",
+    "connectAnotherDevice": "Connecta un altre dispositiu",
+    "myDevices": "Els meus dispositius",
+    "metaGlassesAutoCapture": "Captura automàtica en connectar",
+    "metaGlassesShowPreview": "Previsualització en directe",
+    "metaGlassesPendingPhotos": "{count} fotos pendents de sincronitzar",
+    "metaGlassesPairInMetaAI": "Configura-ho a l'aplicació Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Les ulleres s'estan refredant — captura en pausa",
+    "metaGlassesFolded": "Desplega les ulleres per continuar capturant",
+    "metaGlassesCaptureFrequency": "Freqüència de captura",
+    "metaGlassesEvery10s": "Cada 10 s",
+    "metaGlassesEvery30s": "Cada 30 s",
+    "metaGlassesEvery1min": "Cada 1 min",
+    "metaGlassesEvery5min": "Cada 5 min",
+    "metaGlassesGestures": "Gestos"
 }

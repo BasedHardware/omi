@@ -184,7 +184,7 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta, metaWearables }
 
 // Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
 const List<String> _legacyDeviceTypeNames = [
@@ -198,6 +198,7 @@ const List<String> _legacyDeviceTypeNames = [
   'friendPendant',
   'limitless',
   'raybanMeta',
+  'metaWearables',
 ];
 
 DeviceType _deviceTypeFromJson(dynamic raw) {
@@ -611,6 +612,7 @@ class BtDevice {
       case DeviceType.openglass:
       case DeviceType.appleWatch:
       case DeviceType.raybanMeta:
+      case DeviceType.metaWearables:
         return ''; // No warning needed
     }
   }
@@ -649,6 +651,7 @@ class BtDevice {
       case DeviceType.openglass:
       case DeviceType.appleWatch:
       case DeviceType.raybanMeta:
+      case DeviceType.metaWearables:
         return ''; // No warning needed
     }
   }

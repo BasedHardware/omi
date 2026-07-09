@@ -3177,5 +3177,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Connectez vos Meta Glasses",
+    "pairingDescMetaGlasses": "Associez vos lunettes dans l'application Meta AI, puis touchez Connecter dans Omi. Vous pouvez lier plusieurs paires et choisir celle qui est active.",
+    "metaGlassesUnavailable": "Application Meta AI introuvable. Installez Meta AI et activez le mode développeur pour connecter vos lunettes.",
+    "metaGlassesRegistering": "Terminez la connexion dans l'application Meta AI, puis revenez dans Omi.",
+    "metaGlassesCameraPermission": "Autorisez l'accès à la caméra dans l'application Meta AI",
+    "metaGlassesCaptureModeLabel": "Mode de capture",
+    "metaGlassesModeCameraMic": "Caméra + micro",
+    "metaGlassesModeMicOnly": "Micro uniquement",
+    "metaGlassesStartCapture": "Démarrer la capture",
+    "metaGlassesStopCapture": "Arrêter la capture",
+    "metaGlassesGestureHint": "Les commandes gestuelles des lunettes Meta ne sont pas prises en charge dans cette version.",
+    "connectAnotherDevice": "Connecter un autre appareil",
+    "myDevices": "Mes appareils",
+    "metaGlassesAutoCapture": "Capture automatique à la connexion",
+    "metaGlassesShowPreview": "Aperçu en direct",
+    "metaGlassesPendingPhotos": "{count} photos en attente de synchronisation",
+    "metaGlassesPairInMetaAI": "Configurez dans l'application Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Les lunettes refroidissent — capture en pause",
+    "metaGlassesFolded": "Dépliez vos lunettes pour continuer la capture",
+    "metaGlassesCaptureFrequency": "Fréquence de capture",
+    "metaGlassesEvery10s": "Toutes les 10 s",
+    "metaGlassesEvery30s": "Toutes les 30 s",
+    "metaGlassesEvery1min": "Toutes les 1 min",
+    "metaGlassesEvery5min": "Toutes les 5 min",
+    "metaGlassesGestures": "Gestes"
 }

@@ -9498,4 +9498,95 @@ class AppLocalizationsHe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'שגיאה בהתחברות ל-Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'חברו את משקפי ה-Meta Glasses שלכם';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'צמדו את המשקפיים באפליקציית Meta AI ואז הקישו על התחברות ב-Omi. אפשר לקשר יותר מזוג אחד ולבחור איזה פעיל.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'אפליקציית Meta AI לא נמצאה. התקינו את Meta AI והפעילו מצב מפתחים כדי לחבר את המשקפיים.';
+
+  @override
+  String get metaGlassesRegistering => 'השלימו את החיבור באפליקציית Meta AI וחזרו ל-Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'אפשרו גישה למצלמה באפליקציית Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'מצב הקלטה';
+
+  @override
+  String get metaGlassesModeCameraMic => 'מצלמה + מיקרופון';
+
+  @override
+  String get metaGlassesModeMicOnly => 'מיקרופון בלבד';
+
+  @override
+  String get metaGlassesStartCapture => 'התחל הקלטה';
+
+  @override
+  String get metaGlassesStopCapture => 'עצור הקלטה';
+
+  @override
+  String get metaGlassesGestureHint => 'פקדי מחוות עבור משקפי Meta אינם נתמכים בגרסה זו.';
+
+  @override
+  String get connectAnotherDevice => 'חיבור מכשיר נוסף';
+
+  @override
+  String get myDevices => 'המכשירים שלי';
+
+  @override
+  String get metaGlassesAutoCapture => 'הקלטה אוטומטית בעת חיבור';
+
+  @override
+  String get metaGlassesShowPreview => 'תצוגה מקדימה חיה';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count תמונות ממתינות לסנכרון';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'הגדירו באפליקציית Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'המשקפיים מתקררים — הצילום הושהה';
+
+  @override
+  String get metaGlassesFolded => 'פתח את המשקפיים כדי להמשיך בצילום';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'תדירות צילום';
+
+  @override
+  String get metaGlassesEvery10s => 'כל 10 שנ\'';
+
+  @override
+  String get metaGlassesEvery30s => 'כל 30 שנ\'';
+
+  @override
+  String get metaGlassesEvery1min => 'כל דקה';
+
+  @override
+  String get metaGlassesEvery5min => 'כל 5 דק\'';
+
+  @override
+  String get metaGlassesGestures => 'מחוות';
 }

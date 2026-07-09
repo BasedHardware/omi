@@ -9576,4 +9576,95 @@ class AppLocalizationsSv extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Fel vid anslutning till Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Anslut dina Meta Glasses';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Parkoppla dina glasögon i Meta AI-appen och tryck sedan på Anslut i Omi. Du kan länka flera par och välja vilket som är aktivt.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Meta AI-appen hittades inte. Installera Meta AI och aktivera utvecklarläget för att ansluta dina glasögon.';
+
+  @override
+  String get metaGlassesRegistering => 'Slutför anslutningen i Meta AI-appen och återgå till Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Tillåt kameraåtkomst i Meta AI-appen';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Inspelningsläge';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Endast mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Starta inspelning';
+
+  @override
+  String get metaGlassesStopCapture => 'Stoppa inspelning';
+
+  @override
+  String get metaGlassesGestureHint => 'Geststyrning för Meta-glasögon stöds inte i den här versionen.';
+
+  @override
+  String get connectAnotherDevice => 'Anslut en annan enhet';
+
+  @override
+  String get myDevices => 'Mina enheter';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatisk inspelning vid anslutning';
+
+  @override
+  String get metaGlassesShowPreview => 'Live-förhandsvisning';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count foton väntar på synkronisering';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Konfigurera i Meta AI-appen';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Glasögonen svalnar — inspelning pausad';
+
+  @override
+  String get metaGlassesFolded => 'Fäll upp glasögonen för att fortsätta spela in';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Tagningsfrekvens';
+
+  @override
+  String get metaGlassesEvery10s => 'Var 10:e s';
+
+  @override
+  String get metaGlassesEvery30s => 'Var 30:e s';
+
+  @override
+  String get metaGlassesEvery1min => 'Varje 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Var 5:e min';
+
+  @override
+  String get metaGlassesGestures => 'Gester';
 }

@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "חברו את משקפי ה-Meta Glasses שלכם",
+    "pairingDescMetaGlasses": "צמדו את המשקפיים באפליקציית Meta AI ואז הקישו על התחברות ב-Omi. אפשר לקשר יותר מזוג אחד ולבחור איזה פעיל.",
+    "metaGlassesUnavailable": "אפליקציית Meta AI לא נמצאה. התקינו את Meta AI והפעילו מצב מפתחים כדי לחבר את המשקפיים.",
+    "metaGlassesRegistering": "השלימו את החיבור באפליקציית Meta AI וחזרו ל-Omi.",
+    "metaGlassesCameraPermission": "אפשרו גישה למצלמה באפליקציית Meta AI",
+    "metaGlassesCaptureModeLabel": "מצב הקלטה",
+    "metaGlassesModeCameraMic": "מצלמה + מיקרופון",
+    "metaGlassesModeMicOnly": "מיקרופון בלבד",
+    "metaGlassesStartCapture": "התחל הקלטה",
+    "metaGlassesStopCapture": "עצור הקלטה",
+    "metaGlassesGestureHint": "פקדי מחוות עבור משקפי Meta אינם נתמכים בגרסה זו.",
+    "connectAnotherDevice": "חיבור מכשיר נוסף",
+    "myDevices": "המכשירים שלי",
+    "metaGlassesAutoCapture": "הקלטה אוטומטית בעת חיבור",
+    "metaGlassesShowPreview": "תצוגה מקדימה חיה",
+    "metaGlassesPendingPhotos": "{count} תמונות ממתינות לסנכרון",
+    "metaGlassesPairInMetaAI": "הגדירו באפליקציית Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "המשקפיים מתקררים — הצילום הושהה",
+    "metaGlassesFolded": "פתח את המשקפיים כדי להמשיך בצילום",
+    "metaGlassesCaptureFrequency": "תדירות צילום",
+    "metaGlassesEvery10s": "כל 10 שנ'",
+    "metaGlassesEvery30s": "כל 30 שנ'",
+    "metaGlassesEvery1min": "כל דקה",
+    "metaGlassesEvery5min": "כל 5 דק'",
+    "metaGlassesGestures": "מחוות"
 }

@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Yhdistä Meta Glasses -lasisi",
+    "pairingDescMetaGlasses": "Muodosta lasien laitepari Meta AI -sovelluksessa ja napauta sitten Omissa Yhdistä. Voit liittää useita laseja ja valita, mitkä ovat aktiiviset.",
+    "metaGlassesUnavailable": "Meta AI -sovellusta ei löytynyt. Asenna Meta AI ja ota kehittäjätila käyttöön yhdistääksesi lasit.",
+    "metaGlassesRegistering": "Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa Omiin.",
+    "metaGlassesCameraPermission": "Salli kameran käyttö Meta AI -sovelluksessa",
+    "metaGlassesCaptureModeLabel": "Tallennustila",
+    "metaGlassesModeCameraMic": "Kamera + mikrofoni",
+    "metaGlassesModeMicOnly": "Vain mikrofoni",
+    "metaGlassesStartCapture": "Aloita tallennus",
+    "metaGlassesStopCapture": "Lopeta tallennus",
+    "metaGlassesGestureHint": "Meta-lasien eleohjausta ei tueta tässä koontiversiossa.",
+    "connectAnotherDevice": "Yhdistä toinen laite",
+    "myDevices": "Omat laitteet",
+    "metaGlassesAutoCapture": "Automaattinen tallennus yhdistettäessä",
+    "metaGlassesShowPreview": "Live-esikatselu",
+    "metaGlassesPendingPhotos": "{count} kuvaa odottaa synkronointia",
+    "metaGlassesPairInMetaAI": "Määritä Meta AI -sovelluksessa",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Lasit jäähtyvät — tallennus keskeytetty",
+    "metaGlassesFolded": "Avaa lasit jatkaaksesi tallennusta",
+    "metaGlassesCaptureFrequency": "Kuvaustaajuus",
+    "metaGlassesEvery10s": "Joka 10 s",
+    "metaGlassesEvery30s": "Joka 30 s",
+    "metaGlassesEvery1min": "Joka 1 min",
+    "metaGlassesEvery5min": "Joka 5 min",
+    "metaGlassesGestures": "Eleet"
 }

@@ -3143,5 +3143,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "अपने Meta Glasses कनेक्ट करें",
+    "pairingDescMetaGlasses": "Meta AI ऐप में अपना चश्मा पेयर करें, फिर Omi में Connect पर टैप करें। आप एक से अधिक जोड़ी लिंक कर सकते हैं और सक्रिय जोड़ी चुन सकते हैं।",
+    "metaGlassesUnavailable": "Meta AI ऐप नहीं मिला। चश्मा कनेक्ट करने के लिए Meta AI इंस्टॉल करें और डेवलपर मोड चालू करें।",
+    "metaGlassesRegistering": "Meta AI ऐप में कनेक्शन पूरा करें, फिर Omi में वापस आएं।",
+    "metaGlassesCameraPermission": "Meta AI ऐप में कैमरा एक्सेस की अनुमति दें",
+    "metaGlassesCaptureModeLabel": "कैप्चर मोड",
+    "metaGlassesModeCameraMic": "कैमरा + माइक",
+    "metaGlassesModeMicOnly": "केवल माइक",
+    "metaGlassesStartCapture": "कैप्चर शुरू करें",
+    "metaGlassesStopCapture": "कैप्चर बंद करें",
+    "metaGlassesGestureHint": "इस बिल्ड में Meta चश्मे के लिए जेस्चर नियंत्रण समर्थित नहीं हैं।",
+    "connectAnotherDevice": "दूसरा डिवाइस कनेक्ट करें",
+    "myDevices": "मेरे डिवाइस",
+    "metaGlassesAutoCapture": "कनेक्ट होने पर ऑटो-कैप्चर",
+    "metaGlassesShowPreview": "लाइव प्रीव्यू",
+    "metaGlassesPendingPhotos": "{count} फ़ोटो सिंक की प्रतीक्षा में",
+    "metaGlassesPairInMetaAI": "Meta AI ऐप में सेट अप करें",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "चश्मा ठंडा हो रहा है — कैप्चर रुका हुआ है",
+    "metaGlassesFolded": "कैप्चर जारी रखने के लिए चश्मा खोलें",
+    "metaGlassesCaptureFrequency": "कैप्चर आवृत्ति",
+    "metaGlassesEvery10s": "हर 10 सेकंड",
+    "metaGlassesEvery30s": "हर 30 सेकंड",
+    "metaGlassesEvery1min": "हर 1 मिनट",
+    "metaGlassesEvery5min": "हर 5 मिनट",
+    "metaGlassesGestures": "जेस्चर"
 }

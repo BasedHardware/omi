@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "உங்கள் Meta Glasses-ஐ இணைக்கவும்",
+    "pairingDescMetaGlasses": "Meta AI ஆப்பில் உங்கள் கண்ணாடியை இணைத்து, பிறகு Omi-இல் Connect-ஐத் தட்டவும். ஒன்றுக்கு மேற்பட்ட ஜோடிகளை இணைத்து, செயலில் உள்ளதைத் தேர்ந்தெடுக்கலாம்.",
+    "metaGlassesUnavailable": "Meta AI ஆப் கிடைக்கவில்லை. கண்ணாடியை இணைக்க Meta AI-ஐ நிறுவி, டெவலப்பர் பயன்முறையை இயக்கவும்.",
+    "metaGlassesRegistering": "Meta AI ஆப்பில் இணைப்பை முடித்து, பிறகு Omi-க்குத் திரும்பவும்.",
+    "metaGlassesCameraPermission": "Meta AI ஆப்பில் கேமரா அணுகலை அனுமதிக்கவும்",
+    "metaGlassesCaptureModeLabel": "பதிவு பயன்முறை",
+    "metaGlassesModeCameraMic": "கேமரா + மைக்",
+    "metaGlassesModeMicOnly": "மைக் மட்டும்",
+    "metaGlassesStartCapture": "பதிவைத் தொடங்கு",
+    "metaGlassesStopCapture": "பதிவை நிறுத்து",
+    "metaGlassesGestureHint": "இந்த build-இல் Meta கண்ணாடிகளுக்கான சைகை கட்டுப்பாடுகள் ஆதரிக்கப்படவில்லை.",
+    "connectAnotherDevice": "மற்றொரு சாதனத்தை இணைக்கவும்",
+    "myDevices": "என் சாதனங்கள்",
+    "metaGlassesAutoCapture": "இணைக்கும்போது தானியங்கு பதிவு",
+    "metaGlassesShowPreview": "நேரடி முன்னோட்டம்",
+    "metaGlassesPendingPhotos": "{count} புகைப்படங்கள் ஒத்திசைவுக்காக காத்திருக்கின்றன",
+    "metaGlassesPairInMetaAI": "Meta AI ஆப்பில் அமைக்கவும்",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "கண்ணாடி குளிர்கிறது — பிடிப்பு இடைநிறுத்தப்பட்டது",
+    "metaGlassesFolded": "பிடிப்பைத் தொடர கண்ணாடியைத் திறக்கவும்",
+    "metaGlassesCaptureFrequency": "படமெடுப்பு அதிர்வெண்",
+    "metaGlassesEvery10s": "ஒவ்வொரு 10 வி",
+    "metaGlassesEvery30s": "ஒவ்வொரு 30 வி",
+    "metaGlassesEvery1min": "ஒவ்வொரு 1 நி",
+    "metaGlassesEvery5min": "ஒவ்வொரு 5 நி",
+    "metaGlassesGestures": "சைகைகள்"
 }

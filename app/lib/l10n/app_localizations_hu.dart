@@ -9611,4 +9611,95 @@ class AppLocalizationsHu extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Hiba a Ray-Ban Meta csatlakoztatásakor: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Csatlakoztasd a Meta Glasses szemüvegedet';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Párosítsd a szemüveget a Meta AI alkalmazásban, majd koppints a Csatlakozás gombra az Omiban. Több szemüveget is összekapcsolhatsz, és kiválaszthatod az aktívat.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'A Meta AI alkalmazás nem található. A szemüveg csatlakoztatásához telepítsd a Meta AI-t, és kapcsold be a fejlesztői módot.';
+
+  @override
+  String get metaGlassesRegistering => 'Fejezd be a csatlakozást a Meta AI alkalmazásban, majd térj vissza az Omiba.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Engedélyezd a kamera-hozzáférést a Meta AI alkalmazásban';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Rögzítési mód';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Csak mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Rögzítés indítása';
+
+  @override
+  String get metaGlassesStopCapture => 'Rögzítés leállítása';
+
+  @override
+  String get metaGlassesGestureHint => 'A Meta szemüveg gesztusvezérlése ebben a buildben nem támogatott.';
+
+  @override
+  String get connectAnotherDevice => 'Másik eszköz csatlakoztatása';
+
+  @override
+  String get myDevices => 'Eszközeim';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatikus rögzítés csatlakozáskor';
+
+  @override
+  String get metaGlassesShowPreview => 'Élő előnézet';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotó vár szinkronizálásra';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Állítsd be a Meta AI alkalmazásban';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'A szemüveg hűl — a rögzítés szünetel';
+
+  @override
+  String get metaGlassesFolded => 'Hajtsd ki a szemüveget a rögzítés folytatásához';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Rögzítési gyakoriság';
+
+  @override
+  String get metaGlassesEvery10s => '10 mp-enként';
+
+  @override
+  String get metaGlassesEvery30s => '30 mp-enként';
+
+  @override
+  String get metaGlassesEvery1min => '1 percenként';
+
+  @override
+  String get metaGlassesEvery5min => '5 percenként';
+
+  @override
+  String get metaGlassesGestures => 'Gesztusok';
 }

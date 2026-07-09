@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Ühenda oma Meta Glasses",
+    "pairingDescMetaGlasses": "Seo prillid Meta AI rakenduses ja seejärel puuduta Omi-s nuppu Ühenda. Saad siduda mitu paari ja valida, milline on aktiivne.",
+    "metaGlassesUnavailable": "Meta AI rakendust ei leitud. Prillide ühendamiseks installi Meta AI ja lülita sisse arendajarežiim.",
+    "metaGlassesRegistering": "Vii ühendamine Meta AI rakenduses lõpule ja naase Omi-sse.",
+    "metaGlassesCameraPermission": "Luba kaamera juurdepääs Meta AI rakenduses",
+    "metaGlassesCaptureModeLabel": "Salvestusrežiim",
+    "metaGlassesModeCameraMic": "Kaamera + mikrofon",
+    "metaGlassesModeMicOnly": "Ainult mikrofon",
+    "metaGlassesStartCapture": "Alusta salvestamist",
+    "metaGlassesStopCapture": "Peata salvestamine",
+    "metaGlassesGestureHint": "Meta prillide žestjuhtimine pole selles järgus toetatud.",
+    "connectAnotherDevice": "Ühenda teine seade",
+    "myDevices": "Minu seadmed",
+    "metaGlassesAutoCapture": "Automaatne salvestus ühendamisel",
+    "metaGlassesShowPreview": "Reaalajas eelvaade",
+    "metaGlassesPendingPhotos": "{count} fotot ootab sünkroonimist",
+    "metaGlassesPairInMetaAI": "Seadista Meta AI rakenduses",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Prillid jahtuvad — jäädvustamine on peatatud",
+    "metaGlassesFolded": "Jäädvustamise jätkamiseks ava prillid",
+    "metaGlassesCaptureFrequency": "Jäädvustuse sagedus",
+    "metaGlassesEvery10s": "Iga 10 s",
+    "metaGlassesEvery30s": "Iga 30 s",
+    "metaGlassesEvery1min": "Iga 1 min",
+    "metaGlassesEvery5min": "Iga 5 min",
+    "metaGlassesGestures": "Žestid"
 }

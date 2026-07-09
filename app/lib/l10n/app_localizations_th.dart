@@ -9519,4 +9519,95 @@ class AppLocalizationsTh extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'เชื่อมต่อ Meta Glasses ของคุณ';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'จับคู่แว่นตาของคุณในแอป Meta AI จากนั้นแตะ เชื่อมต่อ ใน Omi คุณสามารถเชื่อมโยงได้หลายคู่และเลือกคู่ที่ใช้งานอยู่';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'ไม่พบแอป Meta AI โปรดติดตั้ง Meta AI และเปิดโหมดนักพัฒนาเพื่อเชื่อมต่อแว่นตาของคุณ';
+
+  @override
+  String get metaGlassesRegistering => 'ทำการเชื่อมต่อในแอป Meta AI ให้เสร็จ แล้วกลับมาที่ Omi';
+
+  @override
+  String get metaGlassesCameraPermission => 'อนุญาตการเข้าถึงกล้องในแอป Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'โหมดบันทึก';
+
+  @override
+  String get metaGlassesModeCameraMic => 'กล้อง + ไมค์';
+
+  @override
+  String get metaGlassesModeMicOnly => 'ไมค์เท่านั้น';
+
+  @override
+  String get metaGlassesStartCapture => 'เริ่มบันทึก';
+
+  @override
+  String get metaGlassesStopCapture => 'หยุดบันทึก';
+
+  @override
+  String get metaGlassesGestureHint => 'ระบบควบคุมด้วยท่าทางสำหรับแว่น Meta ยังไม่รองรับในบิลด์นี้';
+
+  @override
+  String get connectAnotherDevice => 'เชื่อมต่ออุปกรณ์อื่น';
+
+  @override
+  String get myDevices => 'อุปกรณ์ของฉัน';
+
+  @override
+  String get metaGlassesAutoCapture => 'บันทึกอัตโนมัติเมื่อเชื่อมต่อ';
+
+  @override
+  String get metaGlassesShowPreview => 'ดูตัวอย่างสด';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return 'รูปภาพ $count รูปรอการซิงค์';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'ตั้งค่าในแอป Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'แว่นกำลังเย็นลง — หยุดจับภาพชั่วคราว';
+
+  @override
+  String get metaGlassesFolded => 'กางแว่นออกเพื่อจับภาพต่อ';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'ความถี่ในการถ่าย';
+
+  @override
+  String get metaGlassesEvery10s => 'ทุก 10 วิ';
+
+  @override
+  String get metaGlassesEvery30s => 'ทุก 30 วิ';
+
+  @override
+  String get metaGlassesEvery1min => 'ทุก 1 นาที';
+
+  @override
+  String get metaGlassesEvery5min => 'ทุก 5 นาที';
+
+  @override
+  String get metaGlassesGestures => 'ท่าทาง';
 }

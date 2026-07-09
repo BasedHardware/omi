@@ -146,6 +146,8 @@ class DeviceConnectionFactory {
         return LimitlessDeviceConnection(device, transport);
       case DeviceType.raybanMeta:
         return RayBanMetaDeviceConnection(device, transport);
+      case DeviceType.metaWearables:
+        return RayBanMetaDeviceConnection(device, transport);
     }
   }
 }

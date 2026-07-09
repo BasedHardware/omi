@@ -9580,4 +9580,95 @@ class AppLocalizationsId extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Kesalahan saat menghubungkan ke Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Hubungkan Meta Glasses Anda';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Sandingkan kacamata di aplikasi Meta AI, lalu ketuk Hubungkan di Omi. Anda dapat menautkan lebih dari satu pasang dan memilih yang aktif.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Aplikasi Meta AI tidak ditemukan. Instal Meta AI dan aktifkan Mode Pengembang untuk menghubungkan kacamata Anda.';
+
+  @override
+  String get metaGlassesRegistering => 'Selesaikan penghubungan di aplikasi Meta AI, lalu kembali ke Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Izinkan akses kamera di aplikasi Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Mode perekaman';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Hanya mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Mulai merekam';
+
+  @override
+  String get metaGlassesStopCapture => 'Berhenti merekam';
+
+  @override
+  String get metaGlassesGestureHint => 'Kontrol gestur untuk kacamata Meta tidak didukung dalam build ini.';
+
+  @override
+  String get connectAnotherDevice => 'Hubungkan perangkat lain';
+
+  @override
+  String get myDevices => 'Perangkat Saya';
+
+  @override
+  String get metaGlassesAutoCapture => 'Rekam otomatis saat terhubung';
+
+  @override
+  String get metaGlassesShowPreview => 'Pratinjau langsung';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count foto menunggu sinkronisasi';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Siapkan di aplikasi Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Kacamata sedang mendingin — perekaman dijeda';
+
+  @override
+  String get metaGlassesFolded => 'Buka lipatan kacamata untuk terus merekam';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Frekuensi tangkapan';
+
+  @override
+  String get metaGlassesEvery10s => 'Setiap 10 dtk';
+
+  @override
+  String get metaGlassesEvery30s => 'Setiap 30 dtk';
+
+  @override
+  String get metaGlassesEvery1min => 'Setiap 1 mnt';
+
+  @override
+  String get metaGlassesEvery5min => 'Setiap 5 mnt';
+
+  @override
+  String get metaGlassesGestures => 'Gestur';
 }

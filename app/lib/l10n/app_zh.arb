@@ -3164,5 +3164,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "连接您的 Meta Glasses",
+    "pairingDescMetaGlasses": "在 Meta AI 应用中配对眼镜，然后在 Omi 中点击“连接”。您可以关联多副眼镜并选择当前使用的一副。",
+    "metaGlassesUnavailable": "未检测到 Meta AI 应用。请安装 Meta AI 并启用开发者模式以连接您的眼镜。",
+    "metaGlassesRegistering": "在 Meta AI 应用中完成连接，然后返回 Omi。",
+    "metaGlassesCameraPermission": "在 Meta AI 应用中允许访问相机",
+    "metaGlassesCaptureModeLabel": "采集模式",
+    "metaGlassesModeCameraMic": "相机 + 麦克风",
+    "metaGlassesModeMicOnly": "仅麦克风",
+    "metaGlassesStartCapture": "开始采集",
+    "metaGlassesStopCapture": "停止采集",
+    "metaGlassesGestureHint": "此版本不支持 Meta 眼镜的手势控制。",
+    "connectAnotherDevice": "连接其他设备",
+    "myDevices": "我的设备",
+    "metaGlassesAutoCapture": "连接时自动采集",
+    "metaGlassesShowPreview": "实时预览",
+    "metaGlassesPendingPhotos": "{count} 张照片等待同步",
+    "metaGlassesPairInMetaAI": "请在 Meta AI 应用中完成设置",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "眼镜正在冷却 — 已暂停捕捉",
+    "metaGlassesFolded": "展开眼镜以继续捕捉",
+    "metaGlassesCaptureFrequency": "采集频率",
+    "metaGlassesEvery10s": "每 10 秒",
+    "metaGlassesEvery30s": "每 30 秒",
+    "metaGlassesEvery1min": "每 1 分钟",
+    "metaGlassesEvery5min": "每 5 分钟",
+    "metaGlassesGestures": "手势"
 }

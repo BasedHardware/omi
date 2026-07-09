@@ -9414,4 +9414,93 @@ class AppLocalizationsKo extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta 연결 오류: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Meta Glasses 연결하기';
+
+  @override
+  String get pairingDescMetaGlasses => 'Meta AI 앱에서 글래스를 페어링한 다음 Omi에서 연결을 탭하세요. 여러 개를 연결하고 활성 글래스를 선택할 수 있습니다.';
+
+  @override
+  String get metaGlassesUnavailable => 'Meta AI 앱을 찾을 수 없습니다. 글래스를 연결하려면 Meta AI를 설치하고 개발자 모드를 활성화하세요.';
+
+  @override
+  String get metaGlassesRegistering => 'Meta AI 앱에서 연결을 완료한 후 Omi로 돌아오세요.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Meta AI 앱에서 카메라 접근을 허용하세요';
+
+  @override
+  String get metaGlassesCaptureModeLabel => '캡처 모드';
+
+  @override
+  String get metaGlassesModeCameraMic => '카메라 + 마이크';
+
+  @override
+  String get metaGlassesModeMicOnly => '마이크만';
+
+  @override
+  String get metaGlassesStartCapture => '캡처 시작';
+
+  @override
+  String get metaGlassesStopCapture => '캡처 중지';
+
+  @override
+  String get metaGlassesGestureHint => '이 빌드에서는 Meta 글래스의 제스처 제어가 지원되지 않습니다.';
+
+  @override
+  String get connectAnotherDevice => '다른 기기 연결';
+
+  @override
+  String get myDevices => '내 기기';
+
+  @override
+  String get metaGlassesAutoCapture => '연결 시 자동 캡처';
+
+  @override
+  String get metaGlassesShowPreview => '실시간 미리보기';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count장의 사진이 동기화 대기 중';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Meta AI 앱에서 설정하세요';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => '안경이 식는 중입니다 — 캡처가 일시 중지됨';
+
+  @override
+  String get metaGlassesFolded => '캡처를 계속하려면 안경을 펼치세요';
+
+  @override
+  String get metaGlassesCaptureFrequency => '캡처 주기';
+
+  @override
+  String get metaGlassesEvery10s => '10초마다';
+
+  @override
+  String get metaGlassesEvery30s => '30초마다';
+
+  @override
+  String get metaGlassesEvery1min => '1분마다';
+
+  @override
+  String get metaGlassesEvery5min => '5분마다';
+
+  @override
+  String get metaGlassesGestures => '제스처';
 }
