@@ -211,6 +211,23 @@ The action returns the log only as **metadata** (`log_attachment_filename`/`_exi
 never its contents — so the bridge response itself can't leak the raw log. To confirm no
 Sentry event fired, check the app log has no "User report submitted to Sentry" line.
 
+### 2h. Prove /state survives a wedged main thread (bridge responsiveness)
+`GET /state` refreshes live UI fields on the MainActor. If the main thread is wedged
+(e.g. a sign-in Keychain read blocking on `SecItemCopyMatching`), that hop used to hang
+the whole bridge — `curl /state` timed out with 0 bytes. `liveAutomationSnapshot()` now
+bounds the hop (`awaitWithTimeout`, 3s) and falls back to the last cached snapshot with
+`snapshotStale=true`, so `/state` always answers. `debug_block_main_thread` (non-prod)
+wedges the main thread on demand so this is testable:
+```bash
+cd desktop/macos
+# wedge the main thread for 8s, then /state must still answer (stale) within ~3s
+./scripts/omi-ctl action debug_block_main_thread durationMs=8000
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("stale:", d.get("snapshotStale"))'
+#   expect snapshotStale=true during the wedge (cached fallback), false again once it clears
+```
+Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
+Hermetic ratchet for the timeout itself: `xcrun swift test --filter AwaitWithTimeoutTests`.
+
 ### The full loop
 ```bash
 cd desktop/macos
