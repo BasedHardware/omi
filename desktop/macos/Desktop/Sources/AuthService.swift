@@ -149,25 +149,145 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
                 let bytesRead = recv(clientFD, &buffer, buffer.count - 1, 0)
                 guard bytesRead > 0,
                       let request = String(bytes: buffer.prefix(bytesRead), encoding: .utf8) else {
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
 
                 switch self.parseCallbackRequest(request) {
                 case .success(let code, let state):
-                    self.sendResponse(clientFD, status: "200 OK", message: "Authentication complete. You can close this tab.")
+                    self.sendResponse(clientFD, page: .success)
                     self.finish(.success((code: code, state: state)))
                     return
                 case .providerError(let error):
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Authentication failed. You can close this tab.")
+                    self.sendResponse(clientFD, page: .failure)
                     self.finish(.failure(AuthError.oauthError(error)))
                     return
                 case .ignore:
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
             }
         }
+    }
+
+    enum CallbackPage {
+        case success
+        case failure
+        case invalid
+
+        var httpStatus: String {
+            switch self {
+            case .success: return "200 OK"
+            case .failure, .invalid: return "400 Bad Request"
+            }
+        }
+
+        var documentTitle: String {
+            switch self {
+            case .success: return "Signed in - Omi"
+            case .failure, .invalid: return "Authentication failed - Omi"
+            }
+        }
+
+        var heading: String {
+            switch self {
+            case .success: return "You're signed in"
+            case .failure: return "Authentication failed"
+            case .invalid: return "Invalid callback"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .success: return "You can close this tab and return to Omi."
+            case .failure: return "You can close this tab and try again in the app."
+            case .invalid: return "This authentication callback was invalid. You can close this tab."
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .success: return "✓"
+            case .failure, .invalid: return "!"
+            }
+        }
+
+        var iconBackground: String {
+            switch self {
+            case .success: return "#111111"
+            case .failure, .invalid: return "#d32f2f"
+            }
+        }
+    }
+
+    /// Branded HTML body served on the local OAuth loopback callback.
+    /// Kept pure/static so unit tests can assert markup without opening a socket.
+    static func responseHTML(for page: CallbackPage) -> String {
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>\(page.documentTitle)</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background-color: #f7f7f7;
+                    color: #333;
+                }
+                .card {
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    padding: 48px 32px;
+                    text-align: center;
+                    max-width: 400px;
+                }
+                .icon {
+                    width: 56px;
+                    height: 56px;
+                    margin: 0 auto 16px;
+                    border-radius: 50%;
+                    background-color: \(page.iconBackground);
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 600;
+                    line-height: 56px;
+                }
+                h1 {
+                    font-size: 24px;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                }
+                p {
+                    font-size: 16px;
+                    color: #555;
+                    margin: 0;
+                    line-height: 1.5;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">\(page.icon)</div>
+                <h1>\(page.heading)</h1>
+                <p>\(page.message)</p>
+            </div>
+            <script>
+                setTimeout(function () {
+                    try { window.close(); } catch (e) {}
+                }, 1200);
+            </script>
+        </body>
+        </html>
+        """
     }
 
     private enum ParsedCallbackRequest {
@@ -207,12 +327,10 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
         return .success(code: code, state: state)
     }
 
-    private func sendResponse(_ clientFD: Int32, status: String, message: String) {
-        let body = """
-        <!doctype html><html><head><meta charset="utf-8"><title>Omi Authentication</title></head><body><p>\(message)</p></body></html>
-        """
+    private func sendResponse(_ clientFD: Int32, page: CallbackPage) {
+        let body = Self.responseHTML(for: page)
         let response = """
-        HTTP/1.1 \(status)\r
+        HTTP/1.1 \(page.httpStatus)\r
         Content-Type: text/html; charset=utf-8\r
         Content-Length: \(body.utf8.count)\r
         Connection: close\r
@@ -971,6 +1089,7 @@ class AuthService {
             NSLog("OMI AUTH: Waiting for OAuth callback...")
             let (code, returnedState) = try await waitForOAuthCallback(callbackServer: callbackServer)
             clearLoopbackCallbackServerIfCurrent(callbackServer, flowId: flowId)
+            bringAppToFrontAfterAuthCallback()
             if callbackServer != nil {
                 trackAuthFlowEvent(
                     "Auth Callback Received",
@@ -1463,7 +1582,20 @@ class AuthService {
             provider: pendingOAuthFlow?.provider ?? "unknown",
             authFlowId: callbackFlowId
         )
+        // Foregrounding happens once in signIn() after waitForOAuthCallback returns,
+        // so custom-scheme and loopback paths share a single activation.
         resumeOAuthContinuation(returning: (code: code, state: state))
+    }
+
+    /// Focus the main Omi window after the browser finishes the OAuth handoff.
+    /// Filters to titled main windows so ordered-out panels (floating bar, overlays)
+    /// are not resurrected by a blanket `orderFrontRegardless()` sweep.
+    @MainActor
+    private func bringAppToFrontAfterAuthCallback() {
+        NSApp.activate()
+        for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean
