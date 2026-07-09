@@ -598,8 +598,27 @@ class AuthService {
         return ""
     }
 
+    private let sessionCoordinator = AuthSessionCoordinator.shared
+
     init() {
         // Initialize without super
+    }
+
+    // MARK: - Session invalidation (light — not nuclear signOut)
+
+    /// Clears tokens and signed-in UI state without onboarding wipe, capture stop,
+    /// or storage cache teardown. Use for expired/revoked credentials.
+    func invalidateSession(reason: AuthSessionCoordinator.InvalidateReason) {
+        sessionCoordinator.invalidateSession(reason: reason, auth: self)
+    }
+
+    /// Internal hook for `AuthSessionCoordinator` — not a user-facing sign-out.
+    func performLightSessionInvalidation() {
+        clearTokens()
+        isSignedIn = false
+        AuthState.shared.userEmail = nil
+        AuthState.shared.isRestoringAuth = false
+        saveAuthState(isSignedIn: false, email: nil, userId: nil)
     }
 
     // MARK: - Configuration (call after FirebaseApp.configure())
@@ -930,6 +949,7 @@ class AuthService {
         }
 
         isSignedIn = true
+        sessionCoordinator.resetAfterSuccessfulSignIn()
 
         // Extract email from identity token if not provided by Apple
         if AuthState.shared.userEmail == nil {
@@ -1200,6 +1220,7 @@ class AuthService {
             }
 
             isSignedIn = true
+            sessionCoordinator.resetAfterSuccessfulSignIn()
 
             // Save auth state immediately
             let userId = firebaseTokens.localId
@@ -2293,6 +2314,8 @@ class AuthService {
     // MARK: - Sign Out
 
     func signOut() throws {
+        sessionCoordinator.resetAfterNuclearSignOut()
+
         // Track sign out and reset analytics
         AnalyticsManager.shared.signedOut()
         AnalyticsManager.shared.reset()

@@ -1032,6 +1032,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var sessionGroupingObserver: AnyCancellable?
     private var activationObserver: AnyCancellable?
     private var signOutObserver: AnyCancellable?
+    private var sessionInvalidateObserver: AnyCancellable?
 
     private var refreshAllObserver: AnyCancellable?
 
@@ -1177,6 +1178,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                     self.resetSessionStateForAuthChange()
                     AgentRuntimeStatusStore.shared.reset()
+                }
+            }
+
+        // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
+        sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+                    if self.agentBridgeStarted {
+                        await self.resolvedAgentClient().clearOwnerState()
+                        await self.resolvedAgentClient().stop()
+                        self.agentBridgeStarted = false
+                    }
                 }
             }
 
