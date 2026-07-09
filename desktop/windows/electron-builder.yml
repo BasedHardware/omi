@@ -33,6 +33,9 @@ asarUnpack:
   - node_modules/@agentclientprotocol/sdk/**
   - node_modules/@anthropic-ai/claude-agent-sdk/**
   - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**
+  # zod is the only remaining runtime import of the closure above (verified by
+  # spawning the entry from a packaged build; the sdk resolves it hoisted).
+  - node_modules/zod/**
 win:
   executableName: omi-windows
   target:
