@@ -13,11 +13,13 @@ This skill teaches you the Omi desktop macOS app's navigation structure, screen 
 Two things make iterating on the desktop app slow: signing in (web OAuth) and clicking through the UI to reach a screen. Both are solved — use these before reaching for `agent-swift`.
 
 ### 1. Skip the web login (seed auth/settings once, reuse forever)
-Dev/named bundles store auth and common developer settings in UserDefaults (not Keychain), so a signed-in session and shortcuts can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
+Named bundles clone auth state + Firebase tokens into UserDefaults; on first launch the app migrates tokens into its own Keychain item (correct `teamid:` partition — avoids the login-keychain password sheet). Prefer `./run.sh` for named bundles — it dumps/seeds after install. Manual seed:
 ```bash
 cd desktop/macos
 ./scripts/omi-auth-dump.sh                                  # capture Omi Dev's session -> tmp/desktop-auth.json
-./scripts/omi-auth-seed.sh com.omi.omi-myfeature           # replay into a named bundle (run BEFORE launch)
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature \
+  tmp/desktop-auth.json \
+  "/Applications/omi-myfeature.app"                         # optional: Team ID for clearing stale Keychain
 ./scripts/omi-settings-seed.sh com.omi.omi-myfeature       # replay shortcuts/settings
 ```
 The seeded bundle boots already signed-in and past onboarding, with Omi Dev's shortcuts/settings — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
@@ -108,7 +110,7 @@ next manual audit. One-time setup — build and seed a dedicated named bundle:
 cd desktop/macos
 OMI_APP_NAME="omi-smoke" ./run.sh          # build + install /Applications/omi-smoke.app, then quit it
 ./scripts/omi-auth-dump.sh                 # capture the signed-in Omi Dev session
-./scripts/omi-auth-seed.sh com.omi.omi-smoke
+./scripts/omi-auth-seed.sh com.omi.omi-smoke tmp/desktop-auth.json "/Applications/omi-smoke.app"
 ```
 Then re-run any time (launches the installed bundle on an isolated port, ends with it stopped):
 ```bash
@@ -163,7 +165,7 @@ agent process is running / on a prod bundle).
 ```bash
 cd desktop/macos
 OMI_APP_NAME="omi-myfeature" ./run.sh &                 # build + launch once
-./scripts/omi-auth-seed.sh com.omi.omi-myfeature        # (first run, or after re-dump) — relaunch to apply
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature tmp/desktop-auth.json "/Applications/omi-myfeature.app"  # after install; relaunch to apply
 ./scripts/omi-settings-seed.sh com.omi.omi-myfeature    # copy shortcuts/settings from Omi Dev
 ./scripts/omi-ctl wait-ready
 ./scripts/omi-ctl navigate memories                      # jump to the screen you changed

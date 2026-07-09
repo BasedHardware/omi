@@ -261,7 +261,8 @@ timeline identity/open, or pill projection is incomplete until:
    gauntlet and note evidence in the PR:
    ```bash
    cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh
-   ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet   # if needed
+   # run.sh seeds auth after install (UD tokens → app Keychain migrate). Manual reseed:
+   # ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet tmp/desktop-auth.json "/Applications/omi-gauntlet.app"
    ./scripts/agent-continuity-gauntlet.sh --suite continuity --bundle-id com.omi.omi-gauntlet
    ./scripts/check-gauntlet-evidence-at-head.sh
    ```

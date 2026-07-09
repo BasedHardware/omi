@@ -1,23 +1,30 @@
 #!/bin/bash
 # omi-auth-seed.sh — replay a captured auth session into a test bundle.
 #
-# Writes the auth-state UserDefaults keys (isSignedIn, userEmail, userId,
-# names, onboarding) captured by omi-auth-dump.sh into the target bundle's
-# domain. Auth tokens (idToken, refreshToken, expiry, tokenUserId) live in the
-# login Keychain under a Team+bundle scoped service name (see
-# DesktopKeychainStore.scopedService). Each bundle has its own Keychain item, so
-# this script always writes the token blob into the *target* bundle's scoped
-# service (dump from Omi Dev → seed into com.omi.omi-fix-rewind copies tokens).
+# Writes auth-state UserDefaults (isSignedIn, email, userId, names, onboarding)
+# plus Firebase token keys into the target bundle's domain. On first launch,
+# AuthService.storedTokens() migrates those UserDefaults tokens into the
+# team+bundle scoped Keychain item via SecItemAdd — which stamps the correct
+# teamid: partition so the app can read them without a login-keychain prompt.
+#
+# Why not write Keychain from this script?
+# The security(1) generic-password *add* path creates items with partition list
+# `apple-tool:` only. TrustedApplication `-T /path/to/App.app` is not enough:
+# the running app still gets the "wants to access key … in your keychain"
+# password sheet. Deleting any prior CLI-written item and seeding UserDefaults
+# avoids that path entirely for named-bundle / agent launches.
 #
 # Run this BEFORE launching the bundle (UserDefaults is read at startup).
 #
-# Usage: omi-auth-seed.sh <target-bundle-id> [in-file]
+# Usage: omi-auth-seed.sh <target-bundle-id> [in-file] [app-path]
 #   target-bundle-id  e.g. com.omi.omi-fix-rewind  (a named test bundle)
 #   in-file           default: desktop/tmp/desktop-auth.json
+#   app-path          optional; also via OMI_AUTH_SEED_APP_PATH (used for Team ID)
 set -euo pipefail
 
-TARGET="${1:?usage: omi-auth-seed.sh <target-bundle-id> [in-file]}"
+TARGET="${1:?usage: omi-auth-seed.sh <target-bundle-id> [in-file] [app-path]}"
 IN="${2:-$(cd "$(dirname "$0")/.." && pwd)/tmp/desktop-auth.json}"
+APP_PATH_ARG="${3:-${OMI_AUTH_SEED_APP_PATH:-}}"
 
 [ "$TARGET" != "com.omi.computer-macos" ] || {
   echo "Refusing to seed production auth; shipped bundles store Firebase tokens in Keychain." >&2
@@ -54,9 +61,19 @@ resolve_app_path() {
   return 1
 }
 
-APP_PATH="$(resolve_app_path "$TARGET" || true)"
+if [ -n "$APP_PATH_ARG" ]; then
+  APP_PATH="$APP_PATH_ARG"
+else
+  APP_PATH="$(resolve_app_path "$TARGET" || true)"
+fi
+
 TEAM_ID=""
-if [ -n "$APP_PATH" ]; then
+if [ -n "${APP_PATH:-}" ] && [ -d "$APP_PATH" ]; then
+  FOUND_BID="$(defaults read "$APP_PATH/Contents/Info" CFBundleIdentifier 2>/dev/null || true)"
+  if [ -n "$FOUND_BID" ] && [ "$FOUND_BID" != "$TARGET" ]; then
+    echo "ERROR: app at $APP_PATH has bundle id '$FOUND_BID', expected '$TARGET'." >&2
+    exit 1
+  fi
   TEAM_ID="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | awk -F= '/^TeamIdentifier=/{print $2; exit}')"
 fi
 if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
@@ -64,17 +81,11 @@ if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
 fi
 KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}.bundle.${TARGET}"
 
-# Token secrets are never written to the target bundle's UserDefaults — that
-# was the plaintext path this PR removed. Tokens from the dump are written to
-# the target bundle's team+bundle scoped Keychain item.
-SKIP_KEYS="auth_idToken auth_refreshToken auth_tokenExpiry auth_tokenUserId _keychainService"
-
-python3 - "$TARGET" "$IN" "$SKIP_KEYS" "$KC_SERVICE" "$KC_ACCOUNT" <<'PY'
+python3 - "$TARGET" "$IN" "$KC_SERVICE" "$KC_ACCOUNT" <<'PY'
 import json, subprocess, sys
 
 target, inp = sys.argv[1], sys.argv[2]
-skip = set(sys.argv[3].split())
-kc_service, kc_account = sys.argv[4], sys.argv[5]
+kc_service, kc_account = sys.argv[3], sys.argv[4]
 data = json.load(open(inp))
 
 id_token = data.get("auth_idToken", {}).get("value", "")
@@ -82,55 +93,61 @@ refresh_token = data.get("auth_refreshToken", {}).get("value", "")
 token_expiry = data.get("auth_tokenExpiry", {}).get("value", "0")
 token_uid = data.get("auth_tokenUserId", {}).get("value", "")
 
-# Bundle-scoped Keychain items are not shared across apps. Refuse to seed a
-# signed-in UserDefaults state without credentials — that leaves a ghost session.
 if not id_token or not refresh_token:
     print("ERROR: dump has no auth_idToken/auth_refreshToken — refusing to seed "
-          "signed-in state without Keychain credentials. Re-run omi-auth-dump.sh "
+          "signed-in state without credentials. Re-run omi-auth-dump.sh "
           "from a signed-in source bundle.", file=sys.stderr)
     sys.exit(1)
 
-try:
-    expiry = float(token_expiry)
-except (ValueError, TypeError):
-    expiry = 0.0
-blob = json.dumps({
-    "idToken": id_token,
-    "refreshToken": refresh_token,
-    "expiryTime": expiry,
-    "tokenUserId": token_uid,
-})
-# Delete any existing item first so -U update cannot hit a poisoned ACL.
+# Remove any prior CLI-seeded Keychain item. Those carry partition list
+# apple-tool: only; leaving them makes the app prompt on SecItemCopyMatching
+# even with TrustedApplication -T grants. `security` (apple-tool:) can delete
+# without prompting; the app then migrates UserDefaults → Keychain on boot.
 subprocess.run(
     ["security", "delete-generic-password", "-s", kc_service, "-a", kc_account],
     capture_output=True, text=True,
 )
-r = subprocess.run(
-    ["security", "add-generic-password", "-s", kc_service, "-a", kc_account,
-     "-w", blob, "-U"],
-    capture_output=True, text=True,
-)
-if r.returncode != 0:
-    print(f"ERROR: could not write token blob to Keychain ({kc_service}): "
-          f"{r.stderr.strip()}", file=sys.stderr)
-    sys.exit(1)
-print(f"Wrote token blob to Keychain ({kc_service}/{kc_account})")
+print(f"Cleared Keychain item if present ({kc_service}/{kc_account})")
+
+# Token keys are seeded into UserDefaults for one-shot migration by AuthService.
+# Do not CLI-add a generic-password item — that recreates the apple-tool:
+# partition prompt path.
+TOKEN_KEYS = {
+    "auth_idToken": id_token,
+    "auth_refreshToken": refresh_token,
+    "auth_tokenExpiry": str(token_expiry),
+    "auth_tokenUserId": token_uid,
+}
+SKIP_META = {"_keychainService"}
 
 flag = {"boolean": "-bool", "string": "-string", "integer": "-int",
         "float": "-float", "date": "-date", "data": "-data"}
 
 n = 0
+for key, val in TOKEN_KEYS.items():
+    if key == "auth_tokenExpiry":
+        # AuthService reads this as Double via UserDefaults.double(forKey:)
+        subprocess.run(
+            ["defaults", "write", target, key, "-float", val or "0"],
+            check=True,
+        )
+    else:
+        subprocess.run(
+            ["defaults", "write", target, key, "-string", val],
+            check=True,
+        )
+    n += 1
+
 for k, info in data.items():
-    if k in skip:
+    if k in TOKEN_KEYS or k in SKIP_META:
         continue
     typ, val = info["type"], info["value"]
-    # `defaults read` prints booleans as 1/0, but `defaults write -bool` only
-    # accepts true/false/yes/no — convert so the write doesn't fail.
     if typ == "boolean":
         val = "true" if val.strip().lower() in ("1", "true", "yes") else "false"
     subprocess.run(["defaults", "write", target, k, flag.get(typ, "-string"), val], check=True)
     n += 1
-print(f"Seeded {n} keys into {target}")
+
+print(f"Seeded {n} keys into {target} (tokens via UserDefaults → Keychain migrate on launch)")
 PY
 
 echo "Done — launch $TARGET and it boots signed-in (no web login)."

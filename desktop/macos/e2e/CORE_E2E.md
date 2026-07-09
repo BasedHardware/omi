@@ -25,7 +25,7 @@ cd desktop/macos
 
 ```bash
 cd desktop/macos && OMI_APP_NAME=omi-core-e2e OMI_SKIP_TUNNEL=1 ./run.sh
-./scripts/omi-auth-seed.sh com.omi.omi-core-e2e
+./scripts/omi-auth-seed.sh com.omi.omi-core-e2e tmp/desktop-auth.json "/Applications/omi-core-e2e.app"
 ./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e --port <PORT>
 ```
 
