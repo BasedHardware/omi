@@ -2654,12 +2654,14 @@ workflows:
 
       - name: Smoke signed desktop artifact
         script: |
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
           scripts/smoke-signed-desktop-artifact.sh \
             --app "$APP_BUNDLE" \
             --zip "$SPARKLE_ZIP_PATH" \
             --dmg "$DMG_PATH" \
             --tag "$CM_TAG" \
             --expected-channel beta \
+            --auth-storage-canary \
             --result-json "$BUILD_DIR/desktop-smoke-result.json"
 
       - name: Create GitHub release

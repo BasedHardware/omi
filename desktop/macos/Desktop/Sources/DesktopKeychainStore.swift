@@ -147,9 +147,11 @@ enum DesktopKeychainStore {
     }
     if !isMissing(updateStatus) {
       if isAuthUnavailable(updateStatus) {
-        // Existing item is unreadable/unwritable under silent auth. Do not prompt; try a
-        // fresh add after a silent delete. If delete also fails, fail closed.
-        delete(service: service, account: account)
+        // Never delete an existing credential merely because a write is temporarily
+        // unavailable. Delete-then-add can turn a recoverable locked-Keychain or ACL
+        // condition into permanent session loss if the subsequent add also fails.
+        log("DesktopKeychainStore: update unavailable; preserving existing item for \(service)/\(account) (status \(updateStatus))")
+        return false
       } else {
         log("DesktopKeychainStore: update failed for \(service)/\(account) (status \(updateStatus))")
         return false

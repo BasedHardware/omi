@@ -14,6 +14,7 @@ EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
 RUN_LAUNCH=false
 RUN_NETWORK=false
 RUN_AUTH=false
+RUN_AUTH_STORAGE_CANARY=false
 RUN_CHAT=false
 RUN_PERMISSIONS=false
 RUN_STORAGE=false
@@ -45,6 +46,7 @@ Options:
   --launch                   Launch the app and assert it stays alive briefly
   --network                  Probe configured backend/appcast URLs
   --auth                     Run auth persistence probe (requires env below)
+  --auth-storage-canary      Run synthetic Keychain round trip in the signed app
   --chat                     Run minimal chat probe (requires --auth env)
   --permissions             Verify permission surface/fail-graceful live path
   --storage                  Verify local storage opens in live path
@@ -69,6 +71,7 @@ Optional live-probe environment:
 Smoke paths covered:
   - Launch + identity
   - Auth persistence
+  - Signed Keychain canary
   - Backend routing
   - Sparkle/update metadata
   - Native helper/runtime bundle integrity
@@ -124,6 +127,7 @@ parse_args() {
       --launch) RUN_LAUNCH=true; shift ;;
       --network) RUN_NETWORK=true; shift ;;
       --auth) RUN_AUTH=true; shift ;;
+      --auth-storage-canary) RUN_AUTH_STORAGE_CANARY=true; shift ;;
       --chat) RUN_CHAT=true; shift ;;
       --permissions) RUN_PERMISSIONS=true; shift ;;
       --storage) RUN_STORAGE=true; shift ;;
@@ -168,7 +172,7 @@ extract_zip_if_needed() {
 }
 
 maybe_copy_for_launch() {
-  [[ "$RUN_LAUNCH" == true ]] || return 0
+  [[ "$RUN_LAUNCH" == true || "$RUN_AUTH_STORAGE_CANARY" == true ]] || return 0
   [[ -n "$INSTALL_DIR" ]] || INSTALL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-signed-smoke-install.XXXXXX")"
   mkdir -p "$INSTALL_DIR"
 
@@ -496,6 +500,52 @@ run_auth_probe() {
   pass "Auth persistence app-level proof command passed"
 }
 
+run_auth_storage_canary() {
+  [[ "${OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH:-}" == "1" ]] \
+    || fail "--auth-storage-canary for production bundle requires OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1"
+
+  local result_path executable started_at canary_pid
+  result_path="$(mktemp "${TMPDIR:-/tmp}/omi-auth-storage-canary.XXXXXX")"
+  rm -f "$result_path"
+  executable="$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
+  [[ -x "$executable" ]] || fail "executable missing before auth storage canary"
+
+  "$executable" "--auth-storage-canary-result=$result_path" \
+    >/tmp/omi-auth-storage-canary.out 2>/tmp/omi-auth-storage-canary.err &
+  canary_pid=$!
+
+  started_at=$SECONDS
+  while [[ ! -s "$result_path" && $((SECONDS - started_at)) -lt "$TIMEOUT_SECONDS" ]]; do
+    sleep 1
+  done
+  [[ -s "$result_path" ]] || {
+    cat /tmp/omi-auth-storage-canary.err >&2 || true
+    kill "$canary_pid" >/dev/null 2>&1 || true
+    wait "$canary_pid" >/dev/null 2>&1 || true
+    fail "signed app auth storage canary did not produce a result"
+  }
+
+  python3 - "$result_path" <<'PY' || fail "signed app auth storage canary failed"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    result = json.load(handle)
+if result.get("success") is not True or result.get("stage") != "complete":
+    raise SystemExit(f"auth storage canary result: {result}")
+PY
+  started_at=$SECONDS
+  while kill -0 "$canary_pid" >/dev/null 2>&1 && $((SECONDS - started_at)) -lt 5; do
+    sleep 1
+  done
+  if kill -0 "$canary_pid" >/dev/null 2>&1; then
+    kill "$canary_pid" >/dev/null 2>&1 || true
+  fi
+  wait "$canary_pid" >/dev/null 2>&1 || true
+  rm -f "$result_path"
+  pass "Signed artifact Keychain write/read/delete canary passed"
+}
+
 run_chat_probe() {
   local auth_header="${OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER:-}"
   local chat_url="${OMI_SIGNED_ARTIFACT_SMOKE_CHAT_URL:-https://api.omi.me/v2/chat/completions}"
@@ -544,6 +594,7 @@ main() {
 
   maybe_copy_for_launch
   [[ "$RUN_NETWORK" == true ]] && run_network_probes
+  [[ "$RUN_AUTH_STORAGE_CANARY" == true ]] && run_auth_storage_canary
   [[ "$RUN_LAUNCH" == true ]] && run_launch_probe
   [[ "$RUN_AUTH" == true ]] && run_auth_probe
   [[ "$RUN_CHAT" == true ]] && run_chat_probe

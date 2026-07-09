@@ -1,0 +1,3 @@
+{
+  "change": "Protected signed-in sessions across app updates and added a clear recovery screen when credentials cannot be verified"
+}
