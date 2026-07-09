@@ -4,13 +4,21 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTVoiceOutputCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
 preconditions:
   - automation_bridge_ready
 

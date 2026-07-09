@@ -281,7 +281,9 @@ actor AgentBridge {
   }
 
   func setTurnRecordedHandler(_ handler: @escaping AgentRuntimeProcess.TurnRecordedHandler) async {
-    await runtime.addTurnRecordedHandler(handler)
+    // Single-slot replace — KernelTurnProjection.attachClient re-registers on
+    // every bridge start/warm. Never append; that double-applied turn_recorded.
+    await runtime.setTurnRecordedHandler(handler)
   }
 
   func controlTool(name: String, input: [String: Any]) async throws -> String {
@@ -483,7 +485,7 @@ actor AgentBridge {
 
   private func migrateFloatingChatIntoMainChatIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     let migrationKey = "\(Self.floatingChatMigrationDefaultsKey).\(ownerId)"
@@ -494,7 +496,7 @@ actor AgentBridge {
 
   private func migrateLegacyMainChatSessionsIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     guard let map = UserDefaults.standard.dictionary(forKey: Self.legacyMainChatDefaultsKey) as? [String: String],

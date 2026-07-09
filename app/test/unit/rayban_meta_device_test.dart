@@ -17,10 +17,7 @@ void main() {
 
   final hostApiChannelNames = <String>{};
 
-  void setRayBanMetaHostApiHandler(
-    String methodName,
-    Future<Object?> Function(Object? message) handler,
-  ) {
+  void setRayBanMetaHostApiHandler(String methodName, Future<Object?> Function(Object? message) handler) {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final channelName = '$_rayBanMetaHostApiPrefix.$methodName';
     hostApiChannelNames.add(channelName);

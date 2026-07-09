@@ -1,0 +1,4 @@
+{
+  "type": "fixed",
+  "change": "Keep main chat subagent links visible without showing completed implementation-only tool logs, and keep externally spawned agent pills synced to terminal runtime state"
+}

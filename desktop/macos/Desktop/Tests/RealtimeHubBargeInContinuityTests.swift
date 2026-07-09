@@ -90,7 +90,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("if inputTurnInProgress"))
     XCTAssertTrue(
       source.contains("inputTurnActivityStartPending || sessionProvider == .gemini"))
-    XCTAssertTrue(source.contains("session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)"))
+    XCTAssertTrue(source.contains("live.beginInputTurn(interrupting: pendingInputTurnInterrupting)"))
   }
 
   func testPTTArmsVoiceSeedPrefetchBeforeMicCapture() throws {

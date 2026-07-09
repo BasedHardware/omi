@@ -156,8 +156,10 @@ class RayBanMetaDeviceConnection extends DeviceConnection {
   }) async {
     if (isAudioOnly) return null;
 
-    final stream =
-        transport.getCharacteristicStream(rayBanMetaCameraServiceUuid, rayBanMetaPhotoDataCharacteristicUuid);
+    final stream = transport.getCharacteristicStream(
+      rayBanMetaCameraServiceUuid,
+      rayBanMetaPhotoDataCharacteristicUuid,
+    );
 
     final subscription = stream.listen((framed) {
       if (framed.length < 2) return;

@@ -1,0 +1,4 @@
+{
+  "type": "fixed",
+  "change": "Fixed subagent chats so completed agents show their final output and stop showing stale Running or Working indicators"
+}

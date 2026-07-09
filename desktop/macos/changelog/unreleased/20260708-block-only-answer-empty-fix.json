@@ -1,0 +1,3 @@
+{
+  "change": "Fixed floating bar treating block-only or artifact answers as failed empty responses"
+}

@@ -102,6 +102,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
   }
 
+  func testUnroutedToolCallsFailClosed() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("Self.unroutedToolCallError(toolName: name)"))
+    XCTAssertTrue(processSource.contains(#""code": "unrouted_tool_call""#))
+    XCTAssertFalse(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
+  }
+
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"result","protocolVersion":2,"requestId":"req-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done"}"#

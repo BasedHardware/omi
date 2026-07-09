@@ -182,7 +182,9 @@ actor AgentRuntimeProcess {
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
   private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
-  private var turnRecordedHandlers: [TurnRecordedHandler] = []
+  /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
+  /// never append; a second ChatProvider attach must not fan out duplicates.
+  private var turnRecordedHandler: TurnRecordedHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -386,12 +388,17 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func setTurnRecordedHandlers(_ handlers: [TurnRecordedHandler]) {
-    turnRecordedHandlers = handlers
+  func setTurnRecordedHandler(_ handler: TurnRecordedHandler?) {
+    turnRecordedHandler = handler
   }
 
-  func addTurnRecordedHandler(_ handler: @escaping TurnRecordedHandler) {
-    turnRecordedHandlers.append(handler)
+  func turnRecordedHandlerCount() -> Int {
+    turnRecordedHandler == nil ? 0 : 1
+  }
+
+  /// Test-only: fire the single turn_recorded apply gate without a live node runtime.
+  func dispatchTurnRecordedForTesting(_ turn: KernelTurnRecorded) {
+    turnRecordedHandler?(turn)
   }
 
   func recordSurfaceTurn(
@@ -1221,9 +1228,7 @@ actor AgentRuntimeProcess {
 
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
-        for handler in turnRecordedHandlers {
-          handler(recorded)
-        }
+        turnRecordedHandler?(recorded)
       }
 
     case .result:
@@ -1248,17 +1253,13 @@ actor AgentRuntimeProcess {
     let callId = message.payload["callId"] as? String ?? ""
     let name = message.payload["name"] as? String ?? ""
     guard let request = routedRequest(for: message) else {
-      if let requestKey = message.requestKey, activeControlRequests[requestKey] != nil {
-        log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
-        completeToolCall(
-          callId: callId,
-          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs",
-          requestId: message.requestId,
-          clientId: message.clientId
-        )
-        return
-      }
-      log("AgentRuntimeProcess: dropping unroutable tool call")
+      log("AgentRuntimeProcess: rejecting unrouted tool call \(name)")
+      completeToolCall(
+        callId: callId,
+        result: Self.unroutedToolCallError(toolName: name),
+        requestId: message.requestId,
+        clientId: message.clientId
+      )
       return
     }
     if request.isInterrupted {
@@ -1270,6 +1271,23 @@ actor AgentRuntimeProcess {
       let result = await request.onToolCall(callId, name, input)
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
+  }
+
+  private static func unroutedToolCallError(toolName: String) -> String {
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": [
+        "code": "unrouted_tool_call",
+        "message": "Tool call '\(toolName)' was rejected because it was not attached to an active trusted request.",
+      ],
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let text = String(data: data, encoding: .utf8)
+    else {
+      return #"{"ok":false,"error":{"code":"unrouted_tool_call"}}"#
+    }
+    return text
   }
 
   private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
@@ -1431,10 +1449,7 @@ actor AgentRuntimeProcess {
   }
 
   private func currentOwnerId() -> String? {
-    guard let value = UserDefaults.standard.string(forKey: "auth_userId"), !value.isEmpty else {
-      return nil
-    }
-    return value
+    RuntimeOwnerIdentity.currentOwnerId()
   }
 
   private func handleTermination(

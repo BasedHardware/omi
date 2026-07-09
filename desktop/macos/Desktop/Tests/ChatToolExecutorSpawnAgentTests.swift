@@ -44,6 +44,7 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
+    XCTAssertTrue(source.contains("AgentPillsManager.shared.upsertSpawnedPill("))
     XCTAssertTrue(source.contains("refreshProjectedPillsFromKernel"))
     XCTAssertFalse(source.contains("AgentPillsManager.shared.spawnFromUserQuery("))
   }

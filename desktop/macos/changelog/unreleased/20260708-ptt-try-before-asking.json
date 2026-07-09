@@ -1,0 +1,4 @@
+{
+  "type": "changed",
+  "change": "PTT now tries available Omi context before asking follow-up questions and delegates larger work to background agents when a short voice answer is not the right surface"
+}

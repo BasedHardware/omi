@@ -1,0 +1,4 @@
+{
+  "type": "fixed",
+  "change": "Fixed Home chat input focus after expansion and added Escape-to-Home navigation on secondary Home pages"
+}

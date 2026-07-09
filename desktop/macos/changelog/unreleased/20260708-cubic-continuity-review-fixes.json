@@ -1,0 +1,3 @@
+{
+  "change": "Fixed continuity review findings: restage can create a missing assistant after a user-only stage, owner-swap clear no longer clobbers a mid-session auth uid, agent open ordering is generation-guarded, and agent cards hide dead Open links / avoid false-success status icons"
+}

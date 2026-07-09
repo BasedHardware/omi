@@ -4,6 +4,7 @@ tier: 2
 description: Settings navigation smoke for General, Transcription, and Privacy sections
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
 preconditions:

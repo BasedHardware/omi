@@ -1851,6 +1851,8 @@ struct OnboardingChatBubble: View {
         return false
       case .discoveryCard:
         return true
+      case .agentSpawn, .agentCompletion:
+        return true
       }
     }
   }
