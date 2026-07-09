@@ -906,6 +906,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var sendGeneration: Int = 0
     private var activeBridgeSendGeneration: Int?
 
+    /// Set to a send's generation when the 180s watchdog fires for it, *before*
+    /// the watchdog interrupts the bridge. `interrupt()` resumes the in-flight
+    /// request with `BridgeError.stopped`, which the send-loop catch would
+    /// otherwise treat as a silent user stop — so the catch checks this marker to
+    /// surface "Response took too long" instead of vanishing the turn. See the
+    /// watchdog in sendMessage() and the `.stopped` catch branch.
+    private var sendWatchdogFiredGeneration: Int?
+
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
     @Published var sessionsLoadError: String?
@@ -3647,10 +3655,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let stillStuck = await MainActor.run { () -> Bool in
                 guard self.isSending, self.sendGeneration == sendGen else { return false }
                 log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
+                // Mark this generation before interrupting: interrupt() resumes the
+                // in-flight request with `.stopped`, and the catch below uses this
+                // marker to surface the timeout instead of silently dropping the turn.
+                self.sendWatchdogFiredGeneration = sendGen
                 return true
             }
             guard stillStuck else { return }
             await self.resolvedAgentClient().interrupt()
+            // Fallback for the "stray turn_end" case where interrupt() does not
+            // route through the catch (no active request to resume): if the lock is
+            // somehow still held, force-release it and surface the timeout here.
+            // Deliberately does NOT clear sendWatchdogFiredGeneration — only the
+            // catch clears it, so if this fallback wins the race with the catch, the
+            // catch still sees the marker and surfaces the timeout instead of
+            // re-silencing the turn. A stale marker is harmless: generations only
+            // increase, so it never matches a later send.
             await MainActor.run {
                 guard self.isSending, self.sendGeneration == sendGen else { return }
                 _ = self.releaseSendLock(sendGeneration: sendGen)
@@ -4406,10 +4426,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Both surfaces coexist — only one is active at a time per
             // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                stoppedByUser = true
+                // `.stopped` normally means the user pressed Stop (silent). But if the
+                // 180s watchdog fired for THIS send, the `.stopped` came from the
+                // watchdog's own interrupt() — the turn timed out, so surface it
+                // instead of letting the turn vanish (the watchdog's own error-set
+                // races this catch and bails once `isSending` is released here).
+                let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
+                sendWatchdogFiredGeneration = nil
                 currentError = nil
-                lastFailedPrompt = nil
-                errorMessage = nil
+                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(watchdogFired: watchdogFired) {
+                    errorMessage = timeoutMessage
+                } else {
+                    stoppedByUser = true
+                    lastFailedPrompt = nil
+                    errorMessage = nil
+                }
             } else if let bridgeError = error as? BridgeError,
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
@@ -4863,6 +4894,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return .completed
         }
         return .failed
+    }
+
+    /// The banner text to show when a turn ends with `BridgeError.stopped`.
+    /// A user-initiated Stop is silent (`nil`). But when the 180s send watchdog
+    /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
+    /// the turn timed out, so surface "Response took too long" rather than letting
+    /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.
+    nonisolated static func stoppedTurnErrorMessage(watchdogFired: Bool) -> String? {
+        watchdogFired ? "Response took too long. Try again." : nil
     }
 
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
