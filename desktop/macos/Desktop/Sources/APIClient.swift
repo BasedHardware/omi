@@ -387,12 +387,20 @@ actor APIClient {
       return nil
     }
     let authService = await MainActor.run { AuthService.shared }
-    var retry = request
-    retry.setValue(
-      try await authService.getAuthHeader(forceRefresh: true),
-      forHTTPHeaderField: "Authorization"
-    )
-    return retry
+    do {
+      var retry = request
+      retry.setValue(
+        try await authService.getAuthHeader(forceRefresh: true),
+        forHTTPHeaderField: "Authorization"
+      )
+      return retry
+    } catch AuthError.notSignedIn {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
   }
 
   private func performRequest<T: Decodable>(

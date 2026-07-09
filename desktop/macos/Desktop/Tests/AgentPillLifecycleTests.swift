@@ -902,6 +902,9 @@ final class AgentPillLifecycleTests: XCTestCase {
         && apiSource.contains("throw CredentialHealthError.requiresLogin"),
       "Definitive session 401 after retry must invalidate and require login")
     XCTAssertTrue(
+      apiSource.contains("} catch AuthError.notSignedIn {\n      await invalidateSessionAfterUnauthorized"),
+      "Only definitive not-signed-in refresh failures should invalidate and require login")
+    XCTAssertTrue(
       hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
       "Mint failure must clear minting before failover starts the alternate provider")
     XCTAssertTrue(
