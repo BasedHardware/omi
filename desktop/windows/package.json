@@ -36,6 +36,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@zed-industries/claude-agent-acp": "^0.18.0",
     "axios": "^1.16.1",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",

@@ -22,6 +22,14 @@ asarUnpack:
   # kgWorker.js is loaded via new Worker(path) which bypasses Electron's asar
   # virtual-fs patch — it must be a real file on disk.
   - out/main/kgWorker.js
+  # The coding-agent ACP entry is spawned as a plain Node child process
+  # (ELECTRON_RUN_AS_NODE), which cannot read scripts out of the asar archive —
+  # both the entry (emitted under out/main/chunks by the ?asset import) and the
+  # packages it imports at runtime must be real files on disk.
+  - out/main/chunks/*.mjs
+  - node_modules/@zed-industries/claude-agent-acp/**
+  - node_modules/@agentclientprotocol/**
+  - node_modules/@anthropic-ai/claude-agent-sdk/**
 win:
   executableName: omi-windows
   target:
