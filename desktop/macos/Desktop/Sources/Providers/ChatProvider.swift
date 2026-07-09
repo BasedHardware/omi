@@ -2740,8 +2740,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         defer { pollGate.exit() }
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
-        // Skip if in auth backoff period (recent 401 errors)
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
         // Skip if we're actively sending. Note: isSending is released *before* the AI
         // message is saved to the backend (to unblock the next query). This means the
         // poll can run while saveMessage() is still in-flight — see the race note below.
@@ -2845,11 +2843,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages.append(contentsOf: genuinelyNewMessages)
                 messages.sort(by: { $0.createdAt < $1.createdAt })
             }
-            AuthBackoffTracker.shared.reportSuccess()
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
-            }
             // Benign sign-out race: the isSignedIn guard above passed, but the
             // token was cleared by the time getMessages ran. Expected, not a bug
             // — log quietly (breadcrumb only) instead of flooding Sentry.
