@@ -5,6 +5,7 @@ description: Memory search, tag filter, and visibility toggle after create
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
 preconditions:
   - automation_bridge_ready
 
