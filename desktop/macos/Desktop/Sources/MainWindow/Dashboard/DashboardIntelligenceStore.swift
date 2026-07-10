@@ -124,7 +124,7 @@ final class DashboardFeedbackOutboxDefaults: DashboardFeedbackOutboxPersisting {
   }
 
   func currentOwnerID() -> String {
-    fixedOwnerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
+    fixedOwnerID ?? defaults.string(forKey: .authUserId) ?? "signed-out"
   }
 
   private func key(ownerID: String) -> String { "whatMattersNowFeedbackOutbox.v1.\(ownerID)" }

@@ -62,27 +62,33 @@ struct SuggestedCandidate: Identifiable, Equatable {
 }
 
 protocol SuggestedSuppressionPersisting: AnyObject {
-  func load() -> [String: Date]
-  func save(_ suppressions: [String: Date])
+  func currentOwnerID() -> String
+  func load(ownerID: String) -> [String: Date]
+  func save(_ suppressions: [String: Date], ownerID: String)
 }
 
 final class SuggestedSuppressionDefaults: SuggestedSuppressionPersisting {
   private let defaults: UserDefaults
-  private let key: String
+  private let fixedOwnerID: String?
 
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
-    let owner = ownerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
-    self.key = "canonicalSuggestedCandidateSuppressions.v1.\(owner)"
+    fixedOwnerID = ownerID
   }
 
-  func load() -> [String: Date] {
-    guard let raw = defaults.dictionary(forKey: key) as? [String: Double] else { return [:] }
+  func currentOwnerID() -> String {
+    fixedOwnerID ?? defaults.string(forKey: .authUserId) ?? "signed-out"
+  }
+
+  private func key(ownerID: String) -> String { "canonicalSuggestedCandidateSuppressions.v1.\(ownerID)" }
+
+  func load(ownerID: String) -> [String: Date] {
+    guard let raw = defaults.dictionary(forKey: key(ownerID: ownerID)) as? [String: Double] else { return [:] }
     return raw.mapValues(Date.init(timeIntervalSince1970:))
   }
 
-  func save(_ suppressions: [String: Date]) {
-    defaults.set(suppressions.mapValues(\.timeIntervalSince1970), forKey: key)
+  func save(_ suppressions: [String: Date], ownerID: String) {
+    defaults.set(suppressions.mapValues(\.timeIntervalSince1970), forKey: key(ownerID: ownerID))
   }
 }
 
@@ -95,27 +101,33 @@ struct PendingSuggestedFeedback: Codable {
 }
 
 protocol SuggestedFeedbackOutboxPersisting: AnyObject {
-  func load() -> [PendingSuggestedFeedback]
-  func save(_ entries: [PendingSuggestedFeedback])
+  func currentOwnerID() -> String
+  func load(ownerID: String) -> [PendingSuggestedFeedback]
+  func save(_ entries: [PendingSuggestedFeedback], ownerID: String)
 }
 
 final class SuggestedFeedbackOutboxDefaults: SuggestedFeedbackOutboxPersisting {
   private let defaults: UserDefaults
-  private let key: String
+  private let fixedOwnerID: String?
 
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
-    let owner = ownerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
-    self.key = "canonicalSuggestedFeedbackOutbox.v1.\(owner)"
+    fixedOwnerID = ownerID
   }
 
-  func load() -> [PendingSuggestedFeedback] {
-    guard let data = defaults.data(forKey: key) else { return [] }
+  func currentOwnerID() -> String {
+    fixedOwnerID ?? defaults.string(forKey: .authUserId) ?? "signed-out"
+  }
+
+  private func key(ownerID: String) -> String { "canonicalSuggestedFeedbackOutbox.v1.\(ownerID)" }
+
+  func load(ownerID: String) -> [PendingSuggestedFeedback] {
+    guard let data = defaults.data(forKey: key(ownerID: ownerID)) else { return [] }
     return (try? JSONDecoder().decode([PendingSuggestedFeedback].self, from: data)) ?? []
   }
 
-  func save(_ entries: [PendingSuggestedFeedback]) {
-    defaults.set(try? JSONEncoder().encode(entries), forKey: key)
+  func save(_ entries: [PendingSuggestedFeedback], ownerID: String) {
+    defaults.set(try? JSONEncoder().encode(entries), forKey: key(ownerID: ownerID))
   }
 }
 
@@ -133,6 +145,8 @@ final class SuggestedTasksStore: ObservableObject {
   private var recordsByID: [String: OmiAPI.CandidateRecord] = [:]
   private var interventionIDs: [String: String] = [:]
   private var registeringInterventionIDs: Set<String> = []
+  private var activeSuppressionOwnerID: String
+  private var activeFeedbackOwnerID: String
   private var suppressions: [String: Date]
   private var pendingFeedback: [PendingSuggestedFeedback]
   private var didRegisterAutomationActions = false
@@ -147,29 +161,46 @@ final class SuggestedTasksStore: ObservableObject {
     self.suppressionStore = suppressionStore
     self.feedbackOutboxStore = feedbackOutboxStore
     self.now = now
-    self.suppressions = suppressionStore.load()
-    self.pendingFeedback = feedbackOutboxStore.load()
+    let suppressionOwnerID = suppressionStore.currentOwnerID()
+    let feedbackOwnerID = feedbackOutboxStore.currentOwnerID()
+    activeSuppressionOwnerID = suppressionOwnerID
+    activeFeedbackOwnerID = feedbackOwnerID
+    self.suppressions = suppressionStore.load(ownerID: suppressionOwnerID)
+    self.pendingFeedback = feedbackOutboxStore.load(ownerID: feedbackOwnerID)
   }
 
   func load() async {
     guard !isLoading else { return }
+    refreshOwnerScopedState()
     isLoading = true
     defer { isLoading = false }
     do {
       let control = try await client.getCandidateWorkflowControl()
+      guard persistenceOwnersAreCurrent else {
+        refreshOwnerScopedState()
+        return
+      }
       guard control.workflowMode == .read else {
         candidates = []
         recordsByID = [:]
         return
       }
       pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
-      feedbackOutboxStore.save(pendingFeedback)
+      feedbackOutboxStore.save(pendingFeedback, ownerID: activeFeedbackOwnerID)
       await retryPendingFeedback()
+      guard persistenceOwnersAreCurrent else {
+        refreshOwnerScopedState()
+        return
+      }
       let records = try await client.listCanonicalCandidates(status: "pending", limit: 100)
+      guard persistenceOwnersAreCurrent else {
+        refreshOwnerScopedState()
+        return
+      }
       let pendingRecords = records.filter { $0.status == nil || $0.status == .pending }
       let checkedAt = now()
       suppressions = suppressions.filter { $0.value > checkedAt }
-      suppressionStore.save(suppressions)
+      suppressionStore.save(suppressions, ownerID: activeSuppressionOwnerID)
       recordsByID = Dictionary(uniqueKeysWithValues: pendingRecords.map { ($0.candidateId, $0) })
       candidates = pendingRecords
         .filter { suppressions[$0.candidateId] == nil }
@@ -183,6 +214,10 @@ final class SuggestedTasksStore: ObservableObject {
 
   @discardableResult
   func revealCandidateForNavigation(_ record: OmiAPI.CandidateRecord) -> Bool {
+    guard persistenceOwnersAreCurrent else {
+      refreshOwnerScopedState()
+      return false
+    }
     guard let projected = Self.project(record) else { return false }
     recordsByID[record.candidateId] = record
     if !candidates.contains(where: { $0.id == record.candidateId }) {
@@ -196,6 +231,10 @@ final class SuggestedTasksStore: ObservableObject {
   }
 
   func presented(candidateID: String) async {
+    guard persistenceOwnersAreCurrent else {
+      refreshOwnerScopedState()
+      return
+    }
     guard let record = recordsByID[candidateID],
       interventionIDs[candidateID] == nil,
       !registeringInterventionIDs.contains(candidateID)
@@ -203,10 +242,18 @@ final class SuggestedTasksStore: ObservableObject {
     registeringInterventionIDs.insert(candidateID)
     defer { registeringInterventionIDs.remove(candidateID) }
     _ = try? await ensureIntervention(for: record)
+    guard persistenceOwnersAreCurrent else { refreshOwnerScopedState(); return }
   }
 
   func doNow(candidateID: String, editedTitle: String?) async -> String? {
-    guard let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID) else { return nil }
+    guard persistenceOwnersAreCurrent,
+      let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID)
+    else {
+      refreshOwnerScopedState()
+      return nil
+    }
+    let suppressionOwnerID = activeSuppressionOwnerID
+    let feedbackOwnerID = activeFeedbackOwnerID
     let trimmed = editedTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
     let originalTitle = Self.title(for: record)
     let changedTitle = trimmed.flatMap { $0.isEmpty || $0 == originalTitle ? nil : $0 }
@@ -218,16 +265,32 @@ final class SuggestedTasksStore: ObservableObject {
       receipt = try await client.acceptCanonicalCandidate(
         candidateID: candidateID, accountGeneration: record.accountGeneration)
     } catch {
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return nil
+      }
       restoreCandidate(removed)
       self.error = "That Suggested action did not sync. Try again."
+      return nil
+    }
+    guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+      refreshOwnerScopedState()
       return nil
     }
     var feedbackAction = OmiAPI.TaskIntelligenceFeedbackAction.accept_candidate
     if let changedTitle, let taskID = receipt.taskId {
       do {
         try await client.updateSuggestedTaskDescription(id: taskID, description: changedTitle)
+        guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+          refreshOwnerScopedState()
+          return nil
+        }
         feedbackAction = .edit
       } catch {
+        guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+          refreshOwnerScopedState()
+          return nil
+        }
         self.error = "The task was kept, but the edit did not sync."
       }
     }
@@ -245,18 +308,27 @@ final class SuggestedTasksStore: ObservableObject {
       idempotencyKey: "suggested:\(candidateID):\(feedbackAction.rawValue)",
       record: record
     )
+    guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+      refreshOwnerScopedState()
+      return nil
+    }
     if feedbackSynced && feedbackAction == .accept_candidate && changedTitle == nil { error = nil }
     return receipt.taskId
   }
 
   func later(candidateID: String) async {
-    guard let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID) else { return }
+    guard persistenceOwnersAreCurrent,
+      let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID)
+    else {
+      refreshOwnerScopedState()
+      return
+    }
     let until = now().addingTimeInterval(24 * 60 * 60)
     guard removeCandidate(candidateID) != nil else { return }
     busyCandidateIDs.insert(candidateID)
     defer { busyCandidateIDs.remove(candidateID) }
     suppressions[candidateID] = until
-    suppressionStore.save(suppressions)
+    suppressionStore.save(suppressions, ownerID: activeSuppressionOwnerID)
     _ = await recordOrQueueFeedback(
       OmiAPI.FeedbackCreate(
         action: .later,
@@ -273,7 +345,14 @@ final class SuggestedTasksStore: ObservableObject {
   }
 
   func dismiss(candidateID: String, reason: OmiAPI.TaskIntelligenceFeedbackReason?) async {
-    guard let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID) else { return }
+    guard persistenceOwnersAreCurrent,
+      let record = recordsByID[candidateID], !busyCandidateIDs.contains(candidateID)
+    else {
+      refreshOwnerScopedState()
+      return
+    }
+    let suppressionOwnerID = activeSuppressionOwnerID
+    let feedbackOwnerID = activeFeedbackOwnerID
     let until = now().addingTimeInterval(30 * 24 * 60 * 60)
     guard let removed = removeCandidate(candidateID) else { return }
     busyCandidateIDs.insert(candidateID)
@@ -285,12 +364,20 @@ final class SuggestedTasksStore: ObservableObject {
         accountGeneration: record.accountGeneration
       )
     } catch {
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return
+      }
       restoreCandidate(removed)
       self.error = "That Suggested action did not sync. Try again."
       return
     }
+    guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+      refreshOwnerScopedState()
+      return
+    }
     suppressions[candidateID] = until
-    suppressionStore.save(suppressions)
+    suppressionStore.save(suppressions, ownerID: activeSuppressionOwnerID)
     let feedbackRequest = OmiAPI.FeedbackCreate(
       action: .dismiss,
       contextSnapshotHash: nil,
@@ -305,6 +392,40 @@ final class SuggestedTasksStore: ObservableObject {
       idempotencyKey: "suggested:\(candidateID):dismiss:\(reason?.rawValue ?? "none")",
       record: record
     )
+  }
+
+  private var persistenceOwnersAreCurrent: Bool {
+    ownersAreCurrent(
+      suppressionOwnerID: activeSuppressionOwnerID,
+      feedbackOwnerID: activeFeedbackOwnerID
+    )
+  }
+
+  private func ownersAreCurrent(suppressionOwnerID: String, feedbackOwnerID: String) -> Bool {
+    activeSuppressionOwnerID == suppressionOwnerID
+      && activeFeedbackOwnerID == feedbackOwnerID
+      && suppressionStore.currentOwnerID() == suppressionOwnerID
+      && feedbackOutboxStore.currentOwnerID() == feedbackOwnerID
+  }
+
+  @discardableResult
+  private func refreshOwnerScopedState() -> Bool {
+    let suppressionOwnerID = suppressionStore.currentOwnerID()
+    let feedbackOwnerID = feedbackOutboxStore.currentOwnerID()
+    let changed = suppressionOwnerID != activeSuppressionOwnerID || feedbackOwnerID != activeFeedbackOwnerID
+    guard changed else { return false }
+
+    activeSuppressionOwnerID = suppressionOwnerID
+    activeFeedbackOwnerID = feedbackOwnerID
+    suppressions = suppressionStore.load(ownerID: suppressionOwnerID)
+    pendingFeedback = feedbackOutboxStore.load(ownerID: feedbackOwnerID)
+    candidates = []
+    recordsByID = [:]
+    interventionIDs = [:]
+    registeringInterventionIDs = []
+    busyCandidateIDs = []
+    error = nil
+    return true
   }
 
   private func removeCandidate(_ candidateID: String) -> (candidate: SuggestedCandidate, index: Int)? {
@@ -322,6 +443,8 @@ final class SuggestedTasksStore: ObservableObject {
     idempotencyKey: String,
     record: OmiAPI.CandidateRecord
   ) async -> Bool {
+    let suppressionOwnerID = activeSuppressionOwnerID
+    let feedbackOwnerID = activeFeedbackOwnerID
     var preparedRequest = request
     let pendingInterventionRequest = Self.interventionRequest(for: record)
     upsertPendingFeedback(
@@ -337,13 +460,25 @@ final class SuggestedTasksStore: ObservableObject {
         for: record,
         request: pendingInterventionRequest
       )
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return false
+      }
       preparedRequest = Self.feedbackRequest(request, interventionID: interventionID)
       _ = try await client.recordTaskFeedback(
         preparedRequest, idempotencyKey: idempotencyKey, accountGeneration: record.accountGeneration)
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return false
+      }
       pendingFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
-      feedbackOutboxStore.save(pendingFeedback)
+      feedbackOutboxStore.save(pendingFeedback, ownerID: feedbackOwnerID)
       return true
     } catch {
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return false
+      }
       upsertPendingFeedback(
         PendingSuggestedFeedback(
           request: preparedRequest,
@@ -361,12 +496,20 @@ final class SuggestedTasksStore: ObservableObject {
   private func upsertPendingFeedback(_ entry: PendingSuggestedFeedback) {
     pendingFeedback.removeAll { $0.idempotencyKey == entry.idempotencyKey }
     pendingFeedback.append(entry)
-    feedbackOutboxStore.save(pendingFeedback)
+    feedbackOutboxStore.save(pendingFeedback, ownerID: activeFeedbackOwnerID)
   }
 
   private func retryPendingFeedback() async {
-    var remaining: [PendingSuggestedFeedback] = []
-    for entry in pendingFeedback {
+    let suppressionOwnerID = activeSuppressionOwnerID
+    let feedbackOwnerID = activeFeedbackOwnerID
+    let retryEntries = pendingFeedback
+    var successfulKeys: Set<String> = []
+    var failedByKey: [String: PendingSuggestedFeedback] = [:]
+    for entry in retryEntries {
+      guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+        refreshOwnerScopedState()
+        return
+      }
       var request = entry.request
       do {
         if request.interventionId == nil,
@@ -378,23 +521,41 @@ final class SuggestedTasksStore: ObservableObject {
             idempotencyKey: interventionKey,
             accountGeneration: entry.accountGeneration
           )
+          guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+            refreshOwnerScopedState()
+            return
+          }
           request = Self.feedbackRequest(request, interventionID: intervention.interventionId)
         }
         _ = try await client.recordTaskFeedback(
           request, idempotencyKey: entry.idempotencyKey, accountGeneration: entry.accountGeneration)
+        guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+          refreshOwnerScopedState()
+          return
+        }
+        successfulKeys.insert(entry.idempotencyKey)
       } catch {
-        remaining.append(
-          PendingSuggestedFeedback(
-            request: request,
-            idempotencyKey: entry.idempotencyKey,
-            accountGeneration: entry.accountGeneration,
-            interventionRequest: request.interventionId == nil ? entry.interventionRequest : nil,
-            interventionIdempotencyKey: request.interventionId == nil ? entry.interventionIdempotencyKey : nil
-          ))
+        failedByKey[entry.idempotencyKey] = PendingSuggestedFeedback(
+          request: request,
+          idempotencyKey: entry.idempotencyKey,
+          accountGeneration: entry.accountGeneration,
+          interventionRequest: request.interventionId == nil ? entry.interventionRequest : nil,
+          interventionIdempotencyKey: request.interventionId == nil ? entry.interventionIdempotencyKey : nil
+        )
       }
     }
-    pendingFeedback = remaining
-    feedbackOutboxStore.save(remaining)
+    guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+      refreshOwnerScopedState()
+      return
+    }
+    var merged = feedbackOutboxStore.load(ownerID: feedbackOwnerID)
+      .filter { !successfulKeys.contains($0.idempotencyKey) }
+    for failed in failedByKey.values {
+      merged.removeAll { $0.idempotencyKey == failed.idempotencyKey }
+      merged.append(failed)
+    }
+    pendingFeedback = merged
+    feedbackOutboxStore.save(merged, ownerID: feedbackOwnerID)
   }
 
   private func ensureIntervention(
@@ -402,11 +563,17 @@ final class SuggestedTasksStore: ObservableObject {
     request: OmiAPI.InterventionCreate? = nil
   ) async throws -> String {
     if let existing = interventionIDs[record.candidateId] { return existing }
+    let suppressionOwnerID = activeSuppressionOwnerID
+    let feedbackOwnerID = activeFeedbackOwnerID
     let intervention = try await client.registerTaskIntervention(
       request ?? Self.interventionRequest(for: record),
       idempotencyKey: Self.interventionIdempotencyKey(for: record),
       accountGeneration: record.accountGeneration
     )
+    guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
+      refreshOwnerScopedState()
+      throw CancellationError()
+    }
     interventionIDs[record.candidateId] = intervention.interventionId
     return intervention.interventionId
   }

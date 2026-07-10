@@ -140,8 +140,8 @@ final class TaskContextSubjectMatcher {
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
     fixedOwnerID = ownerID
-    activeOwnerHash = Self.ownerHash(ownerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out")
-    if let data = defaults.data(forKey: "taskContextSubjectMatches.v1.\(activeOwnerHash)"),
+    activeOwnerHash = Self.ownerHash(ownerID ?? defaults.string(forKey: .authUserId) ?? "signed-out")
+    if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
       let decoded = try? JSONDecoder().decode([Entry].self, from: data)
     {
       entries = Dictionary(uniqueKeysWithValues: decoded.map { ($0.referenceHash, $0) })
@@ -209,18 +209,17 @@ final class TaskContextSubjectMatcher {
   private func persist() {
     defaults.set(
       try? JSONEncoder().encode(Array(entries.values)),
-      forKey: "taskContextSubjectMatches.v1.\(activeOwnerHash)"
+      forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)
     )
   }
 
   private func ensureCurrentOwner() {
     guard fixedOwnerID == nil else { return }
-    let next = Self.ownerHash(defaults.string(forKey: "auth_userId") ?? "signed-out")
+    let next = Self.ownerHash(defaults.string(forKey: .authUserId) ?? "signed-out")
     guard next != activeOwnerHash else { return }
     activeOwnerHash = next
     currentContext = nil
-    let key = "taskContextSubjectMatches.v1.\(activeOwnerHash)"
-    if let data = defaults.data(forKey: key),
+    if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
       let decoded = try? JSONDecoder().decode([Entry].self, from: data)
     {
       entries = Dictionary(uniqueKeysWithValues: decoded.map { ($0.referenceHash, $0) })
@@ -472,7 +471,7 @@ final class TaskInterruptionLedgerDefaults: TaskInterruptionLedgerPersisting {
   }
 
   private var key: String {
-    let owner = fixedOwnerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
+    let owner = fixedOwnerID ?? defaults.string(forKey: .authUserId) ?? "signed-out"
     return "proactiveTaskInterruptionLedger.v1.\(owner)"
   }
 
@@ -645,7 +644,7 @@ final class KernelPreparedArtifactBridge {
     if let root {
       self.root = root
     } else {
-      let owner = UserDefaults.standard.string(forKey: "auth_userId") ?? "signed-out"
+      let owner = UserDefaults.standard.string(forKey: .authUserId) ?? "signed-out"
       let ownerHash = SHA256.hash(data: Data(owner.utf8))
         .map { String(format: "%02x", $0) }.joined()
       self.root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

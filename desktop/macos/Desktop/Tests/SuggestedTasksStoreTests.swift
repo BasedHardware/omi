@@ -294,6 +294,82 @@ final class SuggestedTasksStoreTests: XCTestCase {
     }
   }
 
+  func testOwnerSwitchReloadsSuppressionsAndOutboxWithoutCrossAccountRetry() async {
+    let api = FakeSuggestedTasksClient()
+    let suppression = MemorySuppressionStore()
+    let outbox = MemoryFeedbackOutboxStore()
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    suppression.values = ["candidate-b": Date.distantFuture]
+    outbox.entries = [
+      PendingSuggestedFeedback(
+        request: OmiAPI.FeedbackCreate(
+          action: .later,
+          contextSnapshotHash: nil,
+          interventionId: "intervention-a",
+          laterUntil: nil,
+          reason: nil,
+          subjectId: "candidate-a",
+          subjectKind: .candidate
+        ),
+        idempotencyKey: "owner-a-feedback",
+        accountGeneration: 7,
+        interventionRequest: nil,
+        interventionIdempotencyKey: nil
+      )
+    ]
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: suppression,
+      feedbackOutboxStore: outbox
+    )
+
+    suppression.ownerID = "owner-b"
+    outbox.ownerID = "owner-b"
+    api.records = [candidate(id: "candidate-b", status: .pending)]
+    await store.load()
+
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-b"])
+    XCTAssertEqual(api.feedbackAttempts, 0)
+    XCTAssertTrue(outbox.entries.isEmpty)
+
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    api.records = []
+    await store.load()
+
+    XCTAssertEqual(api.feedbackAttempts, 1)
+    XCTAssertTrue(outbox.entries.isEmpty)
+  }
+
+  func testOwnerSwitchDuringAcceptDoesNotNavigateOrRestorePriorOwnerCandidate() async {
+    for failAccept in [false, true] {
+      let api = FakeSuggestedTasksClient()
+      let suppression = MemorySuppressionStore()
+      let outbox = MemoryFeedbackOutboxStore()
+      suppression.ownerID = "owner-a"
+      outbox.ownerID = "owner-a"
+      api.records = [candidate(id: "candidate-a", status: .pending)]
+      api.failAccept = failAccept
+      api.onAccept = {
+        suppression.ownerID = "owner-b"
+        outbox.ownerID = "owner-b"
+      }
+      let store = SuggestedTasksStore(
+        client: api,
+        suppressionStore: suppression,
+        feedbackOutboxStore: outbox
+      )
+      await store.load()
+
+      let taskID = await store.doNow(candidateID: "candidate-a", editedTitle: nil)
+
+      XCTAssertNil(taskID)
+      XCTAssertTrue(store.candidates.isEmpty)
+      XCTAssertNil(store.error)
+    }
+  }
+
   func testSuggestedImplementationDoesNotCreateNotificationsOrBadges() throws {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -417,15 +493,27 @@ final class SuggestedTasksStoreTests: XCTestCase {
 }
 
 private final class MemorySuppressionStore: SuggestedSuppressionPersisting {
-  var values: [String: Date] = [:]
-  func load() -> [String: Date] { values }
-  func save(_ suppressions: [String: Date]) { values = suppressions }
+  var ownerID = "test-owner"
+  private var valuesByOwner: [String: [String: Date]] = [:]
+  var values: [String: Date] {
+    get { valuesByOwner[ownerID] ?? [:] }
+    set { valuesByOwner[ownerID] = newValue }
+  }
+  func currentOwnerID() -> String { ownerID }
+  func load(ownerID: String) -> [String: Date] { valuesByOwner[ownerID] ?? [:] }
+  func save(_ suppressions: [String: Date], ownerID: String) { valuesByOwner[ownerID] = suppressions }
 }
 
 private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting {
-  var entries: [PendingSuggestedFeedback] = []
-  func load() -> [PendingSuggestedFeedback] { entries }
-  func save(_ entries: [PendingSuggestedFeedback]) { self.entries = entries }
+  var ownerID = "test-owner"
+  private var entriesByOwner: [String: [PendingSuggestedFeedback]] = [:]
+  var entries: [PendingSuggestedFeedback] {
+    get { entriesByOwner[ownerID] ?? [] }
+    set { entriesByOwner[ownerID] = newValue }
+  }
+  func currentOwnerID() -> String { ownerID }
+  func load(ownerID: String) -> [PendingSuggestedFeedback] { entriesByOwner[ownerID] ?? [] }
+  func save(_ entries: [PendingSuggestedFeedback], ownerID: String) { entriesByOwner[ownerID] = entries }
 }
 
 private final class FakeSuggestedTasksClient: SuggestedTasksClient {
@@ -441,7 +529,12 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   var failAccept = false
   var failIntervention = false
   var failFeedback = false
+  var failReject = false
   var feedbackAttempts = 0
+  var onRegisterIntervention: (() -> Void)?
+  var onAccept: (() -> Void)?
+  var onReject: (() -> Void)?
+  var onUpdate: (() -> Void)?
   var accountGeneration = 7
   var workflowMode = OmiAPI.TaskWorkflowMode.read
 
@@ -456,6 +549,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
+    onRegisterIntervention?()
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
     registeredInterventionDedupeKeys.append(request.dedupeKey)
@@ -499,6 +593,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    onAccept?()
     if failAccept { throw FakeError.failed }
     acceptedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .accepted, taskID: acceptedTaskID)
@@ -507,11 +602,14 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func rejectCanonicalCandidate(
     candidateID: String, reason: String?, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    onReject?()
+    if failReject { throw FakeError.failed }
     rejectedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .rejected, taskID: nil)
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
+    onUpdate?()
     updatedTaskDescriptions[id] = description
   }
 
