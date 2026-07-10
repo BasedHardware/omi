@@ -276,7 +276,11 @@ class TestSyncV2Structure:
         v2_end = source.find('\n@router.', v2_start + 1)
         v2 = source[v2_start:v2_end]
         task_handler = source[source.index('async def run_sync_job') :]
-        segment = source[source.index('def process_segment(') : source.index('\ndef _store_sync_audio_chunk')]
+        # process_segment was extracted to utils/sync/pipeline.py (W4 refactor)
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        with open(pipeline_path, encoding='utf-8') as f:
+            pipeline_source = f.read()
+        segment = pipeline_source[pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')]
 
         assert 'resolve_client_device_from_request(request)' in v1
         assert 'resolve_client_device(' in v2
@@ -1377,10 +1381,10 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.client_device'].resolve_client_device = MagicMock(
-            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+            return_value=MagicMock(client_device_id=None, platform=None)
         )
         sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
-            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+            return_value=MagicMock(client_device_id=None, platform=None)
         )
 
         _install_sync_observability_stubs()
@@ -1945,10 +1949,10 @@ class TestV2EndpointExecution:
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.client_device'].resolve_client_device = MagicMock(
-            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+            return_value=MagicMock(client_device_id=None, platform=None)
         )
         sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
-            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+            return_value=MagicMock(client_device_id=None, platform=None)
         )
 
         _install_sync_observability_stubs()
