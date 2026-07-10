@@ -47,7 +47,8 @@ export function createOverlayWindow(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      webSecurity: false, // match main window (Omi API CORS workaround)
+      // webSecurity ON (matches the main window). The Omi API CORS gap is handled
+      // by the main-process webRequest header injection, not by weakening this.
       backgroundThrottling: false
     }
   })

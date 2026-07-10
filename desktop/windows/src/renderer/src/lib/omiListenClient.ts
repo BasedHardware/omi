@@ -1,5 +1,4 @@
 import { auth } from './firebase'
-import { acquireMicStream, floatTo16BitPCM, teardownAudioGraph } from './audio'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
@@ -29,32 +28,16 @@ export type OmiListenHandle = {
 
 let nextSessionId = 1
 
-async function getSystemAudioStream(): Promise<MediaStream> {
-  let display: MediaStream
-  try {
-    display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-  } catch (e) {
-    const err = e as Error
-    if (/not supported/i.test(err.message)) {
-      throw new Error(
-        'System-audio capture handler not active. Fully restart the app (stop and rerun `npm run dev`) so the main process reloads.'
-      )
-    }
-    throw e
-  }
-  const audioTracks = display.getAudioTracks()
-  display.getVideoTracks().forEach((t) => t.stop())
-  if (audioTracks.length === 0) {
-    throw new Error('Windows returned no system-audio (loopback) track.')
-  }
-  return new MediaStream(audioTracks)
-}
-
 /**
- * Open a v4/listen session for one audio source. The renderer captures PCM
- * with AudioContext, then forwards each
- * 4096-sample buffer to the main process as Int16. The main process owns the
- * WebSocket (needed to set the Authorization header).
+ * Open a v4/listen session for one audio source. The main process owns the
+ * WebSocket (needed to set the Authorization header) and, since Phase 2, the
+ * hidden capture window owns the actual audio capture: this client opens the
+ * session and OWNS the transcript flow in the CALLING window (byte-identical to
+ * before), but the mic/system stream is acquired + fed remotely — we send an
+ * `audio-start` command and the capture window's AudioSessionHost runs the
+ * pipeline → VAD gate → listenFeed(sessionId). A source (mic/loopback) failure
+ * comes back as a routed `audio-source-error` for this sessionId, surfaced here
+ * as a fatal error (same shape as the old in-window capture failure).
  */
 export async function startOmiListen(
   source: ListenSource,
@@ -65,28 +48,10 @@ export async function startOmiListen(
   const token = await user.getIdToken()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
-  // acquireMicStream (shared) steers away from virtual/loopback default inputs —
-  // the conversation lane must not silently record a VB-Cable's silence either.
-  const stream = source === 'mic' ? await acquireMicStream() : await getSystemAudioStream()
-
-  const audioCtx = new AudioContext({ sampleRate: 16000 })
-  const node = audioCtx.createMediaStreamSource(stream)
-  const processor = audioCtx.createScriptProcessor(4096, 1, 1)
-  node.connect(processor)
-
   let stopped = false
   let connected = false
-  let captureStopped = false
 
-  // Tear down the audio-capture graph — idempotent, shared by the start-failure
-  // path and stop().
-  const stopCapture = (): void => {
-    if (captureStopped) return
-    captureStopped = true
-    teardownAudioGraph({ nodes: [processor, node], stream, ctx: audioCtx })
-  }
-
-  const unsub = window.omi.onListenMessage((msg) => {
+  const unsubMsg = window.omi.onListenMessage((msg) => {
     if (msg.sessionId !== sessionId) return
     if (msg.kind === 'connected') {
       connected = true
@@ -112,6 +77,15 @@ export async function startOmiListen(
     }
   })
 
+  // The audio stream now lives in the capture window. A failure to acquire it (a
+  // dead/blocked mic, no loopback track) arrives as a routed audio-source-error
+  // for our sessionId — surface it as a fatal source failure.
+  const unsubCapture = window.omi.onCaptureEvent((ev) => {
+    if (ev.type !== 'audio-source-error' || ev.sessionId !== sessionId) return
+    if (stopped) return
+    cb.onError(new Error(ev.message || 'audio source failed'), true)
+  })
+
   try {
     await window.omi.listenStart({
       sessionId,
@@ -121,23 +95,21 @@ export async function startOmiListen(
       mode: 'conversation'
     })
   } catch (e) {
-    unsub()
-    stopCapture()
+    unsubMsg()
+    unsubCapture()
     throw e
   }
 
-  processor.onaudioprocess = (e): void => {
-    if (stopped) return
-    const i16 = floatTo16BitPCM(e.inputBuffer.getChannelData(0))
-    window.omi.listenFeed(sessionId, i16.buffer)
-  }
-  processor.connect(audioCtx.destination)
+  // Ask the capture window to acquire this source and stream it (VAD-gated) into
+  // the session we just opened.
+  window.omi.captureCommand({ type: 'audio-start', sessionId, source, gating: 'vad' })
 
   return {
     stop: (): void => {
       stopped = true
-      unsub()
-      stopCapture()
+      unsubMsg()
+      unsubCapture()
+      window.omi.captureCommand({ type: 'audio-stop', sessionId })
       void window.omi.listenStop(sessionId)
     }
   }

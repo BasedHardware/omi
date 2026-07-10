@@ -51,7 +51,8 @@ function ensureWindow(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      webSecurity: false,
+      // webSecurity ON (matches the main window). CORS is handled by the
+      // main-process webRequest header injection, not by weakening this.
       backgroundThrottling: false
     }
   })

@@ -20,7 +20,7 @@ import {
   MIC_TAP_RELEASE_MS,
   RECORDING_TOO_LONG_MESSAGE
 } from '../lib/ptt/constants'
-import { PCM_PENDING_MAX_BYTES } from '../../../shared/types'
+import { PCM_PENDING_MAX_BYTES, type WaveformSource } from '../../../shared/types'
 
 // Hold-Space push-to-talk, buffer-first (macOS architecture): one mic capture per
 // hold feeds a local PCM buffer + the waveform + an opportunistic live stream. On
@@ -55,8 +55,9 @@ export type PushToTalk = {
   hint: string | null
   /** Failure strip message — auto-clears. */
   error: string | null
-  /** Live analyser for the waveform (null while not capturing). */
-  analyserRef: React.MutableRefObject<AnalyserNode | null>
+  /** Live amplitude source for the waveform (null while not capturing). Structural
+   *  WaveformSource — a real AnalyserNode or the IPC-fed PTT adapter both satisfy it. */
+  analyserRef: React.MutableRefObject<WaveformSource | null>
   /** Wire to the input's onKeyDown. True = consumed (skip Enter/typing handling). */
   onKeyDown: (e: React.KeyboardEvent) => boolean
   /** Wire to the input's onKeyUp. True = consumed. */
@@ -106,7 +107,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const [transcribing, setTranscribing] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
+  const analyserRef = useRef<WaveformSource | null>(null)
 
   // The ACTIVE (foreground) job — the one bound to UI state. Superseded jobs run
   // headless until they finish.
@@ -193,7 +194,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
               } else if (!job.streamStopped) {
                 job.pendingStream.push(pcm)
                 job.pendingStreamBytes += pcm.byteLength
-                while (job.pendingStreamBytes > PCM_PENDING_MAX_BYTES && job.pendingStream.length > 1) {
+                while (
+                  job.pendingStreamBytes > PCM_PENDING_MAX_BYTES &&
+                  job.pendingStream.length > 1
+                ) {
                   job.pendingStreamBytes -= job.pendingStream.shift()!.byteLength
                 }
               }
@@ -282,7 +286,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
           job.abort = abort
           void (async () => {
             try {
-              const transcript = await batchTranscribe(job.buffer ?? new Int16Array(0), abort.signal)
+              const transcript = await batchTranscribe(
+                job.buffer ?? new Int16Array(0),
+                abort.signal
+              )
               dispatch(job, { type: 'BATCH_OK', transcript })
             } catch (err) {
               if (abort.signal.aborted) return // cancelled — the job is already idle

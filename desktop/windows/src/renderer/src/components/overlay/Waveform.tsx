@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { WaveformSource } from '../../../../shared/types'
 
 const BAR_COUNT = 24
 const MIN_SCALE = 0.06 // resting height so idle bars still read as a waveform
@@ -29,7 +30,7 @@ const SMOOTH = 0.18 // per-bar easing toward target (lower = smoother/less react
 export function Waveform({
   analyserRef
 }: {
-  analyserRef: React.MutableRefObject<AnalyserNode | null>
+  analyserRef: React.MutableRefObject<WaveformSource | null>
 }): React.JSX.Element {
   const barsRef = useRef<Array<HTMLDivElement | null>>([])
   // Learned ambient noise floor (0..1) and whether it's been seeded yet.

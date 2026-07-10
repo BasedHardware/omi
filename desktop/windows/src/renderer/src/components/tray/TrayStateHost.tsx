@@ -11,7 +11,7 @@ import { getPreferences, setPreferences, onPreferencesChange } from '../../lib/p
 //   signed in, listening  → 'listening'
 //   signed in, paused     → 'paused'
 // The tray's "toggle listening" action flips the continuousRecording pref, which
-// starts/stops the ContinuousRecordingHost session and re-reports the new state.
+// starts/stops the capture window's ContinuousSessionHost session and re-reports the new state.
 export function TrayStateHost(): null {
   const [enabled, setEnabled] = useState(() => !!getPreferences().continuousRecording)
   const [signedIn, setSignedIn] = useState(() => !!auth.currentUser)
