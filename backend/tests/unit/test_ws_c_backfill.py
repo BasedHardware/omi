@@ -50,8 +50,13 @@ def _ws_c_import_isolation():
     module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
     module_globals["reconcile_backfill_counts"] = reconcile_backfill_counts
     from utils.memory.memory_service import MemoryService
+    from utils.memory.canonical_required_processing import ProcessedRequiredMemory, process_required_memory_item
+    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
 
     module_globals["MemoryService"] = MemoryService
+    module_globals["ProcessedRequiredMemory"] = ProcessedRequiredMemory
+    module_globals["process_required_memory_item"] = process_required_memory_item
+    module_globals["run_canonical_short_term_promotion"] = run_canonical_short_term_promotion
     yield
     restore_sys_modules(saved)
 
@@ -424,9 +429,12 @@ def test_backfill_copies_legacy_without_mutating_source(_trusted_account):
     for row in rows:
         canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
         stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
-        assert stored["tier"] == MemoryTier.long_term.value
+        assert stored["tier"] == MemoryTier.short_term.value
         assert stored["status"] == MemoryItemStatus.active.value
-        assert stored["processing_state"] == ProcessingState.processed.value
+        assert stored["processing_state"] == ProcessingState.pending.value
+        assert stored["promotion"]["required"] is False
+        assert stored["promotion"]["processing_status"] == "pending_admission"
+        assert stored["promotion"]["submission"]["content_hash"]
         assert stored["content"] == row["content"]
 
     assert get_non_filtered_fn(LEGACY_UID, limit=100, offset=0) == rows
@@ -567,7 +575,7 @@ def test_bucketed_manual_apply_writes_required_promotion_with_legacy_timestamps(
     assert stored["promotion"]["legacy_memory_id"] == row["id"]
 
 
-def test_bucketed_reviewed_apply_writes_long_term_with_legacy_timestamp(_trusted_account):
+def test_bucketed_reviewed_apply_stages_processing_with_legacy_timestamp(_trusted_account):
     created_at = datetime(2024, 5, 6, 7, 8, tzinfo=timezone.utc)
     row = _legacy_row(
         legacy_id="leg-reviewed-apply", content="David uses Omi Beta daily", conversation_id="conv-reviewed"
@@ -599,16 +607,19 @@ def test_bucketed_reviewed_apply_writes_long_term_with_legacy_timestamp(_trusted
     assert report.kg_extraction_failures == 0
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
-    assert stored["tier"] == MemoryTier.long_term.value
+    assert stored["tier"] == MemoryTier.short_term.value
+    assert stored["processing_state"] == ProcessingState.pending.value
     assert stored["captured_at"] == created_at
     assert stored["updated_at"] == created_at
-    assert stored["expires_at"] is None
-    assert stored["kg_extracted"] is True
+    assert stored["expires_at"] > datetime.now(timezone.utc)
+    assert stored["kg_extracted"] is False
+    assert stored["promotion"]["processing_status"] == "pending_processing"
+    assert stored["promotion"]["submission"]["content_hash"]
     assert stored["promotion"]["bucket"] == LegacyBackfillBucket.reviewed_long_term.value
-    extract_kg.assert_called_once()
+    extract_kg.assert_not_called()
 
 
-def test_bucketed_reviewed_rerun_repairs_missing_kg_on_existing_item(_trusted_account):
+def test_bucketed_reviewed_rerun_keeps_pending_item_out_of_kg(_trusted_account):
     row = _legacy_row(
         legacy_id="leg-reviewed-repair",
         content="User prefers memory bucket repairs",
@@ -637,9 +648,7 @@ def test_bucketed_reviewed_rerun_repairs_missing_kg_on_existing_item(_trusted_ac
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
     assert first.written_count == 1
-    assert db.docs[item_path]["kg_extracted"] is True
-
-    db.docs[item_path]["kg_extracted"] = False
+    assert db.docs[item_path]["kg_extracted"] is False
 
     with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
         repaired = backfill_user_bucketed(
@@ -653,11 +662,69 @@ def test_bucketed_reviewed_rerun_repairs_missing_kg_on_existing_item(_trusted_ac
     assert repaired.written_count == 0
     assert repaired.skipped_already_present == 1
     assert repaired.kg_extraction_failures == 0
-    assert db.docs[item_path]["kg_extracted"] is True
-    extract_kg.assert_called_once()
+    assert db.docs[item_path]["kg_extracted"] is False
+    extract_kg.assert_not_called()
 
 
-def test_resume_completed_checkpoint_repairs_missing_kg_side_effect(_trusted_account):
+def test_stage_all_candidate_can_be_reviewed_processed_and_promoted(_trusted_account):
+    row = _legacy_row(
+        legacy_id="leg-stage-upgrade",
+        content="The user works on the Omi memory system",
+        conversation_id="conv-stage-upgrade",
+    )
+    rows = [row]
+    initial_reader, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    staged = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=initial_reader)
+    assert staged.completed is True
+    memory_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    item_path = f"users/{LEGACY_UID}/memory_items/{memory_id}"
+    assert db.docs[item_path]["promotion"]["processing_status"] == "pending_admission"
+
+    reviewed_row = dict(row)
+    reviewed_row["user_review"] = True
+    reviewed_reader, _ = _make_non_filtered_store([reviewed_row])
+    upgraded = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.reviewed_long_term,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=reviewed_reader,
+    )
+
+    assert upgraded.completed is True
+    assert upgraded.written_count == 1
+    assert db.docs[item_path]["promotion"]["required"] is True
+    assert db.docs[item_path]["promotion"]["processing_status"] == "pending_processing"
+
+    processed = process_required_memory_item(
+        LEGACY_UID,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: ProcessedRequiredMemory(
+            content="The user works on the Omi memory system.",
+            subject_entity_id="user",
+            predicate="works_on",
+            arguments={"project": "Omi memory system"},
+        ),
+        now=datetime.now(timezone.utc),
+    )
+    assert processed.processed is True
+
+    promoted = run_canonical_short_term_promotion(
+        LEGACY_UID,
+        db_client=db,
+        now=datetime.now(timezone.utc),
+        run_id="legacy-stage-upgrade",
+    )
+
+    assert promoted.promoted_memory_ids == [memory_id]
+    assert db.docs[item_path]["tier"] == MemoryTier.long_term.value
+
+
+def test_resume_completed_checkpoint_keeps_pending_item_out_of_kg(_trusted_account):
     row = _legacy_row(legacy_id="leg-resume-kg", content="User prefers local rollout harnesses")
     rows = [row]
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
@@ -681,9 +748,7 @@ def test_resume_completed_checkpoint_repairs_missing_kg_side_effect(_trusted_acc
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
     assert first.completed is True
-    assert db.docs[item_path]["kg_extracted"] is True
-
-    db.docs[item_path]["kg_extracted"] = False
+    assert db.docs[item_path]["kg_extracted"] is False
 
     with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
         repaired = backfill_user(
@@ -697,8 +762,8 @@ def test_resume_completed_checkpoint_repairs_missing_kg_side_effect(_trusted_acc
     assert repaired.resumed_from_index == 1
     assert repaired.written_count == 0
     assert repaired.kg_extraction_failures == 0
-    assert db.docs[item_path]["kg_extracted"] is True
-    extract_kg.assert_called_once()
+    assert db.docs[item_path]["kg_extracted"] is False
+    extract_kg.assert_not_called()
 
 
 def test_bucketed_hold_bucket_never_writes(_trusted_account):

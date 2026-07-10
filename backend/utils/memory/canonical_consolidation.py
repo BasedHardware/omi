@@ -111,6 +111,8 @@ def _is_promotable_for_consolidation(item: MemoryItem, *, now: datetime) -> bool
         return False
     if item.source_state != SourceState.active:
         return False
+    if (item.promotion or {}).get("required") is True:
+        return False
     if item.expires_at is not None and item.expires_at <= current_time:
         return False
     return True
