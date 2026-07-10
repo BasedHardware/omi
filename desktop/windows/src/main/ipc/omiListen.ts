@@ -79,6 +79,31 @@ function recordFed(mode: ListenMode, source: 'mic' | 'system', bytes: number): v
   listenStats.set(key, cur)
 }
 
+/** OMI_E2E only: register a socketless counting session so the VAD-playback
+ * harness can assert post-gate byte flow with zero auth/network. feedSession
+ * counts via recordFed then drops the bytes (stub is never OPEN/CONNECTING). */
+export function startTestListenSession(sessionId: string, source: 'mic' | 'system'): boolean {
+  if (process.env.OMI_E2E !== '1') return false
+  const stub = { readyState: 3, close(): void {}, send(): void {} } as unknown as WebSocket
+  sessions.set(sessionId, {
+    ws: stub,
+    ownerId: -1,
+    source,
+    mode: 'conversation',
+    closed: false,
+    pending: [],
+    pendingBytes: 0
+  })
+  return true
+}
+
+export function stopTestListenSession(sessionId: string): void {
+  const s = sessions.get(sessionId)
+  if (!s) return
+  s.closed = true
+  sessions.delete(sessionId)
+}
+
 /** Snapshot of bytes/chunks fed per mode:source since process start. */
 export function getListenStats(): Record<string, { bytes: number; chunks: number }> {
   const out: Record<string, { bytes: number; chunks: number }> = {}

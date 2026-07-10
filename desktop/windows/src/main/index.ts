@@ -4,7 +4,11 @@ import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
-import { registerOmiListenHandlers } from './ipc/omiListen'
+import {
+  registerOmiListenHandlers,
+  startTestListenSession,
+  stopTestListenSession
+} from './ipc/omiListen'
 import { registerCaptureBridge } from './ipc/captureBridge'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
@@ -532,7 +536,29 @@ app.whenReady().then(async () => {
       trayCreated: () => isTrayCreated(),
       // The harness must target the MAIN window — getAllWindows() also returns
       // the insight toast / overlay, which have different close semantics.
-      mainWindowId: mainWindow.id
+      mainWindowId: mainWindow.id,
+      // VAD-playback harness: start/stop a real capture session (mic -> pipeline
+      // -> VAD gate -> counted-and-dropped bytes) with zero auth or network.
+      startCaptureForTest: async ({ source }: { source: 'mic' | 'system' }) => {
+        if (!startTestListenSession('e2e-vad-playback', source)) return false
+        const wc = getCaptureWc()
+        if (!wc || wc.isDestroyed()) return false
+        wc.send('omi-capture:cmd', {
+          cmd: { type: 'audio-start', sessionId: 'e2e-vad-playback', source, gating: 'vad' },
+          ownerId: wc.id
+        })
+        return true
+      },
+      stopCaptureForTest: () => {
+        const wc = getCaptureWc()
+        if (wc && !wc.isDestroyed()) {
+          wc.send('omi-capture:cmd', {
+            cmd: { type: 'audio-stop', sessionId: 'e2e-vad-playback' },
+            ownerId: wc.id
+          })
+        }
+        stopTestListenSession('e2e-vad-playback')
+      }
     }
   }
 
