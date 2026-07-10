@@ -1,3 +1,5 @@
+# PlatformIO materializes this dependency under .pio; keep the gitlink mapped so
+# GitHub checkout cleanup can resolve it without treating generated files as an unknown submodule.
 [submodule "omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus"]
 	path = omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus
 	url = https://github.com/pschatzmann/arduino-libopus.git
