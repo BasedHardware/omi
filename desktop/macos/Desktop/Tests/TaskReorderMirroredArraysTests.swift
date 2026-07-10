@@ -83,4 +83,25 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     let cat1Min = cat1.compactMap { $0.sortOrder }.min() ?? .min
     XCTAssertLessThan(cat0Max, cat1Min, "category 0's band must sit entirely below category 1's")
   }
+
+  /// BL-030 regression guard: `moveTask` must fan the reorder out to ALL THREE mirrored
+  /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
+  /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the
+  /// exact call sites (the helper's own correctness is covered behaviourally above).
+  func testMoveTaskFansReorderOutToAllThreeMirroredArrays() throws {
+    let source = try tasksPageSource()
+    for target in ["&incomplete", "&filteredFromDatabase", "&searchResults"] {
+      XCTAssertTrue(
+        source.contains("Self.applyReorder(order, categoryIndex: categoryIndex, to: \(target))"),
+        "moveTask must apply the reorder to \(target) so all three mirrored arrays agree (BL-030)")
+    }
+  }
+
+  private func tasksPageSource() throws -> String {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/TasksPage.swift")
+    return try String(contentsOf: url, encoding: .utf8)
+  }
 }
