@@ -398,6 +398,78 @@ class GeneratedAudioFile {
   }
 }
 
+class GeneratedConversationAudioSpan {
+  final double artifactOffset;
+  final String fileId;
+  final double len;
+  final double wallOffset;
+
+  const GeneratedConversationAudioSpan({
+    required this.artifactOffset,
+    required this.fileId,
+    required this.len,
+    required this.wallOffset,
+  });
+
+  factory GeneratedConversationAudioSpan.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationAudioSpan(
+      artifactOffset: _required(_readFieldValue<double>(_readField(json, const ["artifact_offset"]), "artifact_offset", _readDouble, requiredField: true, nullable: false), "artifact_offset"),
+      fileId: _required(_readFieldValue<String>(_readField(json, const ["file_id"]), "file_id", _readString, requiredField: true, nullable: false), "file_id"),
+      len: _required(_readFieldValue<double>(_readField(json, const ["len"]), "len", _readDouble, requiredField: true, nullable: false), "len"),
+      wallOffset: _required(_readFieldValue<double>(_readField(json, const ["wall_offset"]), "wall_offset", _readDouble, requiredField: true, nullable: false), "wall_offset"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'artifact_offset': artifactOffset,
+      'file_id': fileId,
+      'len': len,
+      'wall_offset': wallOffset,
+    };
+  }
+}
+
+class GeneratedConversationAudio {
+  final String audioFilesFingerprint;
+  final DateTime? builtAt;
+  final double capturedDuration;
+  final String contentType;
+  final double duration;
+  final List<GeneratedConversationAudioSpan> spans;
+
+  const GeneratedConversationAudio({
+    required this.audioFilesFingerprint,
+    this.builtAt,
+    required this.capturedDuration,
+    this.contentType = "audio/mpeg",
+    required this.duration,
+    this.spans = const [],
+  });
+
+  factory GeneratedConversationAudio.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationAudio(
+      audioFilesFingerprint: _required(_readFieldValue<String>(_readField(json, const ["audio_files_fingerprint"]), "audio_files_fingerprint", _readString, requiredField: true, nullable: false), "audio_files_fingerprint"),
+      builtAt: _readFieldValue<DateTime>(_readField(json, const ["built_at"]), "built_at", _readDateTime, requiredField: false, nullable: true),
+      capturedDuration: _required(_readFieldValue<double>(_readField(json, const ["captured_duration"]), "captured_duration", _readDouble, requiredField: true, nullable: false), "captured_duration"),
+      contentType: _required(_readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: false, defaultValue: "audio/mpeg"), "content_type"),
+      duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
+      spans: _required(_readFieldValue<List<GeneratedConversationAudioSpan>>(_readField(json, const ["spans"]), "spans", (value) => _readObjectList(value, GeneratedConversationAudioSpan.fromJson), requiredField: false, nullable: false, defaultValue: const []), "spans"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'audio_files_fingerprint': audioFilesFingerprint,
+      'built_at': builtAt?.toUtc().toIso8601String(),
+      'captured_duration': capturedDuration,
+      'content_type': contentType,
+      'duration': duration,
+      'spans': spans.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedCalendarEventLink {
   final List<String> attendeeEmails;
   final List<String> attendees;
@@ -450,6 +522,7 @@ class GeneratedConversation {
   final String? callId;
   final String? clientDeviceId;
   final String? clientPlatform;
+  final GeneratedConversationAudio? conversationAudio;
   final DateTime createdAt;
   final String? dataProtectionLevel;
   final bool deferred;
@@ -485,6 +558,7 @@ class GeneratedConversation {
     this.callId,
     this.clientDeviceId,
     this.clientPlatform,
+    this.conversationAudio,
     required this.createdAt,
     this.dataProtectionLevel,
     this.deferred = false,
@@ -522,6 +596,7 @@ class GeneratedConversation {
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
+      conversationAudio: _readFieldValue<GeneratedConversationAudio>(_readField(json, const ["conversation_audio"]), "conversation_audio", (value) => _readObject(value, GeneratedConversationAudio.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
@@ -560,6 +635,7 @@ class GeneratedConversation {
       'call_id': callId,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
+      'conversation_audio': conversationAudio?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'deferred': deferred,

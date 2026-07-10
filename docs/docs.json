@@ -27,6 +27,7 @@
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
+              "doc/developer/desktop-voice-turns",
               "doc/developer/agent-control-plane",
               "doc/developer/agent-control-plane-invariants",
               {

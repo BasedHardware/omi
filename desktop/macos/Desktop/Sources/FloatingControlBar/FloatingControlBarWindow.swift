@@ -3203,7 +3203,7 @@ class FloatingControlBarManager {
             origin: origin,
             turnOwner: .floatingDefault
         )
-        await recordSurfaceTurn(
+        _ = await recordSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: userText,
             assistantText: assistantText,
@@ -3679,27 +3679,51 @@ class FloatingControlBarManager {
     }
 
     func kernelVoiceSeedContext() async -> String {
-        guard let provider = historyChatProvider else { return "" }
-        return await provider.kernelTurnProjection.fetchVoiceSeedContext(
+        await kernelVoiceSeedSnapshot().context
+    }
+
+    func kernelVoiceSeedSnapshot() async -> AgentRuntimeProcess.VoiceSeedContextResult {
+        guard let provider = historyChatProvider else {
+            return AgentRuntimeProcess.VoiceSeedContextResult(
+                conversationId: "", context: "", idempotencyKeys: []
+            )
+        }
+        return await provider.kernelTurnProjection.fetchVoiceSeedSnapshot(
             surface: provider.mainChatSurfaceReference()
         )
     }
 
     func recordSurfaceTurn(
         surface: AgentSurfaceReference,
+        ownerID: String? = nil,
         userText: String,
         assistantText: String,
         origin: String = "realtime_voice",
         interrupted: Bool = false,
         idempotencyKey: String? = nil
-    ) async {
+    ) async -> Bool {
         await historyChatProvider?.kernelTurnProjection.recordSurfaceTurn(
             surface: surface,
+            ownerID: ownerID,
             userText: userText,
             assistantText: assistantText,
             origin: origin,
             interrupted: interrupted,
             idempotencyKey: idempotencyKey
+        ) ?? false
+    }
+
+    func stageRealtimeVoiceTurn(
+        userText: String,
+        assistantText: String,
+        idempotencyKey: String
+    ) {
+        _ = historyChatProvider?.stageOptimisticTurn(
+            continuityKey: idempotencyKey,
+            userText: userText,
+            assistantText: assistantText,
+            origin: "realtime_voice",
+            turnOwner: .floatingVoice
         )
     }
 
@@ -4342,11 +4366,9 @@ class FloatingControlBarManager {
         let generation = activeQueryGeneration
 
         barWindow.state.currentQueryFromVoice = true
-        barWindow.state.isVoiceListening = false
-        barWindow.state.isVoiceLocked = false
-        barWindow.state.isVoiceFollowUp = false
-        barWindow.state.voiceTranscript = ""
-        barWindow.state.voiceFollowUpTranscript = ""
+        if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+            VoiceTurnCoordinator.shared.send(.clearPresentation(turnID: turnID))
+        }
 
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider {

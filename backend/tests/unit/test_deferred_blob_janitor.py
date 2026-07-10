@@ -124,7 +124,8 @@ class TestSleepPatternRemoved:
             assert 'time.sleep(480)' not in _read_source(rel), f'{rel} still parks threads as deletion timers'
 
     def test_sync_uses_scheduler(self):
-        assert 'schedule_syncing_temporal_file_deletion(path)' in _read_source('routers/sync.py')
+        pipeline_src = _read_source('utils/sync/pipeline.py')
+        assert 'schedule_syncing_temporal_file_deletion(path)' in pipeline_src
 
     def test_chat_uses_scheduler_at_all_three_sites(self):
         assert _read_source('utils/chat.py').count('schedule_syncing_temporal_file_deletion(path)') == 3

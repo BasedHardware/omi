@@ -18,6 +18,7 @@ from utils.fair_use import (
     get_rolling_speech_ms,
     get_dg_budget_status,
     invalidate_enforcement_cache,
+    normalize_expired_restriction_state,
     FAIR_USE_ENABLED,
     FAIR_USE_DAILY_SPEECH_MS,
     FAIR_USE_3DAY_SPEECH_MS,
@@ -259,7 +260,7 @@ def get_public_case_status(case_ref: str):
 @router.get('/v1/fair-use/status', tags=['fair_use'], response_model=FairUseStatusResponse)
 def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     """User-facing endpoint: see your own fair-use status and speech usage."""
-    state = fair_use_db.get_fair_use_state(uid)
+    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
     speech = get_rolling_speech_ms(uid)
 
     stage = state.get('stage', 'none')

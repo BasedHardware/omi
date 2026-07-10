@@ -28,6 +28,8 @@ SCHEMA_GROUPS = {
             'Geolocation',
             'ConversationPhoto',
             'AudioFile',
+            'ConversationAudioSpan',
+            'ConversationAudio',
             'CalendarEventLink',
             'Conversation',
             'ConversationTestPromptResponse',
@@ -338,6 +340,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'AudioPrecacheResponse',
             'AudioFileUrlInfo',
+            'ConversationAudioSpanInfo',
+            'ConversationAudioUrlInfo',
             'AudioUrlsResponse',
         ),
     },

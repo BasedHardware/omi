@@ -1,0 +1,41 @@
+version: 2
+name: delete-account
+tier: manual
+description: Delete Account confirmation sheet only — never confirm deletion (Live P2; not bless tier)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Settings Account section
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings), then open the Account section in the settings sidebar. Verify account email and Sign Out button are visible."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Account
+
+  - id: S2
+    name: Open delete confirmation
+    do: "Scroll to the 'Delete Account & Data' row and click the red Delete button. Verify the alert sheet appears with title 'Delete Account and Data?', Cancel, and Delete Permanently buttons."
+    expect:
+      interactive_count: { min: 2 }
+      text_visible:
+        - Delete Account and Data?
+
+  - id: S3
+    name: Cancel deletion
+    do: "Click Cancel on the confirmation alert. Verify the alert dismisses and the account section remains visible with no deletion in progress."
+    expect:
+      interactive_count: { min: 5 }
+
+  - id: S4
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

@@ -3,6 +3,10 @@ import Sentry
 import Darwin
 
 enum DesktopHealthEventName: String {
+  case authTokenStorageFallback = "auth_token_storage_fallback"
+  case authSessionCleared = "auth_session_cleared"
+  case transcriptionWsReconnectExhausted = "transcription_ws_reconnect_exhausted"
+
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -42,6 +46,12 @@ private extension ISO8601DateFormatter {
   }()
 }
 
+/// Desktop health telemetry matrix (RealtimeHub pattern — copy for new surfaces):
+/// - **Local log** (`log`): always, with `failure_class` / `recovery_action` / `recovery_result`.
+/// - **Ring buffer** (`record*` → `writeDiagnosticsAttachment`): always via this manager.
+/// - **PostHog** (`desktopHealthEvent`): prod/beta when `trackRemotely` is true (default).
+/// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
+/// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
   static let shared = DesktopDiagnosticsManager()
 
@@ -55,6 +65,203 @@ final class DesktopDiagnosticsManager {
   private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
+
+  func recordAuthTokenStorageFallback(reason: String, updateChannel: String) {
+    record(
+      .authTokenStorageFallback,
+      properties: [
+        "storage": "user_defaults",
+        "reason": reason,
+        "update_channel": updateChannel,
+      ])
+  }
+
+  func recordAuthSessionCleared(
+    reason: String,
+    httpStatusCode: Int?,
+    failureClass: String = "definitive_auth_failure"
+  ) {
+    var properties: [String: Any] = [
+      "reason": reason,
+      "failure_class": failureClass,
+      "recovery_action": "clear_session",
+      "recovery_result": "cleared",
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
+    record(.authSessionCleared, properties: properties)
+  }
+
+  func recordTranscriptionWsReconnectExhausted(
+    reconnectAttempts: Int,
+    streamingMode: String
+  ) {
+    record(
+      .transcriptionWsReconnectExhausted,
+      properties: [
+        "reconnect_attempts": reconnectAttempts,
+        "streaming_mode": streamingMode,
+        "failure_class": "ws_reconnect_exhausted",
+        "recovery_action": "surface_error",
+        "recovery_result": "exhausted",
+      ])
+  }
+
+  func recordWalPersistenceDegraded(reason: String, recoveryAction: String, recoveryResult: String) {
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: reason,
+      outcome: .degraded,
+      extra: [
+        "failure_class": "wal_persistence_degraded",
+        "recovery_action": recoveryAction,
+        "recovery_result": recoveryResult,
+      ])
+  }
+
+  func recordWalWriteFailed(walId: String, reason: String) {
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: "wal_write_failed",
+      outcome: .degraded,
+      extra: [
+        "wal_id": walId,
+        "detail_reason": reason,
+        "failure_class": "wal_write_failed",
+        "recovery_action": "retain_frames",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordWalUploadFailed(walId: String, reason: String) {
+    recordFallback(
+      area: "wal_upload",
+      from: "disk",
+      to: "pending",
+      reason: "upload_failed",
+      outcome: .degraded,
+      extra: [
+        "wal_id": walId,
+        "detail_reason": reason,
+        "failure_class": "wal_upload_failed",
+        "recovery_action": "leave_pending",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeStaleAliveCheck() {
+    recordFallback(
+      area: "agent_runtime",
+      from: "alive_latch",
+      to: "termination_cleanup",
+      reason: "stale_alive_latch",
+      outcome: .degraded,
+      extra: [
+        "failure_class": "stale_alive_latch",
+        "recovery_action": "route_to_termination",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeUnexpectedExit(exitCode: Int32, oom: Bool) {
+    recordFallback(
+      area: "agent_runtime",
+      from: "running",
+      to: "stopped",
+      reason: oom ? "out_of_memory" : "process_exited",
+      outcome: .degraded,
+      extra: [
+        "exit_code": Int(exitCode),
+        "oom": oom,
+        "failure_class": oom ? "out_of_memory" : "process_exited",
+        "recovery_action": "restart_on_next_send",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordApiAuthRetry(endpoint: String, outcome: String) {
+    let fallbackOutcome: DesktopFallbackOutcome = outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
+    recordFallback(
+      area: "api_auth",
+      from: "expired_token",
+      to: outcome == "succeeded" ? "refreshed_token" : "reauth",
+      reason: "http_401",
+      outcome: fallbackOutcome,
+      extra: [
+        "endpoint": endpoint,
+        "retry_outcome": outcome,
+        "failure_class": "auth_retry",
+        "recovery_action": "refresh_token",
+        "recovery_result": fallbackOutcome.rawValue,
+      ])
+  }
+
+  func recordDbLockContention(source: String) {
+    recordFallback(
+      area: "db_lock",
+      from: "query",
+      to: "backoff",
+      reason: "db_lock_contention",
+      outcome: .degraded,
+      extra: [
+        "source": source,
+        "failure_class": "db_lock_contention",
+        "recovery_action": "backoff",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordChatBridgeModeSwitchTimeout(waitSeconds: Int) {
+    recordFallback(
+      area: "chat_bridge",
+      from: "mode_switch",
+      to: "continue_waiting",
+      reason: "mode_switch_timeout",
+      outcome: .degraded,
+      extra: [
+        "wait_seconds": waitSeconds,
+        "failure_class": "mode_switch_timeout",
+        "recovery_action": "clear_waiters",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordBleDecodeDegraded(codec: String, failures: Int) {
+    recordFallback(
+      area: "ble_audio",
+      from: "decode",
+      to: "raw_capture",
+      reason: "ble_decode_failed",
+      outcome: .degraded,
+      extra: [
+        "codec": codec,
+        "consecutive_failures": failures,
+        "failure_class": "ble_decode_degraded",
+        "recovery_action": "continue_raw_capture",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAutomationBridgeBindFailed(port: Int, reason: String) {
+    recordFallback(
+      area: "automation_bridge",
+      from: "unbound",
+      to: "bind_failed",
+      reason: "bind_failed",
+      outcome: .exhausted,
+      extra: [
+        "port": port,
+        "detail_reason": reason,
+        "failure_class": "bind_failed",
+        "recovery_action": "retry_exhausted",
+        "recovery_result": "exhausted",
+      ])
+  }
 
   func recordPTTStarted(mode: String, hubActive: Bool, micPermissionGranted: Bool) {
     record(
@@ -123,6 +330,34 @@ final class DesktopDiagnosticsManager {
         "hub_active": hubActive,
       ],
       trackRemotely: false)
+  }
+
+  func recordVoiceTurnTerminal(
+    reason: String,
+    route: String,
+    staleEventCount: Int,
+    invalidTransitionCount: Int
+  ) {
+    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
+    breadcrumb.message = "Voice turn reached terminal state"
+    breadcrumb.data = [
+      "terminal_reason": reason,
+      "route": route,
+      "stale_event_count": staleEventCount,
+      "invalid_transition_count": invalidTransitionCount,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
+  func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
+    let breadcrumb = Breadcrumb(level: .warning, category: "voice.turn.anomaly")
+    breadcrumb.message = "Voice turn rejected an anomalous event"
+    breadcrumb.data = [
+      "kind": kind,
+      "phase": phase,
+      "route": route,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   func recordPTTDeviceRouteChanged(recoveryAction: String, recoveryResult: String) {
@@ -506,6 +741,15 @@ final class DesktopDiagnosticsManager {
     "gemini_stream_proxy",
     "redis_ratelimit",
     "silent_mic",
+    "wal_persistence",
+    "wal_upload",
+    "agent_runtime",
+    "api_auth",
+    "db_lock",
+    "chat_bridge",
+    "ble_audio",
+    "automation_bridge",
+    "transcription_retry",
     "other",
   ]
 
@@ -525,6 +769,18 @@ final class DesktopDiagnosticsManager {
     "byok",
     "other",
     "none",
+    "wal_directory_unavailable",
+    "wal_write_failed",
+    "upload_failed",
+    "stale_alive_latch",
+    "out_of_memory",
+    "process_exited",
+    "http_401",
+    "db_lock_contention",
+    "mode_switch_timeout",
+    "ble_decode_failed",
+    "bind_failed",
+    "db_backoff",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

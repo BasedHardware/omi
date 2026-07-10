@@ -1,11 +1,130 @@
 """Tests for sync endpoint fair-use gates (#5854)."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
 
 import utils.fair_use as fair_use_mod
+from utils.sync.rate_limit import (
+    DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS,
+    FAIR_USE_RATE_LIMIT_CODE,
+    FAIR_USE_RATE_LIMIT_REASON_HEADER,
+    MAX_FAIR_USE_RETRY_AFTER_SECONDS,
+    bounded_fair_use_retry_after,
+    build_sync_rate_limit_event,
+    emit_sync_rate_limit_event,
+    fair_use_rate_limit_headers,
+    validated_correlation_id,
+)
+
+
+class TestSyncRateLimitContract:
+    def test_retry_after_uses_bounded_fallback_for_missing_legacy_deadline(self):
+        assert bounded_fair_use_retry_after(None) == DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS
+        assert bounded_fair_use_retry_after('invalid') == DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS
+        assert bounded_fair_use_retry_after(0) == 1
+        assert bounded_fair_use_retry_after(MAX_FAIR_USE_RETRY_AFTER_SECONDS + 1) == MAX_FAIR_USE_RETRY_AFTER_SECONDS
+
+    def test_fair_use_headers_always_include_reason_and_retry_after(self):
+        headers = fair_use_rate_limit_headers(None, {'Deprecation': 'true'})
+        assert headers == {
+            'Deprecation': 'true',
+            FAIR_USE_RATE_LIMIT_REASON_HEADER: 'fair_use',
+            'Retry-After': str(DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS),
+        }
+
+    def test_structured_event_has_fixed_parsed_fields(self):
+        event = build_sync_rate_limit_event(
+            uid='uid-123',
+            device_hash='a1b2c3d4',
+            app_platform='ios',
+            app_version='1.0.543+992',
+            subscription_plan='operator',
+            subscription_status='active',
+            fair_use_stage='restrict',
+            classifier_type='prerecorded',
+            retry_after=321,
+            backend_revision='backend-sync-00042-abc',
+            correlation_id='5d55a970-f41c-4e18-9c20-7e7c6fb9d48d',
+        )
+
+        assert event == {
+            'severity': 'WARNING',
+            'message': 'sync_rate_limit_rejected',
+            'event': 'sync_rate_limit_rejected',
+            'uid': 'uid-123',
+            'device_id_hash': 'a1b2c3d4',
+            'app_platform': 'ios',
+            'app_version': '1.0.543+992',
+            'reason_code': FAIR_USE_RATE_LIMIT_CODE,
+            'subscription_plan': 'operator',
+            'subscription_status': 'active',
+            'fair_use_stage': 'restrict',
+            'classifier_type': 'prerecorded',
+            'retry_after': 321,
+            'backend_revision': 'backend-sync-00042-abc',
+            'correlation_id': '5d55a970-f41c-4e18-9c20-7e7c6fb9d48d',
+        }
+
+    def test_untrusted_metadata_is_strictly_redacted(self):
+        event = build_sync_rate_limit_event(
+            uid='uid-123',
+            device_hash='raw-device-id@example.com',
+            app_platform='ios@example.com',
+            app_version='1.0.543@example.com',
+            subscription_plan='operator@example.com',
+            subscription_status='active@example.com',
+            fair_use_stage='restrict@example.com',
+            classifier_type='prerecorded@example.com',
+            retry_after=None,
+            backend_revision='backend-sync@example.com',
+            correlation_id='person@example.com',
+        )
+
+        serialized = json.dumps(event)
+        assert 'example.com' not in serialized
+        for key in (
+            'device_id_hash',
+            'app_platform',
+            'app_version',
+            'subscription_plan',
+            'subscription_status',
+            'fair_use_stage',
+            'classifier_type',
+            'backend_revision',
+            'correlation_id',
+        ):
+            assert event[key] == 'unknown'
+        assert event['retry_after'] == DEFAULT_FAIR_USE_RETRY_AFTER_SECONDS
+
+    def test_correlation_accepts_only_uuid_or_cloud_trace_format(self):
+        request_id = '5d55a970-f41c-4e18-9c20-7e7c6fb9d48d'
+        cloud_trace = '105445aa7843bc8bf206b12000100000/1;o=1'
+        assert validated_correlation_id(request_id) == request_id
+        assert validated_correlation_id(cloud_trace) == cloud_trace
+        assert validated_correlation_id('request-123') is None
+        assert validated_correlation_id('person@example.com') is None
+
+    def test_emitter_writes_exact_json_object(self, capsys):
+        event = build_sync_rate_limit_event(
+            uid='uid-123',
+            device_hash='a1b2c3d4',
+            app_platform='android',
+            app_version='1.0.543+992',
+            subscription_plan='basic',
+            subscription_status='active',
+            fair_use_stage='restrict',
+            classifier_type='free_exhausted',
+            retry_after=None,
+            backend_revision='backend-sync-00042-abc',
+            correlation_id='5d55a970-f41c-4e18-9c20-7e7c6fb9d48d',
+        )
+        emit_sync_rate_limit_event(event)
+        output = capsys.readouterr().out
+        assert json.loads(output) == event
+        assert output.count('\n') == 1
 
 
 class TestRecordSpeechMsSource:
@@ -365,6 +484,14 @@ class TestSyncEndpointCodeStructure:
             return f.read()
 
     @staticmethod
+    def _read_pipeline_source():
+        import os
+
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        with open(pipeline_path, encoding='utf-8') as f:
+            return f.read()
+
+    @staticmethod
     def _function_body(source, marker):
         start = source.find(marker)
         assert start != -1, f'{marker} not found in sync.py'
@@ -393,8 +520,8 @@ class TestSyncEndpointCodeStructure:
         assert 'should_lock' in source
 
     def test_is_locked_passed_to_create_conversation(self):
-        """sync.py passes is_locked to CreateConversation."""
-        source = self._read_sync_source()
+        """sync pipeline passes is_locked to CreateConversation."""
+        source = self._read_pipeline_source()
         assert 'is_locked=is_locked' in source
 
     def test_hard_restricted_gate_exists(self):
@@ -403,12 +530,20 @@ class TestSyncEndpointCodeStructure:
         assert 'get_hard_restriction_status(uid)' in source
 
     def test_hard_restricted_429_uses_retry_after_headers(self):
-        """Hard-restricted sync responses must expose Retry-After for client cooldowns."""
+        """Hard-restricted sync responses share an explicit machine-readable contract."""
         source = self._read_sync_source()
         assert 'get_hard_restriction_retry_after_seconds' not in source
-        assert 'headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS)' in source
-        assert 'headers=headers' in self._function_body(source, 'async def sync_local_files_v2(')
-        assert 'run_blocking(critical_executor, _hard_restriction_headers' not in source
+        assert 'FAIR_USE_RATE_LIMIT_CODE' in source
+        assert 'headers = fair_use_rate_limit_headers(safe_retry_after, base_headers)' in source
+        assert source.count('return await _fair_use_restriction_response(') >= 3
+        assert 'retry_after=retry_after' in self._function_body(source, 'async def sync_local_files_v2(')
+        assert 'run_blocking(critical_executor, fair_use_rate_limit_headers' not in source
+
+    def test_v2_propagates_app_version_into_rejection_telemetry(self):
+        source = self._function_body(self._read_sync_source(), 'async def sync_local_files_v2(')
+        assert "x_app_version: Optional[str] = Header(None, alias='X-App-Version')" in source
+        assert 'x_app_version=x_app_version if isinstance(x_app_version, str) else None' in source
+        assert 'app_version=client_device_context.app_version' in source
 
     def test_zero_speech_skips_recording(self):
         """Verify zero-speech guard in code: only records when total_speech_ms > 0."""

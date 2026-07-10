@@ -597,6 +597,7 @@ export interface AudioPrecacheResponse {
 
 export interface AudioUrlsResponse {
   audio_files: Array<AudioFileUrlInfo>;
+  conversation_audio?: ConversationAudioUrlInfo | null;
   poll_after_ms?: number | null;
 }
 
@@ -971,6 +972,7 @@ export interface Conversation {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -1007,6 +1009,38 @@ export interface ConversationActionItemsDeleteResponse {
 export interface ConversationActionItemsResponse {
   action_items: Array<ActionItemResponse>;
   conversation_id: string;
+}
+
+export interface ConversationAudio {
+  audio_files_fingerprint: string;
+  built_at?: string | null;
+  captured_duration: number;
+  content_type?: string;
+  duration: number;
+  spans?: Array<ConversationAudioSpan>;
+}
+
+export interface ConversationAudioSpan {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioSpanInfo {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioUrlInfo {
+  captured_duration?: number | null;
+  content_type?: string | null;
+  duration?: number | null;
+  signed_url?: string | null;
+  spans?: Array<ConversationAudioSpanInfo>;
+  status: string;
 }
 
 export interface ConversationCreateResponse {
@@ -2744,6 +2778,7 @@ export interface SharedConversationResponse {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -3725,6 +3760,10 @@ export interface OmiApiSchemas {
   "Conversation": Conversation;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationAudio": ConversationAudio;
+  "ConversationAudioSpan": ConversationAudioSpan;
+  "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
+  "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
@@ -14932,7 +14971,7 @@ export async function report_message_v2_messages__message_id__report_post(path: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, authorization?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, authorization?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -14946,8 +14985,10 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_Request_ID !== undefined ? { "X-Request-ID": String(header.X_Request_ID) } : {}),
+      ...(header.X_Cloud_Trace_Context !== undefined ? { "X-Cloud-Trace-Context": String(header.X_Cloud_Trace_Context) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);

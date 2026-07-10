@@ -1313,6 +1313,7 @@ public enum OmiAPI {
     public let callId: String?
     public let clientDeviceId: String?
     public let clientPlatform: String?
+    public let conversationAudio: ConversationAudio?
     public let createdAt: String
     public let dataProtectionLevel: String?
     public let deferred: Bool?
@@ -1348,6 +1349,7 @@ public enum OmiAPI {
       case callId = "call_id"
       case clientDeviceId = "client_device_id"
       case clientPlatform = "client_platform"
+      case conversationAudio = "conversation_audio"
       case createdAt = "created_at"
       case dataProtectionLevel = "data_protection_level"
       case deferred
@@ -1385,6 +1387,7 @@ public enum OmiAPI {
       callId = try c.decodeIfPresent(String.self, forKey: .callId)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       clientPlatform = try c.decodeIfPresent(String.self, forKey: .clientPlatform)
+      conversationAudio = try c.decodeIfPresent(ConversationAudio.self, forKey: .conversationAudio)
       createdAt = try c.decode(String.self, forKey: .createdAt)
       dataProtectionLevel = try c.decodeIfPresent(String.self, forKey: .dataProtectionLevel)
       deferred = try c.decodeIfPresent(Bool.self, forKey: .deferred)
@@ -1413,7 +1416,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String?, appsResults: [AppResult]?, audioFiles: [AudioFile]?, calendarEvent: CalendarEventLink?, callId: String?, clientDeviceId: String?, clientPlatform: String?, createdAt: String, dataProtectionLevel: String?, deferred: Bool?, discarded: Bool?, externalData: [String: OmiAnyCodable]?, finishedAt: String?, folderId: String?, geolocation: Geolocation?, id: String, isLocked: Bool?, language: String?, photos: [ConversationPhoto]?, pluginsResults: [PluginResult]?, privateCloudSyncEnabled: Bool?, processingConversationId: String?, processingMemoryId: String?, source: ConversationSource?, starred: Bool?, startedAt: String?, status: ConversationStatus?, structured: Structured, suggestedSummarizationApps: [String]?, transcriptSegments: [TranscriptSegment]?, transcriptSegmentsCompressed: Bool?, updatedAt: String?, visibility: ConversationVisibility?) {
+    public init(appId: String?, appsResults: [AppResult]?, audioFiles: [AudioFile]?, calendarEvent: CalendarEventLink?, callId: String?, clientDeviceId: String?, clientPlatform: String?, conversationAudio: ConversationAudio?, createdAt: String, dataProtectionLevel: String?, deferred: Bool?, discarded: Bool?, externalData: [String: OmiAnyCodable]?, finishedAt: String?, folderId: String?, geolocation: Geolocation?, id: String, isLocked: Bool?, language: String?, photos: [ConversationPhoto]?, pluginsResults: [PluginResult]?, privateCloudSyncEnabled: Bool?, processingConversationId: String?, processingMemoryId: String?, source: ConversationSource?, starred: Bool?, startedAt: String?, status: ConversationStatus?, structured: Structured, suggestedSummarizationApps: [String]?, transcriptSegments: [TranscriptSegment]?, transcriptSegmentsCompressed: Bool?, updatedAt: String?, visibility: ConversationVisibility?) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1421,6 +1424,7 @@ public enum OmiAPI {
       self.callId = callId
       self.clientDeviceId = clientDeviceId
       self.clientPlatform = clientPlatform
+      self.conversationAudio = conversationAudio
       self.createdAt = createdAt
       self.dataProtectionLevel = dataProtectionLevel
       self.deferred = deferred
@@ -1447,6 +1451,74 @@ public enum OmiAPI {
       self.transcriptSegmentsCompressed = transcriptSegmentsCompressed
       self.updatedAt = updatedAt
       self.visibility = visibility
+    }
+  }
+
+
+  public struct ConversationAudio: Codable {
+    public let audioFilesFingerprint: String
+    public let builtAt: String?
+    public let capturedDuration: Double
+    public let contentType: String?
+    public let duration: Double
+    public let spans: [ConversationAudioSpan]?
+
+    private enum CodingKeys: String, CodingKey {
+      case audioFilesFingerprint = "audio_files_fingerprint"
+      case builtAt = "built_at"
+      case capturedDuration = "captured_duration"
+      case contentType = "content_type"
+      case duration
+      case spans
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      audioFilesFingerprint = try c.decode(String.self, forKey: .audioFilesFingerprint)
+      builtAt = try c.decodeIfPresent(String.self, forKey: .builtAt)
+      capturedDuration = try c.decode(Double.self, forKey: .capturedDuration)
+      contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
+      duration = try c.decode(Double.self, forKey: .duration)
+      spans = try c.decodeIfPresent([ConversationAudioSpan].self, forKey: .spans)
+    }
+
+    public init(audioFilesFingerprint: String, builtAt: String?, capturedDuration: Double, contentType: String?, duration: Double, spans: [ConversationAudioSpan]?) {
+      self.audioFilesFingerprint = audioFilesFingerprint
+      self.builtAt = builtAt
+      self.capturedDuration = capturedDuration
+      self.contentType = contentType
+      self.duration = duration
+      self.spans = spans
+    }
+  }
+
+
+  public struct ConversationAudioSpan: Codable {
+    public let artifactOffset: Double
+    public let fileId: String
+    public let len: Double
+    public let wallOffset: Double
+
+    private enum CodingKeys: String, CodingKey {
+      case artifactOffset = "artifact_offset"
+      case fileId = "file_id"
+      case len
+      case wallOffset = "wall_offset"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      artifactOffset = try c.decode(Double.self, forKey: .artifactOffset)
+      fileId = try c.decode(String.self, forKey: .fileId)
+      len = try c.decode(Double.self, forKey: .len)
+      wallOffset = try c.decode(Double.self, forKey: .wallOffset)
+    }
+
+    public init(artifactOffset: Double, fileId: String, len: Double, wallOffset: Double) {
+      self.artifactOffset = artifactOffset
+      self.fileId = fileId
+      self.len = len
+      self.wallOffset = wallOffset
     }
   }
 
@@ -13606,7 +13678,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -13625,8 +13697,10 @@ public enum OmiAPI {
     }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
-    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let xRequestID { req.setValue(String(xRequestID), forHTTPHeaderField: "X-Request-ID") }
+    if let xCloudTraceContext { req.setValue(String(xCloudTraceContext), forHTTPHeaderField: "X-Cloud-Trace-Context") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {

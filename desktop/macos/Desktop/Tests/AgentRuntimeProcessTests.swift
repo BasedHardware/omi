@@ -14,8 +14,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNotNil(result["error"])
   }
 
-  func testResumeStreamNoOpsWithoutProcess() async {
-    let result = await AgentRuntimeProcess.shared.debugResumeStream()
+  func testResumeStreamNoOpsWithoutProcess() {
+    // debugResumeStream is nonisolated now (off-actor SIGCONT) — no await needed.
+    let result = AgentRuntimeProcess.shared.debugResumeStream()
     XCTAssertNotEqual(result["resumed"], "true")
     XCTAssertNotNil(result["error"])
   }
@@ -33,9 +34,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       "guard AppBuild.isNonProduction else",
       "process.isRunning, process.processIdentifier > 0",
       "kill(pid, SIGSTOP)",
-      "kill(pid, SIGCONT)",
+      "kill($0, SIGCONT)",
       "min(durationMs, 300_000)",
-      "generation == debugSuspendGeneration",
+      "generation == self.generation",
     ] {
       XCTAssertTrue(processSource.contains(needle), "AgentRuntimeProcess missing stall-hook invariant: \(needle)")
     }
@@ -582,5 +583,41 @@ final class AgentRuntimeProcessTests: XCTestCase {
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
 """))
+  }
+
+  func testIsAliveRequiresUnderlyingProcessRunning() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("let processRunning = process?.isRunning ?? false"))
+    XCTAssertTrue(source.contains("return isRunning && processRunning"))
+    XCTAssertTrue(source.contains("recordAgentRuntimeStaleAliveCheck"))
+  }
+
+  func testUnexpectedExitRecordsHealthEvent() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("recordAgentRuntimeUnexpectedExit"))
+    XCTAssertTrue(source.contains("recovery_action=restart_on_next_send"))
+  }
+
+  func testEnsureBridgeStartedPreparesCrashRecoveryBeforeRestart() throws {
+    let chatSource = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(chatSource.contains("prepareForCrashRecovery()"))
+    XCTAssertTrue(chatSource.contains("agent bridge process died, will restart"))
+
+    let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
+    XCTAssertTrue(bridgeSource.contains("func prepareForCrashRecovery()"))
+    XCTAssertTrue(bridgeSource.contains("registered = false"))
+  }
+
+  private func agentRuntimeSource() throws -> String {
+    try sourceFile("Chat/AgentRuntimeProcess.swift")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

@@ -1433,25 +1433,25 @@ async function main(): Promise<void> {
           interrupted: record.interrupted === true,
           idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
         });
-        if (result.recorded) {
-          send({
-            type: "turn_recorded",
-            protocolVersion: record.protocolVersion,
-            requestId: record.requestId,
-            clientId: record.clientId,
-            conversationId: result.conversationId,
-            surfaceKind,
-            externalRefKind,
-            externalRefId,
-            userText: userText.trim(),
-            assistantText: assistantText.trim(),
-            origin,
-            interrupted: record.interrupted === true,
-            idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
-            userTurnId: result.userTurn?.turnId,
-            assistantTurnId: result.assistantTurn?.turnId,
-          });
-        }
+        send({
+          type: "turn_recorded",
+          protocolVersion: record.protocolVersion,
+          requestId: record.requestId,
+          clientId: record.clientId,
+          conversationId: result.conversationId,
+          surfaceKind,
+          externalRefKind,
+          externalRefId,
+          userText: userText.trim(),
+          assistantText: assistantText.trim(),
+          origin,
+          interrupted: record.interrupted === true,
+          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+          userTurnId: result.userTurn?.turnId,
+          assistantTurnId: result.assistantTurn?.turnId,
+          recorded: result.recorded,
+          duplicate: result.duplicate,
+        });
         break;
       }
 
@@ -1461,8 +1461,11 @@ async function main(): Promise<void> {
         const requestId = seed.requestId.trim();
         let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
         let context = "";
+        let idempotencyKeys: string[] = [];
         if (conversationId) {
-          context = kernel.getVoiceSeedContext({ conversationId });
+          const snapshot = kernel.getVoiceSeedSnapshot({ conversationId });
+          context = snapshot.context;
+          idempotencyKeys = snapshot.idempotencyKeys;
         } else {
           const surfaceKind = typeof seed.surfaceKind === "string" ? seed.surfaceKind : "main_chat";
           const externalRefKind = typeof seed.externalRefKind === "string" ? seed.externalRefKind : "chat";
@@ -1473,6 +1476,7 @@ async function main(): Promise<void> {
           });
           conversationId = resolved.conversationId;
           context = resolved.context;
+          idempotencyKeys = resolved.idempotencyKeys;
         }
         send({
           type: "voice_seed_context",
@@ -1481,6 +1485,7 @@ async function main(): Promise<void> {
           clientId: seed.clientId,
           conversationId,
           context,
+          idempotencyKeys,
         });
         break;
       }
@@ -1566,6 +1571,8 @@ async function main(): Promise<void> {
             idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
             userTurnId: result.userTurn?.turnId,
             assistantTurnId: result.assistantTurn?.turnId,
+            recorded: true,
+            duplicate: false,
           });
         }
         break;

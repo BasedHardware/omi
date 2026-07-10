@@ -108,7 +108,15 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL and canonical_write_enabled(
             uid, db_client=db
         ):
-            MemoryService(db_client=db).write(uid, memory_data)
+            MemoryService(db_client=db).create_external_memory(
+                uid,
+                MemoryDB.model_validate(memory_data),
+                memory_system=MemorySystem.CANONICAL,
+                consumer="agent_preference",
+                operation="save_user_preference",
+                upsert_vector=False,
+                require_canonical_promotion=True,
+            )
         else:
             memory_db.create_memory(uid, memory_data)
         logger.info(f"Saved user preference: {preference[:80]}")

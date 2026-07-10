@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import FirebaseAuth
+import FirebaseCore
 import OmiSupport
 import CryptoKit
 import AppKit
@@ -537,6 +538,14 @@ class AuthService {
 
     var tokenStorageHooks = TokenStorageHooks.live
 
+    struct TokenRefreshHooks {
+        var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
+
+        static let live = TokenRefreshHooks(dataForRequest: nil)
+    }
+
+    var tokenRefreshHooks = TokenRefreshHooks.live
+
     // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
     // No hardcoded fallback — if the key isn't available, auth operations will fail
     // with a clear error instead of silently using a potentially wrong key.
@@ -617,9 +626,10 @@ class AuthService {
         // auth-state listener do not re-create the ghost session on the next
         // launch. Unlike signOut(), this does NOT tear down storage caches or
         // stop background services — it only clears the Firebase SDK user.
-        // Guard: local harness mode skips FirebaseApp.configure(); Auth.auth()
-        // traps fatally if called without Firebase configured.
-        if !DesktopLocalProfile.isEnabled {
+        // Guard: tests/local harnesses can exercise invalidation without
+        // FirebaseApp.configure(); Auth.auth() traps fatally if called before
+        // Firebase is configured.
+        if FirebaseApp.app() != nil {
             try? Auth.auth().signOut()
         }
     }
@@ -2229,7 +2239,12 @@ class AuthService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = "grant_type=refresh_token&refresh_token=\(refreshToken)".data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        if let handler = tokenRefreshHooks.dataForRequest {
+            (data, response) = try await handler(request)
+        } else {
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
@@ -2252,6 +2267,10 @@ class AuthService {
                         return token
                     }
                 }
+                DesktopDiagnosticsManager.shared.recordAuthSessionCleared(
+                    reason: "refresh_token_rejected",
+                    httpStatusCode: httpResponse.statusCode
+                )
                 NSLog("OMI AUTH: Definitive auth failure — invalidating session")
                 invalidateSession(reason: .definitiveRefreshFailure)
                 throw AuthError.notSignedIn
@@ -2320,6 +2339,11 @@ class AuthService {
                 } catch {
                     refreshFailure = error
                     NSLog("OMI AUTH: Token refresh failed: %@", error.localizedDescription)
+                    // Definitive refresh failures already cleared local tokens — do not
+                    // fall through to Firebase SDK (which traps when FirebaseApp is absent).
+                    if case AuthError.notSignedIn = error {
+                        throw error
+                    }
                 }
             }
         }
@@ -2327,7 +2351,7 @@ class AuthService {
         // Third try: Use Firebase SDK (only if user matches expected user)
         // This prevents returning a stale user's token during sign-out race conditions
         // Local harness skips FirebaseApp.configure(); Auth.auth() traps if called.
-        if !DesktopLocalProfile.isEnabled, let user = Auth.auth().currentUser {
+        if !DesktopLocalProfile.isEnabled, FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             if expectedUserId == nil || user.uid == expectedUserId {
                 if expectedUserId == nil {
                     // Backfill the missing userId

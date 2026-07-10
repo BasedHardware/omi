@@ -19,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
@@ -26,6 +27,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
   - desktop/macos/Desktop/Sources/Generated/OmiToolManifest.generated.swift

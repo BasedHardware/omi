@@ -606,15 +606,10 @@ def delete_conversation(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
-    conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(uid, conversation_id)
-    delete_transcript_chunk_vectors(uid, conversation_id)
 
     if cascade:
-        # Delete audio files
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
-
-        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        # Delete associated memories and action items before removing the conversation doc
+        # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
@@ -624,8 +619,12 @@ def delete_conversation(
             for memory_id in deletion_result.get('vector_delete_ids', []):
                 delete_memory_vector(uid, memory_id)
 
-        # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+
+    conversations_db.delete_conversation(uid, conversation_id)
+    delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
 
     return {"status": "Ok"}
 

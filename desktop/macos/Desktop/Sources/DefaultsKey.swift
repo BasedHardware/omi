@@ -33,8 +33,15 @@ enum DefaultsKey: String {
     /// `auth_userId` with a synthetic owner.
     case automationOwnerABackup = "automation_swap_owner_a_backup"
     case chatBridgeMode = "chatBridgeMode"
+    case multiChatEnabled = "multiChatEnabled"
+    case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+    case hasCompletedOnboarding = "hasCompletedOnboarding"
     case onboardingStep = "onboardingStep"
+    case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
+    case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+    /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
+    case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -59,6 +66,7 @@ extension UserDefaults {
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
     func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
+    func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
     func set(_ value: Any?, forKey key: ScopedDefaultsKey) { set(value, forKey: key.rawValue) }

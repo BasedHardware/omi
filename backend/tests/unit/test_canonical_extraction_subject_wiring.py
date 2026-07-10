@@ -147,11 +147,13 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
         uid,
         db_client=db,
         device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id=device_id),
+        include_pending_processing=True,
     )
     another_device = read_canonical_memories(
         uid,
         db_client=db,
         device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id="ios_deadbeef"),
+        include_pending_processing=True,
     )
 
     assert [memory.id for memory in current_device] == [memory_db.id]

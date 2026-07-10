@@ -360,8 +360,10 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     final outcome = await provider.upload(rec);
     if (!mounted) return;
     switch (outcome) {
-      case LocalUploadOutcome.rateLimited:
+      case LocalUploadOutcome.fairUseLimited:
         AppSnackbar.showSnackbarError(context.l10n.fairUseBudgetExhausted, duration: const Duration(seconds: 4));
+      case LocalUploadOutcome.backendBusy:
+        AppSnackbar.showSnackbarError(context.l10n.msgUploadFileFailed, duration: const Duration(seconds: 4));
       case LocalUploadOutcome.failed:
         AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
       case LocalUploadOutcome.busy:

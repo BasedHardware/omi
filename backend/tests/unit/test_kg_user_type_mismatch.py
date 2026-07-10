@@ -225,6 +225,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
 
+    utils_cloud_tasks = add("utils.cloud_tasks")
+    utils_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+
     utils_calendar_linking = add("utils.conversations.calendar_linking")
     utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
     utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()

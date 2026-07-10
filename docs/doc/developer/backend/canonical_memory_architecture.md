@@ -13,18 +13,18 @@
 ## Top-level flow
 
 ```
-Raw inputs (conversation, chat, OCR, manual)
+Raw inputs (conversation, chat, OCR, explicit API/plugin memory)
         │
         ▼
 ┌───────────────────────────────────────────────────────────┐
 │  LAYER 1 — Short-term capture (extract liberally)         │
-│  MemoryService → canonical write → memory_items (ST)      │
+│  Evidence/extractions are processed; explicit text pending│
 └───────────────────────────────────────────────────────────┘
         │
-        ▼  (hourly cron, env-gated)
+        ▼  explicit text: required normalization + receipt
 ┌───────────────────────────────────────────────────────────┐
-│  LAYER 2 — Maintenance pass (consolidate then promote)    │
-│  TTL audit → batched LLM consolidation → promotion gate   │
+│  LAYER 2 — Maintenance pass                               │
+│  Required processing → TTL → consolidation → promotion    │
 └───────────────────────────────────────────────────────────┘
         │
         ▼
@@ -72,9 +72,9 @@ Every read/write/maintenance path resolves the user's cohort first.
 
 ### 1. Capture → Short-term write (Layer 1)
 
-**What happens:** Upstream processors (conversation extraction, MCP, dev API, integrations) call `MemoryService.write` / `write_batch`. For canonical users, `CanonicalMemoryBackend` persists to `users/{uid}/memory_items/{memory_id}` with `tier=short_term`, evidence, TTL (`expires_at`), and optional structured fields (`subject_entity_id`, `predicate`, `arguments`).
+**What happens:** Processed conversation extraction uses `MemoryService.write` / `write_batch`. Explicit user, MCP, developer API, plugin, and integration submissions use the same public create APIs as before, but the compatibility seam stores them as `tier=short_term`, `processing_state=pending`, with immutable submission provenance and a 30-day TTL. Filesystem, mail, calendar, and notes imports use `/v3/memory-imports/batch` and create evidence only, never product memories.
 
-**Plain English:** New facts land as short-lived, source-backed rows in one store. Extraction is intentionally generous; nothing is promoted yet.
+**Plain English:** Raw external text never enters Long-term or its derived indexes. An explicit memory is immediately visible in the first-party `/v3/memories` list as Short-term, while agent/chat, developer, MCP, search-index, and KG reads ignore it until processing completes.
 
 | Piece | Evidence |
 |-------|----------|
@@ -83,10 +83,22 @@ Every read/write/maintenance path resolves the user's cohort first.
 | Structured fields on write | `canonical_memory_adapter.py:534-535` (`subject_entity_id` in patch) |
 | Record shape | `MemoryItem` — `backend/models/product_memory.py:93-129` |
 | Subject inference (voice) | `process_conversation.py:478`, `:496` (`infer_subject_from_segments`) |
+| Explicit submission envelope | `required_processing_payload` in `backend/utils/memory/required_promotion.py` |
+| Evidence-only imports | `create_memory_import_batch` in `backend/routers/memories.py` |
 
-### 2. Scheduled maintenance orchestration
+### 2. Required processing for explicit memories
 
-**What happens:** Hourly `memory-maintenance-job` may run `run_canonical_short_term_maintenance_cron` when `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` and the whitelist is non-empty. Per user: **TTL audit → consolidation → promotion** (in that order).
+**What happens:** `canonical_required_processing.py` normalizes every explicit canonical submission into one self-contained memory plus structured `subject_entity_id`, `predicate`, and `arguments`. User-requested memories have a required durable outcome: processing may retry, but it cannot silently reject or downgrade them. A successful pass attaches a versioned processing receipt containing processor identity, input/output hashes, source submission ID, and timestamp. Only a required memory with that receipt is promotion-eligible.
+
+**Plain English:** “Remember this” is guaranteed to remain a durable intent, but the raw sentence is not itself trusted as a graph atom. The processor makes it fit the memory model first and leaves an auditable receipt.
+
+Failures remain pending/retryable Short-term. Edits to an admitted memory invalidate its KG citation and search projections, create a new pending revision, and go through the same processor again.
+
+Legacy migration is deliberately stricter: manually added and positively reviewed rows enter this required-processing path, while unreviewed bulk/profile rows are stored as hidden `pending_admission` candidates. Those candidates are provenance-preserving quarantine records, not processor input or promotion candidates; a separate future admission decision is required before they can become product memory.
+
+### 3. Scheduled maintenance orchestration
+
+**What happens:** Hourly `memory-maintenance-job` may run `run_canonical_short_term_maintenance_cron` when `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` and the whitelist is non-empty. Per user: **required processing → TTL audit → consolidation → promotion** (in that order). The maintenance job is the durable processor and retry owner; request handlers only stage the submission and return it as pending Short-term.
 
 **Plain English:** A background job ages out expired short-term rows, asks the LLM to reconcile duplicates/contradictions, then promotes survivors to long-term — but only if consolidation did not fail mid-flight.
 
@@ -96,7 +108,7 @@ Every read/write/maintenance path resolves the user's cohort first.
 | Orchestration order | `run_canonical_short_term_maintenance` — `short_term_promotion.py:480-509` |
 | Promotion gate semantics | Docstring at `short_term_promotion.py:352-357`; gate logic `:365-374`, `:496-501` |
 
-### 3. Batched LLM consolidation (Layer 2 decider)
+### 4. Batched LLM consolidation (Layer 2 decider)
 
 **What happens:**
 
@@ -121,7 +133,7 @@ Every read/write/maintenance path resolves the user's cohort first.
 | KG citation prune on supersede | `invalidate_kg_for_memory_retraction` — `canonical_memory_adapter.py:61-73` → `knowledge_graph.py:244` |
 | Corroboration fields | `MemoryItem.corroboration_count` — `product_memory.py:122-123`; increment in apply `:705-708` |
 
-### 4. Promotion gate → Long-term
+### 5. Promotion gate → Long-term
 
 **What happens:** After consolidation, promotion runs only for items allowed by the gate:
 
@@ -130,6 +142,8 @@ Every read/write/maintenance path resolves the user's cohort first.
 - `consolidation_batched_ids == {ids…}` — only batched survivors may promote this pass.
 
 Promotion flips `tier` short_term → long_term on the **same** `memory_id` via `apply_long_term_patch_firestore`, then syncs keyword index, Pinecone vector, and KG extraction.
+
+For required explicit memories, promotion additionally fails closed unless `processing_status=processed` and a valid `processing_receipt` are present.
 
 **Plain English:** Long-term is not a copy — it's a audited layer transition on one row. Vector and KG are derived indexes built at promotion time.
 
@@ -141,7 +155,7 @@ Promotion flips `tier` short_term → long_term on the **same** `memory_id` via 
 | Fast-track bypass (default off) | `is_fast_track_promotable` `:114-116`, env `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED` |
 | Post-promotion side effects | `sync_atom_keyword_index_for_item` `:279`, `sync_canonical_memory_vector` `:286`, `extract_kg_for_promoted_memory` `:287` |
 
-### 5. KG write on promotion
+### 6. KG write on promotion
 
 **What happens:** When a row becomes `tier=long_term`, `extract_kg_for_promoted_memory` calls `extract_knowledge_from_memory` (LLM) and upserts nodes/edges into the Firestore KG (`users/{uid}/knowledge_graph/...`). Retractions prune citations via `prune_memory_citations_from_kg`.
 
@@ -152,11 +166,11 @@ Promotion flips `tier` short_term → long_term on the **same** `memory_id` via 
 | KG store | `backend/database/knowledge_graph.py` — `upsert_knowledge_node` `:112`, `upsert_knowledge_edge` `:189` |
 | Idempotent flag | `kg_extracted` on `MemoryItem` — `product_memory.py:129` |
 
-### 6. Reads and search
+### 7. Reads and search
 
-**What happens:** All product reads go through `MemoryService.read` / `search` / `search_mcp`. Canonical path filters default-visible short+long-term (`canonical_visibility_filter`), optionally scopes by device, and for search combines Typesense keyword hits + Pinecone vectors with RRF reranking (long-term active rows only).
+**What happens:** All product reads go through `MemoryService.read` / `search` / `search_mcp`. The first-party `/v3/memories` list opts into required pending submissions so users see their write immediately as Short-term. Agent/chat, developer, MCP, plugin, and search consumers use the protected default and see only processed memories. Search combines Typesense keyword hits + Pinecone vectors with RRF reranking (processed rows only).
 
-**Plain English:** Users see short-term + long-term by default; archive is explicit. Search is hybrid keyword+vector over promoted facts.
+**Plain English:** The memory-management screen can show a pending Short-term receipt without allowing that raw text to influence an agent. Once processed, normal Short-term and Long-term reads work as before; archive remains explicit.
 
 | Piece | Evidence |
 |-------|----------|
@@ -175,6 +189,7 @@ Promotion flips `tier` short_term → long_term on the **same** `memory_id` via 
 | `users/{uid}/memory_items/{id}` | Single product store; `tier` = short_term / long_term / archive | `domain_model.md`, `product_memory.py` |
 | `users/{uid}/memory_evidence/` | Immutable evidence artifacts | `canonical_memory_adapter.py:370` |
 | `users/{uid}/memory_operations/` + ledger apply | Audited mutations | `apply_long_term_patch_firestore` — `database/memory_apply_store.py` |
+| `memory_items.promotion.submission` / `processing_receipt` | Source provenance and durable-admission proof | `required_promotion.py`, `canonical_required_processing.py` |
 | Pinecone ns2 | Neutral `mem_*` vector ids | `neutral_vector_id_for_memory` — `canonical_memory_adapter.py:56-58` |
 | Firestore KG | Nodes/edges with memory citations | `knowledge_graph.py` |
 | `review_queue` | Human escalation for ambiguous conflicts | `review_queue.py:57` |
@@ -208,6 +223,7 @@ Items below are intentional deferrals or edge cases worth reviewing — not hidd
 | Canonical CRUD + search | `backend/utils/memory/canonical_memory_adapter.py` |
 | Consolidation agent | `backend/utils/memory/canonical_consolidation.py` |
 | Promotion + maintenance | `backend/utils/memory/short_term_promotion.py` |
+| Explicit required processing | `backend/utils/memory/canonical_required_processing.py` |
 | Cron wiring | `backend/utils/memory/canonical_short_term_maintenance_cron.py` |
 | KG on promotion | `backend/utils/memory/canonical_kg_promotion.py` |
 | Record model | `backend/models/product_memory.py` |

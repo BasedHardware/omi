@@ -14,6 +14,7 @@ import {
   assembleTurnContext,
   bindingCarriesNativeHistory,
   getVoiceSeedContext,
+  getVoiceSeedSnapshot,
   isExplicitAgentControlToolTurn,
   shouldInjectCoordinatorRoute,
   shouldInjectCompletedAgentDelta,
@@ -546,6 +547,120 @@ describe("turn-context", () => {
     expect(turns.filter((turn) => turn.role === "assistant")).toHaveLength(1);
   });
 
+  it("projects every rapid PTT user turn before the final assistant reply", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-rapid-ptt";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (const [index, text] of ["one two three", "A B C", "R G B"].entries()) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: text,
+        assistantText: index === 2 ? "Red, green, blue." : "",
+        origin: "realtime_voice",
+        interrupted: index < 2,
+        idempotencyKey: `realtime_voice:turn-${index}:user`,
+        nowMs: 1_700_000_000_000 + index,
+      });
+    }
+    const duplicate = recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef,
+      userText: "A B C",
+      assistantText: "",
+      origin: "realtime_voice",
+      idempotencyKey: "realtime_voice:turn-1:user",
+      nowMs: 1_700_000_000_020,
+    });
+
+    expect(duplicate.duplicate).toBe(true);
+    const turns = listRecentConversationTurns(store, resolved.conversationId, 10);
+    expect(turns.map((turn) => [turn.role, turn.content])).toEqual([
+      ["user", "one two three"],
+      ["user", "A B C"],
+      ["user", "R G B"],
+      ["assistant", "Red, green, blue."],
+    ]);
+    const seed = getVoiceSeedContext(store, resolved.conversationId);
+    expect(seed).toContain("User: one two three");
+    expect(seed).toContain("User: A B C");
+    expect(seed).toContain("User: R G B");
+    expect(seed).toContain("Omi: Red, green, blue.");
+  });
+
+  it("keeps the full retained rapid PTT burst in the Gemini replacement seed", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-long-rapid-ptt";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (let index = 0; index < 32; index += 1) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: `rapid transcript ${index}`,
+        assistantText: index < 31 ? `partial reply ${index}` : "final reply",
+        origin: "realtime_voice",
+        interrupted: index < 31,
+        idempotencyKey: `rapid-${index}`,
+        nowMs: 1_700_000_000_000 + index * 2,
+      });
+    }
+
+    const seed = getVoiceSeedContext(store, resolved.conversationId);
+    expect(seed).toContain("User: rapid transcript 0");
+    expect(seed).toContain("Omi (interrupted): partial reply 0");
+    expect(seed).toContain("User: rapid transcript 31");
+    expect(seed).toContain("Omi: final reply");
+    expect(seed.length).toBeLessThanOrEqual(VOICE_SEED_MAX_CHARACTERS + 64);
+  });
+
+  it("spends an over-budget voice seed on the newest turns", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-over-budget-voice-seed";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (const [index, marker] of ["OLDEST-DROP-ME", "middle-one", "middle-two", "NEWEST-KEEP-ME"].entries()) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: `${marker} ${"x".repeat(100)}`,
+        assistantText: "",
+        origin: "realtime_voice",
+        idempotencyKey: `budget-${index}`,
+        nowMs: 1_700_000_000_000 + index,
+      });
+    }
+
+    const seed = getVoiceSeedContext(store, resolved.conversationId, {
+      maxTurns: 64,
+      maxCharacters: 180,
+    });
+    expect(seed).toContain("NEWEST-KEEP-ME");
+    expect(seed).not.toContain("OLDEST-DROP-ME");
+  });
+
   it("includes floating spawn handoff in voice seed and dedupes by idempotency key", () => {
     const { store, stateDir } = newStore();
     cleanupDir = stateDir;
@@ -585,5 +700,45 @@ describe("turn-context", () => {
     const seed = getVoiceSeedContext(store, resolved.conversationId);
     expect(seed).toContain("User: Build me a Penguin Facts HTML page");
     expect(seed).toContain('Omi: I started a background agent titled "Penguin Facts Page" for that.');
+    const snapshot = getVoiceSeedSnapshot(store, resolved.conversationId);
+    expect(snapshot.context).toBe(seed);
+    expect(snapshot.idempotencyKeys).toEqual(["floating_spawn:pill-abc"]);
+  });
+
+  it("does not reconcile an idempotency key when its user row is truncated", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(
+      store,
+      { ownerId: "owner-truncated-seed", surfaceRef },
+      () => 1_700_000_000_000,
+    );
+    recordSurfaceTurn(store, {
+      ownerId: "owner-truncated-seed",
+      surfaceRef,
+      userText: "the user transcription must survive",
+      assistantText: "assistant ".repeat(30),
+      origin: "realtime_voice",
+      idempotencyKey: "partial-turn",
+      nowMs: 1_700_000_000_000,
+    });
+
+    const truncated = getVoiceSeedSnapshot(store, resolved.conversationId, {
+      maxTurns: 64,
+      maxCharacters: 80,
+    });
+    expect(truncated.context).toContain("Omi:");
+    expect(truncated.context).not.toContain("the user transcription must survive");
+    expect(truncated.idempotencyKeys).not.toContain("partial-turn");
+
+    const complete = getVoiceSeedSnapshot(store, resolved.conversationId);
+    expect(complete.context).toContain("the user transcription must survive");
+    expect(complete.idempotencyKeys).toContain("partial-turn");
   });
 });

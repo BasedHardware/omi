@@ -54,13 +54,18 @@ def merge():
     # none of it is touched by the pure functions under test.
     storage_stub = ModuleType("utils.other.storage")
     for _name in [
+        "compute_audio_files_fingerprint",
         "delete_conversation_audio_files",
+        "enqueue_conversation_artifact_build",
         "list_audio_chunks",
         "_get_storage_client",
         "private_cloud_sync_bucket",
         "_get_extension_for_path",
     ]:
         setattr(storage_stub, _name, MagicMock())
+
+    cloud_tasks_stub = ModuleType("utils.cloud_tasks")
+    cloud_tasks_stub.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
 
     # models.* — referenced only inside perform_merge_async (not the validate
     # function under test), but the top-level imports still resolve at load.
@@ -103,6 +108,7 @@ def merge():
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
+        "utils.cloud_tasks": cloud_tasks_stub,
         "utils.other.storage": storage_stub,
         "models": models_pkg,
         "utils.memory.memory_service": memory_service_stub,

@@ -228,6 +228,49 @@ cd desktop/macos
 Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
 Hermetic ratchet for the timeout itself: `xcrun swift test --package-path Desktop --filter AwaitWithTimeoutTests`.
 
+### 2i. Prove Quit & Reopen relaunches the same bundle, session intact (PERM-06)
+The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen Recording)
+calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
+`quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
+`reset_onboarding`), delayed so the action's HTTP response flushes before the process
+terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
+`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
+app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+`OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
+
+Two traps make a naive `wait-ready` lie, so the recipe below guards against both:
+- **Wait for a *new* listener pid.** `quit_and_reopen` returns immediately and only
+  schedules the restart ~`delay_ms` later; the pre-quit process is still alive and
+  answering for ~1s. Poll until the pid *listening on the port* differs from the one
+  you captured before, or you'll assert the OLD process's state (false PASS). Track the
+  listener via `lsof -tiTCP:$PORT -sTCP:LISTEN`, not `pgrep` — a `pgrep -f` pattern also
+  matches the shell running this recipe.
+- **Poll with *fresh* `omi-ctl` calls.** The relaunch is a fresh process, so it mints a
+  new bridge auth token and writes it to the same port-keyed token file. A single
+  long-lived `omi-ctl` process caches the token from its first read, so it would keep
+  presenting the *stale* token and 401 forever (false FAIL). Each `./scripts/omi-ctl`
+  invocation is a fresh process that re-reads the token file — so loop over separate
+  calls, don't reuse one `wait-ready`.
+```bash
+cd desktop/macos
+export OMI_AUTOMATION_PORT=47894           # whatever port you launched the bundle with
+BEFORE_PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("before", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
+./scripts/omi-ctl action quit_and_reopen        # detail: {"restarting":"true", "bundle_id":…, "relaunch_path":…, "delay_ms":"400"}
+# wait for the OLD listener to be replaced by a NEW one on the SAME port (fresh omi-ctl each try)
+for i in $(seq 1 60); do
+  PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$PID" ] && [ "$PID" != "$BEFORE_PID" ] && ./scripts/omi-ctl state >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"], d["bridgePort"])'
+#   assert: same bundleIdentifier, isSignedIn=true, hasCompletedOnboarding=true, bridgePort=47894 (session intact, SAME port)
+# the reopened process's own argv carries the re-passed port (proves the fix):
+#   ps -o command= -p "$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN | head -1)"  → …/Omi Computer --automation-port=47894
+```
+Hermetic ratchets: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`
+and `--filter RestartRelaunchCommandTests` (non-prod relaunch re-passes the port as argv).
+
 ### The full loop
 ```bash
 cd desktop/macos
@@ -314,7 +357,7 @@ System Tray Menu
 **Main sidebar navigation:**
 - Icons are `image` type elements with accessibility identifiers: `sidebar_dashboard`, `sidebar_chat`, `sidebar_memories`, `sidebar_tasks`, `sidebar_rewind`, `sidebar_apps`, `sidebar_settings`
 - Use `find key sidebar_dashboard click` for reliable navigation (survives UI changes)
-- Keyboard shortcuts: Cmd+1 (Dashboard), Cmd+2 (Chat), Cmd+3 (Memories), Cmd+4 (Tasks), Cmd+5 (Rewind), Cmd+6 (Apps), Cmd+, (Settings)
+- Keyboard shortcuts: Cmd+1 (Dashboard), Cmd+2 (Conversations), Cmd+3 (Memories), Cmd+4 (Tasks), Cmd+5 (Rewind), Cmd+6 (Apps), Cmd+, (Settings)
 - Use `click` — these are SwiftUI views with onTapGesture
 
 **Settings sidebar navigation:**
@@ -339,14 +382,14 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 |------|--------|-------|--------|
 | `flows/navigation.yaml` | SidebarView, DesktopHomeView | 6/6 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RVS7NChPvj.html) |
 | `flows/dashboard.yaml` | DashboardPage, GoalsWidget, TasksWidget | 3/6 (3 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ghCdGIUAA2.html) |
-| `flows/chat.yaml` | ChatPage, ChatProvider | 5/5 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html) |
+| `flows/chat-hermetic.yaml` | ChatPage, ChatProvider | 5/5 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html) |
 | `flows/memories.yaml` | MemoriesPage, MemoryGraphPage | 5/6 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/Mkp6ahc12I.html) |
 | `flows/tasks.yaml` | TasksPage, TasksStore | 4/5 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ealB_-UdqS.html) |
-| `flows/settings.yaml` | SettingsPage, SettingsSidebar | 9/9 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html) |
+| `flows/settings-basic.yaml` | SettingsPage, SettingsSidebar | 9/9 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html) |
 | `flows/language.yaml` | SettingsPage, SettingsSidebar | 5 steps | — |
 | `flows/rewind.yaml` | RewindPage | 4/4 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/1HE5OsPOOy.html) |
 | `flows/apps.yaml` | IntegrationsPage | 6/6 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/VDGw-wbHqa.html) |
-| `flows/refer.yaml` | ReferPage | 3/3 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html) |
+| `flows/refer-external.yaml` | Profile menu → affiliate URL | 3/3 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html) |
 | `flows/screen-recording-permission.yaml` | RewindPage, ScreenCaptureService, PermissionsPage | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html) |
 | `flows/audio-recording.yaml` | ConversationsPage, AudioCaptureService, AppState | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html) |
 

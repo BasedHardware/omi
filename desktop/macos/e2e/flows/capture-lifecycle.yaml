@@ -6,8 +6,10 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+  - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
@@ -23,6 +25,12 @@ covers:
   - desktop/macos/Desktop/Sources/WAL/WALCloudSyncLogic.swift
   - desktop/macos/Desktop/Sources/WAL/WALService.swift
   - desktop/macos/Desktop/Sources/WAL/WALSyncReconciler.swift
+  - desktop/macos/Desktop/Sources/TranscriptionService.swift
+  - desktop/macos/Desktop/Sources/TranscriptionRetryService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/Audio/BleAudioProcessor.swift
+  - desktop/macos/Desktop/Sources/Audio/BleAudioService.swift
 preconditions:
   - automation_bridge_ready
 

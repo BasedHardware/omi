@@ -1127,7 +1127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    AppState().resetOnboardingAndRestart()
+    (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
   @MainActor @objc private func reportIssue() {
