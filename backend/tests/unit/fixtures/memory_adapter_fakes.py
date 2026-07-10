@@ -101,7 +101,7 @@ def memory_item(
         "version": 1,
         "tier": tier,
         "status": MemoryItemStatus.active,
-        "processing_state": ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        "processing_state": ProcessingState.processed,
         "content": content or f"{memory_id} coffee preference",
         "evidence": [evidence(f"{memory_id}-source", quote_text=quote_text)],
         "source_state": SourceState.active,

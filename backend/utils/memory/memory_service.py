@@ -26,7 +26,7 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_review,
     write_canonical_external_memory,
 )
-from utils.memory.required_promotion import required_promotion_payload
+from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
 from utils.memory.memory_system import MemorySystem
@@ -290,6 +290,7 @@ class LegacyMemoryBackend:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         _reject_legacy_device_scope(device_scope_request)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
@@ -358,6 +359,7 @@ class CanonicalMemoryBackend:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         return read_canonical_memories(
             uid,
@@ -365,6 +367,7 @@ class CanonicalMemoryBackend:
             offset=offset,
             db_client=self._db_client,
             device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
         )
 
     def search(
@@ -444,6 +447,7 @@ class MemoryService:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         backend = self._canonical if canonical_read_enabled(uid, db_client=self._db_client) else self._legacy
         return backend.read(
@@ -451,6 +455,7 @@ class MemoryService:
             limit=limit,
             offset=offset,
             device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
         )
 
     def search(
@@ -550,15 +555,17 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vector: bool = True,
-        require_canonical_promotion: bool = False,
+        require_canonical_promotion: bool = True,
     ) -> MemoryDB:
-        """Create one external memory on canonical or legacy backend with side effects."""
+        """Create one external memory without changing the caller-facing API.
+
+        ``require_canonical_promotion`` remains accepted for compatibility, but
+        canonical external writes are always processed before durable admission.
+        """
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payload = memory_db.dict()
-            if require_canonical_promotion:
-                payload = required_promotion_payload(payload, source_surface=consumer)
+            payload = required_processing_payload(memory_db.model_dump(mode="python"), source_surface=consumer)
             committed_id = self._canonical.write(uid, payload)
             item = read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
             if item is not None:
@@ -598,15 +605,16 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vectors: bool = True,
-        require_canonical_promotion: bool = False,
+        require_canonical_promotion: bool = True,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payloads = [memory.dict() for memory in memory_dbs]
-            if require_canonical_promotion:
-                payloads = [required_promotion_payload(payload, source_surface=consumer) for payload in payloads]
+            payloads = [
+                required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
+                for memory in memory_dbs
+            ]
             committed_ids = self._canonical.write_batch(uid, payloads)
             results: List[MemoryDB] = []
             for memory_id in committed_ids:

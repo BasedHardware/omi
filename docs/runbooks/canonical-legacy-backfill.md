@@ -2,7 +2,7 @@
 
 **Purpose:** Migrate a whitelisted user's active legacy `memories` rows into canonical `memory_items` without mutating or deleting legacy data.
 
-For first-user dogfood, use the **bucketed** strategy. It inventories the full legacy corpus, then lets an operator apply one reviewed bucket at a time. The older bulk strategy still exists for compatibility, but it copies every active legacy row as `long_term` and should not be used for noisy legacy accounts.
+For first-user dogfood, start with the **bucketed** inventory. The `stage-all-for-admission` strategy is also safe: it copies active rows only into Short-term quarantine. Manual and positively reviewed rows require processing; all other rows remain hidden `pending_admission` candidates.
 
 **Library:** `utils.memory.legacy_backfill.backfill_user_bucketed`
 **CLI:** `backend/scripts/backfill_legacy_memories.py`
@@ -14,7 +14,7 @@ For first-user dogfood, use the **bucketed** strategy. It inventories the full l
 - **Cohort gate** — backfill runs only when `uid` is in `CANONICAL_MEMORY_USERS` (or `--allow-admin-override`).
 - **Idempotent** — backfill ids are `mem_` + hash(`uid`, `legacy_memory_id`); apply path honors `idempotency_key`.
 - **Both-store dedup** — if live extraction already wrote the same fact (`extraction_memory_id` from `conversation_id` + `content`), backfill skips that row.
-- **Bucketed dogfood** — bucketed runs preserve legacy timestamps, write selected profile-like rows as either `long_term` or required-promotion `short_term`, and hold noisy/sensitive rows.
+- **Bucketed dogfood** — bucketed runs preserve legacy timestamps, stage only manual or positively reviewed rows for required processing, and hold unreviewed profile/noisy/sensitive rows out of durable memory.
 - **Reversible** — remove `uid` from `CANONICAL_MEMORY_USERS` and redeploy to return them to legacy reads; legacy rows remain intact.
 
 ## Preconditions
@@ -51,9 +51,9 @@ Buckets:
 
 | Bucket | Writes? | Destination | Intended use |
 |--------|---------|-------------|--------------|
-| `manual_required_promotion` | Yes | `short_term` with `promotion.required=true` | User/manual memories that should flow through normal promotion |
-| `profile_required_promotion` | Yes | `short_term` with `promotion.required=true` | Profile-like legacy rows that need consolidation/promotion review |
-| `reviewed_long_term` | Yes | `long_term` | Profile-like rows already explicitly user-reviewed |
+| `manual_required_promotion` | Yes | pending `short_term` with `promotion.required=true` | User/manual memories that must be normalized before promotion |
+| `profile_required_promotion` | No | None in bucketed mode; `pending_admission` under stage-all | Unreviewed profile-like rows requiring a separate admission decision |
+| `reviewed_long_term` | Yes | pending `short_term` with `promotion.required=true` | Positively reviewed rows that must still be normalized before promotion |
 | `archive_review` | No | None | Non-obvious rows for later manual/archive policy review |
 | `hold_noise` | No | None | Downloads inventory, focused-app activity, imperative task fragments, empty/low-signal rows |
 | `hold_sensitive` | No | None | Credential/token/password/secret-like rows |
@@ -96,9 +96,9 @@ Re-run is safe: already-present and both-store-duplicate rows are skipped.
 **Firestore (console or script):**
 
 - Legacy unchanged: `users/{uid}/memories/*` — same doc count as before; no `invalid_at` changes from backfill.
-- Canonical items: `users/{uid}/memory_items/*` — one active processed item per applied writable-bucket row (either backfill id or live-write id).
-- Required-promotion rows: selected `manual_required_promotion` / `profile_required_promotion` rows are `tier=short_term`, have `promotion.required=true`, `promotion.status=pending`, old `captured_at`, and future `expires_at`.
-- Reviewed long-term rows: selected `reviewed_long_term` rows are `tier=long_term` with old `captured_at`.
+- Canonical items: `users/{uid}/memory_items/*` — one active Short-term submission per applied writable-bucket row (either backfill id or live-write id).
+- Required-processing rows: selected `manual_required_promotion` / `reviewed_long_term` rows are `tier=short_term`, `processing_state=pending`, have `promotion.required=true`, `promotion.processing_status=pending_processing`, source/content provenance, old `captured_at`, and future `expires_at`.
+- Quarantined rows: stage-all unreviewed rows have `promotion.required=false` and `promotion.processing_status=pending_admission`; they are hidden from agent/search/KG reads and do not enter the required processor.
 - Control state: `users/{uid}/memory_control/state` exists after a real run.
 
 **Python reconcile (same logic as the library):**
@@ -110,7 +110,7 @@ report = backfill_user_bucketed("YOUR_UID", bucket="manual_required_promotion", 
 assert report.errors == []
 ```
 
-**Read path smoke:** with uid still whitelisted, `GET /v3/memories` (or desktop Memories tab) should show long-term facts without duplicates.
+**Read path smoke:** with uid still whitelisted, `GET /v3/memories` may show required pending rows as Short-term. Agent/developer/MCP/search reads must not return pending text.
 
 ## Rollback (kill-switch)
 
@@ -128,8 +128,8 @@ assert report.errors == []
 ## Operational notes
 
 - **Provenance:** bucketed rows preserve legacy `created_at` as `captured_at` and legacy `updated_at` as `updated_at`. Short-term bucketed rows set `expires_at` to migration time + 30 days so promotion can process them.
-- **Bulk compatibility:** `backfill_user` and `--strategy bulk-long-term` still use the legacy id-set checkpoint. Bucketed dogfood does not use that checkpoint; re-runs reconcile by deterministic canonical ids.
-- **Vectors:** backfill syncs Pinecone via `sync_canonical_memory_vector`; vector sync failures increment `vector_sync_failures` but does not roll back Firestore writes.
+- **Stage-all checkpoint:** `backfill_user` and `--strategy stage-all-for-admission` use the legacy id-set checkpoint. Bucketed dogfood does not use that checkpoint; re-runs reconcile by deterministic canonical ids and can upgrade an existing candidate after positive review.
+- **Derived stores:** pending backfill rows create no keyword, vector, or KG projection. Those projections are built only after processing and Long-term promotion.
 
 ## Short-term promotion (canonical cohort)
 
