@@ -64,7 +64,7 @@ static int16_t mono_buffer[MAX_FRAMES];
 /*
  * Hardware AAD (T5838): during silence the mic is clocked into AAD sleep
  * (PDM off, ~20uA) and its WAKE pin (P1.02, active-HIGH) resumes it on sound.
- * Owned here since it shares the PDM peripheral and CLK pin. See AAD_HARDWARE.md.
+ * Owned here since it shares the PDM peripheral and CLK pin.
  */
 extern bool is_connected; /* from main.c: keep SD up while a phone can sync */
 
