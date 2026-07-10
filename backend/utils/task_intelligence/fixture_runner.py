@@ -3,6 +3,8 @@
 from collections.abc import Callable
 from typing import Any
 
+from models.task_recommendation import DeterministicFacts, RecommendationSubjectKind
+from utils.task_intelligence import recommendations
 from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capture_policy
 
 NormalizedSignals = dict[str, Any]
@@ -71,28 +73,49 @@ def run_recorded_association_case(case: dict[str, Any]) -> dict[str, Any]:
     return judgment
 
 
+def _fixture_ranking_subject(subject: dict[str, Any], *, device_id: str | None) -> recommendations.EvaluationSubject:
+    if not isinstance(subject, dict):
+        raise ValueError('ranking subject must be an object')
+    subject_id = subject.get('subject_id')
+    if not isinstance(subject_id, str) or not subject_id:
+        raise ValueError('ranking subject requires subject_id')
+    raw_facts = subject.get('facts')
+    if not isinstance(raw_facts, dict):
+        raise ValueError('ranking subject requires deterministic facts')
+    facts = DeterministicFacts.model_validate(
+        {key: value for key, value in raw_facts.items() if key in DeterministicFacts.model_fields}
+    )
+    evidence = recommendations._valid_evidence(subject.get('evidence_refs', []), device_id=device_id)
+    recent_material_activity = bool(
+        subject.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
+    )
+    return recommendations._subject(
+        kind=RecommendationSubjectKind.task,
+        subject_id=subject_id,
+        destination_task_id=subject_id,
+        headline=f'Fixture {subject_id}',
+        label=None,
+        evidence=evidence,
+        facts=facts,
+        is_open=bool(raw_facts.get('open', True)),
+        unexpired=bool(raw_facts.get('unexpired', True)),
+        recent_material_activity=recent_material_activity,
+        material_token='fixture-v1',
+    )
+
+
 def run_recorded_ranking_case(case: dict[str, Any]) -> list[str]:
-    """Apply deterministic eligibility before accepting a recorded judgment."""
+    """Apply production shortlist gates before accepting a recorded judgment."""
 
     subjects = case.get('subjects')
     selected = case.get('recorded_judgment')
     if not isinstance(subjects, list) or not isinstance(selected, list):
         raise ValueError('ranking case requires subjects and recorded_judgment')
-    eligible: set[str] = set()
-    for subject in subjects:
-        if not isinstance(subject, dict):
-            raise ValueError('ranking subject must be an object')
-        facts = subject.get('facts')
-        if not isinstance(facts, dict):
-            raise ValueError('ranking subject requires deterministic facts')
-        if (
-            facts.get('open') is True
-            and facts.get('unexpired') is True
-            and facts.get('capture_confidence', 0) >= case.get('minimum_capture_confidence', 0.8)
-            and facts.get('has_concrete_next_action') is True
-        ):
-            eligible.add(subject['subject_id'])
-    if len(selected) > 3 or not set(selected).issubset(eligible):
+    current_context = case.get('current_context')
+    device_id = current_context.get('device_id') if isinstance(current_context, dict) else None
+    built_subjects = [_fixture_ranking_subject(subject, device_id=device_id) for subject in subjects]
+    shortlist_ids = {subject.subject_id for subject in recommendations.filter_shortlist(built_subjects, set())}
+    if len(selected) > 3 or not set(selected).issubset(shortlist_ids):
         raise ValueError('recorded ranking selected an ineligible or excess subject')
     return selected
 

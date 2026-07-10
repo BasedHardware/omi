@@ -351,7 +351,8 @@ class TaskAssistantSettings {
         }
     }
 
-    /// Whether to show notifications when tasks are extracted
+    /// Whether proactive task interruptions may surface when timing matters.
+    /// Quiet discovery and Suggested capture continue when this is off.
     var notificationsEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: notificationsEnabledKey) }
         set {

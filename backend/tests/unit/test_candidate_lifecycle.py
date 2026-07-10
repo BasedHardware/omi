@@ -224,6 +224,8 @@ def test_candidate_create_and_accept_are_idempotent_and_preserve_envelope(fake_d
     assert task['source'] == 'conversation'
     assert task['provenance'][0]['id'] == 'conversation-1'
     assert task['due_confidence'] == 0.9
+    assert task['capture_confidence'] == 0.95
+    assert task['ownership_confidence'] == 1
 
 
 def test_task_mutation_preserves_origin_and_merges_provenance(fake_db):

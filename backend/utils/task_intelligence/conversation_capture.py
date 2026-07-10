@@ -23,6 +23,13 @@ def capture_enabled(uid: str) -> bool:
     return control.workflow_mode in {TaskWorkflowMode.shadow, TaskWorkflowMode.write, TaskWorkflowMode.read}
 
 
+def _concrete_deliverable(action_item: Any) -> bool:
+    """Fail closed: only treat as concrete when extraction supplies an explicit True."""
+
+    raw = getattr(action_item, 'concrete_deliverable', None)
+    return raw is True
+
+
 def _capture_signals(action_item: Any) -> BackendCaptureSignals:
     capture_kind = getattr(action_item, 'capture_kind', None)
     raw_candidate_action = getattr(action_item, 'candidate_action', None)
@@ -40,7 +47,7 @@ def _capture_signals(action_item: Any) -> BackendCaptureSignals:
         clear_commitment=capture_kind == 'clear_commitment',
         direct_request=capture_kind == 'direct_request' or capture_kind is None,
         inferred_next_step=capture_kind == 'inferred_next_step',
-        concrete_deliverable=True,
+        concrete_deliverable=_concrete_deliverable(action_item),
         owner=getattr(action_item, 'capture_owner', None) or TaskOwner.unknown,
         already_done=candidate_action == 'complete',
         refines_task=target_task_id if candidate_action in {'update', 'complete'} else None,

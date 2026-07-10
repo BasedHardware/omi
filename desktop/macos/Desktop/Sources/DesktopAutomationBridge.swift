@@ -671,7 +671,7 @@ final class DesktopAutomationActionRegistry {
       let facts = ScreenCaptureFacts(
         explicitCommand: value("explicitCommand", "explicit_command", default: false),
         clearCommitment: value("clearCommitment", "clear_commitment", default: false),
-        concreteDeliverable: value("concreteDeliverable", "concrete_deliverable", default: true),
+        concreteDeliverable: value("concreteDeliverable", "concrete_deliverable", default: false),
         directRequest: value("directRequest", "direct_request", default: false),
         inferredNextStep: value("inferredNextStep", "inferred_next_step", default: false),
         owner: value("owner", "owner", default: "unknown"),

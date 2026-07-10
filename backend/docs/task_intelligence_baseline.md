@@ -16,3 +16,10 @@ Ticket ownership:
 - Tickets 04–06 establish workstream product and execution boundaries.
 - Tickets 07–12 replace capture, UX, evaluation, and attention behavior.
 - Tickets 13–14 own universal migration and physical legacy deletion after their gates.
+
+Remaining deferred burn-down (Tickets 13–14; do not treat as done by 01–12):
+
+- Delete `TaskPromotionService` timer and local `staged_tasks` GRDB authority once general-population `read` lands.
+- Grep ratchet proving legacy staged writers are gone.
+- Collapse Swift `task_chat_messages` into kernel SQLite (INV-CHAT-1 dual-store debt).
+- Remove tmux / legacy `task_chat` surface paths marked for Ticket 14.

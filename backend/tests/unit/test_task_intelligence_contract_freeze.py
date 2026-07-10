@@ -77,6 +77,8 @@ def test_association_and_ranking_fixtures_include_negative_and_empty_cases():
         selected = run_recorded_ranking_case(case)
         assert set(selected).isdisjoint(case['must_not_select'])
     assert next(case for case in ranking['cases'] if case['id'] == 'empty_is_valid')['recorded_judgment'] == []
+    missing_evidence = next(case for case in ranking['cases'] if case['id'] == 'missing_evidence_excluded')
+    assert run_recorded_ranking_case(missing_evidence) == ['grounded_with_evidence']
 
 
 def test_fixture_runner_is_byte_stable():

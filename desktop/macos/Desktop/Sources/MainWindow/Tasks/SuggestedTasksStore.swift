@@ -10,6 +10,9 @@ protocol SuggestedTasksClient: AnyObject {
   func recordTaskFeedback(
     _ request: OmiAPI.FeedbackCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate, idempotencyKey: String, accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt
@@ -142,8 +145,10 @@ final class SuggestedTasksStore: ObservableObject {
   private let suppressionStore: any SuggestedSuppressionPersisting
   private let feedbackOutboxStore: any SuggestedFeedbackOutboxPersisting
   private let now: () -> Date
+  private let reportAttribution: (TaskIntelligenceAttributionEvent) -> Void
   private var recordsByID: [String: OmiAPI.CandidateRecord] = [:]
   private var interventionIDs: [String: String] = [:]
+  private var interventionAttributionChainIDs: [String: String] = [:]
   private var registeringInterventionIDs: Set<String> = []
   private var activeSuppressionOwnerID: String
   private var activeFeedbackOwnerID: String
@@ -155,12 +160,14 @@ final class SuggestedTasksStore: ObservableObject {
     client: any SuggestedTasksClient = APIClient.shared,
     suppressionStore: any SuggestedSuppressionPersisting = SuggestedSuppressionDefaults(),
     feedbackOutboxStore: any SuggestedFeedbackOutboxPersisting = SuggestedFeedbackOutboxDefaults(),
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    reportAttribution: ((TaskIntelligenceAttributionEvent) -> Void)? = nil
   ) {
     self.client = client
     self.suppressionStore = suppressionStore
     self.feedbackOutboxStore = feedbackOutboxStore
     self.now = now
+    self.reportAttribution = reportAttribution ?? { AnalyticsManager.shared.taskIntelligenceAttribution($0) }
     let suppressionOwnerID = suppressionStore.currentOwnerID()
     let feedbackOwnerID = feedbackOutboxStore.currentOwnerID()
     activeSuppressionOwnerID = suppressionOwnerID
@@ -241,7 +248,17 @@ final class SuggestedTasksStore: ObservableObject {
     else { return }
     registeringInterventionIDs.insert(candidateID)
     defer { registeringInterventionIDs.remove(candidateID) }
-    _ = try? await ensureIntervention(for: record)
+    if let intervention = try? await ensureIntervention(for: record) {
+      reportAttribution(
+        .interventionPresented(
+          interventionID: intervention.interventionId,
+          surface: .suggested,
+          subjectKind: OmiAPI.FeedbackSubjectKind.candidate.rawValue,
+          subjectID: candidateID,
+          candidateID: candidateID,
+          attributionChainID: intervention.attributionChainId
+        ))
+    }
     guard persistenceOwnersAreCurrent else { refreshOwnerScopedState(); return }
   }
 
@@ -303,7 +320,7 @@ final class SuggestedTasksStore: ObservableObject {
       subjectId: candidateID,
       subjectKind: .candidate
     )
-    let feedbackSynced = await recordOrQueueFeedback(
+    let feedbackRecord = await recordOrQueueFeedback(
       feedbackRequest,
       idempotencyKey: "suggested:\(candidateID):\(feedbackAction.rawValue)",
       record: record
@@ -312,7 +329,15 @@ final class SuggestedTasksStore: ObservableObject {
       refreshOwnerScopedState()
       return nil
     }
-    if feedbackSynced && feedbackAction == .accept_candidate && changedTitle == nil { error = nil }
+    if feedbackRecord != nil && feedbackAction == .accept_candidate && changedTitle == nil { error = nil }
+    if let feedbackRecord {
+      await recordAdvanceOutcome(
+        candidateID: candidateID,
+        accountGeneration: record.accountGeneration,
+        interventionID: feedbackRecord.interventionId ?? interventionIDs[candidateID],
+        attributionChainID: feedbackRecord.attributionChainId
+      )
+    }
     return receipt.taskId
   }
 
@@ -422,6 +447,7 @@ final class SuggestedTasksStore: ObservableObject {
     candidates = []
     recordsByID = [:]
     interventionIDs = [:]
+    interventionAttributionChainIDs = [:]
     registeringInterventionIDs = []
     busyCandidateIDs = []
     error = nil
@@ -442,7 +468,7 @@ final class SuggestedTasksStore: ObservableObject {
     _ request: OmiAPI.FeedbackCreate,
     idempotencyKey: String,
     record: OmiAPI.CandidateRecord
-  ) async -> Bool {
+  ) async -> OmiAPI.FeedbackRecord? {
     let suppressionOwnerID = activeSuppressionOwnerID
     let feedbackOwnerID = activeFeedbackOwnerID
     var preparedRequest = request
@@ -456,28 +482,39 @@ final class SuggestedTasksStore: ObservableObject {
         interventionIdempotencyKey: Self.interventionIdempotencyKey(for: record)
       ))
     do {
-      let interventionID = try await ensureIntervention(
+      let intervention = try await ensureIntervention(
         for: record,
         request: pendingInterventionRequest
       )
       guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
         refreshOwnerScopedState()
-        return false
+        return nil
       }
-      preparedRequest = Self.feedbackRequest(request, interventionID: interventionID)
-      _ = try await client.recordTaskFeedback(
+      preparedRequest = Self.feedbackRequest(request, interventionID: intervention.interventionId)
+      let feedback = try await client.recordTaskFeedback(
         preparedRequest, idempotencyKey: idempotencyKey, accountGeneration: record.accountGeneration)
       guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
         refreshOwnerScopedState()
-        return false
+        return nil
       }
       pendingFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
       feedbackOutboxStore.save(pendingFeedback, ownerID: feedbackOwnerID)
-      return true
+      reportAttribution(
+        .feedbackRecorded(
+          interventionID: intervention.interventionId,
+          surface: .suggested,
+          action: preparedRequest.action.rawValue,
+          reason: preparedRequest.reason?.rawValue,
+          subjectKind: preparedRequest.subjectKind.rawValue,
+          subjectID: preparedRequest.subjectId,
+          candidateID: preparedRequest.subjectKind == .candidate ? preparedRequest.subjectId : nil,
+          attributionChainID: feedback.attributionChainId
+        ))
+      return feedback
     } catch {
       guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID) else {
         refreshOwnerScopedState()
-        return false
+        return nil
       }
       upsertPendingFeedback(
         PendingSuggestedFeedback(
@@ -489,7 +526,7 @@ final class SuggestedTasksStore: ObservableObject {
             ? Self.interventionIdempotencyKey(for: record) : nil
         ))
       self.error = "Saved. Feedback attribution will retry automatically."
-      return false
+      return nil
     }
   }
 
@@ -561,8 +598,20 @@ final class SuggestedTasksStore: ObservableObject {
   private func ensureIntervention(
     for record: OmiAPI.CandidateRecord,
     request: OmiAPI.InterventionCreate? = nil
-  ) async throws -> String {
-    if let existing = interventionIDs[record.candidateId] { return existing }
+  ) async throws -> OmiAPI.InterventionRecord {
+    if let existing = interventionIDs[record.candidateId] {
+      return OmiAPI.InterventionRecord(
+        attributionChainId: interventionAttributionChainIDs[record.candidateId] ?? "attribution-\(record.candidateId)",
+        createdAt: record.createdAt,
+        dedupeKey: Self.candidateRecommendationDedupeKey(record.candidateId),
+        evidenceRefs: record.evidenceRefs,
+        expiresAt: Self.deterministicInterventionExpiry(createdAt: record.createdAt),
+        interventionId: existing,
+        subjectId: record.candidateId,
+        subjectKind: .candidate,
+        surface: .suggested
+      )
+    }
     let suppressionOwnerID = activeSuppressionOwnerID
     let feedbackOwnerID = activeFeedbackOwnerID
     let intervention = try await client.registerTaskIntervention(
@@ -575,7 +624,41 @@ final class SuggestedTasksStore: ObservableObject {
       throw CancellationError()
     }
     interventionIDs[record.candidateId] = intervention.interventionId
-    return intervention.interventionId
+    interventionAttributionChainIDs[record.candidateId] = intervention.attributionChainId
+    return intervention
+  }
+
+  private func recordAdvanceOutcome(
+    candidateID: String,
+    accountGeneration: Int,
+    interventionID: String?,
+    attributionChainID: String
+  ) async {
+    let request = OmiAPI.OutcomeCreate(
+      attributionChainId: attributionChainID,
+      outcomeCode: .workstream_advanced,
+      subjectId: candidateID,
+      subjectKind: .candidate
+    )
+    do {
+      let outcome = try await client.createTaskOutcome(
+        request,
+        idempotencyKey: "suggested:\(candidateID):outcome:advance",
+        accountGeneration: accountGeneration
+      )
+      reportAttribution(
+        .outcomeRecorded(
+          interventionID: interventionID,
+          surface: .suggested,
+          outcomeCode: outcome.outcomeCode.rawValue,
+          subjectKind: OmiAPI.FeedbackSubjectKind.candidate.rawValue,
+          subjectID: candidateID,
+          candidateID: candidateID,
+          attributionChainID: outcome.attributionChainId
+        ))
+    } catch {
+      // Outcome recording is best-effort; accept + feedback already landed.
+    }
   }
 
   private static func interventionRequest(

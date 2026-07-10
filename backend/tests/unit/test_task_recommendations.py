@@ -610,6 +610,13 @@ def test_recommendation_eligibility_requires_visible_typed_evidence():
                 'task_id': 'task-canonical',
                 'description': 'Grounded task',
                 'status': 'active',
+                'capture_confidence': 0.95,
+                'provenance': [canonical],
+            },
+            {
+                'task_id': 'task-missing-confidence',
+                'description': 'Grounded but untrusted',
+                'status': 'active',
                 'provenance': [canonical],
             },
         ],
@@ -640,6 +647,60 @@ def test_recommendation_eligibility_requires_visible_typed_evidence():
     assert not by_id['task-other-device'].eligibility.passes_recommendation_gates
     assert not by_id['artifact-empty'].eligibility.passes_recommendation_gates
     assert by_id['task-canonical'].eligibility.passes_recommendation_gates
+    assert by_id['task-canonical'].facts.capture_confidence == 0.95
+    assert not by_id['task-missing-confidence'].eligibility.passes_recommendation_gates
+    assert by_id['task-missing-confidence'].facts.capture_confidence == 0.0
+
+
+def test_accepted_task_capture_confidence_gates_shortlist_eligibility():
+    canonical = EvidenceRef(
+        kind=EvidenceKind.conversation,
+        id='conversation-1',
+        scope=EvidenceScope.canonical,
+    ).model_dump(mode='json')
+    state = {
+        'tasks': [
+            {
+                'task_id': 'task-accepted-high',
+                'description': 'Send the budget',
+                'status': 'active',
+                'capture_confidence': 0.95,
+                'updated_at': NOW,
+                'provenance': [canonical],
+            },
+            {
+                'task_id': 'task-accepted-low',
+                'description': 'Maybe follow up',
+                'status': 'active',
+                'capture_confidence': 0.4,
+                'updated_at': NOW,
+                'provenance': [canonical],
+            },
+            {
+                'task_id': 'task-accepted-missing',
+                'description': 'Legacy task without confidence',
+                'status': 'active',
+                'updated_at': NOW,
+                'provenance': [canonical],
+            },
+        ],
+        'candidates': [],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+    by_id = {subject.subject_id: subject for subject in subjects}
+    shortlist = recommendations.filter_shortlist(subjects, set())
+
+    assert by_id['task-accepted-high'].facts.capture_confidence == 0.95
+    assert by_id['task-accepted-high'].eligibility.passes_recommendation_gates
+    assert by_id['task-accepted-low'].facts.capture_confidence == 0.4
+    assert not by_id['task-accepted-low'].eligibility.passes_recommendation_gates
+    assert by_id['task-accepted-missing'].facts.capture_confidence == 0.0
+    assert not by_id['task-accepted-missing'].eligibility.passes_recommendation_gates
+    assert [subject.subject_id for subject in shortlist] == ['task-accepted-high']
 
 
 def test_open_loop_subjects_are_device_scoped_actionable_and_expiring():

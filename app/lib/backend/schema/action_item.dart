@@ -11,6 +11,8 @@ typedef ActionItemWithMetadata = wire.GeneratedActionItemResponse;
 typedef ActionItemsResponse = wire.GeneratedActionItemsResponse;
 typedef PendingSyncResponse = wire.GeneratedPendingSyncResponse;
 
+const Object _actionItemCopyWithUnset = Object();
+
 /// copyWith for [ActionItemWithMetadata]; preserved from the deleted hand-written
 /// class because the provider mutates items in place via this method.
 extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
@@ -31,8 +33,8 @@ extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
     int? sortOrder,
     int? indentLevel,
     double? dueConfidence,
-    String? goalId,
-    String? workstreamId,
+    Object? goalId = _actionItemCopyWithUnset,
+    Object? workstreamId = _actionItemCopyWithUnset,
     String? owner,
     String? source,
     String? status,
@@ -60,8 +62,8 @@ extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
       sortOrder: sortOrder ?? this.sortOrder,
       indentLevel: indentLevel ?? this.indentLevel,
       dueConfidence: dueConfidence ?? this.dueConfidence,
-      goalId: goalId ?? this.goalId,
-      workstreamId: workstreamId ?? this.workstreamId,
+      goalId: identical(goalId, _actionItemCopyWithUnset) ? this.goalId : goalId as String?,
+      workstreamId: identical(workstreamId, _actionItemCopyWithUnset) ? this.workstreamId : workstreamId as String?,
       owner: owner ?? this.owner,
       source: source ?? this.source,
       status: status ?? this.status,

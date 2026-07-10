@@ -197,15 +197,13 @@ def _metric_from_storage(data: dict[str, Any]) -> Optional[GoalMetric]:
 
 
 def _metric_aliases(metric: Optional[GoalMetric]) -> dict[str, Any]:
+    """Released numeric aliases for metric-backed goals only.
+
+    Qualitative goals omit tracker aliases so clients rely on ``metric=null``
+    and canonical text fields instead of a fake 0-10 scale projection.
+    """
     if metric is None:
-        return {
-            'goal_type': GoalType.scale.value,
-            'current_value': 0.0,
-            'target_value': 0.0,
-            'min_value': 0.0,
-            'max_value': 10.0,
-            'unit': None,
-        }
+        return {}
     return {
         'goal_type': metric.type.value,
         'current_value': metric.current,
@@ -214,6 +212,27 @@ def _metric_aliases(metric: Optional[GoalMetric]) -> dict[str, Any]:
         'max_value': metric.max if metric.max is not None else max(metric.target, 10.0),
         'unit': metric.unit,
     }
+
+
+def ensure_released_goal_aliases(goal: dict[str, Any]) -> dict[str, Any]:
+    """Fill non-null released-client aliases for API responses without rewriting storage.
+
+    Qualitative goals still expose inert numeric placeholders so older clients that
+    require non-null ``goal_type`` / bounds keep decoding. New clients should prefer
+    ``metric is None`` plus canonical text fields.
+    """
+    projected = dict(goal)
+    metric = _metric_from_storage(projected)
+    if metric is not None:
+        projected.update(_metric_aliases(metric))
+        return projected
+    projected.setdefault('goal_type', 'scale')
+    projected.setdefault('target_value', 0.0)
+    projected.setdefault('current_value', 0.0)
+    projected.setdefault('min_value', 0.0)
+    projected.setdefault('max_value', 10.0)
+    projected.setdefault('unit', None)
+    return projected
 
 
 def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = None) -> dict[str, Any]:
@@ -857,6 +876,7 @@ __all__ = [
     'append_goal_progress_event',
     'create_goal',
     'delete_goal',
+    'ensure_released_goal_aliases',
     'focus_goal',
     'get_all_goals',
     'get_goal_by_id',

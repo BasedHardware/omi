@@ -38,8 +38,8 @@ from models.task_recommendation import (
     WhatMattersNowProjection,
 )
 from utils.metrics import TASK_INTELLIGENCE_ATTRIBUTION_TOTAL
+from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 
-MINIMUM_CAPTURE_CONFIDENCE = 0.8
 MAX_SHORTLIST_SIZE = 20
 MAX_RECOMMENDATIONS = 3
 PROJECTION_TTL = timedelta(minutes=30)
@@ -273,7 +273,7 @@ def _build_subjects(
             has_concrete_next_action=bool(str(task.get('description') or '').strip()),
             focused_goal_linked=goal_id in focused_goal_ids,
             context_match_signals=signals,
-            capture_confidence=float(task.get('capture_confidence', 1.0)),
+            capture_confidence=float(task.get('capture_confidence', 0.0)),
         )
         evidence = _valid_evidence(task.get('provenance'), device_id=context.device_id if context else None)
         subjects.append(

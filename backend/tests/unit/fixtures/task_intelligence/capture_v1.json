@@ -13,18 +13,34 @@
     {
       "id": "clear_commitment",
       "inputs": {
-        "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
-        "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
+        "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}},
+        "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}}
       },
       "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
     },
     {
       "id": "immediate_commitment",
       "inputs": {
-        "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "immediate_action": true}},
-        "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "immediate_action": true}}
+        "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}},
+        "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}}
       },
       "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+    },
+    {
+      "id": "clear_commitment_low_confidence",
+      "inputs": {
+        "transcript": {"text": "I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}},
+        "screen": {"text": "Me: I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "clear_commitment_without_deliverable",
+      "inputs": {
+        "transcript": {"text": "I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}},
+        "screen": {"text": "Me: I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "unaccepted_request",
@@ -45,8 +61,8 @@
     {
       "id": "duplicate_commitment",
       "inputs": {
-        "transcript": {"text": "I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "duplicate_of": "task-budget"}},
-        "screen": {"text": "Me: I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "duplicate_of": "task-budget"}}
+        "transcript": {"text": "I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "duplicate_of": "task-budget"}},
+        "screen": {"text": "Me: I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "duplicate_of": "task-budget"}}
       },
       "expected": {"outcome": "propose_enrichment", "interruption": "none"}
     },

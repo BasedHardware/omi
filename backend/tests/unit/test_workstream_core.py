@@ -565,7 +565,7 @@ def test_workstream_candidate_acceptance_is_atomic_and_idempotent(fake_db):
     assert anchor_task['recurrence_parent_id'] == 'task-parent'
 
 
-def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0):
+def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3):
     now = datetime.now(timezone.utc)
     fake_db.rows[('users', 'u1', 'workstreams', workstream_id)] = {
         'workstream_id': workstream_id,
@@ -576,7 +576,7 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0):
         'latest_event_sequence': latest_sequence,
         'created_at': now,
         'updated_at': now,
-        'account_generation': 3,
+        'account_generation': generation,
     }
 
 
@@ -936,6 +936,7 @@ def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_
             firestore_client=fake_db,
         )
 
+    seed_workstream(fake_db, generation=4)
     first = workstreams_db.update_workstream(
         'u1',
         'w1',
@@ -959,6 +960,85 @@ def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_
             'w1',
             WorkstreamUpdate(current_state_summary='Different payload'),
             idempotency_key='update-2',
+            account_generation=4,
+            firestore_client=fake_db,
+        )
+
+
+def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_db):
+    seed_control(fake_db, generation=4, mode='write')
+    seed_workstream(fake_db, generation=3)
+
+    with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
+        workstreams_db.update_workstream(
+            'u1',
+            'w1',
+            WorkstreamUpdate(current_state_summary='Cross-generation write'),
+            idempotency_key='stale-ws-update',
+            account_generation=4,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
+        workstreams_db.append_workstream_event(
+            'u1',
+            'w1',
+            WorkstreamEventCreate(kind='user_note', summary='Cross-generation note'),
+            idempotency_key='stale-ws-event',
+            account_generation=4,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
+        workstreams_db.create_artifact_descriptor(
+            'u1',
+            'w1',
+            ArtifactDescriptorCreate(
+                logical_key='draft',
+                version=1,
+                kind='email_draft',
+                uri='omi-artifact://w1/draft/1',
+                content_hash='a' * 64,
+            ),
+            idempotency_key='stale-ws-artifact',
+            account_generation=4,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
+        workstreams_db.upsert_continuation_checkpoint(
+            'u1',
+            'w1',
+            ContinuationCheckpointUpsert(
+                runtime_id='runtime-1',
+                last_event_sequence=0,
+                context_summary='Cross-generation checkpoint',
+            ),
+            idempotency_key='stale-ws-checkpoint',
+            account_generation=4,
+            firestore_client=fake_db,
+        )
+
+    seed_workstream(fake_db, generation=4)
+    artifact = workstreams_db.create_artifact_descriptor(
+        'u1',
+        'w1',
+        ArtifactDescriptorCreate(
+            logical_key='draft',
+            version=1,
+            kind='email_draft',
+            uri='omi-artifact://w1/draft/1',
+            content_hash='a' * 64,
+        ),
+        idempotency_key='matching-ws-artifact',
+        account_generation=4,
+        firestore_client=fake_db,
+    )
+    fake_db.rows[('users', 'u1', 'workstreams', 'w1')]['account_generation'] = 3
+    with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
+        workstreams_db.transition_artifact_status(
+            'u1',
+            'w1',
+            artifact.artifact_id,
+            ArtifactStatusTransitionRequest(status='awaiting_review'),
+            idempotency_key='stale-ws-transition',
             account_generation=4,
             firestore_client=fake_db,
         )

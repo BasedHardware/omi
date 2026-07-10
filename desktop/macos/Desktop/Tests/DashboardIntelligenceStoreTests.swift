@@ -303,6 +303,59 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     )
   }
 
+  func testLoadPassesDeviceScopedContextHash() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(items: [recommendation(id: "task-1")])
+    let store = DashboardIntelligenceStore(
+      client: api,
+      outboxStore: MemoryDashboardOutbox(),
+      deviceIDProvider: { "device-hash-abc" }
+    )
+
+    await store.load()
+
+    XCTAssertEqual(api.lastDeviceID, "device-hash-abc")
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["task-1"])
+  }
+
+  func testPresentationFeedbackAndDoNowEmitBoundedAttribution() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(items: [recommendation(id: "task-1")])
+    var events: [TaskIntelligenceAttributionEvent] = []
+    let store = DashboardIntelligenceStore(
+      client: api,
+      outboxStore: MemoryDashboardOutbox(),
+      deviceIDProvider: { "device-1" },
+      reportAttribution: { events.append($0) }
+    )
+
+    await store.load()
+    XCTAssertEqual(events.map(\.eventType), [.interventionPresented])
+    XCTAssertEqual(events[0].interventionID, "intervention-task-1")
+    XCTAssertEqual(events[0].surface, .whatMattersNow)
+    XCTAssertNil(events[0].analyticsProperties["content"])
+
+    let card = try! XCTUnwrap(store.recommendations.first)
+    await store.later(card)
+
+    XCTAssertEqual(events.map(\.eventType), [.interventionPresented, .feedbackRecorded])
+    XCTAssertEqual(events[1].feedbackAction, "later")
+    XCTAssertEqual(events[1].subjectID, "task-1")
+
+    api.projection = projection(items: [recommendation(id: "task-2")])
+    await store.load()
+    let doNowCard = try! XCTUnwrap(store.recommendations.first)
+    await store.recordPrimaryAction(doNowCard)
+
+    XCTAssertEqual(
+      events.map(\.eventType),
+      [.interventionPresented, .feedbackRecorded, .interventionPresented, .feedbackRecorded, .outcomeRecorded]
+    )
+    XCTAssertEqual(api.outcomeRequests.map(\.outcomeCode), [.workstream_advanced])
+    XCTAssertEqual(events.last?.outcomeCode, "workstream_advanced")
+    XCTAssertNil(events.last?.analyticsProperties["headline"])
+  }
+
   func testDashboardDoesNotPersistOrRewriteTaskOrder() throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     let storeSource = try String(
@@ -572,6 +625,10 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   var feedbackKeys: [String] = []
   var feedbackSuspensionsRemaining = 0
   var feedbackRelease: CheckedContinuation<Void, Never>?
+  var outcomeRequests: [OmiAPI.OutcomeCreate] = []
+  var outcomeKeys: [String] = []
+  var failOutcome = false
+  var lastDeviceID: String?
   var createdGoal: (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
   var exactCandidate: OmiAPI.CandidateRecord?
   var exactTask: TaskActionItem?
@@ -594,6 +651,7 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
 
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
     projectionLoads += 1
+    lastDeviceID = deviceID
     if failProjection { throw FakeError.missing }
     return projection
   }
@@ -646,6 +704,22 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
       proposedCompletion: false,
       proposedCompletionCandidateId: nil,
       reason: request.reason,
+      subjectId: request.subjectId,
+      subjectKind: request.subjectKind
+    )
+  }
+
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate, idempotencyKey: String, accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord {
+    outcomeRequests.append(request)
+    outcomeKeys.append(idempotencyKey)
+    if failOutcome { throw FakeError.missing }
+    return OmiAPI.OutcomeRecord(
+      attributionChainId: request.attributionChainId,
+      occurredAt: "2027-01-15T08:00:00Z",
+      outcomeCode: request.outcomeCode,
+      outcomeId: "outcome-\(idempotencyKey)",
       subjectId: request.subjectId,
       subjectKind: request.subjectKind
     )

@@ -15,7 +15,7 @@ class BackendCaptureSignals(BaseModel):
 
     explicit_command: bool = False
     clear_commitment: bool = False
-    concrete_deliverable: bool = True
+    concrete_deliverable: bool = False
     direct_request: bool = False
     inferred_next_step: bool = False
     owner: TaskOwner = TaskOwner.unknown

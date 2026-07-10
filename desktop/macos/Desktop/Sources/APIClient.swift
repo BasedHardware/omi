@@ -2885,6 +2885,20 @@ extension APIClient {
     )
   }
 
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/outcomes",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
     _ = try await updateActionItem(id: id, description: description)
   }

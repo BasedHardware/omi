@@ -360,6 +360,10 @@ struct DashboardPage: View {
     }
 
     var body: some View {
+        applyHomeLifecycle(to: applyHomeSheets(to: homeSurface))
+    }
+
+    private var homeSurface: some View {
         Group {
             if useLegacyHomeDesign {
                 legacyHome
@@ -369,6 +373,10 @@ struct DashboardPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
+    }
+
+    private func applyHomeSheets<Content: View>(to content: Content) -> some View {
+        content
         .sheet(item: $citedConversation) { conversation in
             ConversationDetailView(
                 conversation: conversation,
@@ -447,6 +455,10 @@ struct DashboardPage: View {
                 }
             }
         }
+    }
+
+    private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
+        content
         .onAppear {
             if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)

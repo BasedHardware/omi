@@ -74,6 +74,34 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertLessThanOrEqual(api.registeredInterventionDedupeKeys[0].count, 128)
   }
 
+  func testPresentedAndDoNowEmitBoundedAttributionAndOutcome() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-1", status: .pending)]
+    var events: [TaskIntelligenceAttributionEvent] = []
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      reportAttribution: { events.append($0) }
+    )
+    await store.load()
+
+    await store.presented(candidateID: "candidate-1")
+    XCTAssertEqual(events.map(\.eventType), [.interventionPresented])
+    XCTAssertEqual(events[0].surface, .suggested)
+    XCTAssertEqual(events[0].candidateID, "candidate-1")
+
+    let taskID = await store.doNow(candidateID: "candidate-1", editedTitle: nil)
+
+    XCTAssertEqual(taskID, "task-created")
+    XCTAssertEqual(
+      events.map(\.eventType),
+      [.interventionPresented, .feedbackRecorded, .outcomeRecorded]
+    )
+    XCTAssertEqual(events[1].feedbackAction, "accept_candidate")
+    XCTAssertEqual(api.outcomeRequests.map(\.outcomeCode), [.workstream_advanced])
+    XCTAssertNil(events.last?.analyticsProperties["title"])
+  }
+
   func testWriteSidecarModeNeverExposesSuggestedCandidates() async {
     let api = FakeSuggestedTasksClient()
     api.workflowMode = .write
@@ -530,7 +558,10 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   var failIntervention = false
   var failFeedback = false
   var failReject = false
+  var failOutcome = false
   var feedbackAttempts = 0
+  var outcomeRequests: [OmiAPI.OutcomeCreate] = []
+  var outcomeKeys: [String] = []
   var onRegisterIntervention: (() -> Void)?
   var onAccept: (() -> Void)?
   var onReject: (() -> Void)?
@@ -585,6 +616,22 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
       proposedCompletion: false,
       proposedCompletionCandidateId: nil,
       reason: request.reason,
+      subjectId: request.subjectId,
+      subjectKind: request.subjectKind
+    )
+  }
+
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate, idempotencyKey: String, accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord {
+    outcomeRequests.append(request)
+    outcomeKeys.append(idempotencyKey)
+    if failOutcome { throw FakeError.failed }
+    return OmiAPI.OutcomeRecord(
+      attributionChainId: request.attributionChainId,
+      occurredAt: "2026-07-09T12:00:00Z",
+      outcomeCode: request.outcomeCode,
+      outcomeId: "outcome-\(idempotencyKey)",
       subjectId: request.subjectId,
       subjectKind: request.subjectKind
     )

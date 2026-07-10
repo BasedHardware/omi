@@ -14,6 +14,9 @@ protocol DashboardIntelligenceClient: AnyObject {
   func recordTaskFeedback(
     _ request: OmiAPI.FeedbackCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate, idempotencyKey: String, accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord
   func focusCanonicalGoal(
     goalID: String, replacementGoalID: String?, focusRank: Int?, accountGeneration: Int,
     idempotencyKey: String
@@ -152,18 +155,25 @@ final class DashboardIntelligenceStore: ObservableObject {
   private let client: any DashboardIntelligenceClient
   private let outboxStore: any DashboardFeedbackOutboxPersisting
   private let now: () -> Date
+  private let deviceID: () -> String?
+  private let reportAttribution: (TaskIntelligenceAttributionEvent) -> Void
   private var pendingFeedback: [PendingDashboardFeedback]
+  private var presentedInterventionIDs = Set<String>()
   private var didRegisterAutomationActions = false
   private var recommendationActionHandler: ((DashboardRecommendation) async -> Bool)?
 
   init(
     client: any DashboardIntelligenceClient = APIClient.shared,
     outboxStore: any DashboardFeedbackOutboxPersisting = DashboardFeedbackOutboxDefaults(),
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    deviceIDProvider: (() -> String?)? = nil,
+    reportAttribution: ((TaskIntelligenceAttributionEvent) -> Void)? = nil
   ) {
     self.client = client
     self.outboxStore = outboxStore
     self.now = now
+    self.deviceID = deviceIDProvider ?? { ClientDeviceService.shared.deviceIdHash }
+    self.reportAttribution = reportAttribution ?? { AnalyticsManager.shared.taskIntelligenceAttribution($0) }
     self.pendingFeedback = outboxStore.load(ownerID: outboxStore.currentOwnerID())
   }
 
@@ -199,8 +209,9 @@ final class DashboardIntelligenceStore: ObservableObject {
       outboxStore.save(pendingFeedback, ownerID: ownerID)
       await retryPendingFeedback(ownerID: ownerID)
       do {
-        let projection = try await client.getWhatMattersNow(deviceID: nil)
+        let projection = try await client.getWhatMattersNow(deviceID: deviceID())
         recommendations = Self.project(projection, now: now())
+        emitPresentedInterventions(recommendations)
       } catch {
         // Canonical-read users outside the intelligence cohort retain calm
         // dashboard behavior while canonical Goals remain available.
@@ -218,6 +229,7 @@ final class DashboardIntelligenceStore: ObservableObject {
   /// eligibility to notification settings or interruption policy.
   func applyContextProjection(_ projection: OmiAPI.WhatMattersNowProjection) {
     recommendations = Self.project(projection, now: now())
+    emitPresentedInterventions(recommendations)
     error = nil
   }
 
@@ -314,7 +326,7 @@ final class DashboardIntelligenceStore: ObservableObject {
   }
 
   func recordPrimaryAction(_ recommendation: DashboardRecommendation) async {
-    await recordFeedback(
+    let feedback = await recordFeedback(
       recommendation,
       action: .do_now,
       reason: nil,
@@ -322,11 +334,14 @@ final class DashboardIntelligenceStore: ObservableObject {
       idempotencyKey: "wmn:\(recommendation.interventionID):do-now"
     )
     recommendations.removeAll { $0.id == recommendation.id }
+    if let feedback {
+      await recordAdvanceOutcome(recommendation: recommendation, feedback: feedback)
+    }
   }
 
   func later(_ recommendation: DashboardRecommendation) async {
     let until = now().addingTimeInterval(24 * 60 * 60)
-    await recordFeedback(
+    _ = await recordFeedback(
       recommendation,
       action: .later,
       reason: nil,
@@ -340,7 +355,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     _ recommendation: DashboardRecommendation,
     reason: OmiAPI.TaskIntelligenceFeedbackReason?
   ) async {
-    await recordFeedback(
+    _ = await recordFeedback(
       recommendation,
       action: .dismiss,
       reason: reason,
@@ -404,14 +419,15 @@ final class DashboardIntelligenceStore: ObservableObject {
     }
   }
 
+  @discardableResult
   private func recordFeedback(
     _ recommendation: DashboardRecommendation,
     action: OmiAPI.TaskIntelligenceFeedbackAction,
     reason: OmiAPI.TaskIntelligenceFeedbackReason?,
     laterUntil: String?,
     idempotencyKey: String
-  ) async {
-    guard let generation = accountGeneration else { return }
+  ) async -> OmiAPI.FeedbackRecord? {
+    guard let generation = accountGeneration else { return nil }
     let request = OmiAPI.FeedbackCreate(
       action: action,
       contextSnapshotHash: nil,
@@ -433,15 +449,74 @@ final class DashboardIntelligenceStore: ObservableObject {
     outboxStore.save(ownerFeedback, ownerID: ownerID)
     if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
     do {
-      _ = try await client.recordTaskFeedback(
+      let feedback = try await client.recordTaskFeedback(
         request, idempotencyKey: idempotencyKey, accountGeneration: generation)
       ownerFeedback = outboxStore.load(ownerID: ownerID)
       ownerFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
       outboxStore.save(ownerFeedback, ownerID: ownerID)
       if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
       error = nil
+      reportAttribution(
+        .feedbackRecorded(
+          interventionID: recommendation.interventionID,
+          surface: .whatMattersNow,
+          action: action.rawValue,
+          reason: reason?.rawValue,
+          subjectKind: recommendation.feedbackSubjectKind.rawValue,
+          subjectID: recommendation.feedbackSubjectID,
+          candidateID: recommendation.subjectKind == .candidate ? recommendation.subjectID : nil,
+          attributionChainID: feedback.attributionChainId
+        ))
+      return feedback
     } catch {
       self.error = "Saved. Feedback will retry automatically."
+      return nil
+    }
+  }
+
+  private func recordAdvanceOutcome(
+    recommendation: DashboardRecommendation,
+    feedback: OmiAPI.FeedbackRecord
+  ) async {
+    guard let generation = accountGeneration else { return }
+    let request = OmiAPI.OutcomeCreate(
+      attributionChainId: feedback.attributionChainId,
+      outcomeCode: .workstream_advanced,
+      subjectId: recommendation.feedbackSubjectID,
+      subjectKind: recommendation.feedbackSubjectKind
+    )
+    do {
+      let outcome = try await client.createTaskOutcome(
+        request,
+        idempotencyKey: "wmn:\(recommendation.interventionID):outcome:advance",
+        accountGeneration: generation
+      )
+      reportAttribution(
+        .outcomeRecorded(
+          interventionID: recommendation.interventionID,
+          surface: .whatMattersNow,
+          outcomeCode: outcome.outcomeCode.rawValue,
+          subjectKind: recommendation.feedbackSubjectKind.rawValue,
+          subjectID: recommendation.feedbackSubjectID,
+          candidateID: recommendation.subjectKind == .candidate ? recommendation.subjectID : nil,
+          attributionChainID: outcome.attributionChainId
+        ))
+    } catch {
+      // Outcome recording is best-effort; feedback already landed.
+    }
+  }
+
+  private func emitPresentedInterventions(_ recommendations: [DashboardRecommendation]) {
+    for recommendation in recommendations {
+      guard presentedInterventionIDs.insert(recommendation.interventionID).inserted else { continue }
+      reportAttribution(
+        .interventionPresented(
+          interventionID: recommendation.interventionID,
+          surface: .whatMattersNow,
+          subjectKind: recommendation.subjectKind.rawValue,
+          subjectID: recommendation.subjectID,
+          candidateID: recommendation.subjectKind == .candidate ? recommendation.subjectID : nil
+        ))
     }
   }
 

@@ -189,6 +189,12 @@ def _validate_control(snapshot: Any, *, account_generation: int) -> None:
         raise WorkstreamConflictError('canonical workflow writes are disabled')
 
 
+def _assert_workstream_generation(snapshot: Any, *, account_generation: int) -> None:
+    payload = _snapshot_dict(snapshot)
+    if int(payload.get('account_generation', 0)) != account_generation:
+        raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
+
+
 def _workstream_from_snapshot(snapshot: Any) -> Workstream:
     payload = _snapshot_dict(snapshot)
     payload.pop('account_generation', None)
@@ -411,6 +417,7 @@ def update_workstream(
         snapshot = ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
+        _assert_workstream_generation(snapshot, account_generation=account_generation)
         result = _workstream_from_snapshot(snapshot).model_copy(update={**patch, 'updated_at': now})
         write_transaction.update(ref, {**patch, 'updated_at': now})
         result_payload = result.model_dump(mode='python')
@@ -450,6 +457,7 @@ def append_workstream_event(
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
+        _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         existing = event_ref.get(transaction=write_transaction)
         if existing.exists:
             stored = WorkstreamEvent.model_validate(_snapshot_dict(existing))
@@ -539,6 +547,7 @@ def create_artifact_descriptor(
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
+        _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         existing = artifact_ref.get(transaction=write_transaction)
         record = ArtifactDescriptor(
             **proposal.model_dump(mode='python'),
@@ -666,6 +675,7 @@ def transition_artifact_status(
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
+        _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         artifact_snapshot = artifact_ref.get(transaction=write_transaction)
         if not artifact_snapshot.exists:
             raise WorkstreamNotFoundError(artifact_id)
@@ -762,6 +772,7 @@ def upsert_continuation_checkpoint(
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
+        _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         workstream = _workstream_from_snapshot(workstream_snapshot)
         if checkpoint.last_event_sequence > workstream.latest_event_sequence:
             raise WorkstreamConflictError('checkpoint cannot advance beyond the workstream journal')
@@ -1333,7 +1344,7 @@ def get_goal_detail(uid: str, goal_id: str, *, firestore_client: Any = None) -> 
         payload.setdefault('id', snapshot.id)
         tasks.append(ActionItemResponse.model_validate(payload))
     return GoalDetailProjection(
-        goal=GoalResponse.model_validate(goal),
+        goal=GoalResponse.model_validate(goals_db.ensure_released_goal_aliases(goal)),
         active_threads=list_workstreams_for_goal(uid, goal_id, firestore_client=client),
         tasks=tasks,
         progress_events=goals_db.list_goal_progress_events(uid, goal_id, firestore_client=client),

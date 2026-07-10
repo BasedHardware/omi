@@ -24,14 +24,30 @@ struct TaskIntelligenceAttributionEvent {
     enum EventType: String {
         case candidateCaptured = "candidate_captured"
         case candidateResolved = "candidate_resolved"
+        case interventionPresented = "intervention_presented"
+        case feedbackRecorded = "feedback_recorded"
+        case outcomeRecorded = "outcome_recorded"
+    }
+
+    enum Surface: String {
+        case suggested
+        case whatMattersNow = "what_matters_now"
     }
 
     let eventID: String
     let eventType: EventType
     let confidenceBand: TaskIntelligenceConfidenceBand?
-    let candidateID: String
+    let candidateID: String?
     let taskID: String?
     let resolutionCode: TaskIntelligenceResolutionCode?
+    let interventionID: String?
+    let surface: Surface?
+    let subjectKind: String?
+    let subjectID: String?
+    let feedbackAction: String?
+    let feedbackReason: String?
+    let outcomeCode: String?
+    let attributionChainID: String?
     let occurredAt: Date
 
     static func candidateCaptured(
@@ -47,6 +63,14 @@ struct TaskIntelligenceAttributionEvent {
             candidateID: candidateID,
             taskID: nil,
             resolutionCode: nil,
+            interventionID: nil,
+            surface: nil,
+            subjectKind: nil,
+            subjectID: nil,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: nil,
             occurredAt: occurredAt
         )
     }
@@ -66,6 +90,104 @@ struct TaskIntelligenceAttributionEvent {
             candidateID: candidateID,
             taskID: taskID,
             resolutionCode: resolutionCode,
+            interventionID: nil,
+            surface: nil,
+            subjectKind: nil,
+            subjectID: nil,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: nil,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func interventionPresented(
+        interventionID: String,
+        surface: Surface,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String? = nil,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .interventionPresented,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: attributionChainID,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func feedbackRecorded(
+        interventionID: String?,
+        surface: Surface,
+        action: String,
+        reason: String? = nil,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String? = nil,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .feedbackRecorded,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: action,
+            feedbackReason: reason,
+            outcomeCode: nil,
+            attributionChainID: attributionChainID,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func outcomeRecorded(
+        interventionID: String?,
+        surface: Surface,
+        outcomeCode: String,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .outcomeRecorded,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: outcomeCode,
+            attributionChainID: attributionChainID,
             occurredAt: occurredAt
         )
     }
@@ -78,12 +200,20 @@ struct TaskIntelligenceAttributionEvent {
             "event_id": eventID,
             "event_type": eventType.rawValue,
             "source_class": "screen",
-            "candidate_id": candidateID,
             "occurred_at": formatter.string(from: occurredAt),
         ]
         if let confidenceBand { properties["confidence_band"] = confidenceBand.rawValue }
+        if let candidateID { properties["candidate_id"] = candidateID }
         if let taskID { properties["task_id"] = taskID }
         if let resolutionCode { properties["resolution_code"] = resolutionCode.rawValue }
+        if let interventionID { properties["intervention_id"] = interventionID }
+        if let surface { properties["surface"] = surface.rawValue }
+        if let subjectKind { properties["subject_kind"] = subjectKind }
+        if let subjectID { properties["subject_id"] = subjectID }
+        if let feedbackAction { properties["feedback_action"] = feedbackAction }
+        if let feedbackReason { properties["feedback_reason"] = feedbackReason }
+        if let outcomeCode { properties["outcome_code"] = outcomeCode }
+        if let attributionChainID { properties["attribution_chain_id"] = attributionChainID }
         return properties
     }
 }

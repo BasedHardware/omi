@@ -675,7 +675,8 @@ def extract_action_items(
     • Extract a concrete future commitment even when phrased as "I will" or "I'll do it".
     • Skip only work demonstrably completed in the current moment; an immediate but still-open commitment is capturable.
     • For every item set capture_kind to exactly one of explicit_command, clear_commitment, direct_request, inferred_next_step.
-    • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.'''
+    • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.
+    • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
         if task_intelligence_capture
         else '''LEGACY COMMITMENT FILTER:
     • Skip if the user is currently doing it, about to do it, or handling it in this conversation.

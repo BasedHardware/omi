@@ -13,7 +13,8 @@ enum ScreenCaptureOutcome: String, Codable {
 struct ScreenCaptureFacts: Codable, Equatable {
     var explicitCommand = false
     var clearCommitment = false
-    var concreteDeliverable = true
+    /// Fail closed: unknown deliverable must not silent-accept.
+    var concreteDeliverable = false
     var directRequest = false
     var inferredNextStep = false
     var owner = "unknown"
@@ -27,14 +28,20 @@ struct ScreenCaptureFacts: Codable, Equatable {
 }
 
 enum ScreenCapturePolicy {
+    /// Keep in sync with `backend/utils/task_intelligence/capture_policy.py`.
+    static let minimumCaptureConfidence = 0.8
+
     static func evaluate(_ facts: ScreenCaptureFacts) -> ScreenCaptureOutcome {
         if facts.alreadyDone { return .proposeCompletion }
         if facts.duplicateOf != nil { return .proposeEnrichment }
         if facts.refinesTask != nil { return .proposeUpdate }
         if facts.publicBroadcast && !facts.directMention { return .ignore }
         if facts.explicitCommand { return .createDirect }
-        if facts.clearCommitment && facts.concreteDeliverable && facts.owner == "user" {
-            return .autoAcceptSilent
+        if facts.clearCommitment && facts.owner == "user" {
+            if facts.concreteDeliverable && facts.captureConfidence >= minimumCaptureConfidence {
+                return .autoAcceptSilent
+            }
+            return .pendingCandidate
         }
         if facts.directRequest || facts.inferredNextStep { return .pendingCandidate }
         return .ignore
@@ -200,7 +207,7 @@ enum ScreenCandidateAdapter {
         return ScreenCaptureFacts(
             explicitCommand: kind == "explicit_command",
             clearCommitment: kind == "clear_commitment",
-            concreteDeliverable: task.concreteDeliverable ?? true,
+            concreteDeliverable: task.concreteDeliverable ?? false,
             directRequest: kind == "direct_request",
             inferredNextStep: kind == "inferred_next_step",
             owner: task.owner ?? "unknown",

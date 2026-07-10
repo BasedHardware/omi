@@ -169,3 +169,40 @@ class TestGetAllGoals:
         results = goals.get_all_goals("uid123", include_inactive=include_inactive)
         assert len(results) == 1
         assert results[0]["id"] == "goal_no_id"
+
+
+class TestQualitativeGoalAliases:
+    def test_new_qualitative_goal_omits_fake_metric_aliases(self, goals):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        payload = goals._new_goal_payload(
+            {
+                'title': 'Launch desktop',
+                'desired_outcome': 'Ship a trustworthy release',
+                'why_it_matters': 'Users rely on it',
+                'success_criteria': ['Signed build ships'],
+            },
+            goal_id='goal_qualitative',
+            now=now,
+        )
+
+        assert payload['metric'] is None
+        assert 'goal_type' not in payload
+        assert 'target_value' not in payload
+        assert 'max_value' not in payload
+
+    def test_normalize_qualitative_goal_preserves_metric_without_scale_projection(self, goals):
+        normalized = goals.normalize_goal_storage(
+            {
+                'id': 'goal_qualitative',
+                'title': 'Launch desktop',
+                'desired_outcome': 'Ship a trustworthy release',
+                'metric': None,
+            },
+            goal_id='goal_qualitative',
+        )
+
+        assert normalized['metric'] is None
+        assert 'goal_type' not in normalized
+        assert 'max_value' not in normalized

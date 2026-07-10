@@ -11,7 +11,7 @@ from typing import Any
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from models.task_recommendation import DeterministicFacts, FeedbackSubjectKind, RecommendationSubjectKind  # noqa: E402
+from models.task_recommendation import DeterministicFacts, RecommendationSubjectKind  # noqa: E402
 from utils.task_intelligence import recommendations  # noqa: E402
 from utils.task_intelligence.live_recommendation_judgment import LiveRecommendationJudgment  # noqa: E402
 
@@ -49,28 +49,26 @@ def _live_llm():
     return _get_live_llm('what_matters_now')
 
 
-def _subject(payload: dict[str, Any]) -> recommendations.EvaluationSubject:
+def _subject(payload: dict[str, Any], *, device_id: str) -> recommendations.EvaluationSubject:
     raw_facts = payload['facts']
     facts = DeterministicFacts.model_validate(
         {key: value for key, value in raw_facts.items() if key in DeterministicFacts.model_fields}
     )
-    eligibility = recommendations._eligibility(
-        is_open=bool(raw_facts.get('open', True)),
-        unexpired=bool(raw_facts.get('unexpired', True)),
-        facts=facts,
-        recent_material_activity=True,
+    evidence = recommendations._valid_evidence(payload.get('evidence_refs', []), device_id=device_id)
+    recent_material_activity = bool(
+        payload.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
     )
-    return recommendations.EvaluationSubject(
+    return recommendations._subject(
         kind=RecommendationSubjectKind.task,
         subject_id=payload['subject_id'],
-        feedback_subject_kind=FeedbackSubjectKind.task,
-        feedback_subject_id=payload['subject_id'],
+        destination_task_id=payload['subject_id'],
         headline=f"Synthetic fixture {payload['subject_id']}",
         label=None,
-        evidence_preview='Synthetic fixture evidence.',
-        evidence_refs=(),
+        evidence=evidence,
         facts=facts,
-        eligibility=eligibility,
+        is_open=bool(raw_facts.get('open', True)),
+        unexpired=bool(raw_facts.get('unexpired', True)),
+        recent_material_activity=recent_material_activity,
         material_token='fixture-v1',
     )
 
@@ -79,7 +77,8 @@ def run(fixture_path: Path, *, live: bool) -> dict[str, Any]:
     fixture = json.loads(fixture_path.read_text())
     case_reports = []
     for case in fixture['cases']:
-        subjects = [_subject(subject) for subject in case['subjects']]
+        device_id = str(case.get('current_context', {}).get('device_id') or '')
+        subjects = [_subject(subject, device_id=device_id) for subject in case['subjects']]
         shortlist = recommendations.filter_shortlist(subjects, set())
         if live:
             judgment: recommendations.RecommendationJudgment = LiveRecommendationJudgment(_live_llm)

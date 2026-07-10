@@ -99,7 +99,7 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
             let facts = ScreenCaptureFacts(
                 explicitCommand: screen["explicit_command"] as? Bool ?? false,
                 clearCommitment: screen["clear_commitment"] as? Bool ?? false,
-                concreteDeliverable: screen["concrete_deliverable"] as? Bool ?? true,
+                concreteDeliverable: screen["concrete_deliverable"] as? Bool ?? false,
                 directRequest: screen["direct_request"] as? Bool ?? false,
                 inferredNextStep: screen["inferred_next_step"] as? Bool ?? false,
                 owner: screen["owner"] as? String ?? "unknown",
@@ -108,8 +108,12 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
                 alreadyDone: screen["already_done"] as? Bool ?? false,
                 duplicateOf: screen["duplicate_of"] as? String,
                 refinesTask: screen["refines_task"] as? String,
-                captureConfidence: 0.9,
-                ownershipConfidence: 0.9
+                captureConfidence: (screen["capture_confidence"] as? Double)
+                    ?? (screen["capture_confidence"] as? NSNumber)?.doubleValue
+                    ?? 0.0,
+                ownershipConfidence: (screen["ownership_confidence"] as? Double)
+                    ?? (screen["ownership_confidence"] as? NSNumber)?.doubleValue
+                    ?? 0.5
             )
             XCTAssertEqual(
                 ScreenCapturePolicy.evaluate(facts).rawValue,
@@ -196,6 +200,55 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
                 resolutionCode: .accepted
             )
         )
+
+        let presented = TaskIntelligenceAttributionEvent.interventionPresented(
+            interventionID: "intervention-1",
+            surface: .whatMattersNow,
+            subjectKind: "task",
+            subjectID: "task-1",
+            eventID: "attr-presented",
+            occurredAt: occurredAt
+        )
+        XCTAssertEqual(presented.analyticsProperties["event_type"] as? String, "intervention_presented")
+        XCTAssertEqual(presented.analyticsProperties["surface"] as? String, "what_matters_now")
+        XCTAssertEqual(presented.analyticsProperties["intervention_id"] as? String, "intervention-1")
+        XCTAssertNil(presented.analyticsProperties["content"])
+
+        let feedback = TaskIntelligenceAttributionEvent.feedbackRecorded(
+            interventionID: "intervention-1",
+            surface: .suggested,
+            action: "do_now",
+            subjectKind: "candidate",
+            subjectID: "candidate-1",
+            candidateID: "candidate-1",
+            attributionChainID: "chain-1",
+            eventID: "attr-feedback",
+            occurredAt: occurredAt
+        )
+        XCTAssertEqual(feedback.analyticsProperties["event_type"] as? String, "feedback_recorded")
+        XCTAssertEqual(feedback.analyticsProperties["feedback_action"] as? String, "do_now")
+        XCTAssertNil(feedback.analyticsProperties["headline"])
+
+        let outcome = TaskIntelligenceAttributionEvent.outcomeRecorded(
+            interventionID: "intervention-1",
+            surface: .suggested,
+            outcomeCode: "workstream_advanced",
+            subjectKind: "candidate",
+            subjectID: "candidate-1",
+            candidateID: "candidate-1",
+            attributionChainID: "chain-1",
+            eventID: "attr-outcome",
+            occurredAt: occurredAt
+        )
+        XCTAssertEqual(outcome.analyticsProperties["event_type"] as? String, "outcome_recorded")
+        XCTAssertEqual(outcome.analyticsProperties["outcome_code"] as? String, "workstream_advanced")
+        XCTAssertNil(outcome.analyticsProperties["task_text"])
+    }
+
+    func testEvidenceKindNeverLeaksWorkstreamNoun() {
+        XCTAssertEqual(OmiAPI.EvidenceKind.workstream_event.userFacingLabel, "Thread event")
+        XCTAssertFalse(OmiAPI.EvidenceKind.workstream_event.userFacingLabel.localizedCaseInsensitiveContains("workstream"))
+        XCTAssertEqual(OmiAPI.EvidenceKind.external.userFacingLabel, "Journal")
     }
 
     func testCanonicalScreenPayloadContainsOnlyLocalReferenceAndMinimizedTaskFacts() throws {

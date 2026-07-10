@@ -188,11 +188,11 @@ struct TaskChatPanel: View {
                 .scaledFont(size: 36)
                 .foregroundColor(OmiColors.textTertiary.opacity(0.4))
 
-            Text("Select a task to chat")
+            Text("Open a task thread")
                 .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
-            Text("Click on any task in the list to start a conversation about it.")
+            Text("Choose Work on this with Omi on a task, or open one that already has a thread.")
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -342,7 +342,7 @@ private struct TaskThreadOverview: View {
         if !refs.isEmpty {
             HStack(spacing: 4) {
                 Image(systemName: "link")
-                Text(refs.prefix(3).map { "\($0.kind.rawValue):\($0.id)" }.joined(separator: " · "))
+                Text(refs.prefix(3).map { "\($0.kind.userFacingLabel):\($0.id)" }.joined(separator: " · "))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -404,4 +404,20 @@ struct TaskChatPanelPlaceholder: View {
         }
         .background(OmiColors.backgroundPrimary)
     }
+}
+
+extension OmiAPI.EvidenceKind {
+  /// Human labels for evidence chips — never expose internal nouns like "workstream".
+  var userFacingLabel: String {
+    switch self {
+    case .conversation: return "Conversation"
+    case .memory_item: return "Memory"
+    case .workstream_event: return "Thread event"
+    case .artifact: return "Artifact"
+    case .chat_message: return "Chat"
+    case .local_screen: return "Screen"
+    case .external: return "Journal"
+    case ._unknown: return "Evidence"
+    }
+  }
 }

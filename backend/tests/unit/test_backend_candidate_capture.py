@@ -16,7 +16,17 @@ from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
 
 
-def _action(description, *, capture_kind=None, capture_owner=None, candidate_action=None, target_task_id=None):
+def _action(
+    description,
+    *,
+    capture_kind=None,
+    capture_owner=None,
+    candidate_action=None,
+    target_task_id=None,
+    concrete_deliverable=None,
+    capture_confidence=None,
+):
+    default_confidence = 0.95 if capture_kind else None
     return SimpleNamespace(
         description=description,
         completed=False,
@@ -26,10 +36,11 @@ def _action(description, *, capture_kind=None, capture_owner=None, candidate_act
         completed_at=None,
         capture_kind=capture_kind,
         capture_owner=capture_owner,
-        capture_confidence=0.95 if capture_kind else None,
+        capture_confidence=default_confidence if capture_confidence is None else capture_confidence,
         ownership_confidence=1 if capture_owner == 'user' else None,
         candidate_action=candidate_action,
         target_task_id=target_task_id,
+        concrete_deliverable=concrete_deliverable,
     )
 
 
@@ -66,6 +77,31 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
         source_surface='conversation',
         signals=BackendCaptureSignals(
             clear_commitment=True,
+            concrete_deliverable=True,
+            owner='user',
+            capture_confidence=0.95,
+            ownership_confidence=1,
+        ),
+    )
+    low_confidence = adapt_backend_capture(
+        task,
+        evidence_ref=evidence,
+        source_surface='conversation',
+        signals=BackendCaptureSignals(
+            clear_commitment=True,
+            concrete_deliverable=True,
+            owner='user',
+            capture_confidence=0.5,
+            ownership_confidence=1,
+        ),
+    )
+    without_deliverable = adapt_backend_capture(
+        task,
+        evidence_ref=evidence,
+        source_surface='conversation',
+        signals=BackendCaptureSignals(
+            clear_commitment=True,
+            concrete_deliverable=False,
             owner='user',
             capture_confidence=0.95,
             ownership_confidence=1,
@@ -81,9 +117,56 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
     assert pending.policy.outcome == 'pending_candidate'
     assert pending.candidate is not None
     assert accepted.policy.outcome == 'auto_accept_silent'
+    assert accepted.policy.interruption == 'none'
     assert accepted.candidate.capture_confidence == 0.95
+    assert low_confidence.policy.outcome == 'pending_candidate'
+    assert low_confidence.policy.interruption == 'none'
+    assert without_deliverable.policy.outcome == 'pending_candidate'
+    assert without_deliverable.policy.interruption == 'none'
     assert ignored.policy.outcome == 'ignore'
     assert ignored.candidate is None
+
+
+def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_explicit_true():
+    unknown = conversation_capture._capture_signals(_action('Send the budget', capture_kind='clear_commitment'))
+    explicit = conversation_capture._capture_signals(
+        _action('Send the budget', capture_kind='clear_commitment', concrete_deliverable=True)
+    )
+
+    assert unknown.concrete_deliverable is False
+    assert explicit.concrete_deliverable is True
+    assert (
+        conversation_capture._capture_decision(
+            _action(
+                'Send the budget',
+                capture_kind='clear_commitment',
+                capture_owner='user',
+                concrete_deliverable=True,
+            ),
+            'conversation-1',
+        ).policy.outcome
+        == 'auto_accept_silent'
+    )
+    assert (
+        conversation_capture._capture_decision(
+            _action(
+                'Send the budget',
+                capture_kind='clear_commitment',
+                capture_owner='user',
+                capture_confidence=0.4,
+                concrete_deliverable=True,
+            ),
+            'conversation-1',
+        ).policy.outcome
+        == 'pending_candidate'
+    )
+    assert (
+        conversation_capture._capture_decision(
+            _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
+            'conversation-1',
+        ).policy.outcome
+        == 'pending_candidate'
+    )
 
 
 def test_conversation_adapter_uses_supplied_targets_for_update_and_completion():
@@ -234,7 +317,12 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     process_conversation._save_action_items(
         'user-1',
         _conversation(
-            _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
+            _action(
+                'Send the budget',
+                capture_kind='clear_commitment',
+                capture_owner='user',
+                concrete_deliverable=True,
+            ),
             _action('Review the forecast', capture_kind='direct_request'),
         ),
     )

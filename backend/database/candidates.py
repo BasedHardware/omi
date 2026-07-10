@@ -234,6 +234,8 @@ def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datet
             'workstream_id': candidate.workstream_id,
             'source': candidate.source_surface,
             'provenance': [ref.model_dump(mode='python') for ref in candidate.evidence_refs],
+            'capture_confidence': candidate.capture_confidence,
+            'ownership_confidence': candidate.ownership_confidence,
             'candidate_id': candidate.candidate_id,
             'account_generation': candidate.account_generation,
             'idempotency_key': candidate.idempotency_key,

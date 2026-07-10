@@ -472,7 +472,7 @@ actor TaskAssistant: ProactiveAssistant {
             "source_subcategory": task.sourceSubcategory,
             "capture_kind": task.captureKind ?? "direct_request",
             "owner": task.owner ?? "unknown",
-            "concrete_deliverable": task.concreteDeliverable ?? true,
+            "concrete_deliverable": task.concreteDeliverable ?? false,
             "public_broadcast": task.publicBroadcast ?? false,
             "direct_mention": task.directMention ?? false,
             "already_done": task.alreadyDone ?? false,
