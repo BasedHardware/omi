@@ -257,22 +257,11 @@ actor APIClient {
     authPolicy: RequestAuthPolicy = .default,
     retriedAuth: Bool = false
   ) async throws {
-    let (_, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: retriedAuth,
-        signOutOn401: authPolicy.signOutOn401
-      ) else {
-        throw APIError.unauthorized
-      }
-      return try await performVoidRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
-    }
+    let (_, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
 
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
@@ -351,28 +340,61 @@ actor APIClient {
     }
   }
 
-  private func performRequest<T: Decodable>(
-    _ request: URLRequest,
+  private func performAuthenticatedData(
+    for request: URLRequest,
     authPolicy: RequestAuthPolicy = .default,
     retriedAuth: Bool = false
-  ) async throws -> T {
+  ) async throws -> (Data, HTTPURLResponse) {
+    let endpoint = endpointLabel(for: request)
     let (data, response) = try await session.data(for: request)
-
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
     if httpResponse.statusCode == 401 {
+      if !retriedAuth {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
       guard let retryRequest = try await authorizedRetryRequest(
         from: request,
         retriedAuth: retriedAuth,
         signOutOn401: authPolicy.signOutOn401
       ) else {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
         throw APIError.unauthorized
       }
-
-      return try await performRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
+      do {
+        let result = try await performAuthenticatedData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true
+        )
+        let (_, retryResponse) = result
+        let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        return result
+      } catch {
+        if case APIError.unauthorized = error {
+          throw error
+        }
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        throw error
+      }
     }
+
+    return (data, httpResponse)
+  }
+
+  private func performRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> T {
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = OmiHTTPTransport.extractErrorDetail(from: data)
@@ -5461,19 +5483,7 @@ extension APIClient {
   }
 
   private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-
-    if http.statusCode == 401 {
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: retriedAuth,
-        signOutOn401: true
-      ) else {
-        throw APIError.unauthorized
-      }
-      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
-    }
+    let (data, http) = try await performAuthenticatedData(for: request, retriedAuth: retriedAuth)
 
     if http.statusCode == 200 {
       let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)

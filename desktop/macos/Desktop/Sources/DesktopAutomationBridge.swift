@@ -2721,13 +2721,19 @@ final class DesktopAutomationBridge {
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
   private var listener: NWListener?
+  private var bindAttempts = 0
+  private let maxBindAttempts = 3
 
   private init() {}
 
   func startIfNeeded() {
     guard DesktopAutomationLaunchOptions.isEnabled else { return }
     guard listener == nil else { return }
+    bindAttempts = 0
+    attemptStartListener()
+  }
 
+  private func attemptStartListener() {
     do {
       let parameters = NWParameters.tcp
       parameters.allowLocalEndpointReuse = true
@@ -2745,19 +2751,46 @@ final class DesktopAutomationBridge {
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
-      listener.stateUpdateHandler = { (state: NWListener.State) in
+      listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
         log("DesktopAutomationBridge: listener state changed to \(String(describing: state))")
+        if case .failed(let error) = state {
+          self?.handleListenerBindFailure(error: error)
+        }
       }
       listener.start(queue: queue)
       self.listener = listener
+      bindAttempts = 0
       DesktopAutomationLaunchOptions.writeTokenFileIfNeeded()
       Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
       )
     } catch {
-      logError("DesktopAutomationBridge: failed to start listener", error: error)
+      handleListenerBindFailure(error: error)
     }
+  }
+
+  private func handleListenerBindFailure(error: Error) {
+    listener?.cancel()
+    listener = nil
+    bindAttempts += 1
+    let reason = error.localizedDescription
+    if bindAttempts < maxBindAttempts {
+      log(
+        "DesktopAutomationBridge: bind failed (attempt \(bindAttempts)/\(maxBindAttempts)), retrying: \(reason)")
+      queue.asyncAfter(deadline: .now() + Double(bindAttempts)) { [weak self] in
+        self?.attemptStartListener()
+      }
+      return
+    }
+    log(
+      "DesktopAutomationBridge: bind failed after \(maxBindAttempts) attempts "
+        + "(failure_class=bind_failed recovery_action=retry_exhausted recovery_result=exhausted): \(reason)")
+    logError("DesktopAutomationBridge: failed to start listener", error: error)
+    DesktopDiagnosticsManager.shared.recordAutomationBridgeBindFailed(
+      port: Int(DesktopAutomationLaunchOptions.port),
+      reason: reason
+    )
   }
 
   private func handleConnection(_ connection: NWConnection) {
