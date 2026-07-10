@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, ShieldCheck, Zap } from 'lucide-react'
+import { Activity, EyeOff, ShieldCheck, Zap } from 'lucide-react'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
@@ -32,6 +32,20 @@ export function PrivacyTab(): React.JSX.Element {
   const toggleAutomation = (on: boolean): void => {
     setAutoConsent(on)
     setPreferences({ automationConsentedAt: on ? Date.now() : undefined })
+  }
+
+  // Bar/HUD screen-share privacy: exclude the top-edge bar from captures
+  // (WDA_EXCLUDEFROMCAPTURE). Persisted in main's app settings; applied live.
+  const [hudProtected, setHudProtected] = useState<boolean | null>(null)
+  useEffect(() => {
+    window.omiBar
+      .getContentProtection()
+      .then(setHudProtected)
+      .catch(() => setHudProtected(null))
+  }, [])
+  const toggleHudProtection = (on: boolean): void => {
+    setHudProtected(on)
+    void window.omiBar.setContentProtection(on).then(setHudProtected)
   }
 
   return (
@@ -89,6 +103,21 @@ export function PrivacyTab(): React.JSX.Element {
           </label>
         )}
       </SettingRow>
+      <SettingRow
+        icon={EyeOff}
+        dot={hudProtected ? 'on' : 'off'}
+        title="Hide the Omi bar from screen sharing"
+        subtitle="Excludes the top-edge bar from screenshots, recordings, and shared screens. Turn off if you want it visible in captures."
+        keywords="bar hud screen share capture protection privacy exclude recording"
+        control={
+          <Toggle
+            on={!!hudProtected}
+            onChange={toggleHudProtection}
+            disabled={hudProtected === null}
+            label="Hide the Omi bar from screen sharing"
+          />
+        }
+      />
       <SettingRow
         icon={ShieldCheck}
         title="On-device by default"

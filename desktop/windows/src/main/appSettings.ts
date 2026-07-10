@@ -12,6 +12,9 @@ export type AppSettings = {
   closeToTrayNoticeShown: boolean
   /** Electron accelerator that toggles mic recording. */
   recordHotkey: string
+  /** Exclude the bar/HUD from screen capture (WDA_EXCLUDEFROMCAPTURE). User
+   *  toggle, default on — consistent with the old overlay's behavior. */
+  hudContentProtection: boolean
 }
 
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
@@ -24,7 +27,8 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
       : DEFAULT_RECORD_HOTKEY
   return {
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
-    recordHotkey: hotkey
+    recordHotkey: hotkey,
+    hudContentProtection: r.hudContentProtection !== false
   }
 }
 

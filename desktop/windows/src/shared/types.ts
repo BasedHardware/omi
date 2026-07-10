@@ -193,8 +193,6 @@ export type OmiOverlayApi = {
   /** Enable/disable the summon shortcut. Off until onboarding completes; disabling
    *  also hides the overlay if it's open. */
   setEnabled: (enabled: boolean) => void
-  /** Report the panel's current content height so main can ease the window height. */
-  setHeight: (px: number) => void
   /** Hide the overlay and surface the main window (used by the signed-out prompt). */
   focusMain: () => void
   /** Subscribe to window focus/blur (active=true on focus). Returns an unsubscribe fn. */
@@ -235,6 +233,39 @@ export type OmiOverlayApi = {
 
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
 export type OverlayVisibility = { open: boolean; active: boolean }
+
+/** Bar presentation modes: peek (edge-hover pill, unfocused, click-through with
+ *  interactive islands), expanded (chat, the only focused mode), ptt (expanded
+ *  listening for a hotkey hold, unfocused). */
+export type BarMode = 'peek' | 'expanded' | 'ptt'
+/** What triggered a reveal — drives the renderer's entrance motion (strip =
+ *  slide-in; summon/ptt = orb genesis). */
+export type BarReveal = 'strip' | 'summon' | 'ptt'
+export type BarShowPayload = { mode: BarMode; reveal: BarReveal }
+
+/** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
+export type OmiBarApi = {
+  /** The bar renderer has mounted + measured — flush any deferred first show. */
+  ready: () => void
+  /** Slide-out finished; main may hide the window now. */
+  requestHide: () => void
+  /** Ask main to switch modes (focusability + hit-testing follow). */
+  expand: () => void
+  collapse: () => void
+  /** Interactive-island hit-testing toggle (peek/ptt modes). */
+  setInteractive: (interactive: boolean) => void
+  /** Fired by the 1px trigger-strip pages on mousemove (edge reveal). */
+  stripEnter: () => void
+  onShow: (cb: (p: BarShowPayload) => void) => () => void
+  onMode: (cb: (mode: BarMode) => void) => () => void
+  onWillHide: (cb: () => void) => () => void
+  /** Summon-hotkey physical hold state, driven by main's gesture machine.
+   *  'down' arms the existing PTT machine; 'up' releases it. */
+  onPtt: (cb: (phase: 'down' | 'up') => void) => () => void
+  /** Screen-share privacy toggle (persisted in main's app settings). */
+  getContentProtection: () => Promise<boolean>
+  setContentProtection: (enabled: boolean) => Promise<boolean>
+}
 
 /** Listening state the renderer reports to the tray (drives icon/tooltip/menu).
  *  Mirrors the main-process TrayState in main/trayState.ts. */

@@ -21,7 +21,18 @@ import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
 import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
 import { startForegroundMonitor } from './usage/foregroundMonitor'
-import { getOverlayWindow, toggleOverlay } from './overlay/window'
+import {
+  registerBarIpc,
+  startBarStrips,
+  destroyBar,
+  handleSummonPress,
+  setSummonGestureAccelerator,
+  setBarEnabled,
+  getBarWindow,
+  isBarVisible,
+  showBar,
+  hideBar
+} from './bar/window'
 import {
   registerOverlayShortcut,
   unregisterOverlayShortcut,
@@ -551,6 +562,25 @@ app.whenReady().then(async () => {
           })
         }
         stopTestListenSession('e2e-vad-playback')
+      },
+      // Bar harness: drive reveal paths without the global hotkey / edge strip
+      // (the harness asserts focus behavior + takes screenshots).
+      barShow: (mode: 'peek' | 'expanded' | 'ptt', reveal?: 'strip' | 'summon' | 'ptt') => {
+        setBarEnabled(true) // the hermetic harness has no onboarding to enable it
+        showBar(mode, reveal ?? (mode === 'peek' ? 'strip' : 'summon'))
+      },
+      barEnable: () => setBarEnabled(true),
+      barHide: () => hideBar(),
+      barSummonFire: () => handleSummonPress(),
+      barState: () => {
+        const win = getBarWindow()
+        return {
+          exists: !!win && !win.isDestroyed(),
+          visible: isBarVisible(),
+          focused: !!win && !win.isDestroyed() && win.isFocused(),
+          focusable: !!win && !win.isDestroyed() && win.isFocusable(),
+          id: win && !win.isDestroyed() ? win.id : null
+        }
       }
     }
   }
@@ -586,15 +616,22 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Top-edge reveal: 1px trigger strips on every display (zero polling while
+    // idle) + display tracking + fullscreen suppression.
+    startBarStrips()
   })
 
-  // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
-  // first summon (so it inherits the already signed-in Firebase session).
+  // Bar (replaces the old floating overlay): wire IPC + the global summon
+  // shortcut. The shortcut callback feeds the gesture machine (auto-repeat
+  // fires group into ONE gesture: tap toggles the expanded bar, a physical
+  // hold is push-to-talk — the "bar flaps while holding the hotkey" fix).
   registerOverlayHandlers(surfaceMainWindow)
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, toggleOverlay)
+  registerBarIpc()
+  setSummonGestureAccelerator(OVERLAY_ACCELERATOR)
+  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, handleSummonPress)
   if (!shortcutOk) {
     console.warn(
-      '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
+      '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
     )
   }
 
@@ -754,8 +791,7 @@ app.on('window-all-closed', () => {
 // helper + foreground-window hook.
 app.on('will-quit', () => {
   destroyTray()
-  const overlay = getOverlayWindow()
-  if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  destroyBar()
   const capture = getCaptureWindow()
   if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()

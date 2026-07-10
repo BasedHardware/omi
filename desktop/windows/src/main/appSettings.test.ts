@@ -55,7 +55,8 @@ describe('appSettings', () => {
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
-      recordHotkey: 'Ctrl+Space'
+      recordHotkey: 'Ctrl+Space',
+      hudContentProtection: true
     })
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
     expect(sanitizeAppSettings({ recordHotkey: 42 } as never).recordHotkey).toBe('Ctrl+Space')
@@ -63,5 +64,11 @@ describe('appSettings', () => {
       sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown
     ).toBe(false)
     expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+    // HUD capture-exclusion defaults ON and only an explicit false disables it.
+    expect(sanitizeAppSettings(null).hudContentProtection).toBe(true)
+    expect(sanitizeAppSettings({ hudContentProtection: false }).hudContentProtection).toBe(false)
+    expect(
+      sanitizeAppSettings({ hudContentProtection: 'nope' } as never).hudContentProtection
+    ).toBe(true)
   })
 })

@@ -62,6 +62,12 @@ export type PushToTalk = {
   onKeyDown: (e: React.KeyboardEvent) => boolean
   /** Wire to the input's onKeyUp. True = consumed. */
   onKeyUp: (e: React.KeyboardEvent) => boolean
+  /** Programmatic gesture entry points for main-process-driven holds (the bar's
+   *  summon-hotkey hold). Semantically identical to Space key-down/key-up: the
+   *  hook's own threshold timer still decides tap vs hold, the warm mic
+   *  backfills from beginHold, and a sub-threshold begin→end pair is a no-op. */
+  beginHold: () => void
+  endHold: () => void
   /** Abort the active capture without sending (Esc / focus loss / unmount). */
   cancel: () => void
 }
@@ -418,6 +424,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
     return 'none'
   }
 
+  /** Main-process-driven hold (bar hotkey): same path as a physical Space
+   *  key-down/key-up on the window. */
+  const beginHold = (): void => {
+    if (isHolding() || holdTimerRef.current !== null) return
+    gestureDown(optsRef.current.getDraft())
+  }
+  const endHold = (): void => {
+    gestureUp()
+  }
+
   const onKeyDown = (e: React.KeyboardEvent): boolean => {
     if (!isSpace(e)) return false
     if (isHolding()) {
@@ -505,5 +521,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { recording, transcribing, hint, error, analyserRef, onKeyDown, onKeyUp, cancel }
+  return {
+    recording,
+    transcribing,
+    hint,
+    error,
+    analyserRef,
+    onKeyDown,
+    onKeyUp,
+    beginHold,
+    endHold,
+    cancel
+  }
 }

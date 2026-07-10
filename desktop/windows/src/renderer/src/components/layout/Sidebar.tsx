@@ -14,6 +14,7 @@ import {
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
+import { Orb } from '../orb/Orb'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
@@ -149,16 +150,22 @@ export function Sidebar(): React.JSX.Element {
         collapsed ? 'w-16' : 'w-60'
       )}
     >
-      {/* Top row: logo (left, fades out) + collapse toggle pinned right. */}
+      {/* Top row: orb + logo (left, logo fades out when collapsed) + collapse
+          toggle pinned right. The orb is the same component the bar mounts —
+          here it reflects the app's listening state (calm orbit while the
+          always-on mic is live, idle otherwise). */}
       <div className="flex items-center justify-between px-1.5 py-1">
-        <img
-          src="https://personas.omi.me/omilogo.png"
-          alt="omi"
-          className={cn(
-            'h-4 shrink-0 overflow-hidden transition-opacity duration-200',
-            collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
-          )}
-        />
+        <div className="flex min-w-0 items-center gap-2">
+          <Orb size={22} state={micOn && user ? 'listening' : 'idle'} />
+          <img
+            src="https://personas.omi.me/omilogo.png"
+            alt="omi"
+            className={cn(
+              'h-4 shrink-0 overflow-hidden transition-opacity duration-200',
+              collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
+            )}
+          />
+        </div>
         <button
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
