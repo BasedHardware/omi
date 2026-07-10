@@ -28,6 +28,8 @@ export type MeetingTitlePattern = {
   name: string
   /** Regex source tested against the foreground window title. */
   pattern: string
+  /** Compiled once at sanitize time — matchTier1 runs on every evaluate. */
+  regex: RegExp
 }
 
 export type MeetingPatterns = {
@@ -83,8 +85,8 @@ export function sanitizePatterns(raw: unknown): MeetingPatterns | null {
     if (typeof o?.id !== 'string' || typeof o?.name !== 'string' || typeof o?.pattern !== 'string')
       continue
     try {
-      new RegExp(o.pattern) // reject invalid regex sources here, not at match time
-      titles.push({ id: o.id, name: o.name, pattern: o.pattern })
+      // Compile once here (also rejects invalid sources) — not per match call.
+      titles.push({ id: o.id, name: o.name, pattern: o.pattern, regex: new RegExp(o.pattern) })
     } catch {
       /* drop just this entry */
     }
@@ -126,20 +128,17 @@ export function matchTier1(
   const present = new Set(processes.map(lower))
   const matches: Tier1Match[] = []
   for (const app of patterns.apps) {
+    // Packaged (Store) apps are deliberately NOT candidates on presence alone —
+    // their ConsentStore id (not a snapshot exe) confirms them in
+    // pickAgreedMatch, so 'candidate' isn't permanently true for everyone with
+    // Teams installed.
     const exe = app.exes.find((e) => present.has(e))
     if (exe) matches.push({ id: app.id, name: app.name, exe, via: 'process' })
-    else if (app.packaged?.length) {
-      // A packaged (Store) app has no reliable exe in the snapshot list under
-      // the pattern's names; presence is confirmed by Tier 2 agreement instead.
-      // Only emit it as a candidate when its packaged id shows up in Tier 2 —
-      // handled in pickAgreedMatch (a packaged app with no exe here would make
-      // 'candidate' permanently true for everyone with Teams installed).
-    }
   }
   const fgExe = exeBasename(foreground.exePath)
   if (fgExe && foreground.title && patterns.browsers.includes(fgExe)) {
     for (const t of patterns.titles) {
-      if (new RegExp(t.pattern).test(foreground.title)) {
+      if (t.regex.test(foreground.title)) {
         matches.push({ id: t.id, name: t.name, exe: fgExe, via: 'title' })
         break // one title match is enough; the foreground window is one meeting
       }
@@ -161,13 +160,13 @@ export function pickAgreedMatch(
   patterns: MeetingPatterns
 ): AgreedMatch | null {
   const ids = tier2Ids.map(lower)
+  // The Tier 2 id (if any) matching an app pattern's packaged substrings.
+  const packagedId = (app: MeetingAppPattern | undefined): string | undefined =>
+    app?.packaged?.length ? ids.find((id) => app.packaged!.some((p) => id.includes(p))) : undefined
   for (const m of matches) {
     if (m.exe && ids.includes(m.exe)) return { ...m, tier2Key: m.exe }
     // Same app, packaged install: correlate via the pattern's packaged ids.
-    const app = patterns.apps.find((a) => a.id === m.id)
-    const pkg = app?.packaged?.length
-      ? ids.find((id) => app.packaged!.some((p) => id.includes(p)))
-      : undefined
+    const pkg = packagedId(patterns.apps.find((a) => a.id === m.id))
     if (pkg) return { ...m, tier2Key: pkg }
   }
   // A packaged app capturing the mic with NO unpackaged process match — e.g.
@@ -175,8 +174,7 @@ export function pickAgreedMatch(
   // name. Treat "packaged id active in Tier 2" + "pattern lists it" as both
   // present and agreeing (the process demonstrably exists — it holds the mic).
   for (const app of patterns.apps) {
-    if (!app.packaged?.length) continue
-    const pkg = ids.find((id) => app.packaged!.some((p) => id.includes(p)))
+    const pkg = packagedId(app)
     if (pkg) return { id: app.id, name: app.name, exe: null, via: 'process', tier2Key: pkg }
   }
   return null

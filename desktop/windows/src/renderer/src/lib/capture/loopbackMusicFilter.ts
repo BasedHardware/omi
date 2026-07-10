@@ -37,7 +37,8 @@ export function createLoopbackMusicFilter(
 
   return {
     push: (pcm: Int16Array): void => {
-      for (const out of gate.push(pcm)) onOut(out)
+      const out = gate.push(pcm)
+      if (out) onOut(out)
     },
     stop: (): void => {
       stopped = true

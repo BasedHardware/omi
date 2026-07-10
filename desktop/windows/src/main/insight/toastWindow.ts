@@ -25,6 +25,15 @@ const MEETING_ASK_DISMISS_MS = 30_000
 
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
+// Dismiss duration of the toast currently shown — hover-resume must re-arm
+// with the SAME budget (an ask-toast paused at 30s must not resume at 8s).
+let currentDismissMs = AUTO_DISMISS_MS
+
+function armDismiss(ms: number): void {
+  currentDismissMs = ms
+  if (dismissTimer) clearTimeout(dismissTimer)
+  dismissTimer = setTimeout(hideInsightToast, ms)
+}
 // The meeting payload currently on screen. Kept so the toast renderer can PULL
 // it on mount ('meeting:getToast'): a push sent between the window's
 // did-finish-load and React's effect subscription would otherwise vanish — a
@@ -113,8 +122,7 @@ export function showInsightToast(payload: InsightPayload): void {
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
-  if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, AUTO_DISMISS_MS)
+  armDismiss(AUTO_DISMISS_MS)
 }
 
 /** Show (or update) the meeting toast in the shared toast window. Ask-toasts
@@ -130,11 +138,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
-  if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(
-    hideInsightToast,
-    payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS
-  )
+  armDismiss(payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS)
 }
 
 /** Hide the shared toast window (same surface as the insight toast). */
@@ -159,11 +163,11 @@ export function pauseInsightDismiss(): void {
   }
 }
 
-/** Resume the auto-dismiss when the pointer leaves. No-op if already hidden. */
+/** Resume the auto-dismiss when the pointer leaves. No-op if already hidden.
+ *  Re-arms with the CURRENT toast's duration (ask-toasts keep their 30s). */
 export function resumeInsightDismiss(): void {
   if (!toastWindow || toastWindow.isDestroyed() || !toastWindow.isVisible()) return
-  if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, AUTO_DISMISS_MS)
+  armDismiss(currentDismissMs)
 }
 
 /** Pre-create the (hidden) toast window so the first insight shows instantly. */

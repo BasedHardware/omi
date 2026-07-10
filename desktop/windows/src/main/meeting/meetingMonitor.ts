@@ -155,22 +155,13 @@ function handleEffect(effect: DetectorEffect): void {
     console.log(
       `[meeting] started: ${effect.match.name} (${effect.match.tier2Key}) mode=${effect.mode}`
     )
-    if (effect.mode === 'auto') {
-      startCapture()
-      showMeetingToast({
-        meetingId: currentMeeting.id,
-        appName: currentMeeting.appName,
-        kind: 'capturing',
-        firstRun: takeFirstRun()
-      })
-    } else {
-      showMeetingToast({
-        meetingId: currentMeeting.id,
-        appName: currentMeeting.appName,
-        kind: 'ask',
-        firstRun: takeFirstRun()
-      })
-    }
+    if (effect.mode === 'auto') startCapture()
+    showMeetingToast({
+      meetingId: currentMeeting.id,
+      appName: currentMeeting.appName,
+      kind: effect.mode === 'auto' ? 'capturing' : 'ask',
+      firstRun: takeFirstRun()
+    })
   } else {
     // meeting-ended: finalize the session (same stop path as the toast's Stop)
     // and drop the toast if it's still up.
@@ -181,8 +172,17 @@ function handleEffect(effect: DetectorEffect): void {
   }
 }
 
+/** True when detection can do nothing: global mode 'off' with no per-app
+ *  override enabling anything. Skips the snapshot/registry work entirely while
+ *  idle (injected E2E signals bypass the fast-path so tests stay in control). */
+function detectionDisabled(): boolean {
+  const m = getAppSettings().meeting
+  return m.mode === 'off' && !Object.values(m.perApp).some((v) => v !== 'off')
+}
+
 function evaluate(): void {
   if (!running) return
+  if (!injectedSignals && !configOverride && detectionDisabled() && state.phase === 'idle') return
   const now = Date.now()
   const result = step(state, computeSignals(), now, config())
   state = result.state
@@ -242,7 +242,7 @@ export function startMeetingMonitor(d: Deps): void {
   // "Omi is capturing" notice instead of lying.
   unsubCaptureEvents = onCaptureEventInMain((ev) => {
     if (ev.type !== 'meeting-capture-status') return
-    statusLog.push(`${ev.meetingId}:${ev.status}`)
+    if (process.env.OMI_E2E === '1') statusLog.push(`${ev.meetingId}:${ev.status}`)
     if (!currentMeeting || ev.meetingId !== currentMeeting.id) return
     if (ev.status === 'error') {
       console.warn('[meeting] capture failed:', ev.message)
@@ -250,7 +250,9 @@ export function startMeetingMonitor(d: Deps): void {
       hideMeetingToast()
     }
   })
-  evaluate() // pick up a meeting already in progress at app start
+  // Pick up a meeting already in progress at app start — coalesced, so the
+  // first snapshot/registry read stays off the ready-to-show critical path.
+  scheduleEvaluate()
   console.log('[meeting] monitor started')
 }
 

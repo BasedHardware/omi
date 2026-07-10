@@ -18,8 +18,10 @@
 // effect at all when the effective mode is 'off' (the state still latches so
 // the same meeting isn't re-evaluated every step).
 import type { AgreedMatch } from './patterns'
+// Type-only import — the machine stays pure (no Electron, no runtime deps).
+import type { MeetingMode } from '../../shared/types'
 
-export type MeetingMode = 'off' | 'ask' | 'auto'
+export type { MeetingMode }
 
 export type DetectorConfig = {
   /** Tier1+Tier2 must agree continuously this long before 'active' (~3s). */

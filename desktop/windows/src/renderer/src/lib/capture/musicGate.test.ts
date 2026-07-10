@@ -19,7 +19,7 @@ describe('musicGate (loopback speech/music gating)', () => {
   it('passes everything before the first window completes (fail-open warmup)', () => {
     const gate = createMusicGate(scripted(['music']))
     const out = gate.push(chunk(4096))
-    expect(out.length).toBe(1)
+    expect(out).not.toBeNull()
     expect(gate.verdict()).toBe('unknown') // not enough audio to classify yet
   })
 
@@ -32,21 +32,21 @@ describe('musicGate (loopback speech/music gating)', () => {
     // Completing the window classifies → music → THIS chunk is dropped.
     const out = gate.push(chunk(8000))
     expect(c.calls).toBe(1)
-    expect(out).toEqual([])
+    expect(out).toBeNull()
     expect(gate.verdict()).toBe('music')
     // Subsequent audio stays dropped while the verdict is music.
-    expect(gate.push(chunk(4096))).toEqual([])
+    expect(gate.push(chunk(4096))).toBeNull()
   })
 
   it('reopens when a later window says speech', () => {
     const gate = createMusicGate(scripted(['music', 'speech']))
     gate.push(chunk(MUSIC_WINDOW_SAMPLES)) // → music (closed)
-    expect(gate.push(chunk(1000))).toEqual([])
+    expect(gate.push(chunk(1000))).toBeNull()
     // Keep feeding while closed — classification still runs on the buffered
     // audio, so speech returning reopens the gate.
     const out = gate.push(chunk(MUSIC_WINDOW_SAMPLES))
     expect(gate.verdict()).toBe('speech')
-    expect(out.length).toBe(1)
+    expect(out).not.toBeNull()
   })
 
   it('a chunk larger than several windows classifies each window', () => {
@@ -59,8 +59,8 @@ describe('musicGate (loopback speech/music gating)', () => {
 
   it('unknown verdicts always pass (never drop on uncertainty)', () => {
     const gate = createMusicGate(scripted(['unknown', 'unknown']))
-    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES)).length).toBe(1)
-    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES)).length).toBe(1)
+    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES))).not.toBeNull()
+    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES))).not.toBeNull()
   })
 
   it('a throwing classifier fails open', () => {
@@ -69,7 +69,7 @@ describe('musicGate (loopback speech/music gating)', () => {
         throw new Error('model exploded')
       }
     })
-    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES)).length).toBe(1)
+    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES))).not.toBeNull()
     expect(gate.verdict()).toBe('unknown')
   })
 
@@ -78,7 +78,7 @@ describe('musicGate (loopback speech/music gating)', () => {
     gate.push(chunk(MUSIC_WINDOW_SAMPLES))
     expect(gate.verdict()).toBe('speech')
     gate.setClassifier(scripted(['music']))
-    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES))).toEqual([])
+    expect(gate.push(chunk(MUSIC_WINDOW_SAMPLES))).toBeNull()
     expect(gate.verdict()).toBe('music')
   })
 })

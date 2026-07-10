@@ -13,9 +13,9 @@ import {
 } from './loopbackClassifier'
 
 export type MusicGate = {
-  /** Feed one voiced chunk; returns the chunks to forward (the input, or
-   *  nothing while the gate is closed on music). */
-  push: (pcm: Int16Array) => Int16Array[]
+  /** Feed one voiced chunk; returns the chunk to forward, or null while the
+   *  gate is closed on music. */
+  push: (pcm: Int16Array) => Int16Array | null
   /** Current verdict (for tests/telemetry). */
   verdict: () => SpeechMusicVerdict
   /** Swap the classifier once the real model loads (fail-open until then). */
@@ -32,7 +32,9 @@ export function createMusicGate(
 ): MusicGate {
   let classifier = initial
   let verdict: SpeechMusicVerdict = 'unknown'
-  let buf = new Int16Array(windowSamples)
+  // One reusable window buffer (hot path: ~4 pushes/s while voiced). Safe to
+  // reuse because classify() is synchronous and must not retain its input.
+  const buf = new Int16Array(windowSamples)
   let filled = 0
 
   const classifyWindow = (win: Int16Array): void => {
@@ -44,7 +46,7 @@ export function createMusicGate(
   }
 
   return {
-    push(pcm: Int16Array): Int16Array[] {
+    push(pcm: Int16Array): Int16Array | null {
       // Accumulate into fixed windows; a large chunk can complete several.
       let offset = 0
       while (offset < pcm.length) {
@@ -54,12 +56,11 @@ export function createMusicGate(
         offset += take
         if (filled === windowSamples) {
           classifyWindow(buf)
-          buf = new Int16Array(windowSamples)
           filled = 0
         }
       }
       // The verdict (updated at 1s granularity) gates the CURRENT chunk.
-      return verdictIsCapturable(verdict) ? [pcm] : []
+      return verdictIsCapturable(verdict) ? pcm : null
     },
     verdict: () => verdict,
     setClassifier: (c: SpeechMusicClassifier): void => {
