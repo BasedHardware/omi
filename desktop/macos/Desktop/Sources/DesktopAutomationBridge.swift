@@ -2275,8 +2275,15 @@ final class DesktopAutomationActionRegistry {
         resolvedConversationId = conversationId
       }
       let starred = boolParam(params["starred"], default: true)
-      try await APIClient.shared.setConversationStarred(id: resolvedConversationId, starred: starred)
-      await AppState.current?.setConversationStarred(resolvedConversationId, starred: starred)
+      // Single mutation: AppState.setConversationStarred writes through the
+      // repository (optimistic in-memory update + API write + rollback on failure),
+      // so it keeps the visible list in sync without a second API call. Fall back
+      // to a direct API write when there is no live AppState.
+      if let appState = AppState.current {
+        await appState.setConversationStarred(resolvedConversationId, starred: starred)
+      } else {
+        try await APIClient.shared.setConversationStarred(id: resolvedConversationId, starred: starred)
+      }
       return [
         "conversation_id": resolvedConversationId,
         "starred": starred ? "true" : "false",
