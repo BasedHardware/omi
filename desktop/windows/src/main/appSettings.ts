@@ -18,6 +18,9 @@ export type AppSettings = {
   hudContentProtection: boolean
   /** Meeting-detection behavior (Phase 5). */
   meeting: MeetingSettings
+  /** App version whose "what's new" changelog was last shown post-update. null =
+   *  never shown (fresh install / pre-feature) → baseline silently, no toast. */
+  lastShownChangelogVersion: string | null
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -58,7 +61,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
     recordHotkey: hotkey,
     hudContentProtection: r.hudContentProtection !== false,
-    meeting: sanitizeMeeting(r.meeting)
+    meeting: sanitizeMeeting(r.meeting),
+    lastShownChangelogVersion:
+      typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null
   }
 }
 

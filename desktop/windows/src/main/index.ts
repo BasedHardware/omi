@@ -50,7 +50,8 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
-import { createInsightToastWindow } from './insight/toastWindow'
+import { createInsightToastWindow, showWhatsNewToast, getCurrentWhatsNew } from './insight/toastWindow'
+import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
 import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
@@ -354,7 +355,13 @@ app.whenReady().then(async () => {
       )
     }
   }
-  // Set app user model id for windows
+  // Set the App User Model ID before any BrowserWindow or Notification is created,
+  // so Windows attributes toasts + taskbar grouping to Omi (packaged toasts fail
+  // silently otherwise). This MUST run first: it matches electron-builder.yml's
+  // appId (com.omiwindows.app) exactly — the NSIS shortcut AUMID the installer
+  // writes — which is what lets packaged toasts attribute correctly. Both
+  // Notification sites (notify.ts, insight/notification.ts) are user-event-driven
+  // and structurally cannot fire before createWindow below, so this always wins.
   electronApp.setAppUserModelId('com.omiwindows.app')
 
   // Default open or close DevTools by F12 in development
@@ -499,6 +506,10 @@ app.whenReady().then(async () => {
   })
   registerInsightHandlers()
   registerMeetingHandlers()
+  // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
+  // (push-during-load race), and opens the release notes in the system browser.
+  ipcMain.handle('whatsnew:getPending', async () => getCurrentWhatsNew())
+  ipcMain.on('whatsnew:openNotes', () => void shell.openExternal(releaseNotesUrl()))
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -634,6 +645,13 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Post-update "what's new" (Phase 8): a few seconds after startup (once the
+    // toast window has loaded), surface the changelog for the version we just
+    // updated into. No-op on a fresh install or an unchanged version.
+    setTimeout(() => {
+      const whatsNew = maybeGetWhatsNew()
+      if (whatsNew) showWhatsNewToast(whatsNew)
+    }, 6000)
     // Top-edge reveal: 1px trigger strips on every display (zero polling while
     // idle) + display tracking + fullscreen suppression.
     startBarStrips()

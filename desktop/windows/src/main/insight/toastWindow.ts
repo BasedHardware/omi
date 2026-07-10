@@ -14,7 +14,7 @@ import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import iconPath from '../../../resources/icon.png?asset'
-import type { InsightPayload, MeetingToastPayload } from '../../shared/types'
+import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
@@ -23,6 +23,9 @@ const MARGIN = 16
 const AUTO_DISMISS_MS = 8000
 // The ask-toast is a decision prompt — give it longer before it slips away.
 const MEETING_ASK_DISMISS_MS = 30_000
+// The what's-new card is informational (a short read + optional link) — give it
+// longer than an insight so it isn't gone before it's read.
+const WHATS_NEW_DISMISS_MS = 20_000
 
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
@@ -44,6 +47,15 @@ let currentMeetingToast: MeetingToastPayload | null = null
 
 export function getCurrentMeetingToast(): MeetingToastPayload | null {
   return currentMeetingToast
+}
+
+// The what's-new payload currently on screen. Same pull-on-mount rationale as the
+// meeting toast: a push sent between the toast window's did-finish-load and the
+// renderer's effect subscription would otherwise vanish.
+let currentWhatsNew: WhatsNewPayload | null = null
+
+export function getCurrentWhatsNew(): WhatsNewPayload | null {
+  return currentWhatsNew
 }
 
 function applyMaterial(win: BrowserWindow): void {
@@ -119,10 +131,11 @@ function position(win: BrowserWindow): void {
 export function showInsightToast(payload: InsightPayload): void {
   const win = ensureWindow()
   position(win)
-  // An insight replaces whatever is on the shared toast — clear any meeting
-  // payload so a later toast-window reload can't resurface a stale meeting card
-  // via meeting:getToast.
+  // An insight replaces whatever is on the shared toast — clear any meeting /
+  // what's-new payload so a later toast-window reload can't resurface a stale card
+  // via meeting:getToast / whatsnew:getPending.
   currentMeetingToast = null
+  currentWhatsNew = null
   // showInactive: appear on top without taking focus from the user's current app.
   win.showInactive()
   const send = (): void => {
@@ -141,12 +154,29 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
   position(win)
   win.showInactive()
   currentMeetingToast = payload
+  currentWhatsNew = null
   const send = (): void => {
     if (!win.isDestroyed()) win.webContents.send('meeting:toast', payload)
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
   armDismiss(payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS)
+}
+
+/** Show the post-update what's-new card in the shared toast window (Phase 8).
+ *  Informational, so it uses a longer dismiss and never steals focus. */
+export function showWhatsNewToast(payload: WhatsNewPayload): void {
+  const win = ensureWindow()
+  position(win)
+  win.showInactive()
+  currentMeetingToast = null
+  currentWhatsNew = payload
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('whatsnew:toast', payload)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+  armDismiss(WHATS_NEW_DISMISS_MS)
 }
 
 /** Hide the shared toast window (same surface as the insight toast). */
@@ -156,6 +186,7 @@ export function hideMeetingToast(): void {
 
 export function hideInsightToast(): void {
   currentMeetingToast = null
+  currentWhatsNew = null
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null

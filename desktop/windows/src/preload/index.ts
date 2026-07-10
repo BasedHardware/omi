@@ -22,6 +22,7 @@ import type {
   RewindSettings,
   InsightPayload,
   MeetingToastPayload,
+  WhatsNewPayload,
   AutomationPlan,
   StepResult
 } from '../shared/types'
@@ -162,6 +163,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('meeting:toast', listener)
     return () => ipcRenderer.removeListener('meeting:toast', listener)
   },
+  onWhatsNewToast: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: WhatsNewPayload): void => cb(p)
+    ipcRenderer.on('whatsnew:toast', listener)
+    return () => ipcRenderer.removeListener('whatsnew:toast', listener)
+  },
+  whatsNewGetPending: () => ipcRenderer.invoke('whatsnew:getPending'),
+  whatsNewOpenNotes: () => ipcRenderer.send('whatsnew:openNotes'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
   // Main-window chrome: whether the window was created with a Windows 11 Mica

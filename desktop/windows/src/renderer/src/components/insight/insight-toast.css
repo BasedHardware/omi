@@ -37,3 +37,19 @@ body.insight-toast-body { background: transparent !important; overflow: hidden; 
 .meeting-btn:hover { background: rgba(255, 255, 255, 0.16); }
 .meeting-btn-primary { color: #111; background: #f5f5f5; border-color: #f5f5f5; }
 .meeting-btn-primary:hover { background: #ffffff; }
+
+/* What's-new card (shares the card shell). Compact changelog list that fits the
+   fixed toast height; each line clamps to two rows and the full notes are one
+   click away. Neutral/white only. */
+.whatsnew-list { margin: 3px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; flex: 1; min-height: 0; overflow: hidden; }
+.whatsnew-list li {
+  position: relative;
+  padding-left: 13px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #d8d8d8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.whatsnew-list li::before { content: ''; position: absolute; left: 3px; top: 7px; width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a; }

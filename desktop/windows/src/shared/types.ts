@@ -534,6 +534,13 @@ export type OmiBridgeApi = {
   meetingAction: (meetingId: string, action: MeetingToastAction) => void
   /** Toast renderer subscribes to meeting toast payloads. */
   onMeetingToast: (cb: (p: MeetingToastPayload) => void) => () => void
+  // --- What's new (Phase 8) ---
+  /** Toast renderer subscribes to post-update what's-new payloads. */
+  onWhatsNewToast: (cb: (p: WhatsNewPayload) => void) => () => void
+  /** Toast renderer → main: fetch the pending what's-new payload on mount. */
+  whatsNewGetPending: () => Promise<WhatsNewPayload | null>
+  /** Toast renderer → main: open the GitHub release notes in the browser. */
+  whatsNewOpenNotes: () => void
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   /** True when the main window was created with the Win11 Mica background
@@ -983,6 +990,13 @@ export type MeetingToastPayload = {
 }
 
 export type MeetingToastAction = 'start' | 'stop' | 'dismiss'
+
+// Post-update "what's new" toast (Phase 8). Shown once after the app updates to a
+// version we have changelog notes for; rendered in the shared acrylic toast window.
+export type WhatsNewPayload = {
+  version: string
+  changes: string[]
+}
 
 export type InsightSettings = {
   enabled: boolean // default ON
