@@ -196,7 +196,10 @@ int mic_start()
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
     /* Power the mic 1.8V rail (and level-shifter VCCA) before starting the PDM. */
-    (void) t5838_aad_init();
+    ret = t5838_aad_init();
+    if (ret) {
+        LOG_ERR("t5838 AAD init failed (%d): mic rail may be unpowered", ret);
+    }
 #endif
 
     struct pcm_stream_cfg stream = {
@@ -402,7 +405,10 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
 
     while (1) {
-        k_sem_take(&aad_sem, K_MSEC(100));
+        /* Block until signalled: both transitions give aad_sem (silence timer ->
+         * sleep request, WAKE ISR -> wake). No periodic poll needed, so the thread
+         * stays asleep and adds no idle CPU wakeups. */
+        k_sem_take(&aad_sem, K_FOREVER);
 
         if (atomic_cas(&aad_req_sleep, 1, 0) && !atomic_get(&aad_in_sleep)) {
             enter_hw_aad();
