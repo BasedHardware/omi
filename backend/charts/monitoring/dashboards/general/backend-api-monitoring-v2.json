@@ -738,7 +738,7 @@
       "targets": [
         {
           "projectId": "based-hardware",
-          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=~\"backend|backend-integration|backend-sync|frontend|plugins|pusher\"\nhttpRequest.status>=400",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=~\"backend|backend-integration|backend-sync|frontend|plugins\"\nhttpRequest.status>=400",
           "refId": "A"
         }
       ],
@@ -808,7 +808,7 @@
       "targets": [
         {
           "projectId": "based-hardware",
-          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=~\"backend|backend-integration|backend-sync|frontend|plugins|pusher\"\nseverity>=ERROR",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=~\"backend|backend-integration|backend-sync|frontend|plugins\"\nseverity>=ERROR",
           "refId": "A"
         }
       ],

@@ -1,7 +1,7 @@
 name: Promote Desktop Backend to Prod
 
 # Prod promotion is intentionally manual and ordered:
-#   1. choose an existing v*-macos GitHub Release,
+#   1. choose an explicitly nominated stable candidate,
 #   2. deploy the Rust desktop backend from that exact tag,
 #   3. verify /health reports that release identity,
 #   4. promote the Firestore bridge release for old Rust appcast clients,
@@ -16,11 +16,24 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing v*-macos release tag to promote to stable'
+        description: 'Nominated stable-candidate v*-macos release tag'
         required: true
       confirm:
         description: 'Type promote-stable to deploy prod and mark the release stable'
         required: true
+      break_glass:
+        description: 'DANGER: bypass qualification and stable-candidate gates'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type I-ACCEPT-STABLE-PROMOTION-RISK with break_glass'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Required audited rationale when break_glass is enabled'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -57,6 +70,9 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
+          BREAK_GLASS: ${{ inputs.break_glass }}
+          BREAK_GLASS_CONFIRM: ${{ inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ inputs.break_glass_reason }}
         run: |
           set -euo pipefail
 
@@ -78,12 +94,26 @@ jobs:
             --json tagName,body,isDraft,isPrerelease,assets \
             > /tmp/desktop-release.json
 
-          python3 .github/scripts/check-desktop-release-promotion.py \
-            --release-json /tmp/desktop-release.json \
-            --release-tag "$RELEASE_TAG" \
-            --github-output "$GITHUB_OUTPUT"
-
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          PROMOTION_CHECK_ARGS=(
+            --release-json /tmp/desktop-release.json
+            --release-tag "$RELEASE_TAG"
+            --target-sha "$TARGET_SHA"
+            --github-output "$GITHUB_OUTPUT"
+          )
+          if [ "$BREAK_GLASS" = "true" ]; then
+            PROMOTION_CHECK_ARGS+=(
+              --break-glass
+              --break-glass-confirm "$BREAK_GLASS_CONFIRM"
+              --break-glass-reason "$BREAK_GLASS_REASON"
+            )
+            echo "::warning::Audited stable-promotion break glass enabled for $RELEASE_TAG: $BREAK_GLASS_REASON"
+            echo "Audited break glass by ${{ github.actor }} for $RELEASE_TAG: $BREAK_GLASS_REASON" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          python3 .github/scripts/check-desktop-release-promotion.py \
+            "${PROMOTION_CHECK_ARGS[@]}"
+
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 
           if ! git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA" -- desktop/macos/Backend-Rust/src \
@@ -281,6 +311,25 @@ jobs:
             exit 1
           fi
 
+      - name: Validate desktop Calendar API key secret
+        if: steps.current.outputs.deploy_needed == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          gcloud secrets versions access latest \
+            --project="$PROJECT_ID" \
+            --secret=DESKTOP_GOOGLE_CALENDAR_API_KEY > /tmp/desktop-google-calendar-api-key
+          python3 - <<'PY'
+          from pathlib import Path
+
+          value = Path("/tmp/desktop-google-calendar-api-key").read_bytes()
+          if value.endswith(b"\n"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY must not include a trailing newline")
+          if len(value) != 39 or not value.startswith(b"AIza"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
+          PY
+
       - name: Build and Push Desktop Backend Image
         if: steps.current.outputs.deploy_needed == 'true'
         uses: docker/build-push-action@v6
@@ -324,6 +373,26 @@ jobs:
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             RELEASE_SECRET=RELEASE_SECRET:latest
+
+      - name: Route traffic to deployed desktop-backend revision
+        if: steps.current.outputs.deploy_needed == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          REVISION="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.latestCreatedRevisionName)')"
+          if [ -z "$REVISION" ]; then
+            echo "Could not determine latest desktop-backend revision" >&2
+            exit 1
+          fi
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100" \
+            --quiet
 
       - name: Verify prod backend release identity
         env:
@@ -419,6 +488,30 @@ jobs:
             echo "Failed to promote Firestore release $FIRESTORE_DOC_ID (HTTP $HTTP_CODE)" >&2
             exit 1
           fi
+
+      - name: Advance explicit stable pointer
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest \
+            --secret=ADMIN_KEY \
+            --project "$PROJECT_ID")
+          python3 - "$RELEASE_TAG" <<'PY' > /tmp/desktop-stable-pointer.json
+          import json
+          import sys
+          print(json.dumps({"platform": "macos", "channel": "stable", "release_id": sys.argv[1]}))
+          PY
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-stable-pointer.json \
+            https://api.omi.me/v2/desktop/channels/promote \
+            > /tmp/desktop-stable-pointer-response.json
+          python3 -m json.tool /tmp/desktop-stable-pointer-response.json
+          echo "Advanced explicit stable pointer to $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Omi Bot token for release mutations
         id: app-token

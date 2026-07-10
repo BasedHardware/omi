@@ -51,7 +51,11 @@ _mod("google.cloud.firestore", SERVER_TIMESTAMP=MagicMock())
 _mod("google.cloud.firestore_v1", FieldFilter=MagicMock(), transactional=lambda fn: fn)
 _mod("database._client", db=MagicMock(), document_id_from_seed=lambda seed: "id")
 _mod("database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock())
-_mod("database.redis_db", try_acquire_user_platform_write_lock=MagicMock())
+_mod(
+    "database.redis_db",
+    try_acquire_client_device_write_lock=MagicMock(return_value=True),
+    try_acquire_user_platform_write_lock=MagicMock(return_value=True),
+)
 _mod(
     "models.users",
     Subscription=MagicMock(),

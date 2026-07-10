@@ -1,0 +1,77 @@
+name: Desktop Backend Contracts
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-backend-contracts.yml"
+      - "backend/testing/contracts/**"
+      - "backend/database/conversations.py"
+      - "backend/database/helpers.py"
+      - "backend/database/memories.py"
+      - "backend/models/**"
+      - "backend/test.sh"
+      - "backend/utils/encryption.py"
+      - "contract_tests/**"
+      - "desktop/macos/Backend-Rust/Cargo.lock"
+      - "desktop/macos/Backend-Rust/Cargo.toml"
+      - "desktop/macos/Backend-Rust/src/models/**"
+      - "desktop/macos/Backend-Rust/src/services/firestore.rs"
+      - "desktop/macos/Backend-Rust/src/services/firestore/**"
+      - "desktop/macos/scripts/desktop-core-harness.sh"
+      - "desktop/macos/scripts/desktop-flow-lint.py"
+      - "desktop/macos/e2e/**"
+      - "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+      - "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+
+jobs:
+  desktop-core-e2e-t0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Install flow lint dependency
+        run: python3 -m pip install PyYAML
+
+      - name: Install agent runtime for gauntlet self-check
+        working-directory: desktop/macos/agent
+        run: npm ci
+
+      - name: Desktop core E2E self-check (T0)
+        run: ./desktop/macos/scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    env:
+      ENCRYPTION_SECRET: omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv
+      FIRESTORE_EMULATOR_HOST: localhost:8787
+      GOOGLE_CLOUD_PROJECT: omi-contract-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python contract dependencies
+        working-directory: backend
+        run: uv pip sync pylock.toml --system
+
+      - name: Run Python desktop backend contracts
+        run: python -m pytest backend/testing/contracts -v
+
+      - name: Run Rust desktop backend contracts
+        run: cargo test --manifest-path desktop/macos/Backend-Rust/Cargo.toml contract

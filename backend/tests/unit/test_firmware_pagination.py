@@ -6,22 +6,10 @@ no filter is provided (desktop). Also tests the cache-miss fix for empty lists.
 """
 
 import re
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio  # noqa: F401
-
-# Stub heavy dependencies before importing the module under test
-sys.modules.setdefault('firebase_admin', MagicMock())
-sys.modules.setdefault('firebase_admin.auth', MagicMock())
-sys.modules.setdefault('firebase_admin.firestore', MagicMock())
-sys.modules.setdefault('firebase_admin.messaging', MagicMock())
-sys.modules.setdefault('google.cloud', MagicMock())
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-sys.modules.setdefault('google.auth', MagicMock())
-sys.modules.setdefault('google.auth.transport.requests', MagicMock())
 
 from routers.firmware import (
     FIRMWARE_TAG_PATTERN,

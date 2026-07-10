@@ -1,0 +1,8 @@
+{
+  "version": "0.11.595",
+  "date": "2026-07-02",
+  "changes": [
+    "Clear stale Short-term and Long-term memory labels from legacy memory accounts after backend sync",
+    "Home: the Omi Device row now shows Connected when a wearable was used on this account (e.g. paired on mobile), not only when paired to this Mac"
+  ]
+}

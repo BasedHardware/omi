@@ -9,6 +9,9 @@ class AppLocalizationsTl extends AppLocalizations {
   AppLocalizationsTl([String locale = 'tl']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Nag-expire ang session — mag-sign in ulit.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9425,7 +9428,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Gumagana muna sa mga Omi device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+      'Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9451,6 +9454,24 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
+
+  @override
+  String get memoryThisDevice => 'Device na ito';
+
+  @override
+  String get memoryThisIphone => 'iPhone na ito';
+
+  @override
+  String get memoryThisPhone => 'Teleponong ito';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 
   @override
   String get deviceTutorial => 'Paano Gamitin ang Omi';
@@ -9557,4 +9578,89 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get latest => 'Pinakabago';
+
+  @override
+  String get flashFirmware => 'I-flash ang Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Nagre-record sa pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sini-sync ang mga recording mula sa iyong pendant…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min ang nakaimbak';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync.';
+
+  @override
+  String get connectRayBanMeta => 'Ikonekta ang Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Gamitin ang iyong Ray-Ban Meta glasses bilang iyong Omi capture device para sa mga conversation at visual na konteksto. Bubuksan ng Omi ang Meta AI app upang i-link ang iyong glasses.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Kumonekta sa pamamagitan ng Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik dito.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tingnan Muli';
+
+  @override
+  String get raybanMetaAllowCamera => 'Payagan ang Camera sa Glasses';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Ginagamit ng Omi ang camera ng iyong glasses upang magdagdag ng mga larawan sa iyong mga conversation. Maaari mong laktawan ito at gumamit ng audio lamang.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Laktawan Muna';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta audio-only mode';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Magagamit ng bersyong ito ng Omi ang mikropono ng iyong glasses sa pamamagitan ng Bluetooth. Kailangan ng Meta developer build ng Omi para sa photo capture.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Na-pause ang musika sa iyong telepono habang ginagamit ang mikropono ng glasses.';
+
+  @override
+  String get raybanMetaContinue => 'Magpatuloy';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Kumuha ng Photo';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Hiniling ang photo — lalabas ito sa iyong conversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Handa na ang mikropono';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Handa na ang image capture';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Hindi available sa audio-only mode';
+
+  @override
+  String get raybanMetaCamera => 'Camera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Error sa pagkonekta sa Ray-Ban Meta: $error';
+  }
 }

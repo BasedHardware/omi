@@ -1,0 +1,96 @@
+name: Desktop Checks
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+concurrency:
+  group: desktop-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      diff_base: ${{ steps.changes.outputs.diff_base }}
+      has_desktop_agent_runtime: ${{ steps.changes.outputs.has_desktop_agent_runtime }}
+      has_desktop_rust: ${{ steps.changes.outputs.has_desktop_rust }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  rust-backend:
+    name: Rust Backend
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_desktop_rust == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save changed files
+        run: |
+          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          cat /tmp/changed-files.txt
+
+      - name: Set up desktop Rust toolchain
+        run: |
+          cd desktop/macos/Backend-Rust
+          rustup show
+
+      - name: Cache desktop Rust backend build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/macos/Backend-Rust/target
+          key: ${{ runner.os }}-desktop-rust-${{ hashFiles('desktop/macos/Backend-Rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-rust-
+
+      - name: Check desktop Rust backend
+        run: |
+          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
+          if [ -n "$FILES" ]; then
+            (
+              cd desktop/macos/Backend-Rust
+              printf '%s\n' "$FILES" | xargs -d '\n' rustfmt --edition 2021 --check
+            )
+          fi
+          cd desktop/macos/Backend-Rust
+          cargo check --locked
+
+  agent-runtime:
+    name: Agent Runtime
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_desktop_agent_runtime == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js for desktop agent runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            desktop/macos/agent/package-lock.json
+            desktop/macos/pi-mono-extension/package-lock.json
+
+      - name: Check desktop agent runtime
+        run: desktop/macos/scripts/test-tool-surfaces.sh

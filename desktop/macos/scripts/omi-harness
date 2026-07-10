@@ -22,6 +22,7 @@ import typing
 
 
 SCHEMA_VERSION = 2
+MIN_COMPATIBLE_FLOW_VERSION = 1
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
@@ -66,13 +67,60 @@ def read_yaml(path: Path) -> dict[str, typing.Any]:
         return yaml.safe_load(handle) or {}
 
 
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def validate_flow_schema(flow: dict[str, typing.Any], args: argparse.Namespace) -> int:
+    raw_version = flow.get("version")
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+        raise SystemExit("omi-harness: flow version must be an integer")
+    if raw_version > SCHEMA_VERSION:
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} is newer than supported version {SCHEMA_VERSION}"
+        )
+    if raw_version < MIN_COMPATIBLE_FLOW_VERSION:
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} is older than compatible version "
+            f"{MIN_COMPATIBLE_FLOW_VERSION}"
+        )
+    if raw_version < SCHEMA_VERSION and not getattr(args, "allow_legacy_flow_version", False):
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} requires explicit compatibility; "
+            "pass --allow-legacy-flow-version or set OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION=1"
+        )
+    return raw_version
+
+
 def write_json(path: Path, data: typing.Any) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def automation_token(port: int) -> str | None:
+    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = Path(
+        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
+        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
+    )
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    return token or None
+
+
+def automation_port_from_base_url(base_url: str) -> int:
+    return int(base_url.rsplit(":", 1)[1])
 
 
 def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
+    token = automation_token(automation_port_from_base_url(base_url))
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -677,6 +725,7 @@ def unique_run_dir(run_root: Path, timestamp: str, flow_name: str) -> Path:
 def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing.Any]]:
     flow_path = Path(args.flow).resolve()
     flow = read_yaml(flow_path)
+    flow_version = validate_flow_schema(flow, args)
     flow_name = str(flow.get("name") or flow_path.stem)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_root = Path(args.out).resolve()
@@ -710,7 +759,7 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
         "schema_version": SCHEMA_VERSION,
         "runner": "omi-harness",
         "runner_version": 2,
-        "flow": {"name": flow_name, "path": str(flow_path), "version": flow.get("version")},
+        "flow": {"name": flow_name, "path": str(flow_path), "version": flow_version},
         "environment": {
             "git_sha": git_sha(),
             "lane": args.lane,
@@ -1009,7 +1058,12 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         default=os.environ.get("OMI_HARNESS_PROCESS_MATCH"),
         help="unique pgrep pattern for power.sample steps",
     )
-
+    parser.add_argument(
+        "--allow-legacy-flow-version",
+        action="store_true",
+        default=env_flag("OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION"),
+        help="explicitly allow compatible flows older than the current harness schema",
+    )
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

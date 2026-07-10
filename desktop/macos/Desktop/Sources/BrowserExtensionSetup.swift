@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Standalone multi-phase onboarding view for setting up the Playwright MCP browser extension.
 /// Can be presented as a sheet, overlay, or full page from any context.

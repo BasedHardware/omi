@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// List view showing conversations grouped by date
 struct ConversationListView: View {
@@ -211,6 +212,7 @@ struct ConversationListView: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ConversationListView(
     conversations: [],
@@ -225,3 +227,4 @@ struct ConversationListView: View {
   .frame(width: 400, height: 600)
   .background(OmiColors.backgroundSecondary)
 }
+#endif

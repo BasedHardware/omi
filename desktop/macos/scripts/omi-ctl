@@ -7,32 +7,50 @@
 #
 # Env: OMI_AUTOMATION_PORT (default 47777) — set this per bundle if running
 #      several named test bundles side-by-side (each needs its own port).
+#      OMI_AUTOMATION_TOKEN can override the per-launch token file.
 set -euo pipefail
 
 PORT="${OMI_AUTOMATION_PORT:-47777}"
 BASE="http://127.0.0.1:${PORT}"
+TOKEN="${OMI_AUTOMATION_TOKEN:-}"
+TOKEN_FILE="${OMI_AUTOMATION_TOKEN_FILE:-${TMPDIR:-/tmp}/omi-automation-${PORT}.token}"
+
+load_token() {
+  if [ -z "$TOKEN" ] && [ -f "$TOKEN_FILE" ]; then
+    TOKEN="$(tr -d '\r\n' < "$TOKEN_FILE")"
+  fi
+  if [ -z "$TOKEN" ]; then
+    echo "omi-ctl: missing automation token; set OMI_AUTOMATION_TOKEN or wait for $TOKEN_FILE" >&2
+    exit 1
+  fi
+}
+
+curl_bridge() {
+  load_token
+  curl -fsS -H "Authorization: Bearer $TOKEN" "$@"
+}
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   state|health)
-    curl -fsS "$BASE/$cmd"; echo ;;
+    curl_bridge "$BASE/$cmd"; echo ;;
   navigate)
     target="${1:?usage: omi-ctl navigate <screen> [settings-section]}"
     section="${2:-}"
     body="{\"target\":\"$target\""
     [ -n "$section" ] && body="$body,\"settingsSection\":\"$section\""
     body="$body}"
-    curl -fsS -X POST "$BASE/navigate" -d "$body" >/dev/null
+    curl_bridge -X POST "$BASE/navigate" -d "$body" >/dev/null
     # The POST snapshot races the animated tab switch — settle, then report fresh state.
     sleep 0.3
-    curl -fsS "$BASE/state"; echo ;;
+    curl_bridge "$BASE/state"; echo ;;
   open-conversation)
     id="${1:?usage: omi-ctl open-conversation <id> [--transcript]}"
     show=false; [ "${2:-}" = "--transcript" ] && show=true
-    curl -fsS -X POST "$BASE/conversation/open" \
+    curl_bridge -X POST "$BASE/conversation/open" \
       -d "{\"conversationId\":\"$id\",\"showTranscript\":$show}"; echo ;;
   actions)
-    curl -fsS "$BASE/actions"; echo ;;
+    curl_bridge "$BASE/actions"; echo ;;
   action)
     name="${1:?usage: omi-ctl action <name> [key=value ...]}"; shift || true
     params=""
@@ -44,11 +62,11 @@ case "$cmd" in
     body="{\"name\":\"$name\""
     [ -n "$params" ] && body="$body,\"params\":{$params}"
     body="$body}"
-    curl -fsS -X POST "$BASE/action" -d "$body"; echo ;;
+    curl_bridge -X POST "$BASE/action" -d "$body"; echo ;;
   wait-ready)
     tries="${1:-30}"
     for _ in $(seq 1 "$tries"); do
-      s=$(curl -fsS "$BASE/state" 2>/dev/null || true)
+      s=$(curl_bridge "$BASE/state" 2>/dev/null || true)
       if echo "$s" | grep -q '"appState" : "main"'; then echo "$s"; exit 0; fi
       sleep 0.5
     done
@@ -76,7 +94,7 @@ Examples:
   omi-ctl action refresh_all_data
   omi-ctl action toggle_transcription enabled=false
 
-Env: OMI_AUTOMATION_PORT (default 47777)
+Env: OMI_AUTOMATION_PORT (default 47777), OMI_AUTOMATION_TOKEN, OMI_AUTOMATION_TOKEN_FILE
 EOF
     ;;
 esac

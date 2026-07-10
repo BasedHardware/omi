@@ -35,6 +35,12 @@ const FALLBACK_TTL: Duration = Duration::from_secs(30);
 /// Trial length: 3 days in seconds (matches Python `TRIAL_LENGTH_SECONDS`).
 const TRIAL_LENGTH_SECONDS: i64 = 3 * 24 * 60 * 60;
 
+fn auth_emulator_active() -> bool {
+    std::env::var("FIREBASE_AUTH_EMULATOR_HOST")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Copy)]
 struct CacheEntry {
     paywalled: bool,
@@ -80,6 +86,10 @@ impl PaywallChecker {
         request_headers: &HeaderMap,
         byok_stripped: bool,
     ) -> bool {
+        if auth_emulator_active() {
+            return false;
+        }
+
         // Master switch: the trial paywall is OFF by default (freemium). When disabled,
         // no user is ever paywalled by account age — mirrors the Python backend's
         // TRIAL_PAYWALL_ENABLED flag. Set TRIAL_PAYWALL_ENABLED=true to restore the
@@ -246,6 +256,7 @@ fn is_trial_expired(plan: &str, byok_active: bool, creation_time_ms: Option<i64>
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

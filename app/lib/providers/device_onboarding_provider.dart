@@ -5,12 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
-enum PowerCycleSubState {
-  waitingForOff,
-  deviceOff,
-  waitingForReconnect,
-  reconnected,
-}
+enum PowerCycleSubState { waitingForOff, deviceOff, waitingForReconnect, reconnected }
 
 class DeviceOnboardingProvider extends ChangeNotifier {
   static const int totalSteps = 4;

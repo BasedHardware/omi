@@ -7,7 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class FirmwareUpdateStep {
   final String title;
   final String description;
-  final IconData icon;
+  final FaIconData icon;
   final bool isLastStep;
 
   FirmwareUpdateStep({required this.title, required this.description, required this.icon, this.isLastStep = false});
@@ -105,7 +105,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
+                  FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
@@ -328,12 +328,13 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         borderRadius: BorderRadius.circular(_buttonSize / 2),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
-                      child: const Center(
-                        child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18),
-                      ),
+                      child: Center(child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18)),
                     ),
                   ),
                 ),

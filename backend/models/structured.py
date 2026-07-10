@@ -10,7 +10,7 @@ if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
 try:
-    from omi_plugin_sdk.models import ActionItem, ActionItemsExtraction, Event, Structured
+    from omi_plugin_sdk.models import ActionItem, Event, Structured
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
 
@@ -58,7 +58,7 @@ except ModuleNotFoundError:
         created: bool = False
 
         def as_dict_cleaned_dates(self):
-            event_dict = self.dict()
+            event_dict = self.model_dump()
             event_dict['start'] = event_dict['start'].isoformat()
             return event_dict
 
@@ -72,11 +72,6 @@ except ModuleNotFoundError:
                     for event in events
                 ]
             )
-
-    class ActionItemsExtraction(BaseModel):
-        action_items: List[ActionItem] = Field(
-            description='A list of action items from the conversation', default_factory=list
-        )
 
     class Structured(BaseModel):
         title: str = Field(description='A title/name for this conversation', default='')
@@ -118,4 +113,4 @@ except ModuleNotFoundError:
             return result.strip()
 
 
-__all__ = ['ActionItem', 'ActionItemsExtraction', 'Event', 'Structured']
+__all__ = ['ActionItem', 'Event', 'Structured']

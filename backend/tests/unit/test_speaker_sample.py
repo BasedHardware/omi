@@ -1,16 +1,6 @@
 import asyncio
-import os
-import sys
+
 import pytest
-from unittest.mock import MagicMock
-
-# https://github.com/BasedHardware/omi/blob/main/backend/.env.template#L48C20-L48C88
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-
-# Mock modules that initialize GCP clients at import time or have complex dependencies
-sys.modules["database._client"] = MagicMock()
-sys.modules["utils.other.storage"] = MagicMock()
-sys.modules["utils.stt.pre_recorded"] = MagicMock()
 
 import utils.speaker_sample as speaker_sample
 
@@ -36,7 +26,7 @@ def test_verify_and_transcribe_sample_transcription_failure(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -55,7 +45,7 @@ def test_verify_and_transcribe_sample_insufficient_words(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -73,7 +63,7 @@ def test_verify_and_transcribe_sample_multi_speaker_ratio(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -118,7 +108,7 @@ def test_verify_and_transcribe_sample_multi_speaker_ratio_just_below(monkeypatch
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -139,7 +129,7 @@ def test_verify_and_transcribe_sample_text_mismatch(monkeypatch):
     def fake_containment(_text1, _text2):
         return 0.5
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fake_containment)
 
     transcript, is_valid, reason = asyncio.run(
@@ -165,7 +155,7 @@ def test_verify_and_transcribe_sample_text_mismatch_just_below(monkeypatch):
     def fake_containment(_text1, _text2):
         return 0.89
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fake_containment)
 
     transcript, is_valid, reason = asyncio.run(
@@ -186,7 +176,7 @@ def test_verify_and_transcribe_sample_success(monkeypatch):
     def fake_containment(_text1, _text2):
         return 0.95
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fake_containment)
 
     transcript, is_valid, reason = asyncio.run(
@@ -207,7 +197,7 @@ def test_verify_and_transcribe_sample_containment_real_function(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(
         speaker_sample.verify_and_transcribe_sample(
@@ -229,7 +219,7 @@ def test_verify_and_transcribe_sample_minimum_word_boundary(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -257,7 +247,7 @@ def test_verify_and_transcribe_sample_dominant_ratio_boundary(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -278,7 +268,7 @@ def test_verify_and_transcribe_sample_containment_boundary(monkeypatch):
     def fake_containment(_text1, _text2):
         return 0.9
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fake_containment)
 
     transcript, is_valid, reason = asyncio.run(
@@ -296,7 +286,7 @@ def test_verify_and_transcribe_sample_uses_default_speaker(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -314,7 +304,7 @@ def test_verify_and_transcribe_sample_empty_speaker_string(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return words
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
@@ -335,7 +325,7 @@ def test_verify_and_transcribe_sample_skips_similarity_when_expected_missing(mon
     def fail_similarity(*_args, **_kwargs):
         raise AssertionError("compute_text_containment should not be called")
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fail_similarity)
 
     transcript, is_valid, reason = asyncio.run(
@@ -359,7 +349,7 @@ def test_verify_and_transcribe_sample_skips_similarity_when_expected_none(monkey
     def fail_similarity(*_args, **_kwargs):
         raise AssertionError("compute_text_containment should not be called")
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
     monkeypatch.setattr(speaker_sample, "compute_text_containment", fail_similarity)
 
     transcript, is_valid, reason = asyncio.run(
@@ -375,7 +365,7 @@ def test_verify_and_transcribe_sample_empty_transcript(monkeypatch):
     def fake_deepgram(*_args, **_kwargs):
         return []
 
-    monkeypatch.setattr(speaker_sample, "prerecorded_from_bytes", fake_deepgram)
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
 
     transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 

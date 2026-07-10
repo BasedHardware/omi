@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, TypeAlias, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
 from llm_gateway.gateway.schemas import FeatureBundle, LaneConfig, RouteArtifact
+from utils.llm.gateway_client import feature_auto_lane_id
+from utils.llm.model_config import (
+    get_all_configured_features,
+    get_model,
+    get_provider,
+    get_route_options,
+    is_structured_output_feature,
+)
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
+ConfigItem: TypeAlias = dict[str, Any]
 
 
 class ConfigValidationError(ValueError):
@@ -33,9 +43,11 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     artifact_items = _load_config_list(resolved_config_dir / 'route_artifacts.yaml', 'route_artifacts')
     bundle_items = _load_config_list(resolved_config_dir / 'feature_bundles.yaml', 'feature_bundles')
 
-    lanes = _parse_lanes(lane_items)
-    route_artifacts = _parse_route_artifacts(artifact_items, prod_mode=resolved_prod_mode)
-    feature_bundles = _parse_feature_bundles(bundle_items)
+    generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items()
+
+    lanes = _parse_lanes([*generated_lane_items, *lane_items])
+    route_artifacts = _parse_route_artifacts([*generated_artifact_items, *artifact_items], prod_mode=resolved_prod_mode)
+    feature_bundles = _parse_feature_bundles([*generated_bundle_items, *bundle_items])
 
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
@@ -49,31 +61,34 @@ def _resolve_prod_mode(prod_mode: bool | None) -> bool:
     return os.getenv(PROD_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}
 
 
-def _load_config_list(path: Path, top_level_key: str) -> list[dict[str, Any]]:
+def _load_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
     if not path.exists():
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        loaded = cast(object, yaml.safe_load(handle))
 
+    raw_items: object
     if loaded is None:
         return []
     if isinstance(loaded, list):
-        items = loaded
+        raw_items = cast(list[object], loaded)
     elif isinstance(loaded, dict) and top_level_key in loaded:
-        items = loaded[top_level_key]
+        loaded_mapping = cast(Mapping[str, object], loaded)
+        raw_items = loaded_mapping[top_level_key]
     else:
         raise ConfigValidationError(f'{path} must contain a list or top-level {top_level_key} list')
 
-    if not isinstance(items, list):
+    if not isinstance(raw_items, list):
         raise ConfigValidationError(f'{path} {top_level_key} must be a list')
+    items = cast(list[object], raw_items)
     for item in items:
-        if not isinstance(item, dict):
+        if not isinstance(item, Mapping):
             raise ConfigValidationError(f'{path} {top_level_key} entries must be mappings')
-    return items
+    return [dict(cast(Mapping[str, Any], item)) for item in items]
 
 
-def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
+def _parse_lanes(items: list[ConfigItem]) -> dict[str, LaneConfig]:
     lanes: dict[str, LaneConfig] = {}
     for item in items:
         lane = LaneConfig.model_validate(item)
@@ -83,7 +98,7 @@ def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
     return lanes
 
 
-def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> dict[str, RouteArtifact]:
+def _parse_route_artifacts(items: list[ConfigItem], *, prod_mode: bool) -> dict[str, RouteArtifact]:
     route_artifacts: dict[str, RouteArtifact] = {}
     for item in items:
         artifact = RouteArtifact.model_validate(item)
@@ -100,7 +115,7 @@ def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> d
     return route_artifacts
 
 
-def _parse_feature_bundles(items: list[dict[str, Any]]) -> dict[str, FeatureBundle]:
+def _parse_feature_bundles(items: list[ConfigItem]) -> dict[str, FeatureBundle]:
     feature_bundles: dict[str, FeatureBundle] = {}
     for item in items:
         bundle = FeatureBundle.model_validate(item)
@@ -148,3 +163,116 @@ def _validate_feature_bundles(feature_bundles: dict[str, FeatureBundle], lanes: 
     for bundle in feature_bundles.values():
         if bundle.lane_id not in lanes:
             raise ConfigValidationError(f'feature bundle {bundle.feature} references unknown lane: {bundle.lane_id}')
+
+
+def feature_lane_id(feature: str) -> str:
+    return feature_auto_lane_id(feature)
+
+
+def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    lanes: list[dict[str, Any]] = []
+    artifacts: list[dict[str, Any]] = []
+    bundles: list[dict[str, Any]] = []
+    for feature in sorted(get_all_configured_features()):
+        model = get_model(feature)
+        provider = get_provider(feature)
+        lane_id = feature_lane_id(feature)
+        route_id = f"route.{feature}.model_config.001"
+        capabilities = _capabilities_for_feature(feature)
+        credential_policy = _credential_policy()
+
+        lanes.append(
+            {
+                'lane_id': lane_id,
+                'surface': 'openai.chat_completions',
+                'capabilities': capabilities,
+                'objective': {'quality': 0.6, 'latency': 0.2, 'cost': 0.2},
+                'credential_policy': credential_policy,
+                'active_route': route_id,
+                'last_known_good': route_id,
+            }
+        )
+        primary = {'provider': provider, 'model': _provider_model_name(provider, model)}
+        provider_options = get_route_options(feature, model, provider)
+        artifacts.append(
+            {
+                'route_artifact_id': route_id,
+                'lane_id': lane_id,
+                'surface': 'openai.chat_completions',
+                'primary': primary,
+                'fallbacks': [],
+                'provider_options': provider_options,
+                'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
+                'retry': {'max_attempts': 1},
+                'capabilities': capabilities,
+                'evidence': {
+                    'benchmark_snapshot': 'model_config.source_of_truth',
+                    'eval_report': f'{feature}.gateway_coverage',
+                    'benchmark_source': 'omi_eval',
+                    'dev_only': False,
+                },
+                'rollout': {'stage': 'active', 'percent': 100},
+                'credential_policy': credential_policy,
+                'fallback_policy': {
+                    'fallback_on': ['timeout_before_output', 'provider_429_omi_paid', 'provider_5xx_omi_paid'],
+                    'never_fallback_on': [
+                        'byok_auth',
+                        'byok_quota',
+                        'byok_rate_limit',
+                        'byok_unsupported_provider',
+                        'missing_byok_key',
+                        'capability_mismatch',
+                        'invalid_config',
+                    ],
+                },
+            }
+        )
+        bundles.append(
+            {
+                'feature': feature,
+                'lane_id': lane_id,
+                'prompt_version': f'{feature}.model_config',
+                'parser_version': 'callsite',
+                'eval_suite': f'{feature}.gateway_coverage',
+                'promotion_gates': {'inventory_status': 'gateway_managed'},
+            }
+        )
+    return lanes, artifacts, bundles
+
+
+def _capabilities_for_feature(feature: str) -> dict[str, Any]:
+    structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
+    provider = get_provider(feature)
+    return {
+        'text_input': True,
+        'streaming': provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
+        'structured_output': structured_output,
+        'tools': feature == 'memory_l2',
+    }
+
+
+def _credential_policy() -> dict[str, Any]:
+    return {
+        'mode': 'omi_paid',
+        'allow_byok_to_omi_paid_fallback': False,
+        'fallback_eligible_failure_classes': [
+            'timeout_before_output',
+            'provider_429_omi_paid',
+            'provider_5xx_omi_paid',
+        ],
+        'never_fallback_failure_classes': [
+            'byok_auth',
+            'byok_quota',
+            'byok_rate_limit',
+            'byok_unsupported_provider',
+            'missing_byok_key',
+            'capability_mismatch',
+            'invalid_config',
+        ],
+    }
+
+
+def _provider_model_name(provider: str, model: str) -> str:
+    if provider == 'openrouter' and model.startswith('gemini'):
+        return f'google/{model}'
+    return model

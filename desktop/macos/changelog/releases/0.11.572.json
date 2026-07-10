@@ -1,0 +1,9 @@
+{
+  "version": "0.11.572",
+  "date": "2026-06-30",
+  "changes": [
+    "Reduced false desktop recording errors from empty cloud reconciliation sessions",
+    "Made unavailable local agents fail clearly with install-first guidance instead of exposing adapter environment variables.",
+    "Fixed Notch Mode height detection so the floating bar fits the Mac's actual camera housing"
+  ]
+}

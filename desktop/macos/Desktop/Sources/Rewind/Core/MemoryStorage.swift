@@ -40,6 +40,29 @@ actor MemoryStorage {
         return db
     }
 
+    private static func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryLayer]?) -> QueryInterfaceRequest<MemoryRecord> {
+        guard let tiers = tiers, !tiers.isEmpty else { return query }
+        return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
+    }
+
+    private static func applyLifecycleExposureFilter(
+        _ query: QueryInterfaceRequest<MemoryRecord>,
+        includeExplicitLifecycleRows: Bool
+    ) -> QueryInterfaceRequest<MemoryRecord> {
+        includeExplicitLifecycleRows ? query : query.filter(Column("tierIsExplicit") == false)
+    }
+
+    private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryLayer]?) {
+        guard let tiers = tiers, !tiers.isEmpty else { return }
+        let placeholders = tiers.map { _ in "?" }.joined(separator: ", ")
+        conditions.append("tier IN (\(placeholders))")
+        for tier in tiers {
+            if let dbValue = DatabaseValue(value: tier.rawValue) {
+                arguments.append(dbValue)
+            }
+        }
+    }
+
     // MARK: - Local-First Read Operations
 
     /// Get memories from local cache for instant display
@@ -49,6 +72,8 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -65,6 +90,12 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             // Tag filtering using JSON
             if let tags = tags, !tags.isEmpty {
@@ -87,6 +118,8 @@ actor MemoryStorage {
     func getLocalMemoriesCount(
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -103,6 +136,12 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -122,6 +161,8 @@ actor MemoryStorage {
         matchAnyTag: [String]? = nil,     // OR logic: matches any of these tags
         matchAnyCategory: [String]? = nil, // OR logic: matches any of these categories
         excludeTags: [String]? = nil,      // Exclude memories containing these tags
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -133,6 +174,11 @@ actor MemoryStorage {
 
             if !includeDismissed {
                 conditions.append("isDismissed = 0")
+            }
+
+            Self.appendTierCondition(&conditions, &arguments, tiers: tiers)
+            if !includeExplicitLifecycleRows {
+                conditions.append("tierIsExplicit = 0")
             }
 
             // Tag OR conditions
@@ -193,6 +239,8 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -213,6 +261,12 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -249,6 +303,7 @@ actor MemoryStorage {
         query searchText: String,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -268,6 +323,8 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = Self.applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -352,9 +409,13 @@ actor MemoryStorage {
                 if var existingRecord = try MemoryRecord
                     .filter(Column("backendId") == memory.id)
                     .fetchOne(database) {
-                    // Skip if local record is newer than incoming API data
-                    // This prevents auto-refresh from overwriting recent local changes
+                    // Skip full merge if local record is newer than incoming API data.
+                    // This prevents auto-refresh from overwriting recent local edits,
+                    // but tier is server-authoritative and must still be reconciled.
                     if existingRecord.updatedAt > memory.updatedAt {
+                        if existingRecord.mergeAuthoritativeTierFrom(memory) {
+                            try existingRecord.update(database)
+                        }
                         skipped += 1
                         continue
                     }
@@ -393,6 +454,26 @@ actor MemoryStorage {
         } else {
             log("MemoryStorage: Synced \(memories.count) memories from backend")
         }
+    }
+
+    /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
+    /// Local-only rows (backendId NULL) are preserved. No-op when the snapshot is empty.
+    @discardableResult
+    func syncServerMemoriesAndPruneAbsent(
+        _ memories: [ServerMemory],
+        within scope: MemoryLayerScope
+    ) async throws -> Int {
+        try await syncServerMemories(memories)
+        // An empty snapshot is authoritative, not a no-op: the sole caller
+        // (refreshMemoriesAfterConversationCascade) exhaustively fetches the
+        // whole backend. If the cascade delete removed every default-scope
+        // memory, `memories` is empty and synced local rows must be tombstoned.
+        // softDeleteSyncedOrphans only touches rows with a non-nil backendId,
+        // so local-only (unsynced) rows are preserved even with an empty keep-set.
+        return try await softDeleteSyncedOrphans(
+            keepingBackendIds: Set(memories.map(\.id)),
+            within: scope
+        )
     }
 
     // MARK: - Local Extraction Operations
@@ -439,7 +520,6 @@ actor MemoryStorage {
             var mutableRecord = record
             mutableRecord.backendId = backendId
             mutableRecord.backendSynced = true
-            mutableRecord.updatedAt = Date()
             try mutableRecord.update(database)
         }
 
@@ -491,18 +571,24 @@ actor MemoryStorage {
         }
     }
 
-    /// Mark all memories as read
-    func markAllAsRead() async throws {
+    /// Mark memories as read within a tier scope.
+    func markAllAsRead(scope: MemoryLayerScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
+            var conditions = ["isRead = 0"]
+            var arguments: [DatabaseValue] = []
+            guard let updatedAt = DatabaseValue(value: Date()) else { return }
+            arguments.append(updatedAt)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
             try database.execute(
-                sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE isRead = 0",
-                arguments: [Date()]
+                sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
 
-        log("MemoryStorage: Marked all memories as read")
+        log("MemoryStorage: Marked memories as read for scope \(scope.sqlTierRawValues)")
     }
 
     /// Soft delete a memory
@@ -522,6 +608,20 @@ actor MemoryStorage {
         log("MemoryStorage: Soft deleted memory \(id)")
     }
 
+    /// Soft-delete synced memories tied to a deleted conversation (local cache hygiene).
+    @discardableResult
+    func softDeleteMemoriesByConversationId(_ conversationId: String) async throws -> Int {
+        let db = try await ensureInitialized()
+
+        return try await db.write { database -> Int in
+            try database.execute(
+                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0 AND conversationId = ?",
+                arguments: [Date(), conversationId]
+            )
+            return database.changesCount
+        }
+    }
+
     /// Soft delete a memory by backend ID
     func deleteMemoryByBackendId(_ backendId: String) async throws {
         let db = try await ensureInitialized()
@@ -536,20 +636,39 @@ actor MemoryStorage {
         log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
     }
 
+    /// Restore a soft-deleted memory by backend ID. Used by undo/delete-failure paths;
+    /// callers must requery the active tier scope instead of appending directly to UI arrays.
+    func restoreMemoryByBackendId(_ backendId: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
+                arguments: [Date(), backendId]
+            )
+        }
+
+        log("MemoryStorage: Restored memory with backendId \(backendId)")
+    }
+
     /// Soft-delete synced memories whose backendId is no longer present on the
     /// backend. Used by the one-time cache reconcile to clear orphaned local rows
     /// that diverged from the authoritative backend (e.g. after the server-side
     /// category cleanup). Local-only unsynced memories (backendId NULL) are kept.
     @discardableResult
-    func softDeleteSyncedOrphans(keepingBackendIds keep: Set<String>) async throws -> Int {
+    func softDeleteSyncedOrphans(
+        keepingBackendIds keep: Set<String>,
+        within scope: MemoryLayerScope
+    ) async throws -> Int {
         let db = try await ensureInitialized()
 
         return try await db.write { database -> Int in
-            let candidates =
-                try MemoryRecord
+            var query = MemoryRecord
                 .filter(Column("backendId") != nil)
                 .filter(Column("deleted") == false)
-                .fetchAll(database)
+            query = Self.applyTierFilter(query, tiers: scope.tiers)
+
+            let candidates = try query.fetchAll(database)
 
             var removed = 0
             for var record in candidates {
@@ -563,18 +682,24 @@ actor MemoryStorage {
         }
     }
 
-    /// Soft delete all memories
-    func deleteAllMemories() async throws {
+    /// Soft delete memories within a tier scope.
+    func deleteAllMemories(scope: MemoryLayerScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
+            var conditions = ["deleted = 0"]
+            var arguments: [DatabaseValue] = []
+            guard let updatedAt = DatabaseValue(value: Date()) else { return }
+            arguments.append(updatedAt)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
             try database.execute(
-                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0",
-                arguments: [Date()]
+                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
 
-        log("MemoryStorage: Soft deleted all memories")
+        log("MemoryStorage: Soft deleted memories for scope \(scope.sqlTierRawValues)")
     }
 
     /// Update content by backend ID
@@ -597,6 +722,28 @@ actor MemoryStorage {
             try database.execute(
                 sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE backendId = ?",
                 arguments: [visibility, Date(), backendId]
+            )
+        }
+    }
+
+    /// Update visibility for memories within a tier scope.
+    func updateVisibility(scope: MemoryLayerScope, visibility: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            var conditions = ["deleted = 0"]
+            var arguments: [DatabaseValue] = []
+            guard
+                let visibilityValue = DatabaseValue(value: visibility),
+                let updatedAt = DatabaseValue(value: Date())
+            else { return }
+            arguments.append(visibilityValue)
+            arguments.append(updatedAt)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
+            try database.execute(
+                sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
     }

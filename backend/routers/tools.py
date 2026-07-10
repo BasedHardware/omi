@@ -28,6 +28,7 @@ from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tool_services.action_items import (
     get_action_items_text,
     create_action_item_text,
@@ -180,6 +181,7 @@ def get_memories(
         start_date=start_date,
         end_date=end_date,
     )
+    result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
     return _ok("get_memories", result)
 
 
@@ -193,6 +195,7 @@ def search_memories(
         query=body.query,
         limit=body.limit,
     )
+    result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
     return _ok("search_memories", result)
 
 

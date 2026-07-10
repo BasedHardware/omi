@@ -27,8 +27,8 @@ jobs:
     steps:
       - name: Validate Environment Input
         run: |
-          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
-            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+          if [[ "${{ github.event.inputs.environment }}" != "development" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
             exit 1
           fi
 
@@ -79,23 +79,15 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Upgrade backend-secrets Helm chart
-        run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
-            ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
-          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
-            ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="$(date +%s)" --overwrite
-          sleep 10
-
       - name: Deploy LLM Gateway to GKE cluster using Helm
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-llm-gateway \
-            ./backend/charts/llm-gateway \
-            -f ./backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml \
-            --set "image.tag=${GITHUB_SHA::7}"
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-llm-gateway --timeout=300s
+          IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh
 
       - name: Smoke LLM Gateway
         run: |

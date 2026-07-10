@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct DailyTaskCreationSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -152,8 +153,9 @@ struct DailyTaskCreationSheet: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DailyTaskCreationSheet { description, priority in
         print("Create daily task: \(description) with priority: \(priority)")
     }
-}
+}#endif

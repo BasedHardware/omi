@@ -7,7 +7,7 @@ final class AgentControlServiceTests: XCTestCase {
   func testSessionSummaryUsesVoiceHandlesInsteadOfCanonicalIds() {
     let service = AgentControlService()
     let raw = """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note","status":"open","surfaceKind":"main_chat"},"latestRun":{"runId":"run_123","status":"running","mode":"act"},"latestAttempt":{"attemptId":"attempt_123"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note","status":"open","surfaceKind":"main_chat"},"latestRun":{"runId":"run_123","status":"running","mode":"act"},"latestAttempt":{"attemptId":"attempt_123"}}]}
       """
 
     let summary = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: raw)
@@ -21,7 +21,7 @@ final class AgentControlServiceTests: XCTestCase {
   func testSessionSummaryPrefersActiveRunForVoiceHandles() {
     let service = AgentControlService()
     let raw = """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note","status":"open"},"latestRun":{"runId":"run_terminal","status":"completed","mode":"ask"},"activeRun":{"runId":"run_active","status":"running","mode":"act"},"latestAttempt":{"attemptId":"attempt_terminal"},"activeAttempt":{"attemptId":"attempt_active"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note","status":"open"},"latestRun":{"runId":"run_terminal","status":"completed","mode":"ask"},"activeRun":{"runId":"run_active","status":"running","mode":"act"},"latestAttempt":{"attemptId":"attempt_terminal"},"activeAttempt":{"attemptId":"attempt_active"}}]}
       """
 
     let summary = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: raw)
@@ -69,7 +69,7 @@ final class AgentControlServiceTests: XCTestCase {
   func testEmptySessionSummaryClearsStaleVoiceHandles() {
     let service = AgentControlService()
     let withSession = """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
       """
 
     _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: withSession)
@@ -86,7 +86,7 @@ final class AgentControlServiceTests: XCTestCase {
   func testListSessionFailureClearsStaleVoiceHandles() {
     let service = AgentControlService()
     let withSession = """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
       """
 
     _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: withSession)
@@ -129,7 +129,7 @@ final class AgentControlServiceTests: XCTestCase {
   func testFailureResponsesClearAllStaleVoiceHandles() {
     let service = AgentControlService()
     let withSession = """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
       """
     let withArtifact = """
       {"ok":true,"artifacts":[{"artifactId":"artifact_123","role":"result","lifecycleState":"retained"}]}
@@ -171,7 +171,7 @@ final class AgentControlServiceTests: XCTestCase {
     // With an agentRef that resolves to a handle, the guard passes and the
     // runtime is reached (it returns ok:false here, proving we got past the guard).
     _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: """
-      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"}}]}
+      {"ok":true,"sessions":[{"session":{"sessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"}}]}
       """)
     let resolvedWithHandle = service.resolveVoiceHandles(in: ["agentRef": "agent_1"])
     XCTAssertNil(service.missingScopeError(name: HubTool.getAgentRun.rawValue, input: resolvedWithHandle))
@@ -213,5 +213,59 @@ final class AgentControlServiceTests: XCTestCase {
     let missing = service.missingScopeError(name: HubTool.updateAgentArtifactLifecycle.rawValue, input: ["state": "retained"])
     XCTAssertNotNil(missing)
     XCTAssertTrue(missing!.contains("artifact reference or id"))
+  }
+
+  func testVoiceCanonicalizationMapsSnakeCaseAndStripsModelOnlyFields() {
+    let service = AgentControlService()
+    let input: [String: Any] = [
+      "objective": "check something",
+      "brief": "visible text only",
+      "parent_run_id": "run_parent",
+      "max_depth": 2,
+      "max_budget_usd": 3,
+      "run_mode": "act",
+    ]
+
+    let spawn = service.canonicalizeVoiceArguments(name: "spawn_agent", arguments: input)
+    XCTAssertEqual(spawn["parentRunId"] as? String, "run_parent")
+    XCTAssertNil(spawn["parent_run_id"])
+    XCTAssertNil(spawn["brief"])
+
+    let runAndWait = service.canonicalizeVoiceArguments(name: "run_agent_and_wait", arguments: input)
+    XCTAssertEqual(runAndWait["parentRunId"] as? String, "run_parent")
+    XCTAssertEqual(runAndWait["maxDepth"] as? Int, 2)
+    XCTAssertEqual(runAndWait["maxBudgetUsd"] as? Int, 3)
+    XCTAssertEqual(runAndWait["runMode"] as? String, "act")
+  }
+
+  func testUnresolvedVoiceHandlesFailBeforeRuntimeDispatch() {
+    let service = AgentControlService()
+
+    _ = service.summarizeVoiceResult(
+      name: HubTool.listAgentSessions.rawValue,
+      raw: """
+        {"ok":true,"sessions":[{"session":{"sessionId":"ses_1","title":"Screen visibility check","status":"open"},"activeRun":{"runId":"run_1","status":"running","mode":"act"},"activeAttempt":{"attemptId":"att_1","status":"running"}}]}
+        """
+    )
+    XCTAssertNil(
+      service.unresolvedVoiceHandleError(
+        name: HubTool.getAgentRun.rawValue,
+        arguments: ["agentRef": "agent_1"]
+      )
+    )
+
+    let agentError = service.unresolvedVoiceHandleError(
+      name: HubTool.getAgentRun.rawValue,
+      arguments: ["agentRef": "agent_99"]
+    )
+    XCTAssertNotNil(agentError)
+    XCTAssertTrue(agentError!.contains("couldn't resolve"))
+
+    let artifactError = service.unresolvedVoiceHandleError(
+      name: HubTool.updateAgentArtifactLifecycle.rawValue,
+      arguments: ["artifactRef": "artifact_99"]
+    )
+    XCTAssertNotNil(artifactError)
+    XCTAssertTrue(artifactError!.contains("couldn't resolve"))
   }
 }

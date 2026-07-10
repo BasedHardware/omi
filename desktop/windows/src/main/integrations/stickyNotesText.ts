@@ -16,6 +16,7 @@ export function cleanNoteText(raw: string): string {
   return raw
     .replace(BLOCK_ANCHOR, '\n') // drop block-id anchors, keep block boundaries
     .replace(/\r\n?/g, '\n') // normalize line endings first
+    // eslint-disable-next-line no-control-regex -- intentional: strip C0 control chars, keep tab+newline
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ') // strip control chars (keep tab + newline)
     .replace(/[ \t]+/g, ' ')
     .replace(/ *\n */g, '\n')

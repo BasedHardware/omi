@@ -1716,8 +1716,10 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.l10n.goalTitle,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1768,8 +1770,10 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(context.l10n.target,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,
@@ -1888,8 +1892,10 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.l10n.goalTitle,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1940,8 +1946,10 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(context.l10n.target,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,

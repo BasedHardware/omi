@@ -1,5 +1,6 @@
 version: 1
 name: ask-omi-open-benchmark
+tier: 3
 description: Repeated cursor-free Ask Omi open timing for the floating pill.
 app: non-prod
 preconditions:

@@ -20,6 +20,7 @@ enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
 enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
     case userStop = "user_stop"
     case finishAndContinue = "finish_and_continue"
+    case meetingEnded = "meeting_ended"
     case maxDurationRotation = "max_duration_rotation"
     case crashRecovery = "crash_recovery"
     case retry = "retry"
@@ -33,6 +34,11 @@ enum LocalConversationStatus: String, Codable, CaseIterable {
     case merging = "merging"
     case completed = "completed"
     case failed = "failed"
+}
+
+enum ConversationCacheCompleteness: String, Codable, CaseIterable {
+    case list
+    case detail
 }
 
 // MARK: - Transcription Session Record
@@ -52,9 +58,12 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     var retryCount: Int
     var lastError: String?
     var backendId: String?                // Server conversation ID
+    var clientConversationId: String?     // Client-generated stable conversation ID for listen reconciliation
     var backendSynced: Bool
     var createdAt: Date
     var updatedAt: Date
+    var serverUpdatedAt: Date?
+    var cacheCompleteness: ConversationCacheCompleteness
     var finalizationStrategy: TranscriptionFinalizationStrategy?
     var finalizationReason: TranscriptionFinalizationReason?
     var finalizationStartedAt: Date?
@@ -97,9 +106,12 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         retryCount: Int = 0,
         lastError: String? = nil,
         backendId: String? = nil,
+        clientConversationId: String? = nil,
         backendSynced: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
+        serverUpdatedAt: Date? = nil,
+        cacheCompleteness: ConversationCacheCompleteness = .list,
         finalizationStrategy: TranscriptionFinalizationStrategy? = nil,
         finalizationReason: TranscriptionFinalizationReason? = nil,
         finalizationStartedAt: Date? = nil,
@@ -134,9 +146,12 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         self.retryCount = retryCount
         self.lastError = lastError
         self.backendId = backendId
+        self.clientConversationId = clientConversationId
         self.backendSynced = backendSynced
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.serverUpdatedAt = serverUpdatedAt
+        self.cacheCompleteness = cacheCompleteness
         self.finalizationStrategy = finalizationStrategy
         self.finalizationReason = finalizationReason
         self.finalizationStartedAt = finalizationStartedAt
@@ -281,6 +296,10 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
     var session: QueryInterfaceRequest<TranscriptionSessionRecord> {
         request(for: TranscriptionSegmentRecord.session)
     }
+
+    var hasSpeakerAssignment: Bool {
+        isUser || personId != nil
+    }
 }
 
 // MARK: - Session with Segments
@@ -370,6 +389,8 @@ extension TranscriptionSessionRecord {
             backendSynced: true,
             createdAt: conversation.createdAt,
             updatedAt: Date(),
+            serverUpdatedAt: conversation.updatedAt,
+            cacheCompleteness: conversation.transcriptSegmentsIncluded ? .detail : .list,
             finalizationStrategy: nil,
             finalizationReason: nil,
             finalizationStartedAt: nil,
@@ -392,15 +413,19 @@ extension TranscriptionSessionRecord {
         )
     }
 
-    /// Update this record from a ServerConversation (preserving local id)
+    /// Update this record from a versioned server snapshot while preserving its local id.
     mutating func updateFrom(_ conversation: ServerConversation) {
         let encoder = JSONEncoder()
 
-        // Update timestamps — use server's latest timestamp so local mutations
-        // (which set updatedAt = Date()) aren't overwritten by stale sync data
+        // `updatedAt` is local cache bookkeeping. Server freshness is tracked
+        // independently by `serverUpdatedAt` and never inferred from recording time.
         self.startedAt = conversation.startedAt ?? conversation.createdAt
         self.finishedAt = conversation.finishedAt
-        self.updatedAt = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
+        self.updatedAt = Date()
+        self.serverUpdatedAt = conversation.updatedAt ?? self.serverUpdatedAt
+        if conversation.transcriptSegmentsIncluded {
+            self.cacheCompleteness = .detail
+        }
 
         // Update metadata
         self.source = conversation.source?.rawValue ?? self.source
@@ -437,6 +462,72 @@ extension TranscriptionSessionRecord {
         // Mark as synced
         self.backendId = conversation.id
         self.backendSynced = true
+
+    }
+
+    /// Enrich an unversioned or older projection without allowing it to
+    /// overwrite fields from a newer canonical snapshot.
+    mutating func hydrateMissingFields(from conversation: ServerConversation) {
+        let encoder = JSONEncoder()
+        if Self.isEmpty(title), !conversation.structured.title.isEmpty {
+            title = conversation.structured.title
+        }
+        if Self.isEmpty(overview), !conversation.structured.overview.isEmpty {
+            overview = conversation.structured.overview
+        }
+        if Self.isEmpty(emoji), !conversation.structured.emoji.isEmpty {
+            emoji = conversation.structured.emoji
+        }
+        if Self.isDefaultCategory(category), !Self.isDefaultCategory(conversation.structured.category) {
+            category = conversation.structured.category
+        }
+        if Self.isEmptyJsonCollection(actionItemsJson), !conversation.structured.actionItems.isEmpty {
+            actionItemsJson = try? String(
+                data: encoder.encode(conversation.structured.actionItems),
+                encoding: .utf8
+            )
+        }
+        if Self.isEmptyJsonCollection(eventsJson), !conversation.structured.events.isEmpty {
+            eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+        }
+        if Self.isEmptyJsonCollection(photosJson), !conversation.photos.isEmpty {
+            photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
+        }
+        if Self.isEmptyJsonCollection(appsResultsJson), !conversation.appsResults.isEmpty {
+            appsResultsJson = try? String(data: encoder.encode(conversation.appsResults), encoding: .utf8)
+        }
+        if conversation.transcriptSegmentsIncluded {
+            cacheCompleteness = .detail
+        }
+        updatedAt = Date()
+        backendId = conversation.id
+        backendSynced = true
+    }
+
+    /// True when the server response can fill at least one empty local server-owned field.
+    func hasHydratableServerFields(from conversation: ServerConversation) -> Bool {
+        guard backendSynced, backendId == conversation.id else { return false }
+        return Self.isEmpty(title) && !conversation.structured.title.isEmpty ||
+            Self.isEmpty(overview) && !conversation.structured.overview.isEmpty ||
+            Self.isEmpty(emoji) && !conversation.structured.emoji.isEmpty ||
+            Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category) ||
+            Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty ||
+            Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty ||
+            Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty ||
+            Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
+    }
+
+    private static func isEmpty(_ value: String?) -> Bool {
+        value?.isEmpty ?? true
+    }
+
+    private static func isDefaultCategory(_ value: String?) -> Bool {
+        isEmpty(value) || value == "other"
+    }
+
+    private static func isEmptyJsonCollection(_ value: String?) -> Bool {
+        guard let value, !value.isEmpty else { return true }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines) == "[]"
     }
 }
 
@@ -500,7 +591,10 @@ extension TranscriptionSegmentRecord {
 extension TranscriptionSessionRecord {
     /// Convert local record back to ServerConversation for UI display
     /// Requires segments to be passed in (fetched separately)
-    func toServerConversation(segments: [TranscriptionSegmentRecord]) -> ServerConversation? {
+    func toServerConversation(
+        segments: [TranscriptionSegmentRecord],
+        transcriptIncluded: Bool? = nil
+    ) -> ServerConversation? {
         guard let backendId = backendId else { return nil }
 
         let decoder = JSONDecoder()
@@ -533,6 +627,7 @@ extension TranscriptionSessionRecord {
         return ServerConversation(
             id: backendId,
             createdAt: createdAt,
+            updatedAt: serverUpdatedAt,
             startedAt: startedAt,
             finishedAt: finishedAt,
             structured: Structured(
@@ -544,7 +639,7 @@ extension TranscriptionSessionRecord {
                 events: events
             ),
             transcriptSegments: transcriptSegments,
-            transcriptSegmentsIncluded: !segments.isEmpty,
+            transcriptSegmentsIncluded: transcriptIncluded ?? (cacheCompleteness == .detail || !segments.isEmpty),
             geolocation: geolocation,
             photos: photos,
             appsResults: appsResults,

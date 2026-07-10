@@ -21,7 +21,7 @@ class McpApiKeyListItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-            child: const FaIcon(FontAwesomeIcons.key, color: Color(0xFF8E8E93), size: 16),
+            child: FaIcon(FontAwesomeIcons.key, color: Color(0xFF8E8E93), size: 16),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -46,8 +46,10 @@ class McpApiKeyListItem extends StatelessWidget {
             onTap: () => _showDeleteConfirmation(context, apiKey),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration:
-                  BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Text(
                 context.l10n.revoke,
                 style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),

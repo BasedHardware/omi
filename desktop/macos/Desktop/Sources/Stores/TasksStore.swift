@@ -225,9 +225,6 @@ class TasksStore: ObservableObject {
         refreshInvocations += 1
         // Skip if not signed in
         guard AuthService.shared.isSignedIn else { return }
-        // Skip if in auth backoff period (recent 401 errors)
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
-
         // Skip if page is not visible
         guard isActive else { return }
 
@@ -274,7 +271,7 @@ class TasksStore: ObservableObject {
             )
 
             // Merge without triggering @Published unless something actually changed
-            let merged = mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
+            let merged = Self.mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
             if merged != incompleteTasks {
                 // Log what actually changed
                 let currentIds = Set(incompleteTasks.map { $0.id })
@@ -298,11 +295,7 @@ class TasksStore: ObservableObject {
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
             await loadDashboardTasks()
-            AuthBackoffTracker.shared.reportSuccess()
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
-            }
             // Benign sign-out race: the isSignedIn guard above passed, but the
             // token was cleared by the time the request ran. Expected, not a bug
             // — log quietly (breadcrumb only) instead of flooding Sentry.
@@ -332,7 +325,7 @@ class TasksStore: ObservableObject {
                     offset: 0,
                     completed: true
                 )
-                let merged = mergeWithoutAdding(source: mergedTasks, current: completedTasks)
+                let merged = Self.mergeWithoutAdding(source: mergedTasks, current: completedTasks)
                 if merged != completedTasks {
                     completedTasks = merged
                     completedOffset = merged.count
@@ -369,7 +362,7 @@ class TasksStore: ObservableObject {
                 )
                 // Filter to only deleted
                 let newDeleted = mergedTasks.filter { $0.deleted == true }
-                let merged = mergeWithoutAdding(source: newDeleted, current: deletedTasks)
+                let merged = Self.mergeWithoutAdding(source: newDeleted, current: deletedTasks)
                 if merged != deletedTasks {
                     deletedTasks = merged
                     deletedOffset = merged.count
@@ -446,8 +439,11 @@ class TasksStore: ObservableObject {
     /// Does NOT add new items — new tasks only appear on explicit load (initial load, tab switch).
     /// Returns a new array only if different from current (caller compares with == before assigning
     /// to @Published property, preventing unnecessary objectWillChange notifications).
-    private func mergeWithoutAdding(source: [TaskActionItem], current: [TaskActionItem]) -> [TaskActionItem] {
-        let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+    static func mergeWithoutAdding(source: [TaskActionItem], current: [TaskActionItem]) -> [TaskActionItem] {
+        // The source list can contain duplicate ids (local sync/reconciliation races),
+        // so build the lookup with last-write-wins. `Dictionary(uniqueKeysWithValues:)`
+        // traps on a duplicate key and crashes the app (same crash class as #6506).
+        let sourceById = Dictionary(source.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         let sourceIds = Set(source.map { $0.id })
 
         var result = current

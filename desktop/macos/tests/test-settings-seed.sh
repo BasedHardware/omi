@@ -26,10 +26,15 @@ assert_unset() {
 }
 
 cleanup_domains=()
+prefs_home="$(mktemp -d "${TMPDIR:-/tmp}/omi-settings-seed-home.XXXXXX")"
+mkdir -p "$prefs_home/Library/Preferences"
+export HOME="$prefs_home"
+export CFFIXED_USER_HOME="$prefs_home"
 cleanup() {
   for domain in "${cleanup_domains[@]}"; do
     defaults delete "$domain" >/dev/null 2>&1 || true
   done
+  rm -rf "$prefs_home"
 }
 trap cleanup EXIT
 
@@ -45,7 +50,7 @@ defaults write "$source_domain" shortcut_askOmiEnabled -bool true
 # Set the hidden kill switch in the source to verify it is NOT copied to targets.
 defaults write "$source_domain" disableSystemAudioCapture -bool true
 
-"$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_target" "$source_domain" >/tmp/omi-settings-seed-quiet.out
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_target" "$source_domain" >"$prefs_home/omi-settings-seed-quiet.out"
 assert_defaults "$quiet_target" screenAnalysisEnabled 0
 assert_defaults "$quiet_target" transcriptionEnabled 0
 assert_defaults "$quiet_target" systemAudioCaptureMode never
@@ -55,7 +60,7 @@ assert_unset "$quiet_target" disableSystemAudioCapture
 assert_defaults "$quiet_target" shortcut_askOmiEnabled 1
 assert_unset "$quiet_target" hasCompletedFileIndexing
 
-OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$eager_target" "$source_domain" >/tmp/omi-settings-seed-eager.out
+OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$eager_target" "$source_domain" >"$prefs_home/omi-settings-seed-eager.out"
 assert_defaults "$eager_target" screenAnalysisEnabled 1
 assert_defaults "$eager_target" transcriptionEnabled 1
 assert_defaults "$eager_target" devLazyPermissionsEnabled 0
@@ -63,7 +68,7 @@ assert_unset "$eager_target" disableSystemAudioCapture
 assert_defaults "$eager_target" systemAudioCaptureMode always
 assert_unset "$eager_target" screenAnalysisAutoStartFixed_v2
 
-"$MACOS_DIR/scripts/omi-settings-seed.sh" "$missing_target" "com.omi.missing-source-$$" >/tmp/omi-settings-seed-missing.out
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$missing_target" "com.omi.missing-source-$$" >"$prefs_home/omi-settings-seed-missing.out"
 assert_defaults "$missing_target" screenAnalysisEnabled 0
 assert_defaults "$missing_target" transcriptionEnabled 0
 assert_defaults "$missing_target" devLazyPermissionsEnabled 1

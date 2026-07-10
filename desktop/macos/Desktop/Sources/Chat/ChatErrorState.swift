@@ -31,7 +31,7 @@ enum BridgeUnavailableReason: Equatable, Sendable {
 /// The five recoverable error states the chat UI renders inline.
 ///
 /// Anything that does NOT map to a case here (e.g. `BridgeError.encodingError`,
-/// `.quotaExceeded`, `.agentError`) is intentionally left to the existing
+/// `.quotaExceeded`, opaque `.agentError`) is intentionally left to the existing
 /// `errorMessage` banner / sheets. The `from(_:)` factory returns `nil` in
 /// those cases so callers can fall through.
 enum ChatErrorState: Equatable, Sendable {
@@ -47,8 +47,8 @@ enum ChatErrorState: Equatable, Sendable {
   /// runtimeMissing open runtime install docs; crashed / unknown retry.
   case bridgeUnavailable(reason: BridgeUnavailableReason)
 
-  /// User pressed Stop / Cancel mid-turn. Recovery: resume (replay last
-  /// user turn with a fresh `turnId`) or discard.
+  /// User pressed Stop / Cancel mid-turn. Recovery: dismiss; the user can
+  /// type and send a new message when they want to continue.
   case interrupted
 
   /// Tools returned empty payloads and the model produced no text. Recovery:
@@ -61,9 +61,9 @@ enum ChatErrorState: Equatable, Sendable {
 // MARK: - Recovery actions
 
 /// One primary recovery action per error card. Multiple cases may share the
-/// same recovery (e.g. timeout + interrupted both → retry) — that's intentional.
+/// same recovery — that's intentional.
 enum ChatErrorRecoveryAction: Equatable, Sendable, CaseIterable {
-  /// Replay the last user turn with a fresh `turnId`.
+  /// Replay the last failed user turn with a fresh `turnId`.
   case retry
   /// Open the sign-in flow (Firebase / OAuth, NOT the Claude paywall).
   case signIn
@@ -94,9 +94,25 @@ extension ChatErrorState {
         return .retry
       }
     case .interrupted:
-      return .retry
+      return .dismiss
     case .noDataFound:
       return .dismiss
+    }
+  }
+
+  /// Compact summary for surfaces that only show a single line (floating bar).
+  var userFacingSummary: String {
+    switch self {
+    case .authRequired:
+      return "Please sign in to continue."
+    case .timeout:
+      return "AI took too long to respond."
+    case .bridgeUnavailable:
+      return "AI isn't available right now."
+    case .interrupted:
+      return "Response stopped."
+    case .noDataFound:
+      return "No matching data found."
     }
   }
 }
@@ -111,7 +127,6 @@ extension ChatErrorState {
   ///
   /// Cases handled:
   ///   - `.timeout`              → `.timeout(toolName: nil)`
-  ///   - `.stopped`              → `.interrupted`
   ///   - `.nodeNotFound`         → `.bridgeUnavailable(.nodeMissing)`
   ///   - `.bridgeScriptNotFound` → `.bridgeUnavailable(.runtimeMissing)`
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
@@ -120,17 +135,21 @@ extension ChatErrorState {
   ///   - `.restarting`           → `.bridgeUnavailable(.unknown)`
   ///   - `.authMissing`          → `.authRequired`
   ///
+  /// Cases conditionally handled:
+  ///   - `.agentError` session-token auth strings → `.authRequired`
+  ///
   /// Cases intentionally returning `nil` (fall through to existing banner):
   ///   - `.encodingError`        (internal error, retry won't help)
   ///   - `.quotaExceeded`        (paywall — kept as separate sheet)
-  ///   - `.agentError`           (varied; existing banner already classifies)
+  ///   - opaque `.agentError`    (varied; existing banner already classifies)
+  ///   - `.agentRuntimeFailure`  (already carries runtime-specific copy)
   ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
     switch bridgeError {
     case .timeout:
       return .timeout(toolName: nil)
     case .stopped:
-      return .interrupted
+      return nil
     case .nodeNotFound:
       return .bridgeUnavailable(reason: .nodeMissing)
     case .bridgeScriptNotFound:
@@ -141,7 +160,9 @@ extension ChatErrorState {
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:
       return .authRequired
-    case .encodingError, .quotaExceeded, .agentError, .requestAlreadyActive:
+    case .agentError(let message):
+      return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
+    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
       return nil
     }
   }

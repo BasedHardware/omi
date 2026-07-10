@@ -10,34 +10,22 @@ Verifies:
 - Download decodes Opus back to PCM
 """
 
-import os
 import struct
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-
-# Mock heavy dependencies at sys.modules level before importing storage
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("database.users", MagicMock())
-
-_mock_gcs_storage = MagicMock()
-_mock_gcs_client_instance = MagicMock()
-_mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
-sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
-sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
-sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
-sys.modules.setdefault("utils.cloud_tasks", MagicMock())
-sys.modules["utils.cloud_tasks"].enqueue_audio_merge_job = MagicMock()
-sys.modules["utils.cloud_tasks"].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
-
 from utils.other import storage as storage_mod
 
 requires_native_opus = pytest.mark.skipif(storage_mod.opuslib is None, reason="native libopus is not installed")
+
+
+@pytest.fixture(autouse=True)
+def _mock_storage_client(monkeypatch):
+    """storage binds ``storage_client = storage.Client(...)`` at import time; patch the
+    module attribute with a fresh MagicMock per test so bucket/blob setup works and is
+    restored at teardown (sanctioned monkeypatch seam, no sys.modules mutation)."""
+    monkeypatch.setattr(storage_mod, "storage_client", MagicMock())
 
 
 @requires_native_opus
