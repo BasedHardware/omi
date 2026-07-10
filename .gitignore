@@ -240,6 +240,9 @@ builds-snapshot.md
 .dev/
 
 # Agent planning artifacts (ephemeral; do not commit)
-.cursor/plans/
+.cursor/plans/*
+!.cursor/plans/.gitkeep
+
 .hermes/
 backend/.venv
+backend/.harness/

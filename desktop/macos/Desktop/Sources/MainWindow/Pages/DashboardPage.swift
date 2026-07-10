@@ -214,12 +214,12 @@ class DashboardViewModel: ObservableObject {
 
 struct DashboardPage: View {
     @ObservedObject var viewModel: DashboardViewModel
+    @ObservedObject var homeStatusStore: HomeStatusStore = HomeStatusStore()
     @ObservedObject var appState: AppState
     @ObservedObject var appProvider: AppProvider
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
-    @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var selectedCatalogApp: OmiApp?
@@ -231,18 +231,6 @@ struct DashboardPage: View {
     @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
     @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
-    @State private var screenshotCount: Int?
-    // True totals for the "What omi knows" tiles. Without these the tiles showed
-    // only the loaded page (~50 conversations, ~100 memories), badly undercounting.
-    @State private var conversationCount: Int?
-    @State private var memoryCount: Int?
-    @State private var taskCount: Int?
-    // Wearable used on this account (any friend/omi-sourced conversation).
-    // Seeded from UserDefaults so the badge is instant on later launches.
-    @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
-        forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
-    @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
-    @State private var lastHomeStatusRefreshAt = Date.distantPast
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -291,11 +279,14 @@ struct DashboardPage: View {
         }
     }
 
-    private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
-    private static let homeStageMaxWidth: CGFloat = 1120
-    private static let homeStageHorizontalPadding: CGFloat = 34
-    private static let homeAskBarMaxWidth: CGFloat = 640
-    private static let homeStagePanelMaxWidth: CGFloat = 780
+    private static let homeStageMaxWidth: CGFloat = 1360
+    private static let homeStageMinSideInset: CGFloat = 30
+    private static let homeStageMaxSideInset: CGFloat = 96
+    private static let homeAskBarMinWidth: CGFloat = 560
+    private static let homeAskBarMaxWidth: CGFloat = 980
+    private static let homeStagePanelMaxWidth: CGFloat = 1280
+    private static let homeStageTopPadding: CGFloat = 74
+    private static let homeStageBottomPadding: CGFloat = 26
     private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
     private static let appsPopupMaxWidth: CGFloat = 1040
     private static let appsPopupMaxHeight: CGFloat = 600
@@ -344,23 +335,23 @@ struct DashboardPage: View {
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
-            || accountHasOmiDeviceConversations
+            || homeStatusStore.accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
     private func isImportConnectorConnected(_ connectorID: String) -> Bool {
         guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else { return false }
-        return importConnectorStatusStore.snapshot(for: connector).isConnected
+        return homeStatusStore.connectorStatusStore.snapshot(for: connector).isConnected
     }
 
     private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
         switch destination {
         case .claude, .claudeCode:
-            return [.claude, .claudeCode].contains { memoryExportStatuses[$0]?.hasConnection == true }
+            return [.claude, .claudeCode].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
         case .chatgpt, .codex:
-            return [.chatgpt, .codex].contains { memoryExportStatuses[$0]?.hasConnection == true }
+            return [.chatgpt, .codex].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
         default:
-            return memoryExportStatuses[destination]?.hasConnection == true
+            return homeStatusStore.memoryExportStatuses[destination]?.hasConnection == true
         }
     }
 
@@ -394,7 +385,7 @@ struct DashboardPage: View {
             ImportConnectorSheet(
                 connector: connector,
                 appState: appState,
-                statusStore: importConnectorStatusStore,
+                statusStore: homeStatusStore.connectorStatusStore,
                 onDismiss: {
                     selectedImportConnector = nil
                 }
@@ -404,7 +395,7 @@ struct DashboardPage: View {
         .dismissableSheet(item: legacySelectedExportDestination) { destination in
             ConnectDestinationSheet(
                 destination: destination,
-                statuses: $memoryExportStatuses,
+                statuses: $homeStatusStore.memoryExportStatuses,
                 onDismiss: {
                     selectedExportDestination = nil
                 }
@@ -433,13 +424,13 @@ struct DashboardPage: View {
             }
             syncCaptureState()
             reportHomeAutomationMode()
-            Task { await refreshHomeStatusData(force: true) }
+            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await refreshHomeStatusData(force: false) }
+            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -493,7 +484,7 @@ struct DashboardPage: View {
             dashboardWidgets
 
             ChatMessagesView(
-                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
+                messages: chatProvider.messages,
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -510,6 +501,12 @@ struct DashboardPage: View {
                 sessionsLoadError: chatProvider.sessionsLoadError,
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
+                onOpenAgent: { agentID, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
+                },
+                onOpenAgentRef: { ref, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
+                },
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -526,14 +523,17 @@ struct DashboardPage: View {
                 )
             )
 
+            dashboardChatErrorCard
+                .padding(.horizontal, 30)
+
             ChatInputView(
                 onSend: { text in
                     AnalyticsManager.shared.chatMessageSent(
                         messageLength: text.count,
-                        hasContext: selectedApp != nil,
+                        hasSelectedAppContext: selectedApp != nil,
                         source: "dashboard_chat"
                     )
-                    Task { await chatProvider.sendMessage(text) }
+                    Task { await chatProvider.sendMainDraft(text) }
                 },
                 onStop: {
                     chatProvider.stopAgent(owner: .mainChat)
@@ -564,12 +564,10 @@ struct DashboardPage: View {
 
     private var redesignedHome: some View {
         GeometryReader { proxy in
+            let sideInset = homeStageSideInset(for: proxy.size.width)
             let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
             let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
-            let panelWidth = min(
-                Self.homeStageMaxWidth,
-                max(CGFloat(0), proxy.size.width - (Self.homeStageHorizontalPadding * 2))
-            )
+            let panelWidth = homeStageContentWidth(for: proxy.size.width)
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
@@ -586,7 +584,7 @@ struct DashboardPage: View {
                         }
                 }
 
-                homeStage
+                homeStage(stageWidth: proxy.size.width, stageHeight: proxy.size.height)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     // The popup/sheet overlays are modal: while one is up, the
                     // stage underneath must not be reachable by VoiceOver /
@@ -594,7 +592,7 @@ struct DashboardPage: View {
                     .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
-                    .padding(.horizontal, Self.homeStageHorizontalPadding)
+                    .padding(.horizontal, sideInset)
                     .padding(.top, 26)
                     .accessibilityHidden(isHomeModalPresented)
 
@@ -629,103 +627,144 @@ struct DashboardPage: View {
     /// Vertical stage: mode content on top (hub metrics, inline chat, or the
     /// connect tray), the persistent ask bar anchored beneath it, and the
     /// suggested questions under the bar while the hub is showing.
-    private var homeStage: some View {
+    private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
+        let askBarWidth = homeAskBarWidth(for: stageWidth)
+
+        return Group {
+            if homeMode == .hub {
+                homeHubStage(askBarWidth: askBarWidth, stageHeight: stageHeight)
+            } else {
+                homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
+            }
+        }
+        .padding(.top, Self.homeStageTopPadding)
+        .padding(.bottom, Self.homeStageBottomPadding)
+    }
+
+    /// Hub layout: the omi wordmark centered in the full screen, with the stats
+    /// ribbon, ask bar, and suggestions docked as one column at the bottom.
+    ///
+    /// Built as a plain VStack (wordmark, flexible gap, cluster) so the two can
+    /// never overlap. The wordmark's top inset is computed so it lands on the
+    /// true stage center when the window is tall enough, and lifts to sit just
+    /// above the cluster (with a minimum gap) when it isn't.
+    private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View {
+        // Wordmark height and a deliberately generous estimate of the docked
+        // cluster height (ribbon + gap + ask bar + gap + three suggestion rows).
+        // Overestimating only lifts the wordmark slightly early; it never lets
+        // the cluster clip.
+        let wordmarkHeight: CGFloat = 76
+        let clusterHeight: CGFloat = 340
+        let minGap: CGFloat = 24
+        let contentHeight = stageHeight - Self.homeStageTopPadding - Self.homeStageBottomPadding
+
+        let trueCenterInset = (contentHeight - wordmarkHeight) / 2
+        let maxInset = contentHeight - wordmarkHeight - clusterHeight - minGap
+        let topInset = max(0, min(trueCenterInset, maxInset))
+
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+                .frame(height: topInset)
+
+            homeHubWordmark
+                .transition(.homeHubFade)
+
+            // Flexible gap absorbs the remaining height, docking the cluster at
+            // the bottom while keeping at least `minGap` below the wordmark.
+            Spacer(minLength: minGap)
+
+            VStack(spacing: 0) {
+                homeStatRibbon
+                    .frame(width: askBarWidth)
+                    .padding(.bottom, 14)
+
+                homeAskBar
+                    .frame(width: askBarWidth)
+
+                homeSuggestionList
+                    .frame(width: askBarWidth)
+                    .padding(.top, 12)
+                    .transition(.homeSuggestionsFade)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Panel layout (chat / connect): the surface fills the height with the ask
+    /// bar anchored directly beneath it.
+    private func homePanelStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
-            // Constant container alignment — each mode positions itself inside
-            // the flexible area. Animating the container's own alignment made
-            // the hub snap instead of gliding when the chat opened.
             ZStack {
                 switch homeMode {
-                case .hub:
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        homeHubCenterpiece
-                    }
-                    .transition(.homeHubFade)
                 case .chat:
-                    homeChatPanel
+                    homeChatPanel(stageWidth: stageWidth)
                         .transition(.homeDropFromTop)
                 case .connect:
-                    homeConnectPanel
+                    homeConnectPanel(stageWidth: stageWidth)
                         .transition(.homeDropFromTop)
+                case .hub:
+                    EmptyView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             homeAskBar
-                .frame(maxWidth: Self.homeAskBarMaxWidth)
-                .padding(.horizontal, Self.homeStageHorizontalPadding)
+                .frame(width: askBarWidth)
                 .padding(.top, 22)
 
-            if homeMode == .hub {
-                homeSuggestionList
-                    .frame(maxWidth: Self.homeAskBarMaxWidth)
-                    .padding(.horizontal, Self.homeStageHorizontalPadding)
-                    .padding(.top, 12)
-                    .transition(.homeSuggestionsFade)
-            }
-
-            // Lifts the hub cluster toward the optical center; collapses while
-            // a panel is up so the ask bar anchors at the bottom.
-            Spacer(minLength: 0)
-                .frame(height: homeMode == .hub ? 64 : 0)
+            dashboardChatErrorCard
+                .frame(width: askBarWidth)
+                .padding(.top, 8)
         }
-        .padding(.top, 74)
-        .padding(.bottom, 26)
     }
 
     // MARK: Hub centerpiece
 
-    private var homeHubCenterpiece: some View {
-        VStack(spacing: 22) {
-            Text("omi.")
-                .font(.system(size: 52, weight: .bold, design: .rounded))
-                .foregroundStyle(HomePalette.ink)
-                .lineLimit(1)
-                .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
+    private var homeHubWordmark: some View {
+        Text("omi.")
+            .font(.system(size: 58, weight: .bold, design: .rounded))
+            .foregroundStyle(HomePalette.ink)
+            .lineLimit(1)
+            .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    HomeCenterMetricTile(
-                        title: "Conversations",
-                        value: conversationMetricValue,
-                        systemImage: "text.bubble.fill",
-                        action: { navigate(to: .conversations) }
-                    )
-                    HomeCenterMetricTile(
-                        title: "Tasks",
-                        value: taskMetricValue,
-                        systemImage: "checklist",
-                        action: { navigate(to: .tasks) }
-                    )
-                }
-
-                HStack(spacing: 8) {
-                    HomeCenterMetricTile(
-                        title: "Memories",
-                        value: memoryMetricValue,
-                        systemImage: "brain",
-                        action: { navigate(to: .memories) }
-                    )
-                    HomeCenterMetricTile(
-                        title: "Screenshots",
-                        value: screenshotMetricValue,
-                        systemImage: "photo.on.rectangle.angled",
-                        action: { navigate(to: .rewind) }
-                    )
-                }
-            }
-            .frame(width: 304)
-        }
-        .frame(maxWidth: .infinity)
+    /// Stat summary strip that docks directly above the ask bar.
+    private var homeStatRibbon: some View {
+        HomeStatRibbon(items: [
+            HomeStatItem(
+                title: "Conversations",
+                value: conversationMetricValue,
+                systemImage: "text.bubble.fill",
+                action: { navigate(to: .conversations) }
+            ),
+            HomeStatItem(
+                title: "Tasks",
+                value: taskMetricValue,
+                systemImage: "checklist",
+                action: { navigate(to: .tasks) }
+            ),
+            HomeStatItem(
+                title: "Memories",
+                value: memoryMetricValue,
+                systemImage: "brain",
+                action: { navigate(to: .memories) }
+            ),
+            HomeStatItem(
+                title: "Screenshots",
+                value: screenshotMetricValue,
+                systemImage: "photo.on.rectangle.angled",
+                action: { navigate(to: .rewind) }
+            ),
+        ])
     }
 
     // MARK: Inline chat panel
 
-    private var homeChatPanel: some View {
+    private func homeChatPanel(stageWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
             ChatMessagesView(
-                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
+                messages: chatProvider.messages,
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -743,6 +782,12 @@ struct DashboardPage: View {
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+                onOpenAgent: { agentID, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
+                },
+                onOpenAgentRef: { ref, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
+                },
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -760,6 +805,10 @@ struct DashboardPage: View {
             )
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
+
+            dashboardChatErrorCard
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
         }
         // Barely-there card so the chat reads as a bounded surface while still
         // dissolving into the ambient Home canvas.
@@ -784,13 +833,12 @@ struct DashboardPage: View {
                 .opacity(0.65)
         )
         .shadow(color: HomePalette.stageGlow.opacity(0.055), radius: 28, y: 8)
-        .frame(maxWidth: Self.homeStagePanelMaxWidth)
-        .padding(.horizontal, Self.homeStageHorizontalPadding)
+        .frame(width: homeStagePanelWidth(for: stageWidth))
     }
 
     // MARK: Connect tray
 
-    private var homeConnectPanel: some View {
+    private func homeConnectPanel(stageWidth: CGFloat) -> some View {
         // Sources feed omi; omi's memory flows out to the AI destinations —
         // the chevron between the two cards reads that direction. The tray
         // hugs its content: no scroll filler below the columns.
@@ -830,8 +878,7 @@ struct DashboardPage: View {
             .padding(14)
         }
         .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-        .frame(maxWidth: Self.homeStagePanelMaxWidth)
-        .padding(.horizontal, Self.homeStageHorizontalPadding)
+        .frame(width: homeStagePanelWidth(for: stageWidth))
     }
 
     private func homeConnectColumnCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -849,6 +896,21 @@ struct DashboardPage: View {
     }
 
     // MARK: Ask bar + suggestions
+
+    @ViewBuilder
+    private var dashboardChatErrorCard: some View {
+        if let cardState = chatProvider.currentError {
+            ChatErrorCard(
+                state: cardState,
+                onRecover: {
+                    Task { await chatProvider.recoverFromError() }
+                },
+                onDismiss: {
+                    chatProvider.dismissCurrentError()
+                }
+            )
+        }
+    }
 
     private var homeAskBar: some View {
         HomeAskBar(
@@ -868,7 +930,7 @@ struct DashboardPage: View {
             onSend: sendFromHomeAskBar,
             onStop: { chatProvider.stopAgent(owner: .mainChat) },
             onConnect: toggleHomeConnectPanel,
-            onActivate: openHomeChat
+            onActivate: { openHomeChat() }
         )
     }
 
@@ -892,6 +954,39 @@ struct DashboardPage: View {
         }
     }
 
+    private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat {
+        min(Self.homeStageMaxSideInset, max(Self.homeStageMinSideInset, stageWidth * 0.06))
+    }
+
+    private func homeStageContentWidth(for stageWidth: CGFloat) -> CGFloat {
+        let sideInset = homeStageSideInset(for: stageWidth)
+        return min(Self.homeStageMaxWidth, max(CGFloat(0), stageWidth - (sideInset * 2)))
+    }
+
+    private func homeStagePanelWidth(for stageWidth: CGFloat) -> CGFloat {
+        min(Self.homeStagePanelMaxWidth, homeStageContentWidth(for: stageWidth))
+    }
+
+    private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat {
+        let contentWidth = homeStageContentWidth(for: stageWidth)
+        if homeMode != .hub {
+            return min(Self.homeStagePanelMaxWidth, contentWidth)
+        }
+
+        let availableWidth = min(Self.homeAskBarMaxWidth, contentWidth)
+        let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return min(availableWidth, Self.homeAskBarMinWidth)
+        }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 15),
+        ]
+        let measuredTextWidth = (text as NSString).size(withAttributes: attributes).width
+        let chromeWidth: CGFloat = 210
+        return min(availableWidth, max(Self.homeAskBarMinWidth, measuredTextWidth + chromeWidth))
+    }
+
     // MARK: Stage actions
 
     private func reportHomeAutomationMode() {
@@ -903,12 +998,22 @@ struct DashboardPage: View {
         }
     }
 
-    private func openHomeChat() {
+    private func openHomeChat(focusInput: Bool = true) {
         guard homeMode != .chat else { return }
         withAnimation(Self.homeStageAnimation) {
             homeMode = .chat
         }
+        if focusInput {
+            focusHomeAskFieldAfterStageTransition()
+        }
         reportHomeAutomationMode()
+    }
+
+    private func focusHomeAskFieldAfterStageTransition() {
+        Task { @MainActor in
+            await Task.yield()
+            homeAskFieldFocused = true
+        }
     }
 
     private func toggleHomeConnectPanel() {
@@ -931,29 +1036,29 @@ struct DashboardPage: View {
     }
 
     private func sendFromHomeAskBar() {
-        let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draft = chatProvider.draftText
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         // Text is required — ChatProvider.sendMessage no-ops on empty text, so
         // an attachment-only "send" would silently drop the turn.
         guard !text.isEmpty else { return }
-        chatProvider.draftText = ""
-        openHomeChat()
+        openHomeChat(focusInput: false)
         AnalyticsManager.shared.chatMessageSent(
             messageLength: text.count,
-            hasContext: selectedApp != nil,
+            hasSelectedAppContext: selectedApp != nil,
             source: "home_ask_bar"
         )
         if chatProvider.isSending {
             return
         } else {
-            Task { await chatProvider.sendMessage(text) }
+            Task { await chatProvider.sendMainDraft(draft) }
         }
     }
 
     private func askHomeSuggestion(_ suggestion: String) {
-        openHomeChat()
+        openHomeChat(focusInput: false)
         AnalyticsManager.shared.chatMessageSent(
             messageLength: suggestion.count,
-            hasContext: selectedApp != nil,
+            hasSelectedAppContext: selectedApp != nil,
             source: "home_suggested_question"
         )
         Task { await chatProvider.sendMessage(suggestion) }
@@ -982,6 +1087,7 @@ struct DashboardPage: View {
                 AppsPage(
                     appProvider: appProvider,
                     appState: appState,
+                    connectorStatusStore: homeStatusStore.connectorStatusStore,
                     initialSection: appsPopupInitialSection,
                     onDismiss: {
                         dismissAppsPopup()
@@ -1105,7 +1211,7 @@ struct DashboardPage: View {
             ImportConnectorSheet(
                 connector: connector,
                 appState: appState,
-                statusStore: importConnectorStatusStore,
+                statusStore: homeStatusStore.connectorStatusStore,
                 onDismiss: {
                     dismissHomeConnectSheet()
                 }
@@ -1113,7 +1219,7 @@ struct DashboardPage: View {
         } else if let destination = selectedExportDestination {
             ConnectDestinationSheet(
                 destination: destination,
-                statuses: $memoryExportStatuses,
+                statuses: $homeStatusStore.memoryExportStatuses,
                 onDismiss: {
                     dismissHomeConnectSheet()
                 }
@@ -1238,22 +1344,24 @@ struct DashboardPage: View {
     }
 
     private var conversationMetricValue: String {
-        formattedCount(conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
+        formattedCount(
+            homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
+        )
     }
 
     private var taskMetricValue: String {
-        formattedCount(taskCount ?? incompleteTaskCount)
+        formattedCount(homeStatusStore.taskCount ?? incompleteTaskCount)
     }
 
     private var memoryMetricValue: String {
-        let count = memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
+        let count = homeStatusStore.memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
             ? memoriesViewModel.totalMemoriesCount
             : memoriesViewModel.memories.count)
         return formattedCount(count)
     }
 
     private var screenshotMetricValue: String {
-        screenshotCount.map(formattedCount) ?? "—"
+        homeStatusStore.screenshotCount.map(formattedCount) ?? "—"
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -1426,75 +1534,6 @@ struct DashboardPage: View {
         ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
         screenAnalysisEnabled = AssistantSettings.shared.screenAnalysisEnabled
         isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-    }
-
-    private func loadScreenshotCount() async {
-        let stats = await RewindIndexer.shared.getStats()
-        await MainActor.run {
-            screenshotCount = stats?.total
-        }
-    }
-
-    /// Refreshes Home-only status tiles and connector rows. Forced loads run
-    /// when the Home view is recreated; activation-triggered loads share the
-    /// app-wide cooldown so Cmd-Tab bursts do not rescan configs or hit count
-    /// endpoints repeatedly while Home is still mounted.
-    private func refreshHomeStatusData(force: Bool) async {
-        let shouldRefresh = await MainActor.run {
-            let now = Date()
-            if !force,
-               !PollingConfig.shouldAllowActivationRefresh(
-                   now: now,
-                   lastRefresh: lastHomeStatusRefreshAt
-               ) {
-                return false
-            }
-            lastHomeStatusRefreshAt = now
-            return true
-        }
-        guard shouldRefresh else { return }
-
-        async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
-        async let screenshots: Void = loadScreenshotCount()
-        async let knowledgeCounts: Void = loadKnowledgeCounts()
-        async let exportStatuses: Void = loadMemoryExportStatuses()
-        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
-    }
-
-    private func loadMemoryExportStatuses() async {
-        let statuses = await MemoryExportService.shared.allStatuses()
-        await MainActor.run {
-            memoryExportStatuses = statuses
-        }
-    }
-
-    /// Load the true totals behind the "What omi knows" tiles. Conversations come
-    /// from the server count endpoint (not stored locally); memories and tasks are
-    /// counted from the synced local DB — the same totals the detail pages show.
-    private func loadKnowledgeCounts() async {
-        async let convos = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
-        async let mems = try? MemoryStorage.shared.getLocalMemoriesCount()
-        // Open tasks only (matches the "Tasks" label and the old tile's intent —
-        // the old value just under-counted, capping each bucket at a 7-day window).
-        async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }
-        async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
-        let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
-        await MainActor.run {
-            if let c { conversationCount = c }
-            if let m { memoryCount = m }
-            if let t { taskCount = t }
-            // Sticky: device history never un-happens; keep the badge across
-            // launches and network failures once observed.
-            if d == true {
-                accountHasOmiDeviceConversations = true
-                UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
-            }
-        }
-    }
-
-    private func loadOmiDeviceHistory() async -> Bool? {
-        try? await APIClient.shared.hasOmiDeviceConversations()
     }
 
     private func formattedCount(_ count: Int) -> String {
@@ -2976,56 +3015,80 @@ private struct HomeSourceTile: View {
     }
 }
 
-private struct HomeCenterMetricTile: View {
+private struct HomeStatItem: Identifiable {
+    let id = UUID()
     let title: String
     let value: String
     let systemImage: String
     let action: () -> Void
+}
+
+/// Slim summary strip: the four Home metrics fused into a single
+/// hairline-divided bar so they read as one glanceable object instead of
+/// four heavy widgets. Each cell still hovers and navigates.
+private struct HomeStatRibbon: View {
+    let items: [HomeStatItem]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    Rectangle()
+                        .fill(HomePalette.hairline.opacity(0.7))
+                        .frame(width: 1)
+                        .padding(.vertical, 16)
+                }
+                HomeStatRibbonCell(item: item)
+            }
+        }
+        // Pin the height so the hairline dividers (greedy Rectangles) size to the
+        // content instead of stretching the whole strip in taller windows.
+        .frame(height: 76)
+        .background(HomePalette.tile.opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 8)
+    }
+}
+
+private struct HomeStatRibbonCell: View {
+    let item: HomeStatItem
 
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: systemImage)
-                        .scaledFont(size: 12, weight: .semibold)
+        Button(action: item.action) {
+            VStack(spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: item.systemImage)
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
+
+                    Text(item.value)
+                        .font(.system(size: 22, weight: .medium, design: .serif))
                         .foregroundStyle(HomePalette.ink)
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 9, weight: .bold)
-                        .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
 
-                Text(value)
-                    .font(.system(size: 20, weight: .medium, design: .serif))
-                    .foregroundStyle(HomePalette.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                Text(title)
+                Text(item.title)
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundStyle(HomePalette.muted)
+                    .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .minimumScaleFactor(0.78)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(isHovering ? HomePalette.hairline : HomePalette.hairline.opacity(0.82), lineWidth: 1)
-            )
-            .contentShape(.rect(cornerRadius: 15))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .padding(.horizontal, 10)
+            .background(isHovering ? HomePalette.tileHover : Color.clear)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .accessibilityLabel("\(title), \(value)")
+        .accessibilityLabel("\(item.title), \(item.value)")
     }
 }
 

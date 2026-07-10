@@ -1,5 +1,6 @@
 {
     "@@locale": "ta",
+    "sessionExpiredSignInAgain": "அமர்வு காலாவதியானது — மீண்டும் உள்நுழையவும்.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

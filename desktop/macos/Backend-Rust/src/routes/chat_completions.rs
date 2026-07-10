@@ -24,6 +24,10 @@ use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use super::rate_limit::RateDecision;
+use super::retrieval_policy::{
+    caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
+    REQUIRED_WEB_SEARCH_INSTRUCTION,
+};
 
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("chat_completions", builder, body)
@@ -132,6 +136,7 @@ fn compute_cost(usage: &AnthropicUsage, upstream_model: &str) -> f64 {
 
 // ── OpenAI → Anthropic request translation ──────────────────────────────────
 
+#[cfg(test)]
 fn translate_request(
     req: &ChatCompletionRequest,
     upstream_model: &str,
@@ -144,6 +149,7 @@ fn translate_request_inner(
     upstream_model: &str,
     enable_web_search: bool,
 ) -> Result<AnthropicRequest, String> {
+    let policy = retrieval_policy(&req.messages);
     let mut system_prompt: Option<String> = None;
     let mut anthropic_messages: Vec<AnthropicMessage> = Vec::new();
 
@@ -233,13 +239,26 @@ fn translate_request_inner(
     // keeps the tools array byte-stable for the prompt-cache prefix.
     // Haiku is excluded: web_search_20260209 is not supported there, and a
     // tools-bearing haiku request would 400 with it attached.
-    let inject_web_search = enable_web_search && !upstream_model.starts_with("claude-haiku");
-    let anthropic_tools = req.tools.as_ref().map(|tools| {
-        let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(tools.len() + 1);
-        if inject_web_search && !tools.is_empty() {
+    let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
+    let force_web_search =
+        policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
+    if force_web_search && !web_search_supported {
+        return Err(
+            "required public web search is unavailable for this model or deployment".to_string(),
+        );
+    }
+    let client_tools = req.tools.as_deref().unwrap_or(&[]);
+    let inject_web_search = web_search_supported
+        && !policy.prohibits(RetrievalSource::PublicWeb)
+        && (!client_tools.is_empty() || force_web_search);
+    let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
+        req.tools.as_ref().map(|_| Vec::new())
+    } else {
+        let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(client_tools.len() + 1);
+        if inject_web_search {
             defs.push(web_search_tool_def());
         }
-        defs.extend(tools.iter().map(|t| {
+        defs.extend(client_tools.iter().map(|t| {
             AnthropicToolDef::Custom(AnthropicTool {
                 name: t.function.name.clone(),
                 description: t.function.description.clone(),
@@ -250,8 +269,23 @@ fn translate_request_inner(
                     .unwrap_or(json!({"type": "object", "properties": {}})),
             })
         }));
-        defs
-    });
+        Some(defs)
+    };
+
+    if force_web_search {
+        prepend_latest_user_instruction(&mut anthropic_messages, REQUIRED_WEB_SEARCH_INSTRUCTION);
+    }
+
+    tracing::info!(
+        event = "retrieval_policy",
+        required_web = policy.requires(RetrievalSource::PublicWeb),
+        required_private = policy.requires(RetrievalSource::OmiPrivate),
+        prohibited_web = policy.prohibits(RetrievalSource::PublicWeb),
+        reason = policy.reason(),
+        web_search_exposed = inject_web_search,
+        web_search_forced = force_web_search,
+        "chat_retrieval_policy"
+    );
 
     let max_tokens = req
         .max_completion_tokens
@@ -266,7 +300,11 @@ fn translate_request_inner(
         &req.tool_choice,
         Some(serde_json::Value::String(s)) if s == "none"
     );
-    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
+    let anthropic_tool_choice = if force_web_search {
+        Some(json!({"type": "tool", "name": "web_search"}))
+    } else {
+        translate_tool_choice(&req.tool_choice)?
+    };
 
     // ── Prompt caching ──────────────────────────────────────────────────────
     // Breakpoint 1: emit the system prompt as a content block carrying an
@@ -631,6 +669,37 @@ async fn chat_completions(
         StatusCode::BAD_REQUEST
     })?;
 
+    let web_search_enabled = web_search_enabled();
+    let policy = retrieval_policy(&req.messages);
+    if policy.requires(RetrievalSource::PublicWeb)
+        && !caller_disabled_tools(&req)
+        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
+    {
+        tracing::warn!(
+            event = "retrieval_policy",
+            required_web = true,
+            reason = policy.reason(),
+            web_search_exposed = false,
+            web_search_forced = false,
+            "required public web search is unavailable"
+        );
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json"),
+            Body::from(
+                json!({
+                    "error": {
+                        "message": "Public web search is temporarily unavailable. Please try again.",
+                        "type": "web_search_unavailable",
+                        "code": 503
+                    }
+                })
+                .to_string(),
+            ),
+        ));
+    }
+
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
     let byok_anthropic_key =
@@ -682,10 +751,11 @@ async fn chat_completions(
     };
 
     // Translate request
-    let anthropic_req = translate_request(&req, route.upstream_model).map_err(|e| {
-        tracing::warn!("chat_completions: request translation error: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+    let anthropic_req = translate_request_inner(&req, route.upstream_model, web_search_enabled)
+        .map_err(|e| {
+            tracing::warn!("chat_completions: request translation error: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry
@@ -1202,6 +1272,16 @@ mod tests {
     fn user_message(text: &str) -> ChatMessage {
         ChatMessage {
             role: "user".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    fn assistant_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "assistant".to_string(),
             content: Some(json!(text)),
             name: None,
             tool_calls: None,
@@ -1979,6 +2059,59 @@ mod tests {
         assert_eq!(tools.len(), 1);
         let only = serde_json::to_value(&tools[0]).unwrap();
         assert_eq!(only["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_translate_request_forces_required_web_search_without_client_tools() {
+        let req = test_request(vec![
+            user_message("I'm working on humanpost.co now"),
+            assistant_message("Is HumanPost separate from Vost or part of it?"),
+            user_message("look it up"),
+        ]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "web_search"
+        );
+        assert_eq!(
+            result.tool_choice,
+            Some(json!({"type": "tool", "name": "web_search"}))
+        );
+        let latest = result.messages.last().unwrap().content.to_string();
+        assert!(latest.contains("Public web search is required"));
+        assert!(latest.contains("look it up"));
+    }
+
+    #[test]
+    fn test_translate_request_required_web_search_fails_closed_when_disabled() {
+        let req = test_request(vec![user_message("Search the web for HumanPost")]);
+        let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
+        assert!(error.contains("required public web search is unavailable"));
+    }
+
+    #[test]
+    fn test_translate_request_private_lookup_excludes_server_web_search() {
+        let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
+        req.tools = Some(vec![ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "search_conversations".to_string(),
+                description: Some("Search private conversations".to_string()),
+                parameters: None,
+            },
+        }]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "search_conversations"
+        );
+        assert!(result.tool_choice.is_none());
     }
 
     #[test]

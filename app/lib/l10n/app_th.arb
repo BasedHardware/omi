@@ -1,5 +1,6 @@
 {
     "@@locale": "th",
+    "sessionExpiredSignInAgain": "เซสชันหมดอายุ — ลงชื่อเข้าใช้อีกครั้ง",
     "appTitle": "Omi",
     "conversationTab": "บทสนทนา",
     "transcriptTab": "บันทึกเสียง",

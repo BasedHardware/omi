@@ -9,6 +9,9 @@ class AppLocalizationsTh extends AppLocalizations {
   AppLocalizationsTh([String locale = 'th']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'เซสชันหมดอายุ — ลงชื่อเข้าใช้อีกครั้ง';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

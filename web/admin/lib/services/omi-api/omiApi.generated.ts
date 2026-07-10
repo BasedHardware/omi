@@ -497,6 +497,7 @@ export interface AudioPrecacheResponse {
 
 export interface AudioUrlsResponse {
   audio_files: Array<AudioFileUrlInfo>;
+  conversation_audio?: ConversationAudioUrlInfo | null;
   poll_after_ms?: number | null;
 }
 
@@ -763,6 +764,7 @@ export interface Conversation {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -787,6 +789,7 @@ export interface Conversation {
   suggested_summarization_apps?: Array<string>;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
   visibility?: ConversationVisibility;
 }
 
@@ -800,9 +803,46 @@ export interface ConversationActionItemsResponse {
   conversation_id: string;
 }
 
+export interface ConversationAudio {
+  audio_files_fingerprint: string;
+  built_at?: string | null;
+  captured_duration: number;
+  content_type?: string;
+  duration: number;
+  spans?: Array<ConversationAudioSpan>;
+}
+
+export interface ConversationAudioSpan {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioSpanInfo {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioUrlInfo {
+  captured_duration?: number | null;
+  content_type?: string | null;
+  duration?: number | null;
+  signed_url?: string | null;
+  spans?: Array<ConversationAudioSpanInfo>;
+  status: string;
+}
+
 export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
+  status: string;
+}
+
+export interface ConversationMutationResponse {
+  conversation: Conversation;
   status: string;
 }
 
@@ -2251,6 +2291,7 @@ export interface SharedConversationResponse {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -2276,6 +2317,7 @@ export interface SharedConversationResponse {
   suggested_summarization_apps?: Array<string>;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
   visibility?: ConversationVisibility;
   [key: string]: unknown;
 }
@@ -2987,7 +3029,12 @@ export interface OmiApiSchemas {
   "Conversation": Conversation;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationAudio": ConversationAudio;
+  "ConversationAudioSpan": ConversationAudioSpan;
+  "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
+  "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
+  "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
   "ConversationSource": ConversationSource;
@@ -4266,7 +4313,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "move_conversation_to_folder_v1_conversations__conversation_id__folder_patch";
       responses: {
-        "200": FolderMutationResponse;
+        "200": ConversationMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -4352,7 +4399,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "set_conversation_starred_v1_conversations__conversation_id__starred_patch";
       responses: {
-        "200": ConversationStatusResponse;
+        "200": ConversationMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -4395,7 +4442,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "patch_conversation_title_v1_conversations__conversation_id__title_patch";
       responses: {
-        "200": ConversationStatusResponse;
+        "200": ConversationMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -8361,7 +8408,7 @@ export async function finalize_conversation_v1_conversations__conversation_id__f
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function move_conversation_to_folder_v1_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: MoveConversationRequest, init?: OmiApiClientInit): Promise<FolderMutationResponse> {
+export async function move_conversation_to_folder_v1_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: MoveConversationRequest, init?: OmiApiClientInit): Promise<ConversationMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/folder`;
   const _search = "";
@@ -8493,7 +8540,7 @@ export async function get_shared_conversation_by_id_v1_conversations__conversati
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function set_conversation_starred_v1_conversations__conversation_id__starred_patch(path: { conversation_id: string }, query: { starred: boolean }, init?: OmiApiClientInit): Promise<ConversationStatusResponse> {
+export async function set_conversation_starred_v1_conversations__conversation_id__starred_patch(path: { conversation_id: string }, query: { starred: boolean }, init?: OmiApiClientInit): Promise<ConversationMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/starred`;
   const _params = query ? Object.entries(query)
@@ -8560,7 +8607,7 @@ export async function test_prompt_v1_conversations__conversation_id__test_prompt
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function patch_conversation_title_v1_conversations__conversation_id__title_patch(path: { conversation_id: string }, query: { title: string }, init?: OmiApiClientInit): Promise<ConversationStatusResponse> {
+export async function patch_conversation_title_v1_conversations__conversation_id__title_patch(path: { conversation_id: string }, query: { title: string }, init?: OmiApiClientInit): Promise<ConversationMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/title`;
   const _params = query ? Object.entries(query)

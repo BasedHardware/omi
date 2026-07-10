@@ -7,10 +7,12 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+import hashlib
+import json
 import os
 import sys
+import types
 import unittest
-import hashlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -297,7 +299,7 @@ class TestSyncRouterStructure:
         assert 'is_cloud_tasks_dispatch_enabled() and not has_byok_keys()' in source
 
     def test_pipeline_reraises_in_task_mode(self):
-        source = self._read(os.path.join('routers', 'sync.py'))
+        source = self._read(os.path.join('utils', 'sync', 'pipeline.py'))
         assert 'task_mode: bool = False' in source
         # Catch-all must re-raise in task mode so the handler controls retry
         assert 'if task_mode:' in source
@@ -322,6 +324,408 @@ class TestSyncRouterStructure:
     def test_v1_endpoint_unchanged(self):
         source = self._read(os.path.join('routers', 'sync.py'))
         assert '"/v1/sync-local-files"' in source
+
+    def test_post_enqueue_cleanup_does_not_unstage_on_local_failure(self):
+        """Post-enqueue local cleanup errors must not delete staged GCS blobs."""
+        source = self._read(os.path.join('routers', 'sync.py'))
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert 'post-enqueue local cleanup failed' in func_body
+        post_enqueue_block = func_body[func_body.index('if dispatched:') : func_body.index('if not dispatched:')]
+        assert '_delete_staged_blobs_async' not in post_enqueue_block
+
+
+# ---------------------------------------------------------------------------
+# Behavioral: post-enqueue cleanup must not unstage staged blobs
+# ---------------------------------------------------------------------------
+
+
+def _load_sync_router_for_fast_path():
+    """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    import contextvars
+    import importlib.util
+    from io import BytesIO
+    from pydantic import BaseModel
+
+    saved_modules = {}
+    mock_sync_jobs = MagicMock()
+
+    heavy_deps = [
+        'redis',
+        'database',
+        'database.redis_db',
+        'database._client',
+        'database.conversations',
+        'database.users',
+        'database.user_usage',
+        'firebase_admin',
+        'google',
+        'google.cloud',
+        'google.cloud.firestore_v2',
+        'opuslib',
+        'pydub',
+        'models',
+        'models.conversation',
+        'models.conversation_enums',
+        'models.sync_audio',
+        'models.transcript_segment',
+        'utils',
+        'utils.analytics',
+        'utils.byok',
+        'utils.client_device',
+        'utils.cloud_tasks',
+        'utils.conversations',
+        'utils.conversations.process_conversation',
+        'utils.conversations.factory',
+        'utils.other',
+        'utils.other.endpoints',
+        'utils.other.storage',
+        'utils.encryption',
+        'utils.stt',
+        'utils.stt.pre_recorded',
+        'utils.stt.vad',
+        'utils.fair_use',
+        'utils.subscription',
+        'utils.observability',
+        'utils.observability.fallback',
+        'utils.metrics',
+        'utils.log_sanitizer',
+        'utils.http_client',
+        'utils.request_validation',
+        'utils.sync.files',
+        'utils.sync.playback',
+        'utils.speaker_assignment',
+        'utils.speaker_identification',
+        'utils.stt.speaker_embedding',
+        'python_multipart',
+        'python_multipart.multipart',
+    ]
+
+    for mod_name in heavy_deps:
+        saved_modules[mod_name] = sys.modules.get(mod_name)
+        sys.modules[mod_name] = MagicMock()
+
+    sys.modules['python_multipart'].__version__ = '0.0.99'
+    sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+
+    def _submit_with_context(executor, fn, *args, **kwargs):
+        ctx = contextvars.copy_context()
+        return executor.submit(ctx.run, fn, *args, **kwargs)
+
+    mock_executors = MagicMock()
+    mock_executors.critical_executor = MagicMock()
+    mock_executors.sync_executor = MagicMock()
+    mock_executors.postprocess_executor = MagicMock()
+    mock_executors.storage_executor = MagicMock()
+    mock_executors.submit_with_context = _submit_with_context
+    saved_modules['utils.executors'] = sys.modules.get('utils.executors')
+    sys.modules['utils.executors'] = mock_executors
+
+    sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
+    saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
+    mock_sync_jobs.create_sync_job = MagicMock(
+        return_value={
+            'job_id': 'job-1',
+            'uid': 'test-uid',
+            'status': 'queued',
+            'total_files': 1,
+            'total_segments': 0,
+        }
+    )
+    sys.modules['database.sync_jobs'] = mock_sync_jobs
+
+    sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+    sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+    sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
+    sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
+    sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+    sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+    sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+    sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+    sync_pkg = types.ModuleType('utils.sync')
+    sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
+    sys.modules['utils.sync'] = sync_pkg
+    sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
+    sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
+    sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
+    sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=True)
+    sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
+    sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
+    sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
+    sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
+
+    sync_dispatch_fallback_calls = []
+    sync_dispatch_attempt_modes = []
+
+    def _track_record_fallback(**kwargs):
+        sync_dispatch_fallback_calls.append(kwargs)
+
+    def _counter_labels(**kwargs):
+        child = MagicMock()
+        mode = kwargs.get('mode')
+
+        def _inc():
+            sync_dispatch_attempt_modes.append(mode)
+
+        child.inc = _inc
+        return child
+
+    mock_counter = MagicMock()
+    mock_counter.labels = _counter_labels
+    # Re-assign after the MagicMock loop so submodule imports resolve as a package.
+    obs_pkg = types.ModuleType('utils.observability')
+    obs_pkg.__path__ = []  # type: ignore[attr-defined]
+    fallback_mod = types.ModuleType('utils.observability.fallback')
+    fallback_mod.record_fallback = _track_record_fallback
+    sys.modules['utils.observability'] = obs_pkg
+    sys.modules['utils.observability.fallback'] = fallback_mod
+    obs_pkg.fallback = fallback_mod
+    sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
+
+    class _AudioPrecacheResponse(BaseModel):
+        pass
+
+    class _AudioUrlsResponse(BaseModel):
+        pass
+
+    sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+    sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+
+    sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
+    spec = importlib.util.spec_from_file_location(
+        'sync_post_enqueue_cleanup',
+        os.path.join(BACKEND_DIR, 'routers', 'sync.py'),
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    module.run_blocking = _passthrough_run_blocking
+    module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
+    module._stage_files_to_gcs = MagicMock()
+    module._cleanup_files = MagicMock()
+
+    return module, saved_modules, mock_sync_jobs, BytesIO, sync_dispatch_fallback_calls, sync_dispatch_attempt_modes
+
+
+@pytest.mark.asyncio
+async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
+    """Successful enqueue + failed local cleanup must keep staged blobs for the handler."""
+    import shutil
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    unstage_calls = []
+    inline_pipeline_started = []
+
+    async def _track_unstage(blob_paths):
+        unstage_calls.append(list(blob_paths))
+
+    async def _track_inline_pipeline(*args, **kwargs):
+        inline_pipeline_started.append(True)
+
+    module._delete_staged_blobs_async = _track_unstage
+    module._run_full_pipeline_background_async = _track_inline_pipeline
+    module.start_background_task = MagicMock()
+
+    def _rmtree_raises(*args, **kwargs):
+        raise OSError('cleanup failed')
+
+    monkeypatch.setattr(shutil, 'rmtree', _rmtree_raises)
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        body = json.loads(resp.body)
+        assert body['status'] == 'queued'
+        assert unstage_calls == [], f'staged blobs must not be deleted after enqueue: {unstage_calls}'
+        assert inline_pipeline_started == [], 'inline pipeline must not run when Cloud Task was enqueued'
+        module.start_background_task.assert_not_called()
+        module.create_sync_job.assert_called_once()
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == []
+        assert attempt_modes == ['cloud_tasks']
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.resolve_client_device.return_value = types.SimpleNamespace(client_device_id='ios_a1b2c3d4', platform='ios')
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            x_app_platform='ios',
+            x_device_id_hash='a1b2c3d4',
+        )
+
+        assert response.status_code == 202
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['client_device_id'] == 'ios_a1b2c3d4'
+        assert payload['client_platform'] == 'ios'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_enqueue_failed_records_degraded_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.enqueue_sync_job = MagicMock(side_effect=RuntimeError('enqueue boom'))
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'enqueue_failed',
+                'outcome': 'degraded',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        assert module.start_background_task.call_count == 2
+        pipeline_call = module.start_background_task.call_args_list[-1]
+        assert pipeline_call.kwargs.get('name', '').startswith('sync_pipeline:')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.has_byok_keys = MagicMock(return_value=True)
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'byok',
+                'outcome': 'recovered',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        module.start_background_task.assert_called_once()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'dispatch_disabled',
+                'outcome': 'recovered',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        module.start_background_task.assert_called_once()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
 
 
 if __name__ == '__main__':

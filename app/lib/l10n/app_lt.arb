@@ -1,5 +1,6 @@
 {
     "@@locale": "lt",
+    "sessionExpiredSignInAgain": "Seanso laikas baigėsi — prisijunkite dar kartą.",
     "@captureRecordingError": {
         "placeholders": {
             "error": {

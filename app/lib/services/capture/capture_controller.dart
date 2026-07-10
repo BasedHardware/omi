@@ -1916,8 +1916,7 @@ class CaptureController extends ChangeNotifier
     // band; on real failure we bump retryCount so orphan recovery / the next
     // sync retries (the local file is retained until confirmed synced).
     try {
-      final result = await uploadLocalFilesV2([file], conversationId: conversationId);
-      SyncRateLimiter.instance.clear();
+      final result = await SyncUploadGate.instance.upload([file], conversationId: conversationId);
       if (result.completed != null) {
         // 200 fast-path: server already produced the result.
         await phoneSync.markWalSyncedAndPersist(wal);
@@ -1928,11 +1927,9 @@ class CaptureController extends ChangeNotifier
         await phoneSync.persistRetryMetadata(wal); // persists the WAL list
         SyncReconciler.instance.poke();
       }
-    } on SyncRateLimitedException catch (e) {
-      // Fair-use throttle — pause uploads, do NOT bump retryCount (it's not a
-      // content failure). The WAL stays `miss`/'waiting' and syncs once the
-      // cooldown clears.
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+    } on SyncRateLimitedException {
+      // Account-level rate limit — do not bump retryCount. The WAL stays
+      // pending and the global upload gate owns the cooldown.
       Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
     } on SocketException {
       Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');

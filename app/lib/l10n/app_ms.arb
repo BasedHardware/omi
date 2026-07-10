@@ -1,5 +1,6 @@
 {
     "@@locale": "ms",
+    "sessionExpiredSignInAgain": "Sesi tamat tempoh — log masuk semula.",
     "appTitle": "Omi",
     "conversationTab": "Perbualan",
     "transcriptTab": "Transkrip",

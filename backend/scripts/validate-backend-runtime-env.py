@@ -18,6 +18,22 @@ EnvEntry = dict[str, Any]
 EnvEntryMap = dict[str, EnvEntry]
 StringMap = dict[str, str]
 
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
+    {
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_TYPESENSE_COLLECTION',
+        'TYPESENSE_HOST',
+        'TYPESENSE_HOST_PORT',
+        'TYPESENSE_API_KEY',
+    }
+)
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
+
 
 def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
@@ -100,6 +116,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
         errors.extend(
             _validate_cloud_run_workflows(
@@ -211,6 +228,208 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     return errors
 
 
+def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
+    entries = _as_config_dict(env_map) or {}
+    entry = _as_config_dict(entries.get(key))
+    if entry is None or 'value' not in entry:
+        return None
+    return str(entry['value'])
+
+
+def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
+    """Return (scope, env-map) for every surface that can enable canonical memory."""
+    surfaces: list[tuple[str, ConfigDict]] = []
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        env_map = _as_config_dict(service_config.get('env')) or {}
+        if 'MEMORY_MODE' in env_map:
+            surfaces.append((f'gke/{service}', env_map))
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    for service, raw_service in (_as_config_dict(cloud_run.get('services')) or {}).items():
+        service_config = _as_config_dict(raw_service) or {}
+        env_map = _as_config_dict(service_config.get('env')) or {}
+        if 'MEMORY_MODE' in env_map:
+            surfaces.append((f'cloud_run/{service}', env_map))
+    return surfaces
+
+
+def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require memory-maintenance-job to exist and stay aligned with MEMORY_MODE rollout.
+
+    Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
+    request-path surface without enabling the dedicated maintenance job fails validation
+    so Gate 3 cannot forget ST→LT hosting.
+
+    Also rejects:
+    - canonical maintenance env/secrets on notifications-job (its workflow
+      removes only those retired live bindings);
+    - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+      (ST→LT cron must run only on memory-maintenance-job);
+    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
+    - mismatched MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED between job and read surfaces.
+    """
+    errors: list[ValidationError] = []
+    scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+    notifications_job = _as_config_dict(jobs.get('notifications-job')) or {}
+    notifications_env = _as_config_dict(notifications_job.get('env')) or {}
+    notifications_secrets = _as_config_dict(notifications_job.get('secrets')) or {}
+    notifications_scope = f'{env}/cloud_run/jobs/notifications-job'
+    for forbidden_env in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV.intersection(notifications_env)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'env {forbidden_env} belongs only on memory-maintenance-job',
+            )
+        )
+    for forbidden_secret in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS.intersection(notifications_secrets)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'secret {forbidden_secret} belongs only on memory-maintenance-job',
+            )
+        )
+
+    job = _as_config_dict(jobs.get('memory-maintenance-job'))
+    if job is None:
+        errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))
+        return errors
+
+    job_env = _as_config_dict(job.get('env')) or {}
+    job_secrets = _as_config_dict(job.get('secrets')) or {}
+    for required_env in (
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+    ):
+        if required_env not in job_env:
+            errors.append(ValidationError(scope, f'missing env {required_env}'))
+    for required_secret in (
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+        'PINECONE_API_KEY',
+        'TYPESENSE_HOST',
+        'TYPESENSE_API_KEY',
+    ):
+        if required_secret not in job_secrets:
+            errors.append(ValidationError(scope, f'missing secret {required_secret}'))
+
+    job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
+    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+    job_fast_track = (
+        (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '').strip().lower()
+    )
+    job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
+
+    # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
+    for other_job_name, raw_other_job in jobs.items():
+        if other_job_name == 'memory-maintenance-job':
+            continue
+        other_job = _as_config_dict(raw_other_job) or {}
+        other_env = _as_config_dict(other_job.get('env')) or {}
+        other_cron = (
+            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+        )
+        if other_cron == 'true':
+            errors.append(
+                ValidationError(
+                    f'{env}/cloud_run/jobs/{other_job_name}',
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false; '
+                    'ST→LT cron is hosted only by memory-maintenance-job',
+                )
+            )
+
+    read_surfaces = []
+    for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
+        surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
+        surface_cron = (
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+        )
+        if surface_cron == 'true':
+            errors.append(
+                ValidationError(
+                    surface_scope,
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false on request-path surfaces; '
+                    'ST→LT cron is hosted only by memory-maintenance-job',
+                )
+            )
+        if surface_mode and surface_mode != 'off':
+            read_surfaces.append((surface_scope, surface_env, surface_mode))
+
+    if job_mode in ('', 'off'):
+        if job_cron == 'true':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false while MEMORY_MODE is off',
+                )
+            )
+        for surface_scope, _surface_env, surface_mode in read_surfaces:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
+                    'MEMORY_MODE=read and MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true '
+                    '(ST→LT is not hosted by notifications-job)',
+                )
+            )
+        return errors
+
+    # Canonical request-path is on somewhere — maintenance job must be fully enabled.
+    if job_mode != 'read':
+        errors.append(
+            ValidationError(scope, f'MEMORY_MODE must be read when enabling canonical memory (got {job_mode!r})')
+        )
+    if job_cron != 'true':
+        errors.append(
+            ValidationError(
+                scope,
+                'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be true when MEMORY_MODE is not off '
+                '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
+            )
+        )
+    if not job_users:
+        errors.append(ValidationError(scope, 'MEMORY_ENABLED_USERS must be non-empty when MEMORY_MODE is not off'))
+
+    for surface_scope, surface_env, surface_mode in read_surfaces:
+        if surface_mode != job_mode:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_MODE={surface_mode!r} must match memory-maintenance-job MEMORY_MODE={job_mode!r}',
+                )
+            )
+        surface_users = (_manifest_literal_env_value(surface_env, 'MEMORY_ENABLED_USERS') or '').strip()
+        if surface_users != job_users:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
+                    '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
+                )
+            )
+        surface_fast_track = (
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '')
+            .strip()
+            .lower()
+        )
+        if surface_fast_track and job_fast_track and surface_fast_track != job_fast_track:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{surface_scope} MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED={surface_fast_track!r} '
+                    f'must match memory-maintenance-job ({job_fast_track!r})',
+                )
+            )
+    return errors
+
+
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
     errors: list[ValidationError] = []
     gke_config = _as_config_dict(env_config.get('gke')) or {}
@@ -293,59 +512,25 @@ def _validate_cloud_run_workflows(
         return [ValidationError('cloud_run/workflows', 'workflow_files must be a list')]
 
     expected_services = _as_config_dict(cloud_run.get('services')) or {}
+    expected_jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     workflow_services: dict[str, ConfigDict] = {}
+    workflow_jobs: dict[str, ConfigDict] = {}
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        workflow_services.update(_extract_workflow_cloud_run_services(workflow, env=env, manifest_path=manifest_path))
+        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest_path=manifest_path)
+        workflow_services.update(extracted['services'])
+        workflow_jobs.update(extracted['jobs'])
 
+    workflow_vars = _workflow_variable_map(env_config, expected_services)
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
         if service_state is None:
             errors.append(ValidationError(f'cloud_run_workflow/{service}', 'missing deploy-cloudrun env_vars block'))
             continue
-        runtime_gcp_project = str(env_config.get('runtime_gcp_project', env_config['gcp_project']))
-        workflow_vars = {
-            '${{ vars.GCP_PROJECT_ID }}': str(env_config['gcp_project']),
-            '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
-            '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
-            '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
-            '${{ vars.OMI_LLM_GATEWAY_URL }}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
-            '${{vars.OMI_LLM_GATEWAY_URL}}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
-            '${{ vars.CLOUD_RUN_VPC_NETWORK }}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
-            ),
-            '${{vars.CLOUD_RUN_VPC_NETWORK}}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
-            ),
-            '${{ vars.CLOUD_RUN_VPC_SUBNET }}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
-            ),
-            '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
-            ),
-            '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-            '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-            '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
-            '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
-            '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-            '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-            '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-            ),
-            '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-            ),
-            '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-            ),
-            '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-            ),
-        }
         actual_env = _literal_env_entries_by_name(service_state.get('env_vars', {}), variables=workflow_vars)
         errors.extend(
             _validate_env_entries(
@@ -371,7 +556,72 @@ def _validate_cloud_run_workflows(
                 strict_provisional=strict_provisional,
             )
         )
+
+    for job, job_config in expected_jobs.items():
+        job_state = workflow_jobs.get(job)
+        if job_state is None:
+            errors.append(ValidationError(f'cloud_run_workflow/{job}', 'missing deploy-cloudrun job env_vars block'))
+            continue
+        actual_env = _literal_env_entries_by_name(job_state.get('env_vars', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_env_entries(
+                scope=f'cloud_run_workflow/{job}',
+                expected=job_config.get('env', {}),
+                actual=actual_env,
+                strict_provisional=strict_provisional,
+            )
+        )
+        actual_secrets = _workflow_secret_entries_by_name(job_state.get('secrets', {}))
+        errors.extend(
+            _validate_cloud_run_secret_entries(
+                scope=f'cloud_run_workflow/{job}',
+                expected=job_config.get('secrets', {}),
+                actual=actual_secrets,
+            )
+        )
     return errors
+
+
+def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict) -> StringMap:
+    runtime_gcp_project = str(env_config.get('runtime_gcp_project', env_config['gcp_project']))
+    return {
+        '${{ vars.GCP_PROJECT_ID }}': str(env_config['gcp_project']),
+        '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
+        '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
+        '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
+        '${{ vars.OMI_LLM_GATEWAY_URL }}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+        '${{vars.OMI_LLM_GATEWAY_URL}}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+        '${{ vars.CLOUD_RUN_VPC_NETWORK }}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+        ),
+        '${{vars.CLOUD_RUN_VPC_NETWORK}}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+        ),
+        '${{ vars.CLOUD_RUN_VPC_SUBNET }}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+        ),
+        '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+        ),
+        '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+        '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+        '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+        '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+        '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+        '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+        '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        ),
+        '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        ),
+        '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        ),
+        '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        ),
+    }
 
 
 def _network_flags(env_config: ConfigDict) -> ConfigDict:
@@ -497,19 +747,20 @@ def _workflow_secret_entries_by_name(raw_secrets: object) -> EnvEntryMap:
     return result
 
 
-def _extract_workflow_cloud_run_services(
+def _extract_workflow_cloud_run_targets(
     workflow: ConfigDict,
     *,
     env: str,
     manifest_path: Path,
-) -> dict[str, ConfigDict]:
+) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
     rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest_path=manifest_path)
-    result: dict[str, ConfigDict] = {}
-    jobs = _as_config_dict(workflow.get('jobs'))
-    if jobs is None:
-        return result
-    for raw_job in jobs.values():
+    services: dict[str, ConfigDict] = {}
+    jobs: dict[str, ConfigDict] = {}
+    workflow_jobs = _as_config_dict(workflow.get('jobs'))
+    if workflow_jobs is None:
+        return {'services': services, 'jobs': jobs}
+    for raw_job in workflow_jobs.values():
         job = _as_config_dict(raw_job)
         if job is None:
             continue
@@ -521,9 +772,6 @@ def _extract_workflow_cloud_run_services(
                 continue
             step_dict = _as_config_dict(step) or {}
             step_with = _as_config_dict(step_dict.get('with')) or {}
-            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
-            if service is None:
-                continue
             env_vars = _parse_workflow_env_vars(
                 _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
             )
@@ -531,9 +779,16 @@ def _extract_workflow_cloud_run_services(
                 _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
             )
             flags = _parse_workflow_flags(_resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env))
-            if env_vars or secrets or flags:
-                result[service] = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
-    return result
+            if not (env_vars or secrets or flags):
+                continue
+            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
+            job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
+            payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
+            if service is not None:
+                services[service] = payload
+            if job_name is not None:
+                jobs[job_name] = payload
+    return {'services': services, 'jobs': jobs}
 
 
 def _is_cloud_run_deploy_step(step: object) -> bool:
@@ -582,6 +837,14 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
             output_prefix = service.replace('-', '_')
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+        jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+        for job, raw_job_config in jobs.items():
+            job_config = _as_config_dict(raw_job_config)
+            if job_config is None:
+                continue
+            output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
+            outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs
 
 

@@ -40,12 +40,16 @@ outputs:
     value: ${{ steps.changed.outputs.has_desktop_defaults_ratchet }}
   has_desktop_async_after_ratchet:
     value: ${{ steps.changed.outputs.has_desktop_async_after_ratchet }}
+  has_desktop_auth_session_ratchet:
+    value: ${{ steps.changed.outputs.has_desktop_auth_session_ratchet }}
   has_format:
     value: ${{ steps.changed.outputs.has_format }}
   has_flutter_generated:
     value: ${{ steps.changed.outputs.has_flutter_generated }}
   has_backend_static_contracts:
     value: ${{ steps.changed.outputs.has_backend_static_contracts }}
+  has_backend_workflow_contracts:
+    value: ${{ steps.changed.outputs.has_backend_workflow_contracts }}
   has_web_lint:
     value: ${{ steps.changed.outputs.has_web_lint }}
   has_web_build:
@@ -80,13 +84,15 @@ runs:
         has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
-        has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_workflow_contracts=$(echo "$FILES" | grep -qE '^backend/testing/workflow_contracts\.json$|^backend/scripts/check_workflow_contracts\.py$|^scripts/pre-push$|^\.github/workflows/backend-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces|agent-logic-harness)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_compile_smoke=$(echo "$APP_COMPILE_FILES" | grep -qE '^app/(lib/|android/|ios/|pubspec\.yaml$|pubspec\.lock$|build\.yaml$|analysis_options\.yaml$|l10n\.yaml$|flavorizr\.yaml$|setup/prebuilt/|setup/scripts/|config/|assets/)|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_desktop_auth_session_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/(APIClient|AuthService|AuthSessionCoordinator|DesktopKeychainStore|OmiApp)\.swift$|^desktop/macos/Desktop/Sources/Auth/.*\.swift$|^desktop/macos/scripts/smoke-signed-desktop-artifact\.sh$|^codemagic\.yaml$|^\.github/scripts/check_desktop_auth_session\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
 
         {
           echo "has_dart=$has_dart"
@@ -100,6 +106,7 @@ runs:
           echo "has_workflows=$has_workflows"
           echo "has_backend_runtime_env=$has_backend_runtime_env"
           echo "has_backend_async_gate=$has_backend_async_gate"
+          echo "has_backend_workflow_contracts=$has_backend_workflow_contracts"
           echo "has_desktop_agent_runtime=$has_desktop_agent_runtime"
           echo "has_app_codegen=$has_app_codegen"
           echo "has_app_l10n=$has_app_l10n"
@@ -107,6 +114,7 @@ runs:
           echo "has_desktop_rust=$has_desktop_rust"
           echo "has_desktop_defaults_ratchet=$has_desktop_defaults_ratchet"
           echo "has_desktop_async_after_ratchet=$has_desktop_async_after_ratchet"
+          echo "has_desktop_auth_session_ratchet=$has_desktop_auth_session_ratchet"
         } >> "$GITHUB_OUTPUT"
 
         if [ "$has_dart" = "true" ] || [ "$has_python" = "true" ] || [ "$has_arb" = "true" ] || [ "$has_firmware" = "true" ]; then
@@ -121,7 +129,7 @@ runs:
           echo "has_flutter_generated=false" >> "$GITHUB_OUTPUT"
         fi
 
-        if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ]; then
+        if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ] || [ "$has_backend_workflow_contracts" = "true" ]; then
           echo "has_backend_static_contracts=true" >> "$GITHUB_OUTPUT"
         else
           echo "has_backend_static_contracts=false" >> "$GITHUB_OUTPUT"

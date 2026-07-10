@@ -82,6 +82,11 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing auth loading splash")
         }
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
         SignInView(authState: authState)
@@ -293,7 +298,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.reset()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil
@@ -564,6 +569,7 @@ struct DesktopHomeView: View {
 
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
+    if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"
@@ -919,6 +925,9 @@ struct DesktopHomeView: View {
             selectedTabIndex: $selectedIndex
           )
         }
+        .onExitCommand {
+          navigateHomeOnEscapeIfNeeded()
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
@@ -1024,6 +1033,15 @@ struct DesktopHomeView: View {
       restorePreChatWindowWidth()
     }
   }
+
+  private func navigateHomeOnEscapeIfNeeded() {
+    guard !useLegacyHomeDesign else { return }
+    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
+    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    withAnimation(Self.pageNavigationAnimation) {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+    }
+  }
 }
 
 private struct PageChromeBar: View {
@@ -1089,6 +1107,7 @@ private struct PageContentView: View {
       case 0:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
@@ -1101,7 +1120,9 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
@@ -1114,7 +1135,10 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        AppsPage(
+          appProvider: viewModelContainer.appProvider,
+          appState: appState,
+          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore)
       case 9:
         SettingsPage(
           appState: appState,
@@ -1129,6 +1153,7 @@ private struct PageContentView: View {
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,

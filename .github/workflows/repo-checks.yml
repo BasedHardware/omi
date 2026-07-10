@@ -23,6 +23,7 @@ jobs:
       has_python: ${{ steps.changes.outputs.has_python }}
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
       has_desktop_async_after_ratchet: ${{ steps.changes.outputs.has_desktop_async_after_ratchet }}
+      has_desktop_auth_session_ratchet: ${{ steps.changes.outputs.has_desktop_auth_session_ratchet }}
       has_desktop_defaults_ratchet: ${{ steps.changes.outputs.has_desktop_defaults_ratchet }}
     steps:
       - name: Checkout code
@@ -66,6 +67,29 @@ jobs:
       - name: Architecture guardrail warnings
         run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
 
+      - name: Test product invariant PR-body checker
+        run: python3 .github/scripts/test_check_product_invariants.py
+
+      - name: Test brand UI ratchet helper
+        run: python3 .github/scripts/test_check_brand_ui.py
+
+      - name: Check product invariant citations
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$PR_BODY" > /tmp/pr-body.txt
+          python3 .github/scripts/check_product_invariants.py \
+            --changed-files /tmp/changed-files.txt \
+            --pr-body-file /tmp/pr-body.txt
+
+      - name: Check brand UI purple ratchet (INV-UI-1)
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 .github/scripts/check_brand_ui.py \
+            --changed-files /tmp/changed-files.txt \
+            --base "${{ needs.changes.outputs.diff_base }}"
+
       - name: Check desktop changelog data
         run: python3 .github/scripts/desktop-changelog.py validate
 
@@ -85,6 +109,12 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Check desktop release terminology
+        run: python3 .github/scripts/check-desktop-release-terminology.py
+
+      - name: Test desktop qualification metadata writer
+        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
+
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
 
@@ -102,6 +132,10 @@ jobs:
       - name: Check desktop asyncAfter ratchet
         if: needs.changes.outputs.has_desktop_async_after_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-async-after-ratchet.py
+
+      - name: Check desktop auth session ratchet (INV-AUTH-1)
+        if: needs.changes.outputs.has_desktop_auth_session_ratchet == 'true'
+        run: python3 .github/scripts/check_desktop_auth_session.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'

@@ -3125,6 +3125,16 @@
             "title": "Audio Files",
             "type": "array"
           },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudioUrlInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "poll_after_ms": {
             "anyOf": [
               {
@@ -4517,6 +4527,16 @@
             ],
             "title": "Client Platform"
           },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4722,6 +4742,18 @@
             "default": false,
             "title": "Transcript Segments Compressed"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
             "default": "private"
@@ -4776,6 +4808,177 @@
         "title": "ConversationActionItemsResponse",
         "type": "object"
       },
+      "ConversationAudio": {
+        "description": "Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).\n\naudio_files_fingerprint identifies the audio_files content the artifact was\nbuilt from; a mismatch with the doc's current audio_files means the artifact\nis stale and must be rebuilt.",
+        "properties": {
+          "audio_files_fingerprint": {
+            "title": "Audio Files Fingerprint",
+            "type": "string"
+          },
+          "built_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Built At"
+          },
+          "captured_duration": {
+            "title": "Captured Duration",
+            "type": "number"
+          },
+          "content_type": {
+            "default": "audio/mpeg",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "spans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationAudioSpan"
+            },
+            "title": "Spans",
+            "type": "array"
+          }
+        },
+        "required": [
+          "audio_files_fingerprint",
+          "duration",
+          "captured_duration"
+        ],
+        "title": "ConversationAudio",
+        "type": "object"
+      },
+      "ConversationAudioSpan": {
+        "description": "Maps one captured audio_file part into the dense conversation MP3.\n\nwall_offset is seconds relative to conversation.started_at (the same basis\nas TranscriptSegment.start); artifact_offset is seconds into the MP3. The\n>90s inter-part gaps are collapsed in the artifact, so segment-level seek is\nspan arithmetic: artifact_pos = artifact_offset + (segment.start - wall_offset).",
+        "properties": {
+          "artifact_offset": {
+            "title": "Artifact Offset",
+            "type": "number"
+          },
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "len": {
+            "title": "Len",
+            "type": "number"
+          },
+          "wall_offset": {
+            "title": "Wall Offset",
+            "type": "number"
+          }
+        },
+        "required": [
+          "file_id",
+          "wall_offset",
+          "artifact_offset",
+          "len"
+        ],
+        "title": "ConversationAudioSpan",
+        "type": "object"
+      },
+      "ConversationAudioSpanInfo": {
+        "properties": {
+          "artifact_offset": {
+            "title": "Artifact Offset",
+            "type": "number"
+          },
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "len": {
+            "title": "Len",
+            "type": "number"
+          },
+          "wall_offset": {
+            "title": "Wall Offset",
+            "type": "number"
+          }
+        },
+        "required": [
+          "file_id",
+          "wall_offset",
+          "artifact_offset",
+          "len"
+        ],
+        "title": "ConversationAudioSpanInfo",
+        "type": "object"
+      },
+      "ConversationAudioUrlInfo": {
+        "properties": {
+          "captured_duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured Duration"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "signed_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Url"
+          },
+          "spans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationAudioSpanInfo"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConversationAudioUrlInfo",
+        "type": "object"
+      },
       "ConversationCreateResponse": {
         "properties": {
           "discarded": {
@@ -4797,6 +5000,24 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationMutationResponse": {
+        "description": "Canonical conversation snapshot returned after a user mutation.",
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "conversation"
+        ],
+        "title": "ConversationMutationResponse",
         "type": "object"
       },
       "ConversationPhoto": {
@@ -13033,6 +13254,16 @@
             ],
             "title": "Client Platform"
           },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -13245,6 +13476,18 @@
             ],
             "default": false,
             "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -25698,7 +25941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FolderMutationResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26475,7 +26718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26857,7 +27100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -44237,15 +44480,6 @@
           },
           {
             "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
             "name": "X-App-Platform",
             "required": false,
             "schema": {
@@ -44268,6 +44502,47 @@
             "required": false,
             "schema": {
               "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Cloud-Trace-Context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cloud-Trace-Context"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
               "type": "string"
             }
           }

@@ -125,10 +125,25 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ? AssistantSettings.shared.voiceLanguages : []
 
     let defaults = UserDefaults.standard
-    chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
-    claudeImportedMemoriesCount = defaults.integer(forKey: claudeImportedMemoriesKey)
-    chatGPTImportSummary = defaults.string(forKey: chatGPTImportSummaryKey) ?? ""
-    claudeImportSummary = defaults.string(forKey: claudeImportSummaryKey) ?? ""
+    let currentUserID = Self.normalizedUserID(defaults.string(forKey: .authUserId))
+    var ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
+    let hasLegacyImport = defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
+      || defaults.object(forKey: chatGPTImportSummaryKey) != nil
+      || defaults.object(forKey: claudeImportedMemoriesKey) != nil
+      || defaults.object(forKey: claudeImportSummaryKey) != nil
+    if ownerUserID == nil, hasLegacyImport, let currentUserID {
+      defaults.set(currentUserID, forKey: .onboardingMemoryImportOwnerUserId)
+      ownerUserID = currentUserID
+    }
+    let canRestoreMemoryImports = ownerUserID == nil || ownerUserID == currentUserID
+    chatGPTImportedMemoriesCount = canRestoreMemoryImports
+      ? defaults.integer(forKey: chatGPTImportedMemoriesKey) : 0
+    claudeImportedMemoriesCount = canRestoreMemoryImports
+      ? defaults.integer(forKey: claudeImportedMemoriesKey) : 0
+    chatGPTImportSummary = canRestoreMemoryImports
+      ? defaults.string(forKey: chatGPTImportSummaryKey) ?? "" : ""
+    claudeImportSummary = canRestoreMemoryImports
+      ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
   }
 
   deinit {
@@ -225,24 +240,34 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
-    guard result.memories > 0 else {
+    guard case .imported(let memories, let profileSummary) = result else {
       lastActionError =
         "Couldn’t extract durable memories from the pasted \(source.displayName) log."
       return
     }
 
     let defaults = UserDefaults.standard
+    if let currentUserID = Self.normalizedUserID(defaults.string(forKey: .authUserId)) {
+      let ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
+      if let ownerUserID, ownerUserID != currentUserID {
+        defaults.removeObject(forKey: chatGPTImportedMemoriesKey)
+        defaults.removeObject(forKey: chatGPTImportSummaryKey)
+        defaults.removeObject(forKey: claudeImportedMemoriesKey)
+        defaults.removeObject(forKey: claudeImportSummaryKey)
+      }
+      defaults.set(currentUserID, forKey: .onboardingMemoryImportOwnerUserId)
+    }
     switch source {
     case .chatgpt:
-      chatGPTImportedMemoriesCount = result.memories
-      chatGPTImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: chatGPTImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: chatGPTImportSummaryKey)
+      chatGPTImportedMemoriesCount = memories
+      chatGPTImportSummary = profileSummary
+      defaults.set(memories, forKey: chatGPTImportedMemoriesKey)
+      defaults.set(profileSummary, forKey: chatGPTImportSummaryKey)
     case .claude:
-      claudeImportedMemoriesCount = result.memories
-      claudeImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: claudeImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: claudeImportSummaryKey)
+      claudeImportedMemoriesCount = memories
+      claudeImportSummary = profileSummary
+      defaults.set(memories, forKey: claudeImportedMemoriesKey)
+      defaults.set(profileSummary, forKey: claudeImportSummaryKey)
     }
 
     await saveGraph(
@@ -259,6 +284,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         ]
       ]
     )
+  }
+
+  private static func normalizedUserID(_ userID: String?) -> String? {
+    let trimmed = userID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   func selectAppleNotesFolderAndSync() async {

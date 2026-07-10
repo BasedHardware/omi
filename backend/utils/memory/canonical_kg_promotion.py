@@ -9,6 +9,7 @@ from typing import Any, Optional, cast
 
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 
+from database import knowledge_graph as kg_db
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryLayer
@@ -16,6 +17,25 @@ from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 logger = logging.getLogger(__name__)
+
+
+def _current_memory_is_user_rejected(uid: str, memory_id: str, *, db_client: Any) -> bool:
+    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+    if not getattr(snapshot, "exists", False):
+        return False
+    payload = snapshot.to_dict()
+    if not isinstance(payload, dict):
+        return False
+    promotion = payload.get("promotion")
+    return isinstance(promotion, dict) and promotion.get("user_review") is False
+
+
+def _remove_rejected_kg_projection(uid: str, memory_id: str, *, db_client: Any) -> None:
+    kg_db.prune_memory_citations_from_kg(uid, [memory_id], db_client=db_client)
+    db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(
+        {"kg_extracted": False},
+        merge=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -95,6 +115,8 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(skipped_reason="not_canonical_cohort")
     if item.tier != MemoryLayer.long_term:
         return CanonicalKgPromotionResult(skipped_reason="not_long_term")
+    if (item.promotion or {}).get("user_review") is False:
+        return CanonicalKgPromotionResult(skipped_reason="user_rejected")
     if getattr(item, "kg_extracted", False):
         return CanonicalKgPromotionResult(skipped_reason="already_extracted")
     content = (item.content or "").strip()
@@ -117,10 +139,17 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="exception")
     if result is None:
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="extractor_failed")
+    race_check_enabled = db_client is not None
+    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=client):
+        _remove_rejected_kg_projection(uid, item.memory_id, db_client=client)
+        return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     if preserve_item_updated_at:
-        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=db_client)
+        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=client)
     else:
-        set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=db_client)
+        set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=client)
+    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=client):
+        _remove_rejected_kg_projection(uid, item.memory_id, db_client=client)
+        return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     node_count = len(result.get("nodes") or [])
     edge_count = len(result.get("edges") or [])
     logger.info(

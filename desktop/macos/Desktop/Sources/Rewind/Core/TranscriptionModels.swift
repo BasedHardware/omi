@@ -36,6 +36,11 @@ enum LocalConversationStatus: String, Codable, CaseIterable {
     case failed = "failed"
 }
 
+enum ConversationCacheCompleteness: String, Codable, CaseIterable {
+    case list
+    case detail
+}
+
 // MARK: - Transcription Session Record
 
 /// Database record for transcription recording sessions
@@ -57,6 +62,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     var backendSynced: Bool
     var createdAt: Date
     var updatedAt: Date
+    var serverUpdatedAt: Date?
+    var cacheCompleteness: ConversationCacheCompleteness
     var finalizationStrategy: TranscriptionFinalizationStrategy?
     var finalizationReason: TranscriptionFinalizationReason?
     var finalizationStartedAt: Date?
@@ -103,6 +110,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         backendSynced: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
+        serverUpdatedAt: Date? = nil,
+        cacheCompleteness: ConversationCacheCompleteness = .list,
         finalizationStrategy: TranscriptionFinalizationStrategy? = nil,
         finalizationReason: TranscriptionFinalizationReason? = nil,
         finalizationStartedAt: Date? = nil,
@@ -141,6 +150,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         self.backendSynced = backendSynced
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.serverUpdatedAt = serverUpdatedAt
+        self.cacheCompleteness = cacheCompleteness
         self.finalizationStrategy = finalizationStrategy
         self.finalizationReason = finalizationReason
         self.finalizationStartedAt = finalizationStartedAt
@@ -378,6 +389,8 @@ extension TranscriptionSessionRecord {
             backendSynced: true,
             createdAt: conversation.createdAt,
             updatedAt: Date(),
+            serverUpdatedAt: conversation.updatedAt,
+            cacheCompleteness: conversation.transcriptSegmentsIncluded ? .detail : .list,
             finalizationStrategy: nil,
             finalizationReason: nil,
             finalizationStartedAt: nil,
@@ -400,25 +413,19 @@ extension TranscriptionSessionRecord {
         )
     }
 
-    /// Update this record from a ServerConversation (preserving local id).
-    /// When a local mutation is newer than the server timestamp, keep user-controlled local
-    /// fields such as title, star, folder, and delete state while still accepting backend-owned data.
-    mutating func updateFrom(
-        _ conversation: ServerConversation,
-        preservingNewerLocalFields preserveNewerLocalFields: Bool = false
-    ) {
+    /// Update this record from a versioned server snapshot while preserving its local id.
+    mutating func updateFrom(_ conversation: ServerConversation) {
         let encoder = JSONEncoder()
-        let localUpdatedAt = updatedAt
-        let localTitle = title
-        let localStarred = starred
-        let localFolderId = folderId
-        let localDeleted = deleted
 
-        // Update timestamps — use server's latest timestamp so local mutations
-        // (which set updatedAt = Date()) aren't overwritten by stale sync data
+        // `updatedAt` is local cache bookkeeping. Server freshness is tracked
+        // independently by `serverUpdatedAt` and never inferred from recording time.
         self.startedAt = conversation.startedAt ?? conversation.createdAt
         self.finishedAt = conversation.finishedAt
-        self.updatedAt = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
+        self.updatedAt = Date()
+        self.serverUpdatedAt = conversation.updatedAt ?? self.serverUpdatedAt
+        if conversation.transcriptSegmentsIncluded {
+            self.cacheCompleteness = .detail
+        }
 
         // Update metadata
         self.source = conversation.source?.rawValue ?? self.source
@@ -456,13 +463,45 @@ extension TranscriptionSessionRecord {
         self.backendId = conversation.id
         self.backendSynced = true
 
-        if preserveNewerLocalFields {
-            self.title = Self.preserveLocalNonEmpty(localTitle, over: self.title)
-            self.starred = localStarred
-            self.folderId = localFolderId
-            self.deleted = localDeleted
-            self.updatedAt = max(localUpdatedAt, self.updatedAt)
+    }
+
+    /// Enrich an unversioned or older projection without allowing it to
+    /// overwrite fields from a newer canonical snapshot.
+    mutating func hydrateMissingFields(from conversation: ServerConversation) {
+        let encoder = JSONEncoder()
+        if Self.isEmpty(title), !conversation.structured.title.isEmpty {
+            title = conversation.structured.title
         }
+        if Self.isEmpty(overview), !conversation.structured.overview.isEmpty {
+            overview = conversation.structured.overview
+        }
+        if Self.isEmpty(emoji), !conversation.structured.emoji.isEmpty {
+            emoji = conversation.structured.emoji
+        }
+        if Self.isDefaultCategory(category), !Self.isDefaultCategory(conversation.structured.category) {
+            category = conversation.structured.category
+        }
+        if Self.isEmptyJsonCollection(actionItemsJson), !conversation.structured.actionItems.isEmpty {
+            actionItemsJson = try? String(
+                data: encoder.encode(conversation.structured.actionItems),
+                encoding: .utf8
+            )
+        }
+        if Self.isEmptyJsonCollection(eventsJson), !conversation.structured.events.isEmpty {
+            eventsJson = try? String(data: encoder.encode(conversation.structured.events), encoding: .utf8)
+        }
+        if Self.isEmptyJsonCollection(photosJson), !conversation.photos.isEmpty {
+            photosJson = try? String(data: encoder.encode(conversation.photos), encoding: .utf8)
+        }
+        if Self.isEmptyJsonCollection(appsResultsJson), !conversation.appsResults.isEmpty {
+            appsResultsJson = try? String(data: encoder.encode(conversation.appsResults), encoding: .utf8)
+        }
+        if conversation.transcriptSegmentsIncluded {
+            cacheCompleteness = .detail
+        }
+        updatedAt = Date()
+        backendId = conversation.id
+        backendSynced = true
     }
 
     /// True when the server response can fill at least one empty local server-owned field.
@@ -476,12 +515,6 @@ extension TranscriptionSessionRecord {
             Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty ||
             Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty ||
             Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
-    }
-
-    private static func preserveLocalNonEmpty(_ local: String?, over server: String?) -> String? {
-        guard !isEmpty(local) else { return server }
-        guard isEmpty(server) else { return local }
-        return local
     }
 
     private static func isEmpty(_ value: String?) -> Bool {
@@ -558,7 +591,10 @@ extension TranscriptionSegmentRecord {
 extension TranscriptionSessionRecord {
     /// Convert local record back to ServerConversation for UI display
     /// Requires segments to be passed in (fetched separately)
-    func toServerConversation(segments: [TranscriptionSegmentRecord]) -> ServerConversation? {
+    func toServerConversation(
+        segments: [TranscriptionSegmentRecord],
+        transcriptIncluded: Bool? = nil
+    ) -> ServerConversation? {
         guard let backendId = backendId else { return nil }
 
         let decoder = JSONDecoder()
@@ -591,6 +627,7 @@ extension TranscriptionSessionRecord {
         return ServerConversation(
             id: backendId,
             createdAt: createdAt,
+            updatedAt: serverUpdatedAt,
             startedAt: startedAt,
             finishedAt: finishedAt,
             structured: Structured(
@@ -602,7 +639,7 @@ extension TranscriptionSessionRecord {
                 events: events
             ),
             transcriptSegments: transcriptSegments,
-            transcriptSegmentsIncluded: !segments.isEmpty,
+            transcriptSegmentsIncluded: transcriptIncluded ?? (cacheCompleteness == .detail || !segments.isEmpty),
             geolocation: geolocation,
             photos: photos,
             appsResults: appsResults,

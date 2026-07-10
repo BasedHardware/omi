@@ -2654,12 +2654,14 @@ workflows:
 
       - name: Smoke signed desktop artifact
         script: |
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
           scripts/smoke-signed-desktop-artifact.sh \
             --app "$APP_BUNDLE" \
             --zip "$SPARKLE_ZIP_PATH" \
             --dmg "$DMG_PATH" \
             --tag "$CM_TAG" \
             --expected-channel beta \
+            --auth-storage-canary \
             --result-json "$BUILD_DIR/desktop-smoke-result.json"
 
       - name: Create GitHub release
@@ -2679,8 +2681,8 @@ workflows:
           - **Auto-Update**: Existing users will receive this update automatically via Sparkle
 
           <!-- KEY_VALUE_START
-          isLive: true
-          channel: beta
+          isLive: false
+          channel: candidate
           edSignature: ${ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
@@ -2691,113 +2693,13 @@ workflows:
 
           gh release create "$CM_TAG" \
             --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION}" \
+            --title "Omi Desktop v${VERSION} (candidate)" \
             --notes "$RELEASE_NOTES" \
             "$SPARKLE_ZIP_PATH" \
             "$DMG_PATH"
 
-          echo "GitHub release created: $CM_TAG"
-
-      - name: Publish static beta redirect artifacts
-        script: |
-          set -e
-
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-          export BETA_DMG_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/omi.dmg"
-          export RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          cat > /tmp/macos-beta-index.html <<EOF
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=${BETA_DMG_URL}">
-            <meta name="robots" content="noindex">
-            <title>Redirecting to latest Omi Beta download…</title>
-          </head>
-          <body>
-            <p>Redirecting to the latest Omi Beta download.</p>
-            <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
-            <script>window.location.replace("${BETA_DMG_URL}");</script>
-          </body>
-          </html>
-          EOF
-
-          python3 - <<'PY' > /tmp/macos-beta-redirect.json
-          import json, os
-          print(json.dumps({
-              "channel": "beta",
-              "version": os.environ["VERSION"],
-              "build_number": int(os.environ["BUILD_NUMBER"]),
-              "tag": os.environ["CM_TAG"],
-              "download_url": os.environ["BETA_DMG_URL"],
-              "published_at": os.environ["RELEASED_AT"],
-          }, indent=2))
-          PY
-
-          echo "$BETA_DMG_URL" > /tmp/macos-beta-latest-url.txt
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-index.html \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/index.html"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-redirect.json \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/redirect.json"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-latest-url.txt \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/latest-url.txt"
-
-          echo "Static beta redirect artifacts published to $GCS_DESKTOP_UPDATES_BUCKET/beta/"
-
-      - name: Bridge release to Firestore for old clients
-        script: |
-          # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
-          # /appcast.xml which reads from Firestore. Register as beta here; the
-          # manual desktop_promote_prod.yml workflow promotes this same Firestore
-          # release to stable only after the prod Rust backend is deployed and
-          # verified. Remove this step once the Rust backend is decommissioned.
-          export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
-
-          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
-
-          RELEASE_JSON=$(python3 -c "
-          import json, os
-          data = {
-            'version':      os.environ['VERSION'],
-            'build_number': int(os.environ['BUILD_NUMBER']),
-            'download_url': os.environ.get('DOWNLOAD_URL', ''),
-            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
-            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
-            'is_live':      True,
-            'is_critical':  False,
-            'channel':      'beta',
-          }
-          print(json.dumps(data))
-          ")
-
-          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Release-Secret: $RELEASE_SECRET" \
-            -d "$RELEASE_JSON" \
-            "$OMI_DESKTOP_API_URL/updates/releases")
-
-          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "Bridge: Release registered in Firestore for old clients (channel: beta)"
-          else
-            echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
-            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
-          fi
+          echo "GitHub release candidate created: $CM_TAG"
+          echo "Run desktop/macos/scripts/qualify-desktop-beta.sh $CM_TAG to execute T2 qualification and promote beta."
 
     artifacts:
       - build/*.app

@@ -153,7 +153,20 @@ final class BleAudioProcessor {
             let preview = frame.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
             logger.warning("Decode failed. Frame size: \(frame.count), preview: \(preview)")
         } else if decodeFailures == maxDecodeFailures {
+            let error = NSError(
+                domain: "BleAudioProcessor",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Too many consecutive decode failures"])
             logger.error("Too many consecutive decode failures (\(self.decodeFailures)). Check codec compatibility.")
+            log(
+                "BleAudioProcessor: decode degraded "
+                    + "(failure_class=ble_decode_degraded recovery_action=continue_raw_capture recovery_result=degraded)")
+            logError("BleAudioProcessor: decode degraded", error: error)
+            DesktopDiagnosticsManager.shared.recordBleDecodeDegraded(
+                codec: codec.name,
+                failures: decodeFailures
+            )
+            delegate?.bleAudioProcessor(self, didFailWithError: error)
         }
 
         // For Opus, validate TOC byte

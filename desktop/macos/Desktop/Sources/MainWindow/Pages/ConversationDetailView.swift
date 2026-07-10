@@ -167,31 +167,38 @@ struct ConversationDetailView: View {
         .opacity(hasAppeared ? 1 : 0)
         .offset(y: hasAppeared ? 0 : 20)
         .onAppear {
+            ConversationDetailAutomationState.shared.setOpen(
+                conversationId: conversation.id,
+                transcriptDrawerOpen: showTranscriptDrawer
+            )
             withAnimation(.easeOut(duration: 0.5)) {
                 hasAppeared = true
             }
+        }
+        .onDisappear {
+            ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
+        }
+        .onChange(of: showTranscriptDrawer) { _, newValue in
+            ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
+                newValue, conversationId: conversation.id)
         }
         .task {
             await appProvider.fetchApps()
             await onFetchPeople?()
             AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
 
-            // Lazy processing: a deferred conversation (status=processing, only its raw transcript)
-            // enriches in the background on first open. The first fetch kicks it off and returns
-            // immediately (instant open); we then poll until status flips to completed, showing a
-            // loader meanwhile. Capped at ~30s so the loader never spins forever (e.g. on error).
+            // All detail reads go through the repository. It can paint a complete
+            // cached detail immediately, but always revalidates server-owned fields.
             if conversation.deferred || conversation.status == .processing {
                 isEnrichingDeferred = true
                 var attempts = 0
                 while attempts < 15 {
-                    do {
-                        let fetched = try await APIClient.shared.getConversation(id: conversation.id)
-                        loadedConversation = fetched
-                        if fetched.status != .processing { break }
-                    } catch {
-                        logError("ConversationDetail: failed to enrich deferred conversation", error: error)
-                        break
+                    guard let appState = AppState.current else { break }
+                    let fetched = await appState.loadConversationDetail(conversation) { cached in
+                        loadedConversation = cached
                     }
+                    loadedConversation = fetched
+                    if fetched.status != .processing { break }
                     attempts += 1
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                 }
@@ -199,40 +206,13 @@ struct ConversationDetailView: View {
                 return
             }
 
-            // Load detail-only transcript data only when the list response omitted it.
-            // An explicit empty transcript means either genuinely empty or locked/redacted;
-            // do not refetch forever just because the decoded array is empty.
-            if conversation.shouldFetchDetailForTranscript {
-                isLoadingConversation = true
-                do {
-                    // First try local database (faster, works offline)
-                    if let session = try await TranscriptionStorage.shared.getSessionByBackendId(conversation.id) {
-                        let segmentRecords = try await TranscriptionStorage.shared.getSegments(sessionId: session.id!)
-                        if !segmentRecords.isEmpty {
-                            // Convert local records to TranscriptSegments and update conversation
-                            let segments = segmentRecords.map { $0.toTranscriptSegment() }
-                            var updatedConversation = conversation
-                            updatedConversation.transcriptSegments = segments
-                            updatedConversation.transcriptSegmentsIncluded = true
-                            loadedConversation = updatedConversation
-                            log("ConversationDetail: Loaded \(segments.count) segments from local database")
-                        } else {
-                            // No local segments, fetch from API
-                            let fullConversation = try await APIClient.shared.getConversation(id: conversation.id)
-                            loadedConversation = fullConversation
-                            log("ConversationDetail: Loaded \(fullConversation.transcriptSegments.count) segments from API")
-                        }
-                    } else {
-                        // No local session found, fetch from API
-                        let fullConversation = try await APIClient.shared.getConversation(id: conversation.id)
-                        loadedConversation = fullConversation
-                        log("ConversationDetail: Loaded \(fullConversation.transcriptSegments.count) segments from API (no local session)")
-                    }
-                } catch {
-                    logError("ConversationDetail: Failed to load conversation segments", error: error)
+            isLoadingConversation = true
+            if let appState = AppState.current {
+                loadedConversation = await appState.loadConversationDetail(conversation) { cached in
+                    loadedConversation = cached
                 }
-                isLoadingConversation = false
             }
+            isLoadingConversation = false
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .desktopAutomationShowConversationTranscriptRequested)
@@ -542,29 +522,20 @@ struct ConversationDetailView: View {
         isUpdatingTitle = true
         defer { isUpdatingTitle = false }
 
-        do {
-            try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-            onTitleUpdated?(editedTitle)
-        } catch {
-            logError("Failed to update title", error: error)
-        }
+        await AppState.current?.updateConversationTitle(conversation.id, title: editedTitle)
+        onTitleUpdated?(editedTitle)
     }
 
     private func deleteConversation() async {
         isDeleting = true
         defer { isDeleting = false }
 
-        do {
-            let conversationId = conversation.id
-            try await APIClient.shared.deleteConversation(id: conversationId)
+        let conversationId = conversation.id
+        if await AppState.current?.deleteConversation(conversationId) == true {
             await MainActor.run {
-                // Always purge local conversation + memory cache; onDelete is nav/UI only.
-                AppState.current?.deleteConversationLocally(conversationId)
                 onDelete?()
                 onBack()
             }
-        } catch {
-            logError("Failed to delete conversation", error: error)
         }
     }
 

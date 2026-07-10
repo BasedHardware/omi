@@ -8,23 +8,13 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        testUserId = "memory-tier-sync-\(UUID().uuidString)"
-        RewindDatabase.currentUserId = testUserId
-        await MemoryStorage.shared.invalidateCache()
-        try await RewindDatabase.shared.initialize()
-
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        userDir = appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
-            .appendingPathComponent("users", isDirectory: true)
-            .appendingPathComponent(testUserId, isDirectory: true)
+        let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memory-tier-sync")
+        testUserId = fixture.testUserId
+        userDir = fixture.userDir
     }
 
     override func tearDown() async throws {
-        await MemoryStorage.shared.invalidateCache()
-        if let userDir { try? FileManager.default.removeItem(at: userDir) }
-        RewindDatabase.currentUserId = nil
+        await RewindStorageTestIsolation.tearDown(userDir: userDir)
         try await super.tearDown()
     }
 

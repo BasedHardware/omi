@@ -37,7 +37,8 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunks_batch
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -297,13 +298,30 @@ async def _websocket_util_trigger(
                         storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                     )
                     if audio_files:
+                        files_payload = [af.model_dump() for af in audio_files]
                         await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
-                            {'audio_files': [af.model_dump() for af in audio_files]},
+                            {'audio_files': files_payload},
                         )
+                        # Rebuild the conversation playback artifact if a stamped one
+                        # went stale. No stamp (the live-conversation common case) → no-op.
+                        if is_audio_merge_dispatch_enabled():
+                            stamp = await run_blocking(
+                                storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
+                            )
+                            if stamp:
+                                await run_blocking(
+                                    storage_executor,
+                                    maybe_invalidate_conversation_playback,
+                                    uid,
+                                    conv_id,
+                                    {'conversation_audio': stamp},
+                                    files_payload,
+                                    'pusher_flush',
+                                )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
             except Exception as e:

@@ -1,5 +1,6 @@
 {
     "@@locale": "ko",
+    "sessionExpiredSignInAgain": "세션이 만료되었습니다. 다시 로그인하세요.",
     "appTitle": "Omi",
     "conversationTab": "대화",
     "transcriptTab": "녹취록",

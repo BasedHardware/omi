@@ -1,11 +1,13 @@
 version: 2
 name: settings-basic
 tier: 2
-description: Settings navigation smoke for General, Transcription, and Privacy sections
+description: Settings navigation smoke for General, Transcription, Privacy, Rewind, Notifications, About, Shortcuts, and Advanced sections
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MemoryExportService.swift
 preconditions:
   - automation_bridge_ready
 
@@ -46,6 +48,58 @@ steps:
       state.selectedSettingsSection: Privacy
 
   - id: S5
+    name: Open Rewind section
+    bridge.navigate:
+      target: settings
+      settingsSection: Rewind
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Rewind
+
+  - id: S6
+    name: Open Notifications section
+    bridge.navigate:
+      target: settings
+      settingsSection: Notifications
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Notifications
+
+  - id: S7
+    name: Open About section
+    bridge.navigate:
+      target: settings
+      settingsSection: About
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: About
+
+  - id: S8
+    name: Open Shortcuts section
+    bridge.navigate:
+      target: settings
+      settingsSection: Shortcuts
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Shortcuts
+
+  - id: S9
+    name: Open Advanced section
+    bridge.navigate:
+      target: settings
+      settingsSection: Advanced
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Advanced
+
+  - id: S10
+    name: Advanced settings snapshot
+    bridge.action:
+      name: advanced_settings_snapshot
+    expect:
+      ok: true
+
+  - id: S11
     name: Logs clean
     log.expect:
       absent:

@@ -9,6 +9,9 @@ class AppLocalizationsMk extends AppLocalizations {
   AppLocalizationsMk([String locale = 'mk']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесијата истече — најавете се повторно.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

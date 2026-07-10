@@ -4,6 +4,18 @@ icon: "code-pull-request"
 description: "Contribute to Omi and earn rewards! Some tasks have paid bounties."
 ---
 
+## Will this be accepted?
+
+Before you write code, check product fit:
+
+- Read [`PRODUCT.md`](https://github.com/BasedHardware/Omi/blob/main/PRODUCT.md) — memory-first loop, one shared chat mind, trust over cleverness, integrations harness, taste floor.
+- Check the [product invariant registry](https://github.com/BasedHardware/Omi/tree/main/docs/product/invariants). Locked invariants (for example one shared transcript across notch and main chat) are binding; PRs that touch their paths must name the invariant ID.
+- **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
+
+Maintainers declining a PR for direction or taste will cite an invariant ID or open a proposed invariant the same week — so “project direction” stays written down, not tribal.
+
+---
+
 ## How to Contribute
 
 <Steps>
@@ -17,7 +29,7 @@ description: "Contribute to Omi and earn rewards! Some tasks have paid bounties.
     Add focused tests and include the commands or manual steps you used to verify the change.
   </Step>
   <Step title="Create a Pull Request">
-    Submit a PR and specify which issue it relates to.
+    Submit a PR and specify which issue it relates to. Name any product invariants your change affects.
   </Step>
 </Steps>
 
@@ -32,6 +44,7 @@ Good PRs are easy to review and come with evidence that the change works.
 - **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
 - **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
 - **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
+- **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
 
 ### Contributing with an AI agent
 
@@ -64,7 +77,7 @@ Get rewarded for approved PRs with significant contributions:
     $500 of transcription credits + special Contributor role in Discord
   </Card>
   <Card title="10 PRs" icon="plane">
-    Trip to San Francisco to hang out with the Based Hardware team
+    Trip to hang out with the Based Hardware team
   </Card>
 </CardGroup>
 

@@ -727,6 +727,15 @@ class TasksViewModel: ObservableObject {
     /// Guards against transient DB re-query flicker during optimistic bulk updates.
     private var suppressDatabaseRequery = false
 
+    /// Automation-only (TASK-06): counts real SQLite requeries so a harness can
+    /// prove a server-push recompute during an active drag is suppressed.
+    private(set) var automationRequeryCount = 0
+
+    /// Automation-only (TASK-06): forces the filtered-requery branch so the drag
+    /// suppression probe is never vacuous when no user filter is active — the ONLY
+    /// thing that should then block the requery is the drag guard.
+    private var automationForceFilteredRequery = false
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -903,6 +912,25 @@ class TasksViewModel: ObservableObject {
         return base + (itemIndex + 1) * spacing
     }
 
+    /// Rewrites `array`'s `sortOrder` for every task id named in `order`, using the
+    /// single `sortOrder` banding helper. `moveTask` applies this to each source array
+    /// the displayed list can be backed by (`store.incompleteTasks`,
+    /// `filteredFromDatabase`, `searchResults`) so they agree on the new order — a write
+    /// to only one diverges when filters/search are active. Ids not in `order` keep
+    /// their existing sortOrder. Extracted so the mirrored-array invariant is
+    /// unit-testable (TASK-07 / BL-030).
+    nonisolated static func applyReorder(
+        _ order: [String], categoryIndex: Int, to array: inout [TaskActionItem]
+    ) {
+        let itemCount = order.count
+        for (index, taskId) in order.enumerated() {
+            let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
+            if let i = array.firstIndex(where: { $0.id == taskId }) {
+                array[i].sortOrder = newSortOrder
+            }
+        }
+    }
+
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
@@ -924,23 +952,13 @@ class TasksViewModel: ObservableObject {
         // reassignment fires its own @Published; recomputeAllCaches at the end folds
         // them all into categorizedTasks.
         let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
-        let itemCount = order.count
-
-        func applyOrder(to array: inout [TaskActionItem]) {
-            for (index, taskId) in order.enumerated() {
-                let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
-                if let i = array.firstIndex(where: { $0.id == taskId }) {
-                    array[i].sortOrder = newSortOrder
-                }
-            }
-        }
 
         var incomplete = store.incompleteTasks
-        applyOrder(to: &incomplete)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
         store.incompleteTasks = incomplete
 
-        applyOrder(to: &filteredFromDatabase)
-        applyOrder(to: &searchResults)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
 
         // Recompute caches immediately so the UI updates. Suppress the async
         // SQLite requery — when filters are active, the requery would otherwise
@@ -1424,7 +1442,7 @@ class TasksViewModel: ObservableObject {
         // Otherwise just recompute from the in-memory store arrays.
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
-        if hasNonStatusFilters && !suppressDatabaseRequery {
+        if (hasNonStatusFilters || automationForceFilteredRequery) && !suppressDatabaseRequery {
             Task { [weak self] in
                 guard let self, self.recomputeVersion == version else { return }
                 await self.loadFilteredTasksFromDatabase()
@@ -1492,11 +1510,15 @@ class TasksViewModel: ObservableObject {
         let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
 
-        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters else {
+        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters
+            || automationForceFilteredRequery else {
             filteredFromDatabase = []
             recomputeDisplayCaches()
             return
         }
+        // Count only real SQLite requeries (past the empty-filter early return), so
+        // the automation counter reflects an actual DB read (TASK-06).
+        automationRequeryCount += 1
 
         isLoadingFiltered = true
 
@@ -2185,34 +2207,60 @@ class TasksViewModel: ObservableObject {
         registry.register(
             name: "toggle_task",
             summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller (Tasks page never opened) resolves
             // the task instead of getting a spurious "not found".
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.toggleTask(task)
             // Report the real post-toggle state read back from the store rather than the
             // assumed negation — TasksStore leaves the prior state if the local write fails.
-            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
-            return ["id": id, "completed": completed ? "true" : "false"]
+            let completed = self.store.tasks.first(where: { $0.id == task.id })?.completed ?? !task.completed
+            return ["id": task.id, "completed": completed ? "true" : "false"]
         }
 
         registry.register(
             name: "delete_task",
             summary: "Delete a task by id (mirrors swipe / menu delete)",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller resolves the task instead of a
             // spurious "not found" when the Tasks page was never opened.
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.deleteTask(task)
-            return ["id": id, "deleted": "true"]
+            return ["id": task.id, "deleted": "true"]
         }
 
         registry.register(
@@ -2236,8 +2284,8 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "dump_tasks",
-            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
-            params: ["includeCompleted", "limit"]
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field. Pass `marker` to get a boolean `marker_absent` field for post-delete verification.",
+            params: ["includeCompleted", "limit", "marker"]
         ) { params in
             let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
             let limit = Int(params["limit"] ?? "") ?? 500
@@ -2264,8 +2312,83 @@ class TasksViewModel: ObservableObject {
             }
             let json = (try? JSONSerialization.data(withJSONObject: rows))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-            return ["count": String(sorted.count), "tasks": json]
+            var result: [String: String] = ["count": String(sorted.count), "tasks": json]
+            if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !marker.isEmpty
+            {
+                let present = sorted.contains { $0.description.contains(marker) }
+                result["marker_absent"] = present ? "false" : "true"
+            }
+            return result
         }
+
+        registry.register(
+            name: "inject_requery_during_drag",
+            summary: "TASK-06: inject a server-push recompute while a drag is active and report whether the SQLite requery was suppressed (order not clobbered). Non-prod only.",
+            params: []
+        ) { [weak self] _ in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            return await self.automationInjectRequeryDuringDrag()
+        }
+    }
+
+    /// TASK-06: prove a server push arriving mid-drag does not clobber the order.
+    /// Forces the filtered-requery branch (so the probe is never vacuous), sets
+    /// `suppressDatabaseRequery` (the flag the drag/sort-sync window holds), injects
+    /// a server-push recompute via the real `recomputeAllCaches` path, and reports
+    /// whether the SQLite requery was suppressed — plus a control recompute WITHOUT
+    /// the flag that MUST requery (proving the guard is load-bearing). A suppressed
+    /// requery is exactly what keeps the in-memory drag order on screen, so
+    /// `requery_suppressed_during_drag` is the load-bearing signal. Automation-only.
+    @MainActor
+    func automationInjectRequeryDuringDrag() async -> [String: String] {
+        await ensureTasksLoadedForAutomation()
+        // Force the filtered-requery branch so the ONLY thing that can block the
+        // requery is the drag guard — never a vacuous pass because no filter is set.
+        automationForceFilteredRequery = true
+        // Never leave either flag stuck (a stuck suppress flag would permanently
+        // block filtered requeries for this view model).
+        defer {
+            automationForceFilteredRequery = false
+            suppressDatabaseRequery = false
+        }
+
+        // Suppress phase: with the drag flag held, the forced requery must NOT run.
+        let countBefore = automationRequeryCount
+        suppressDatabaseRequery = true
+        recomputeAllCaches()
+        // Give a (wrongly) scheduled requery a bounded window to appear; a correct
+        // guard never lets it, so this observes no increment.
+        _ = await waitForRequeryCount(above: countBefore, timeoutMs: 1000)
+        let countDuringDrag = automationRequeryCount
+
+        // Control: the same forced push WITHOUT the drag flag must requery. Poll
+        // (rather than a fixed sleep) so the signal is deterministic under load.
+        suppressDatabaseRequery = false
+        recomputeAllCaches()
+        let controlFired = await waitForRequeryCount(above: countDuringDrag, timeoutMs: 3000)
+
+        // Settle back to the real filtered state. The control requery has already
+        // completed (we polled for it), so this recompute cannot invalidate it.
+        automationForceFilteredRequery = false
+        recomputeAllCaches()
+
+        return [
+            "requery_suppressed_during_drag": countDuringDrag == countBefore ? "true" : "false",
+            "requery_fires_without_suppress": controlFired ? "true" : "false",
+        ]
+    }
+
+    /// Poll `automationRequeryCount` until it exceeds `baseline` or the timeout
+    /// elapses. Deterministic replacement for a fixed sleep in the TASK-06 probe.
+    @MainActor
+    private func waitForRequeryCount(above baseline: Int, timeoutMs: Int) async -> Bool {
+        let steps = max(1, timeoutMs / 50)
+        for _ in 0..<steps {
+            if automationRequeryCount > baseline { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return automationRequeryCount > baseline
     }
 
     /// Ensure the store + category caches are populated before a headless reorder, so

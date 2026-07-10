@@ -1,5 +1,6 @@
 {
     "@@locale": "pt",
+    "sessionExpiredSignInAgain": "A sessão expirou — inicie sessão novamente.",
     "appTitle": "Omi",
     "conversationTab": "Conversa",
     "transcriptTab": "Transcrição",

@@ -128,7 +128,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       {
         "ok": true,
         "session": {"sessionId": "ses_pill"},
-        "run": {"runId": "run_pill", "status": "running"}
+        "run": {"runId": "run_pill", "status": "running"},
+        "attempt": {"attemptId": "att_pill"}
       }
       """
     )
@@ -142,10 +143,42 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let inspection = try await service.inspectAgentRun(runId: " run_pill ")
 
     XCTAssertEqual(inspection.runId, "run_pill")
+    XCTAssertEqual(inspection.attemptId, "att_pill")
     let call = try XCTUnwrap(runtime.calls.first)
     XCTAssertEqual(call.name, "get_agent_run")
     XCTAssertEqual(Set(call.input.keys), ["runId"])
     XCTAssertEqual(call.input["runId"] as? String, "run_pill")
+  }
+
+  @MainActor
+  func testInspectAgentRunParsesKnownAttemptIdShapes() async throws {
+    for (attemptShape, expected) in [
+      (#""attempt": {"attemptId": "att_nested"}"#, "att_nested"),
+      (#""attemptId": "att_top""#, "att_top"),
+      (#""run": {"runId": "run_pill", "status": "running", "attemptId": "att_run"}"#, "att_run"),
+    ] {
+      let runShape = attemptShape.hasPrefix(#""run":"#)
+        ? attemptShape
+        : #""run": {"runId": "run_pill", "status": "running"},"# + attemptShape
+      let runtime = RecordingCoordinatorRuntime(
+        response: """
+        {
+          "ok": true,
+          "session": {"sessionId": "ses_pill"},
+          \(runShape)
+        }
+        """
+      )
+      let service = DesktopCoordinatorService(
+        runtime: runtime,
+        clientId: "test-desktop-coordinator",
+        harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+        checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.inspectShapes.\(expected)")!
+      )
+
+      let inspection = try await service.inspectAgentRun(runId: "run_pill")
+      XCTAssertEqual(inspection.attemptId, expected)
+    }
   }
 
   @MainActor
@@ -284,11 +317,22 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(chatSource.contains("func applyKernelTurnRecorded("))
     XCTAssertFalse(chatSource.contains("func fetchKernelVoiceSeedContext("))
     XCTAssertFalse(chatSource.contains("setTurnRecordedHandler"))
-    XCTAssertTrue(hubSource.contains("recordTurnToKernel("))
+    XCTAssertTrue(hubSource.contains("recordTurnToKernelAwaiting("))
+    XCTAssertTrue(hubSource.contains("let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()"))
+    XCTAssertTrue(hubSource.contains("ownerID: entry.ownerID"))
+    XCTAssertTrue(hubSource.contains("surfaceKind: entry.surfaceKind"))
+    XCTAssertTrue(
+      try sourceFile("Chat/AgentRuntimeProcess.swift").contains("ownerID ?? currentOwnerId()"))
     XCTAssertTrue(hubSource.contains("origin: \"realtime_voice\""))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    // Speculative warm must reuse mainInstance — a second ChatProvider attaches a
+    // duplicate turn_recorded handler and doubles PTT chat / pill_completion rows.
+    XCTAssertTrue(hubSource.contains("ChatProvider.mainInstance"))
+    XCTAssertTrue(hubSource.contains("speculativelyWarmAgent"))
+    XCTAssertFalse(hubSource.contains("warmProvider = ChatProvider()"))
+    XCTAssertFalse(hubSource.contains("private var warmProvider"))
     XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
@@ -306,7 +350,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func apply(_ turn:"))
     XCTAssertFalse(chatSource.contains("buildTopLevelVoiceContinuityContext("))
     XCTAssertFalse(chatSource.contains("beginVoiceUserMessage("))
-    XCTAssertTrue(managerSource.contains("kernelTurnProjection.fetchVoiceSeedContext("))
+    XCTAssertTrue(managerSource.contains("kernelTurnProjection.fetchVoiceSeedSnapshot("))
     XCTAssertTrue(managerSource.contains("kernelVoiceSeedContext()"))
     XCTAssertTrue(managerSource.contains("floatingAgentStatusContext()"))
     XCTAssertTrue(managerSource.contains("DesktopCoordinatorService.shared.floatingAgentStatusSummary"))
@@ -353,7 +397,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
-    XCTAssertTrue(managerSource.contains("fetchVoiceSeedContext("))
+    XCTAssertTrue(managerSource.contains("fetchVoiceSeedSnapshot("))
     XCTAssertTrue(managerSource.contains("surface: provider.mainChatSurfaceReference()"))
     XCTAssertTrue(hubSource.contains("await self.refreshVoiceSeedContext()"))
     XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfSeedStale()"))
@@ -365,7 +409,10 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
     XCTAssertTrue(managerSource.contains("func recordSurfaceTurn("))
-    XCTAssertTrue(hubSource.contains("recordTurnToKernel(userText: heard, assistantText: handoffReply, interrupted: false)"))
+    XCTAssertTrue(hubSource.contains("let persistedReply ="))
+    XCTAssertTrue(hubSource.contains("handoff.map {"))
+    XCTAssertTrue(hubSource.contains("assistantText: persistedReply"))
+    XCTAssertTrue(hubSource.contains("await self?.persistTurnToKernelThroughTransientFailures("))
     XCTAssertTrue(hubSource.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
     XCTAssertTrue(hubSource.contains("turnRecorded = true"))
     XCTAssertFalse(hubSource.contains("recordVoiceAgentHandoff("))

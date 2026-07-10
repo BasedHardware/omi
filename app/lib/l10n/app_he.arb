@@ -1,5 +1,6 @@
 {
     "@@locale": "he",
+    "sessionExpiredSignInAgain": "ההפעלה פגה — יש להתחבר שוב.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

@@ -77,7 +77,13 @@ extension AppState {
     // Use a shell script to wait briefly, then relaunch the app
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "sleep 0.5 && open \"\(relaunchURL.path)\""]
+    task.arguments = [
+      "-c",
+      Self.relaunchCommand(
+        appPath: relaunchURL.path,
+        isNonProduction: AppBuild.isNonProduction,
+        automationPort: DesktopAutomationLaunchOptions.port),
+    ]
 
     do {
       try task.run()
@@ -92,18 +98,46 @@ extension AppState {
     }
   }
 
+  /// Builds the `/bin/sh -c` payload that relaunches the app after a short delay.
+  ///
+  /// On **non-production** builds the automation port is re-passed as an argv
+  /// (`--automation-port=`) so the reopened bundle rebinds the SAME port the harness
+  /// launched with. A plain `open <bundle>` carries no argv and no env, so on its own
+  /// the reopened app would fall back to a launchd-session-inherited
+  /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
+  /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
+  /// is the highest-precedence port source, so it wins over any inherited env. The
+  /// production relaunch stays a plain `open` and is unchanged.
+  nonisolated static func relaunchCommand(
+    appPath: String,
+    isNonProduction: Bool,
+    automationPort: UInt16
+  ) -> String {
+    var openCommand = "open \"\(appPath)\""
+    if isNonProduction {
+      openCommand += " --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+    }
+    return "sleep 0.5 && \(openCommand)"
+  }
+
   /// Reset onboarding state for the current app only, then restart.
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
 
-    // Update live @AppStorage state in the current app instance before touching
-    // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
-    DispatchQueue.main.async {
+    // Update live @AppStorage-backed state on the main thread *before* clearing
+    // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
+    // hasCompletedOnboarding = false; dispatch synchronously so that runs first.
+    let postResetNotification = {
       NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
     }
+    if Thread.isMainThread {
+      postResetNotification()
+    } else {
+      DispatchQueue.main.sync(execute: postResetNotification)
+    }
 
-    // Clear onboarding-related UserDefaults keys (thread-safe, do first)
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state)
     let onboardingKeys = [
       "hasCompletedOnboarding",
       "onboardingStep",

@@ -47,6 +47,7 @@ ROUTE_TYPES = {'http', 'websocket'}
 AUTH_MECHANISMS = {
     'public',
     'firebase_id_token',
+    'admin_key',
     'admin_key_uid_prefix',
     'developer_api_key',
     'mcp_api_key',

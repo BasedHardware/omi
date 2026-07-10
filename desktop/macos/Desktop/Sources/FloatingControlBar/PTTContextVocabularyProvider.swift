@@ -3,6 +3,9 @@ import Foundation
 
 struct PTTContextSnapshot {
   let capturedAt: Date
+  /// Terms used only to correct the STT transcript. This must not be treated as
+  /// current-screen truth; realtime screen understanding comes from the voice
+  /// hub's screen_now context and explicit screenshot tool.
   let keywords: [String]
   let sourceCount: Int
 }
@@ -15,7 +18,7 @@ enum PTTContextVocabularyProvider {
 
   static func capture(at date: Date = Date(), preOverlayImage: CGImage? = nil) async -> PTTContextSnapshot {
     async let immediateOCRText = captureImmediateScreenText(preferredImage: preOverlayImage)
-    let screenshots = await loadContextScreenshots(around: date)
+    let recentActivityScreenshots = await loadRecentActivityScreenshots(around: date)
     let settingsVocabulary = await MainActor.run {
       AssistantSettings.shared.effectiveVocabulary
     }
@@ -32,7 +35,7 @@ enum PTTContextVocabularyProvider {
       collector.addVisibleTerms(from: clippedText)
     }
 
-    for screenshot in screenshots {
+    for screenshot in recentActivityScreenshots {
       collector.add(screenshot.appName)
       if let title = screenshot.windowTitle {
         collector.add(title)
@@ -46,28 +49,27 @@ enum PTTContextVocabularyProvider {
     let keywords = collector.values
     let sample = keywords.prefix(12).joined(separator: ", ")
     let immediateSourceCount = (visibleText?.isEmpty == false) ? 1 : 0
-    log("PTTContextVocabulary: captured \(keywords.count) keywords from \(screenshots.count) screenshots + \(immediateSourceCount) immediate OCR source(s); sample=[\(sample)]")
+    log(
+      "PTTContextVocabulary: captured \(keywords.count) transcription keyword(s) from "
+        + "\(recentActivityScreenshots.count) fresh recent-activity screenshot(s) + "
+        + "\(immediateSourceCount) immediate OCR source(s); sample=[\(sample)]")
     return PTTContextSnapshot(
       capturedAt: date,
       keywords: keywords,
-      sourceCount: screenshots.count + immediateSourceCount
+      sourceCount: recentActivityScreenshots.count + immediateSourceCount
     )
   }
 
-  private static func loadContextScreenshots(around date: Date) async -> [Screenshot] {
+  private static func loadRecentActivityScreenshots(around date: Date) async -> [Screenshot] {
     do {
       let startDate = date.addingTimeInterval(-lookbackSeconds)
-      let screenshots = try await RewindDatabase.shared.getScreenshots(
+      return try await RewindDatabase.shared.getScreenshots(
         from: startDate,
         to: date.addingTimeInterval(2),
         limit: 12
       )
-      if !screenshots.isEmpty {
-        return screenshots
-      }
-      return try await RewindDatabase.shared.getRecentScreenshots(limit: 8)
     } catch {
-      logError("PTTContextVocabulary: failed to load screenshot context", error: error)
+      logError("PTTContextVocabulary: failed to load fresh recent-activity screenshots", error: error)
       return []
     }
   }

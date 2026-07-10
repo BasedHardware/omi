@@ -1,5 +1,6 @@
 {
     "@@locale": "te",
+    "sessionExpiredSignInAgain": "సెషన్ గడువు ముగిసింది — మళ్లీ సైన్ ఇన్ చేయండి.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

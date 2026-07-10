@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
     MergeConversationsRequest,
@@ -373,12 +374,12 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationMutationResponse
 )
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
-    return {'status': 'Ok'}
+    return {'status': 'Ok', 'conversation': _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.delete(
@@ -605,15 +606,10 @@ def delete_conversation(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
-    conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(uid, conversation_id)
-    delete_transcript_chunk_vectors(uid, conversation_id)
 
     if cascade:
-        # Delete audio files
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
-
-        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        # Delete associated memories and action items before removing the conversation doc
+        # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
@@ -623,8 +619,12 @@ def delete_conversation(
             for memory_id in deletion_result.get('vector_delete_ids', []):
                 delete_memory_vector(uid, memory_id)
 
-        # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+
+    conversations_db.delete_conversation(uid, conversation_id)
+    delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
 
     return {"status": "Ok"}
 
@@ -1011,13 +1011,13 @@ def set_conversation_visibility(
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationMutationResponse
 )
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok"}
+    return {"status": "Ok", "conversation": _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.get(

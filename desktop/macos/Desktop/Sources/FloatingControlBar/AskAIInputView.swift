@@ -7,7 +7,6 @@ import OmiTheme
 struct AskAIInputView: View {
     @EnvironmentObject var state: FloatingControlBarState
     @Binding var userInput: String
-    @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
     @State private var hasMarkedText = false
     @State private var attachments: [ChatAttachment] = []
@@ -21,7 +20,7 @@ struct AskAIInputView: View {
 
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
-    private var trimmedInput: String { localInput.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedInput: String { userInput.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool {
         !hasMarkedText && (!trimmedInput.isEmpty || !attachments.isEmpty)
     }
@@ -60,7 +59,7 @@ struct AskAIInputView: View {
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
-                    if localInput.isEmpty && !hasMarkedText {
+                    if userInput.isEmpty && !hasMarkedText {
                         Text("Ask a question...")
                             .scaledFont(size: 13)
                             .foregroundColor(.secondary)
@@ -69,7 +68,7 @@ struct AskAIInputView: View {
                     }
 
                     OmiTextEditor(
-                        text: $localInput,
+                        text: $userInput,
                         lineFragmentPadding: 8,
                         onSubmit: {
                             guard canSend else { return }
@@ -86,12 +85,6 @@ struct AskAIInputView: View {
                             }
                         }
                     )
-                    .onChange(of: localInput) { _, newValue in
-                        userInput = newValue
-                    }
-                    .onAppear {
-                        localInput = userInput
-                    }
                 }
                 .padding(.horizontal, 4)
                 .frame(height: textHeight)
@@ -123,8 +116,7 @@ struct AskAIInputView: View {
         let text = trimmedInput
         let staged = attachments
         guard !text.isEmpty || !staged.isEmpty else { return }
-        localInput = ""
-        userInput = ""
+        userInput = text
         attachments = []
         if !staged.isEmpty {
             FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)

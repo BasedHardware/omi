@@ -9,6 +9,9 @@ class AppLocalizationsRo extends AppLocalizations {
   AppLocalizationsRo([String locale = 'ro']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesiunea a expirat — autentifică-te din nou.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

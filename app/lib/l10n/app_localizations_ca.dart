@@ -9,6 +9,9 @@ class AppLocalizationsCa extends AppLocalizations {
   AppLocalizationsCa([String locale = 'ca']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'La sessió ha caducat — torna a iniciar la sessió.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
