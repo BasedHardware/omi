@@ -932,11 +932,13 @@ async function main(): Promise<void> {
   };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
+  } else if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+    logErr("Pi-mono adapter unavailable; starting the non-production control-only runtime");
   }
   if (!hermesAvailable && defaultAdapterId === "hermes") {
     const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
@@ -1373,6 +1375,9 @@ async function main(): Promise<void> {
         const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
         const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
         const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        if (surfaceKind === "workstream" && externalRefKind === "workstream" && externalRefId.trim()) {
+          kernel.resolveWorkstreamSession({ ownerId, workstreamId: externalRefId });
+        }
         const turns = Array.isArray(msg.turns) ? msg.turns : [];
         const imported = kernel.importConversationTurns({
           ownerId,

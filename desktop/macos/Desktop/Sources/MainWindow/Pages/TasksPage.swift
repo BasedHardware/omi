@@ -2698,6 +2698,7 @@ struct TasksPage: View {
         .onAppear {
             Task { @MainActor in
                 await viewModel.loadTasksForFirstUse()
+                chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
                 // If tasks are already loaded, notify sidebar to clear loading indicator
                 if !viewModel.isLoading {
                     NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
@@ -2731,6 +2732,25 @@ struct TasksPage: View {
         .onReceive(chatCoordinator.$activeTaskId) { taskId in
             activeChatTaskId = taskId
         }
+        .onReceive(viewModel.$displayTasks) { tasks in
+            chatCoordinator.ingestTaskMappings(tasks)
+        }
+        .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
+            guard isOpen != showChatPanel else { return }
+            if isOpen {
+                adjustWindowWidth(expand: true)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showChatPanel = true
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showChatPanel = false
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    adjustWindowWidth(expand: false)
+                }
+            }
+        }
     }
 
     /// Start a background AI investigation for a task (no panel opens)
@@ -2751,23 +2771,16 @@ struct TasksPage: View {
                 showChatPanel = true
             }
         }
-        // Switch to (or start) chat for this task
+        // Generic navigation only resumes an existing thread. Durable work is
+        // created solely by the labeled “Work on this with Omi” action.
         Task {
-            await chatCoordinator.openChat(for: task)
+            _ = await chatCoordinator.openExistingThread(for: task)
         }
     }
 
     /// Close the chat panel and shrink window
     private func closeChatPanel() {
         chatCoordinator.closeChat()
-        // Animate panel out and shrink window together
-        withAnimation(.easeInOut(duration: 0.25)) {
-            showChatPanel = false
-        }
-        // Shrink window after a short delay so the slide-out animation is visible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            adjustWindowWidth(expand: false)
-        }
     }
 
     /// Expand or shrink the main window to accommodate the chat panel.
@@ -3479,11 +3492,11 @@ struct TasksPage: View {
         } label: {
             Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                 .scaledFont(size: 12)
-                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                .foregroundColor(showChatPanel ? OmiColors.textPrimary : OmiColors.textSecondary)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
+                        .fill(showChatPanel ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -4221,7 +4234,7 @@ struct TaskDragPreviewSimple: View {
 // MARK: - Chat Session Status Indicator
 
 /// Shows streaming activity or unread dot for a task's chat session.
-/// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+/// Appears inline in the TaskRow FlowLayout next to the explicit thread action.
 ///
 /// Uses @State + .onReceive instead of @ObservedObject so that only this
 /// specific task's indicator re-renders when coordinator state changes —
@@ -4251,18 +4264,18 @@ struct ChatSessionStatusIndicator: View {
                         .lineLimit(1)
                 }
             } else if hasUnread {
-                // Unread: purple dot
+                // Unread: quiet neutral dot
                 Button {
                     onOpenChat?(task)
                 } label: {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(OmiColors.purplePrimary)
+                            .fill(OmiColors.textPrimary)
                             .frame(width: 8, height: 8)
 
                         Text("New reply")
                             .scaledFont(size: 10, weight: .medium)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(OmiColors.textPrimary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -4419,11 +4432,11 @@ struct TaskRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+                .fill(isActiveChatTask ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isActiveChatTask ? OmiColors.textPrimary.opacity(0.25) : Color.clear, lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
             if showShareCopiedToast {
@@ -4788,46 +4801,40 @@ struct TaskRow: View {
                             NewBadge()
                         }
 
-                        // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
-                        if TaskAgentSettings.shared.isEnabled {
-                            AgentStatusIndicator(task: task)
-                        }
-
-                        // Investigate / View chat button (background AI chat)
+                        // Explicit durable-work action. Merely viewing/selecting a
+                        // task never creates a thread.
                         if let coordinator = chatCoordinator,
                            TaskAgentSettings.shared.isChatEnabled,
                            !coordinator.streamingTaskIds.contains(task.id),
                            !coordinator.unreadTaskIds.contains(task.id) {
-                            if task.chatSessionId != nil {
-                                // Previous session exists but is no longer active — let user view/resume it
+                            if task.workstreamId != nil {
                                 Button {
                                     onOpenChat?(task)
                                 } label: {
                                     HStack(spacing: 3) {
                                         Image(systemName: "bubble.left")
                                             .scaledFont(size: 9)
-                                        Text("View chat")
+                                        Text("Open thread")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .foregroundColor(OmiColors.textPrimary)
                                 }
                                 .buttonStyle(.plain)
-                                .help("View previous AI investigation")
+                                .help("Resume this task's ongoing work")
                             } else {
-                                // No prior session — start fresh investigation
                                 Button {
-                                    onInvestigate?(task)
+                                    Task { await coordinator.openChat(for: task) }
                                 } label: {
                                     HStack(spacing: 3) {
-                                        Image(systemName: "magnifyingglass")
+                                        Image(systemName: "sparkles")
                                             .scaledFont(size: 9)
-                                        Text("Investigate")
+                                        Text("Work on this with Omi")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(OmiColors.textPrimary)
                                 }
                                 .buttonStyle(.plain)
-                                .help("Start AI investigation in background")
+                                .help("Create ongoing work only when you choose")
                             }
                         }
 
@@ -4856,13 +4863,11 @@ struct TaskRow: View {
             // Hover actions overlaid on trailing edge (no layout shift)
             if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
                 HStack(spacing: 4) {
-                    // Execute: spawn an agent pill that handles this task end-to-end.
+                    // Execute is an explicit work intent and stays in the same
+                    // durable task-backed thread as chat/investigate.
                     if !task.completed {
                         Button {
-                            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                                ? ModelQoS.Claude.defaultSelection
-                                : ShortcutSettings.shared.selectedModel
-                            AgentPillsManager.shared.spawn(query: task.description, model: model)
+                            onInvestigate?(task)
                         } label: {
                             HStack(spacing: 3) {
                                 Image(systemName: "sparkles")

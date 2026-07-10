@@ -1,13 +1,15 @@
 import SwiftUI
 import OmiTheme
 
-/// Compact chat panel for the task sidebar.
-/// Displays task-scoped chat using an independent TaskChatState per task.
+/// Task-scoped view into one durable Omi thread. Multiple tasks may project the
+/// same messages, artifacts, and kernel run while keeping distinct UI scope.
 struct TaskChatPanel: View {
     @ObservedObject var taskState: TaskChatState
     @ObservedObject var coordinator: TaskChatCoordinator
     let task: TaskActionItem?
     let onClose: () -> Void
+    @State private var showsThreadContext = true
+    @ObservedObject private var runtimeStatusStore = AgentRuntimeStatusStore.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +35,16 @@ struct TaskChatPanel: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                if let projection = coordinator.activeThreadProjection {
+                    TaskThreadOverview(
+                        projection: projection,
+                        runtimeProjection: runtimeStatusStore.projection(
+                            for: .workstream(workstreamId: projection.workstreamID)
+                        ),
+                        isExpanded: $showsThreadContext
+                    )
+                    Divider().background(OmiColors.backgroundTertiary)
+                }
                 // Messages area fills all remaining space.
                 // ChatInputView lives in .safeAreaInset so its height changes (editorHeight,
                 // Wispr Flow insertions, etc.) never trigger re-measurement of ChatMessagesView.
@@ -83,11 +95,11 @@ struct TaskChatPanel: View {
                             onSend: { text in
                                 AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                                 Task {
-                                    // On the first message, provide task details through a scoped
-                                    // DesktopContextPacket instead of raw prompt prepending.
-                                    let isFirstMessage = taskState.messages.isEmpty
-                                    let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
-                                    await taskState.sendMessage(text, taskContext: taskContext)
+                                    await taskState.sendMessage(
+                                        text,
+                                        taskContext: coordinator.activeContextPacket
+                                    )
+                                    await coordinator.refreshActiveThread()
                                 }
                             },
                             onStop: {
@@ -95,7 +107,7 @@ struct TaskChatPanel: View {
                             },
                             isSending: taskState.isSending,
                             isStopping: taskState.isStopping,
-                            placeholder: "Ask about this task...",
+                            placeholder: "Continue this work...",
                             mode: $taskState.chatMode,
                             pendingText: $coordinator.pendingInputText,
                             inputText: $taskState.draftText
@@ -128,7 +140,7 @@ struct TaskChatPanel: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
 
-                Text(task?.description ?? "Task Chat")
+                Text(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
                     .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                     .lineLimit(1)
@@ -199,11 +211,11 @@ struct TaskChatPanel: View {
                 .scaledFont(size: 32)
                 .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
-            Text("Chat about this task")
+            Text("Work on this with Omi")
                 .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
-            Text("Ask questions, get suggestions, or discuss implementation details.")
+            Text("Continue the same work as context changes, without starting over.")
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -212,6 +224,131 @@ struct TaskChatPanel: View {
         .frame(maxWidth: .infinity)
         .padding()
         .padding(.vertical, 60)
+    }
+}
+
+private struct TaskThreadOverview: View {
+    let projection: TaskThreadProjection
+    let runtimeProjection: AgentRunProjection?
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    contextSection("Current state") {
+                        Text(projection.currentSummary)
+                    }
+
+                    if let runtimeProjection, runtimeProjection.status.isActive {
+                        contextSection("Omi activity") {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text(runtimeProjection.statusText ?? runtimeProjection.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                            }
+                        }
+                    }
+
+                    if !projection.recentEvents.isEmpty {
+                        contextSection("Recent changes") {
+                            ForEach(projection.recentEvents, id: \.eventId) { event in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(event.summary)
+                                    evidenceRow(event.evidenceRefs ?? [])
+                                }
+                            }
+                        }
+                    }
+
+                    if !projection.scopedTasks.isEmpty {
+                        contextSection("Tasks") {
+                            ForEach(projection.scopedTasks, id: \.id) { item in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(item.id == projection.activeTaskID ? OmiColors.textPrimary : OmiColors.textTertiary)
+                                    Text(item.description_)
+                                        .fontWeight(item.id == projection.activeTaskID ? .semibold : .regular)
+                                }
+                            }
+                        }
+                    }
+
+                    if !projection.artifactVersions.isEmpty {
+                        contextSection("Artifacts") {
+                            ForEach(projection.artifactVersions, id: \.artifactId) { artifact in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(
+                                            artifact.logicalKey
+                                                .replacingOccurrences(of: "_", with: " ")
+                                                .replacingOccurrences(of: "-", with: " ")
+                                                .capitalized
+                                        )
+                                            .fontWeight(.medium)
+                                        Text("v\(artifact.version)")
+                                            .foregroundColor(OmiColors.textTertiary)
+                                        if artifact.supersedesArtifactId == nil {
+                                            Text("Original")
+                                                .foregroundColor(OmiColors.textTertiary)
+                                        }
+                                    }
+                                    evidenceRow(artifact.evidenceRefs ?? [])
+                                    if let url = URL(string: artifact.uri), !artifact.uri.isEmpty {
+                                        Link("Open artifact", destination: url)
+                                            .foregroundColor(OmiColors.textPrimary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
+            .frame(maxHeight: 340)
+        } label: {
+            HStack {
+                Text("Ongoing work")
+                    .scaledFont(size: 11, weight: .semibold)
+                Spacer()
+                Text("\(projection.scopedTasks.count) tasks · \(projection.artifactVersions.count) artifacts")
+                    .scaledFont(size: 10)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .foregroundColor(OmiColors.textSecondary)
+        .background(OmiColors.backgroundSecondary.opacity(0.5))
+    }
+
+    private func contextSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .scaledFont(size: 9, weight: .semibold)
+                .foregroundColor(OmiColors.textTertiary)
+            content()
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func evidenceRow(_ refs: [OmiAPI.EvidenceRef]) -> some View {
+        if !refs.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: "link")
+                Text(refs.prefix(3).map { "\($0.kind.rawValue):\($0.id)" }.joined(separator: " · "))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
+        }
     }
 }
 
@@ -250,13 +387,13 @@ struct TaskChatPanelPlaceholder: View {
             // Empty state
             VStack(spacing: 16) {
                 Spacer()
-                Image(systemName: "text.bubble")
+                Image(systemName: coordinator.errorMessage == nil ? "text.bubble" : "exclamationmark.triangle")
                     .scaledFont(size: 36)
                     .foregroundColor(OmiColors.textTertiary.opacity(0.4))
-                Text("Select a task to chat")
+                Text(coordinator.errorMessage == nil ? "Select a task to continue" : "Couldn’t open this work")
                     .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
-                Text("Click on any task in the list to start a conversation about it.")
+                Text(coordinator.errorMessage ?? "Choose Work on this with Omi when a task deserves ongoing context.")
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)

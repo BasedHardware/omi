@@ -2876,7 +2876,7 @@ extension APIClient {
     idempotencyKey: String,
     accountGeneration: Int
   ) async throws -> OmiAPI.CandidateRecord {
-    try await candidateMutation(
+    try await taskIntelligenceMutation(
       endpoint: "v1/candidates",
       method: "POST",
       body: candidate,
@@ -2889,7 +2889,7 @@ extension APIClient {
     candidateID: String,
     accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    try await candidateMutation(
+    try await taskIntelligenceMutation(
       endpoint: "v1/candidates/\(candidateID)/accept",
       method: "POST",
       body: Optional<String>.none,
@@ -2902,7 +2902,7 @@ extension APIClient {
     try await get("v1/candidates/\(candidateID)")
   }
 
-  private func candidateMutation<Response: Decodable, Body: Encodable>(
+  private func taskIntelligenceMutation<Response: Decodable, Body: Encodable>(
     endpoint: String,
     method: String,
     body: Body?,
@@ -2919,6 +2919,89 @@ extension APIClient {
     }
     if let body { request.httpBody = try JSONEncoder().encode(body) }
     return try await performRequest(request)
+  }
+}
+
+// MARK: - Workstream-backed task threads
+
+extension APIClient {
+  func resolveTaskWorkIntent(
+    taskId: String,
+    title: String?,
+    objective: String?,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.WorkIntentReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/work-intents",
+      method: "POST",
+      body: OmiAPI.TaskOriginWorkIntent(
+        objective: objective,
+        origin: "task",
+        taskId: taskId,
+        title: title
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func resolveGoalWorkIntent(
+    goalId: String,
+    title: String,
+    objective: String,
+    anchorTaskDescription: String,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.WorkIntentReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/work-intents",
+      method: "POST",
+      body: OmiAPI.GoalOriginWorkIntent(
+        anchorTaskDescription: anchorTaskDescription,
+        goalId: goalId,
+        objective: objective,
+        origin: "goal",
+        title: title
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func getWorkstreamDetail(workstreamId: String) async throws -> OmiAPI.WorkstreamDetailProjection {
+    try await get("v1/workstreams/\(workstreamId)")
+  }
+
+  func createWorkstreamArtifact(
+    workstreamId: String,
+    artifact: OmiAPI.ArtifactDescriptorCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.ArtifactDescriptor {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/workstreams/\(workstreamId)/artifacts",
+      method: "POST",
+      body: artifact,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func upsertWorkstreamCheckpoint(
+    workstreamId: String,
+    runtimeId: String,
+    checkpoint: OmiAPI.ContinuationCheckpointUpsert,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.ContinuationCheckpoint {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/workstreams/\(workstreamId)/checkpoints/\(runtimeId)",
+      method: "PUT",
+      body: checkpoint,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
   }
 }
 

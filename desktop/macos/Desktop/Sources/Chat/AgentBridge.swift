@@ -296,6 +296,23 @@ actor AgentBridge {
     )
   }
 
+#if DEBUG
+  func debugAutomationControlTool(
+    name: String,
+    input: [String: Any],
+    ownerId: String = "scenario-13-automation-owner"
+  ) async throws -> String {
+    try await start()
+    return try await runtime.debugAutomationControlTool(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      name: name,
+      input: input,
+      ownerId: ownerId
+    )
+  }
+#endif
+
   func query(
     prompt: String,
     systemPrompt: String,
@@ -520,6 +537,36 @@ actor AgentBridge {
     }
   }
 }
+
+#if DEBUG
+extension AgentBridge.QueryResult {
+  /// Protocol-layer constructor for deterministic automation fixtures. Keeping
+  /// the wire session placeholder here prevents UI/domain code from depending
+  /// on transport identity fields.
+  static func debugFixture(
+    text: String,
+    runId: String,
+    attemptId: String,
+    artifacts: [AgentArtifactProjection]
+  ) -> Self {
+    Self(
+      text: text,
+      costUsd: 0,
+      omiSessionId: "debug-fixture-session",
+      runId: runId,
+      attemptId: attemptId,
+      adapterSessionId: nil,
+      terminalStatus: "succeeded",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      artifacts: artifacts,
+      completionDeltaArtifacts: artifacts
+    )
+  }
+}
+#endif
 
 enum BridgeError: LocalizedError {
   case nodeNotFound

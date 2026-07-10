@@ -1,0 +1,3 @@
+{
+  "change": "Added persistent task threads that keep shared context, cited draft history, and agent progress across related tasks and restarts"
+}

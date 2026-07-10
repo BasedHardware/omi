@@ -296,6 +296,70 @@ describe("turn-context", () => {
     expect(occurrences).toBe(1);
   });
 
+  it("persists minimized workstream context under workstream session identity", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-workstream";
+    const surfaceRef = {
+      surfaceKind: "workstream",
+      externalRefKind: "workstream",
+      externalRefId: "ws-1",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    let persistedInput: Record<string, any> | undefined;
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => {
+          persistedInput = input as unknown as Record<string, any>;
+          return {
+            packet: {
+              packetId: "ctx_workstream",
+              redactedPreviewJson: { objective: input.objective, snippetCount: input.snippets.length },
+            },
+          };
+        },
+        routeDesktopIntent: () => ({ intent: "new_run", explanation: "test" }),
+        listSessions: () => [],
+        inspectArtifacts: () => [],
+      },
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "Update the draft",
+      surfaceContextJson: JSON.stringify({
+        schema_version: 1,
+        workstream: { id: "ws-1", current_summary: "Pricing changed" },
+        current_task: { id: "task-2", status: "active" },
+        artifact_heads: [{ id: "artifact-v1", version: 1 }],
+      }),
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(assembled.prompt).toContain("ctx_workstream");
+    expect(persistedInput?.surfaceKind).toBe("workstream");
+    expect(persistedInput?.selectedToolBundles).toEqual([
+      "desktop.context.local_read",
+      "desktop.tasks.readwrite",
+    ]);
+    expect(persistedInput?.snippets).toHaveLength(1);
+    expect(persistedInput?.snippets[0]).toMatchObject({
+      snippetId: "workstream_context",
+      sourceKind: "chat_surface",
+      operation: "selected_workstream_context",
+      provenance: { workstreamId: "ws-1" },
+    });
+    expect(String(persistedInput?.snippets[0].content)).toContain("artifact-v1");
+    expect(String(persistedInput?.snippets[0].redactedContent)).not.toContain("Pricing changed");
+    expect(String(persistedInput?.snippets[0].redactedContent)).not.toContain("artifact-v1");
+    expect(String(persistedInput?.snippets[0].redactedContent)).toContain('"workstream_id":"ws-1"');
+  });
+
   it("labels voice turns with live:voice attribution", () => {
     const turn = {
       conversationId: "conv-1",

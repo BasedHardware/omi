@@ -143,6 +143,7 @@ import {
   migrateTaskSessionsToWorkstreams,
   persistWorkstreamArtifactVersion,
   persistWorkstreamContextPacket,
+  projectWorkstreamContinuity,
   projectCanonicalCandidateResolution,
   readWorkstreamContinuationCheckpoint,
   reconcileLegacyTaskCandidateOutbox,
@@ -168,6 +169,10 @@ export class AgentRuntimeKernel extends KernelSessions {
 
   persistWorkstreamArtifactVersion(input: PersistWorkstreamArtifactVersionInput) {
     return persistWorkstreamArtifactVersion(this.store, input);
+  }
+
+  projectWorkstreamContinuity(input: { ownerId: string; workstreamId: string; nowMs?: number }) {
+    return projectWorkstreamContinuity(this.store, input);
   }
 
   exportWorkstreamContinuationCheckpoint(input: WorkstreamSessionInput & {

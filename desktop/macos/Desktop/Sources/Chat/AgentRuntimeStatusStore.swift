@@ -21,6 +21,14 @@ struct AgentSurfaceReference: Hashable, Sendable {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }
 
+  static func workstream(workstreamId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "workstream",
+      externalRefKind: "workstream",
+      externalRefId: workstreamId
+    )
+  }
+
   /// Notch / floating "Omi Chat" text conversation. Used as an independent
   /// completed-agent-delta consumer so a finished sub-agent's artifacts can be
   /// delivered to the floating bar separately from the main chat.
@@ -150,6 +158,36 @@ final class AgentRuntimeStatusStore: ObservableObject {
 
   func projection(for surface: AgentSurfaceReference) -> AgentRunProjection? {
     projectionsBySurface[surface.key]
+  }
+
+  /// Rehydrates visible status from a kernel snapshot after app/runtime restart.
+  /// The kernel remains authoritative; this never manufactures a Swift run.
+  func restoreKernelProjection(
+    surface: AgentSurfaceReference,
+    sessionId: String,
+    runId: String,
+    status: AgentRunProjectionStatus,
+    statusText: String?,
+    errorMessage: String?,
+    updatedAt: Date,
+    completedAt: Date?
+  ) {
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+      "updatedAtMs": Int(updatedAt.timeIntervalSince1970 * 1_000),
+    ]
+    if let completedAt {
+      payload["completedAtMs"] = Int(completedAt.timeIntervalSince1970 * 1_000)
+    }
+    update(
+      surface: surface,
+      status: status,
+      statusText: statusText,
+      errorMessage: errorMessage,
+      terminal: status.isTerminal,
+      payload: payload
+    )
   }
 
   func clear(surface: AgentSurfaceReference) {
@@ -323,8 +361,16 @@ final class AgentRuntimeStatusStore: ObservableObject {
     projection.statusText = statusText
     projection.failure = failure ?? (terminal || status.isActive ? nil : projection.failure)
     projection.errorMessage = projection.failure?.displayMessage ?? errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
-    projection.updatedAt = Date()
-    projection.completedAt = terminal ? projection.updatedAt : nil
+    if let updatedAtMs = payload["updatedAtMs"] as? Int {
+      projection.updatedAt = Date(timeIntervalSince1970: Double(updatedAtMs) / 1_000)
+    } else {
+      projection.updatedAt = Date()
+    }
+    if terminal, let completedAtMs = payload["completedAtMs"] as? Int {
+      projection.completedAt = Date(timeIntervalSince1970: Double(completedAtMs) / 1_000)
+    } else {
+      projection.completedAt = terminal ? projection.updatedAt : nil
+    }
     projection.costUsd = (payload["costUsd"] as? Double) ?? projection.costUsd
     projection.inputTokens = (payload["inputTokens"] as? Int) ?? projection.inputTokens
     projection.outputTokens = (payload["outputTokens"] as? Int) ?? projection.outputTokens

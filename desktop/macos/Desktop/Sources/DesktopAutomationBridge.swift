@@ -2463,6 +2463,8 @@ final class DesktopAutomationBridge {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
       } else if payload.target == "overlay" {
         window = CloudConnectorGuidanceOverlay.shared.automationWindow
+      } else if payload.target == "task_thread" {
+        window = NSApp.windows.first(where: { $0.title == "Omi — Task thread scenario" && $0.isVisible })
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow

@@ -141,4 +141,87 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertNil(json["window_title"])
     XCTAssertNil(json["source_app"])
   }
+
+  func testResolveTaskWorkIntentUsesDurableIdentityHeadersAndTaskOrigin() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    do {
+      let _: OmiAPI.WorkIntentReceipt = try await client.resolveTaskWorkIntent(
+        taskId: "task-42",
+        title: "Draft launch email",
+        objective: "Prepare the launch email",
+        idempotencyKey: "work-intent:task:task-42",
+        accountGeneration: 11
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // Expected transport response from the capture protocol.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/work-intents")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "work-intent:task:task-42")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "11")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["origin"] as? String, "task")
+    XCTAssertEqual(json["task_id"] as? String, "task-42")
+    XCTAssertEqual(json["title"] as? String, "Draft launch email")
+    XCTAssertNil(json["goal_id"])
+  }
+
+  func testCreateWorkstreamArtifactUsesCanonicalVersionAndMutationHeaders() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    let artifact = OmiAPI.ArtifactDescriptorCreate(
+      contentHash: "sha256:1234567890abcdef",
+      evidenceEventIds: ["event-friday"],
+      evidenceRefs: [
+        OmiAPI.EvidenceRef(
+          deviceId: nil,
+          excerptHash: nil,
+          id: "conversation-friday",
+          kind: .conversation,
+          scope: .canonical,
+          version: "conversation.v1"
+        )
+      ],
+      kind: "email_draft",
+      logicalKey: "launch-email",
+      sourceRunId: "run-1",
+      supersedesArtifactId: "artifact-v1",
+      uri: "file:///tmp/launch-email-v2.md",
+      version: 2
+    )
+
+    do {
+      let _: OmiAPI.ArtifactDescriptor = try await client.createWorkstreamArtifact(
+        workstreamId: "workstream-1",
+        artifact: artifact,
+        idempotencyKey: "workstream-artifact:workstream-1:source-v2",
+        accountGeneration: 12
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // Expected transport response from the capture protocol.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/workstreams/workstream-1/artifacts")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "workstream-artifact:workstream-1:source-v2")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "12")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["logical_key"] as? String, "launch-email")
+    XCTAssertEqual(json["version"] as? Int, 2)
+    XCTAssertEqual(json["supersedes_artifact_id"] as? String, "artifact-v1")
+    XCTAssertEqual(json["evidence_event_ids"] as? [String], ["event-friday"])
+  }
 }

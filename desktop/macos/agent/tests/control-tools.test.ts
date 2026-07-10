@@ -10,6 +10,7 @@ import {
   agentControlToolSchemas,
   controlRequestKey,
   handleAgentControlToolCall,
+  INTERNAL_AGENT_CONTROL_TOOL_NAMES,
   isAgentControlToolName,
   registerSignedDirectControlOwner,
   resolveControlRequestContext,
@@ -42,6 +43,90 @@ afterEach(async () => {
 });
 
 describe("agent control tools", () => {
+  it("bridges workstream migration, artifact versioning, checkpointing, and idempotent replay", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const context = ownerContext(kernel);
+    const prepared = parseToolResult(
+      await handleAgentControlToolCall(context, "prepare_workstream_continuity", {
+        workstreamId: "workstream-1",
+        taskIds: [],
+      }),
+    );
+    expect(prepared.ok).toBe(true);
+    expect((prepared.session as { agentSessionId: string }).agentSessionId).toMatch(/^ses_/);
+
+    const input = {
+      workstreamId: "workstream-1",
+      context: {
+        canonicalSummary: "Draft ready for review",
+        redactedCanonicalSummary: "Draft ready for review",
+        summarySensitivityTier: "low",
+        latestEventSequence: 2,
+        selectedEvents: [{
+          eventId: "event-2",
+          type: "conversation",
+          summary: "Deadline moved to Friday",
+          occurredAtMs: 10,
+          evidenceRefs: [
+            { kind: "conversation", id: "conversation-1", scope: "canonical" },
+            { kind: "chat_message", id: "local-turn-1", scope: "device_local", device_id: "test-device" },
+          ],
+          sensitivityTier: "low",
+        }],
+        artifactHeads: [],
+        provenance: { snapshotVersion: "workstream:2", fetchedAtMs: 20, source: "canonical_backend" },
+      },
+      artifacts: [{
+        logicalKey: "launch-email",
+        evidenceRefs: [{ kind: "conversation", id: "conversation-1", scope: "canonical" }],
+        kind: "markdown",
+        role: "result",
+        uri: "file:///tmp/launch-email.md",
+        contentHash: "sha256:1234567890abcdef",
+        sourceArtifactId: "source-artifact-1",
+      }, {
+        logicalKey: "provider-reference",
+        evidenceRefs: [{ kind: "conversation", id: "conversation-1", scope: "canonical" }],
+        kind: "provider_reference",
+        role: "result",
+        uri: "adapter://provider/reference-1",
+        sourceArtifactId: "source-artifact-local-only",
+      }],
+    };
+    const first = parseToolResult(await handleAgentControlToolCall(context, "persist_workstream_continuity", input));
+    const firstDeliveries = first.deliveries as Array<{ deliveryId: string; payload: { kind: string } }>;
+    const artifactDelivery = firstDeliveries.find((delivery) => delivery.payload.kind === "artifact_descriptor")!;
+    const delivered = parseToolResult(await handleAgentControlToolCall(
+      context,
+      "resolve_workstream_continuity_delivery",
+      { deliveryId: artifactDelivery.deliveryId, status: "delivered", receipt: { artifact_id: "backend-v1" } },
+    ));
+    const replay = parseToolResult(await handleAgentControlToolCall(context, "persist_workstream_continuity", input));
+    const projected = parseToolResult(await handleAgentControlToolCall(context, "project_workstream_continuity", {
+      workstreamId: "workstream-1",
+    }));
+    expect(first.ok).toBe(true);
+    expect(firstDeliveries.map((delivery) => delivery.payload.kind).sort()).toEqual([
+      "artifact_descriptor",
+      "continuation_checkpoint",
+    ]);
+    expect((delivered.delivery as { status: string }).status).toBe("delivered");
+    expect((first.artifactVersions as Array<{ version: number }>)[0]?.version).toBe(1);
+    expect((replay.artifactVersions as Array<{ version: number }>)[0]?.version).toBe(1);
+    expect(((projected.projection as { artifactVersions: unknown[] }).artifactVersions).length).toBe(2);
+    expect((replay.deliveries as Array<{ deliveryId: string }>).some(
+      (delivery) => delivery.deliveryId === artifactDelivery.deliveryId,
+    )).toBe(false);
+    expect((first.checkpoint as { lastEventSequence: number }).lastEventSequence).toBe(2);
+    expect((first.checkpoint as { evidenceRefs: Array<{ scope: string }> }).evidenceRefs).toEqual([
+      expect.objectContaining({ scope: "canonical" }),
+    ]);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM workstream_artifact_versions").count).toBe(2);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM desktop_artifact_deliveries WHERE delivery_status = 'cancelled'",
+    ).count).toBe(1);
+  });
+
   it("owns schemas and definitions for the first kernel-backed tools", () => {
     expect(agentControlToolDefinitions.map((tool) => tool.name)).toEqual([
       "list_agent_sessions",
@@ -80,8 +165,10 @@ describe("agent control tools", () => {
   });
 
   it("keeps agent-control registry, manifest, and schemas in parity", () => {
-    expect(new Set(AGENT_CONTROL_TOOL_NAMES)).toEqual(new Set(Object.keys(agentControlToolSchemas)));
     expect(new Set(agentControlCapabilityManifest.map((tool) => tool.name))).toEqual(new Set(AGENT_CONTROL_TOOL_NAMES));
+    expect(new Set([...AGENT_CONTROL_TOOL_NAMES, ...INTERNAL_AGENT_CONTROL_TOOL_NAMES])).toEqual(
+      new Set(Object.keys(agentControlToolSchemas)),
+    );
   });
 
   it("validates the canonical Swift background-agent spawn payload", () => {
@@ -164,6 +251,24 @@ describe("agent control tools", () => {
     expect(result).toMatchObject({
       ok: false,
       error: { code: "invalid_tool_input" },
+    });
+    store.close();
+  });
+
+  it("accepts a signed direct-control owner guard when evaluating policy", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const result = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "evaluate_desktop_tool_policy", {
+        ownerId: "scenario-13-automation-owner",
+        selectedBundles: ["external.write_send"],
+        requestedBundles: ["external.write_send"],
+        externalSend: true,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      policy: { decision: "dispatch_required" },
     });
     store.close();
   });

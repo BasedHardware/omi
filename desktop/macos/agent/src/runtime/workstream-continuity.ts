@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { DesktopActionQueueItem } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type BuiltDesktopContextPacket } from "./desktop-context-packet.js";
 import { generateAgentId } from "./sqlite-store.js";
+import { artifactFromRow } from "./kernel-support.js";
 import { resolveSurfaceSession, type ResolveSurfaceSessionResult } from "./surface-session.js";
 import type {
   AgentArtifact,
@@ -108,6 +109,7 @@ export interface PersistWorkstreamContextInput extends WorkstreamSessionInput {
 export interface PersistWorkstreamArtifactVersionInput extends WorkstreamSessionInput {
   logicalKey: string;
   evidenceRefs: EvidenceRef[];
+  sourceArtifactId?: string;
   artifact: Omit<NewAgentArtifact, "sessionId">;
   nowMs?: number;
 }
@@ -118,6 +120,12 @@ export interface WorkstreamArtifactVersion {
   artifact: AgentArtifact;
   supersedesArtifactId: string | null;
   evidenceRefs: EvidenceRef[];
+}
+
+export interface WorkstreamContinuityProjection {
+  agentSessionId: string | null;
+  artifactVersions: WorkstreamArtifactVersion[];
+  checkpoint: WorkstreamContinuationCheckpoint | null;
 }
 
 export interface WorkstreamContinuationCheckpoint {
@@ -300,6 +308,27 @@ export function persistWorkstreamArtifactVersion(
   if (evidenceRefs.length === 0) throw new Error("Workstream artifact versions require cited evidence");
   return store.withTransaction(() => {
     const resolved = resolveWorkstreamSession(store, input, () => now);
+    const sourceArtifactId = input.sourceArtifactId?.trim();
+    if (sourceArtifactId) {
+      const existing = store.getOptionalRow(
+        `SELECT v.version, v.supersedes_artifact_id, v.evidence_refs_json, a.*
+         FROM workstream_artifact_versions v
+         JOIN artifacts a ON a.artifact_id = v.artifact_id
+         WHERE v.session_id = ? AND v.logical_key = ?
+           AND json_extract(a.metadata_json, '$.sourceArtifactId') = ?
+         ORDER BY v.version DESC LIMIT 1`,
+        [resolved.agentSessionId, logicalKey, sourceArtifactId],
+      );
+      if (existing) {
+        return {
+          logicalKey,
+          version: Number(existing.version),
+          artifact: artifactFromRow(existing),
+          supersedesArtifactId: nullableText(existing.supersedes_artifact_id),
+          evidenceRefs: parseEvidenceRefs(String(existing.evidence_refs_json)),
+        };
+      }
+    }
     const executionScope = resolveArtifactExecutionScope(
       store,
       resolved.agentSessionId,
@@ -322,6 +351,7 @@ export function persistWorkstreamArtifactVersion(
       createdAtMs: input.artifact.createdAtMs ?? now,
       metadataJson: JSON.stringify({
         ...parseObject(input.artifact.metadataJson),
+        ...(sourceArtifactId ? { sourceArtifactId } : {}),
         workstreamId: input.workstreamId,
         logicalKey,
         logicalVersion: version,
@@ -355,6 +385,42 @@ export function persistWorkstreamArtifactVersion(
     });
     return { logicalKey, version, artifact, supersedesArtifactId, evidenceRefs };
   });
+}
+
+export function projectWorkstreamContinuity(
+  store: AgentStore,
+  input: { ownerId: string; workstreamId: string; nowMs?: number },
+): WorkstreamContinuityProjection {
+  const mapping = store.getOptionalRow(
+    `SELECT agent_session_id FROM surface_conversations
+     WHERE owner_id = ? AND surface_kind = 'workstream'
+       AND external_ref_kind = 'workstream' AND external_ref_id = ?`,
+    [input.ownerId, input.workstreamId],
+  );
+  if (!mapping) return { agentSessionId: null, artifactVersions: [], checkpoint: null };
+  const agentSessionId = String(mapping.agent_session_id);
+  const artifactVersions = store.allRows(
+    `SELECT v.logical_key, v.version, v.supersedes_artifact_id, v.evidence_refs_json, a.*
+     FROM workstream_artifact_versions v
+     JOIN artifacts a ON a.artifact_id = v.artifact_id
+     WHERE v.session_id = ? ORDER BY v.logical_key ASC, v.version ASC`,
+    [agentSessionId],
+  ).map((row) => ({
+    logicalKey: String(row.logical_key),
+    version: Number(row.version),
+    artifact: artifactFromRow(row),
+    supersedesArtifactId: nullableText(row.supersedes_artifact_id),
+    evidenceRefs: parseEvidenceRefs(String(row.evidence_refs_json)),
+  }));
+  return {
+    agentSessionId,
+    artifactVersions,
+    checkpoint: readWorkstreamContinuationCheckpoint(store, {
+      ownerId: input.ownerId,
+      workstreamId: input.workstreamId,
+      nowMs: input.nowMs,
+    }),
+  };
 }
 
 export function exportWorkstreamContinuationCheckpoint(

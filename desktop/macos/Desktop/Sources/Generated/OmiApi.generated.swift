@@ -1786,6 +1786,40 @@ public enum OmiAPI {
   }
 
 
+  public struct GoalOriginWorkIntent: Codable {
+    public let anchorTaskDescription: String
+    public let goalId: String
+    public let objective: String
+    public let origin: String?
+    public let title: String
+
+    private enum CodingKeys: String, CodingKey {
+      case anchorTaskDescription = "anchor_task_description"
+      case goalId = "goal_id"
+      case objective
+      case origin
+      case title
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      anchorTaskDescription = try c.decode(String.self, forKey: .anchorTaskDescription)
+      goalId = try c.decode(String.self, forKey: .goalId)
+      objective = try c.decode(String.self, forKey: .objective)
+      origin = try c.decodeIfPresent(String.self, forKey: .origin)
+      title = try c.decode(String.self, forKey: .title)
+    }
+
+    public init(anchorTaskDescription: String, goalId: String, objective: String, origin: String?, title: String) {
+      self.anchorTaskDescription = anchorTaskDescription
+      self.goalId = goalId
+      self.objective = objective
+      self.origin = origin
+      self.title = title
+    }
+  }
+
+
   public struct GoalProgressEvent: Codable {
     public let createdAt: String
     public let eventId: String
@@ -2670,6 +2704,36 @@ public enum OmiAPI {
   }
 
 
+  public struct TaskOriginWorkIntent: Codable {
+    public let objective: String?
+    public let origin: String?
+    public let taskId: String
+    public let title: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case objective
+      case origin
+      case taskId = "task_id"
+      case title
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      objective = try c.decodeIfPresent(String.self, forKey: .objective)
+      origin = try c.decodeIfPresent(String.self, forKey: .origin)
+      taskId = try c.decode(String.self, forKey: .taskId)
+      title = try c.decodeIfPresent(String.self, forKey: .title)
+    }
+
+    public init(objective: String?, origin: String?, taskId: String, title: String?) {
+      self.objective = objective
+      self.origin = origin
+      self.taskId = taskId
+      self.title = title
+    }
+  }
+
+
   public enum TaskOwner: String, Codable, CaseIterable {
     case user
     case other
@@ -2925,6 +2989,44 @@ public enum OmiAPI {
     public init(lang: String, text: String) {
       self.lang = lang
       self.text = text
+    }
+  }
+
+
+  public struct WorkIntentReceipt: Codable {
+    public let createdAt: String
+    public let goalId: String?
+    public let newlyCreated: Bool
+    public let receiptId: String
+    public let taskId: String
+    public let workstreamId: String
+
+    private enum CodingKeys: String, CodingKey {
+      case createdAt = "created_at"
+      case goalId = "goal_id"
+      case newlyCreated = "newly_created"
+      case receiptId = "receipt_id"
+      case taskId = "task_id"
+      case workstreamId = "workstream_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      createdAt = try c.decode(String.self, forKey: .createdAt)
+      goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
+      newlyCreated = try c.decode(Bool.self, forKey: .newlyCreated)
+      receiptId = try c.decode(String.self, forKey: .receiptId)
+      taskId = try c.decode(String.self, forKey: .taskId)
+      workstreamId = try c.decode(String.self, forKey: .workstreamId)
+    }
+
+    public init(createdAt: String, goalId: String?, newlyCreated: Bool, receiptId: String, taskId: String, workstreamId: String) {
+      self.createdAt = createdAt
+      self.goalId = goalId
+      self.newlyCreated = newlyCreated
+      self.receiptId = receiptId
+      self.taskId = taskId
+      self.workstreamId = workstreamId
     }
   }
 
@@ -10250,7 +10352,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func resolveWorkIntentV1WorkIntentsPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func resolveWorkIntentV1WorkIntentsPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> WorkIntentReceipt {
     let _path = "/v1/work-intents"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -10268,7 +10370,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode(WorkIntentReceipt.self, from: data)
   }
 
   public static func importTaskGoalLinksV1WorkflowMigrationsTaskGoalLinksPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
