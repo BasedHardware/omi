@@ -118,6 +118,9 @@ jobs:
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
 
+      - name: Test automatic desktop beta candidate gate
+        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
+
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
 

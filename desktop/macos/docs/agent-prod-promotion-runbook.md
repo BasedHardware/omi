@@ -34,7 +34,7 @@ Identify and report:
 - newest published GitHub macOS release;
 - whether a newer auto-release or Codemagic build is currently in flight.
 
-A tag is eligible for nomination only after Codemagic has published the immutable ZIP/DMG build candidate, `qualify-desktop-beta.sh` has completed exact-tag T2 qualification, and the beta workflow has promoted its explicit beta pointer. If the newest tag is still a build candidate, queued, building, or unqualified, hold and report it as not ready.
+A tag is eligible for nomination only after Codemagic has published the immutable ZIP/DMG build candidate, the automatic signed-digest, static, exact-tag T2, and fault-suite gates have passed, and the beta workflow has promoted its explicit beta pointer. Manual `qualify-desktop-beta.sh` remains a recovery path. If the newest tag is still a build candidate, queued, building, or unqualified, hold and report it as not ready.
 
 ## 2. Verify release artifact alignment
 
@@ -84,9 +84,11 @@ restart, and authenticated API), not only curl an API with an injected bearer
 token. `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER='Bearer ...'` is only for the
 separate minimal chat endpoint probe.
 
-Beta exposure is gated: Codemagic uploads a non-live candidate, the signed-artifact
-smoke runs against that digest, `qualify-desktop-beta.sh` rebuilds the exact tag and runs
-the T2 harness, and only the beta promotion workflow can advance visibility.
+Beta exposure is gated: Codemagic uploads a non-live candidate, verifies the published
+digests against signed-smoke evidence, and runs static checks, exact-tag T2, and the
+fault-injection suite. Only the beta promotion workflow can advance visibility, and
+automatic requests must still target the newest tag. Stable nomination and promotion
+remain manual-only.
 For stable promotion, add an upgrade-path canary: previous signed release signed
 in → update to candidate → restart → auth, helper runtime, and local storage
 still work.
