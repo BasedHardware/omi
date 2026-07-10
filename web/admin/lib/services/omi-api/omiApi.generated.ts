@@ -4675,7 +4675,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "drain_candidate_integrations_v1_candidates_integrations_drain_post";
       responses: {
-        "200": unknown;
+        "200": Record<string, number>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8914,7 +8914,7 @@ export async function create_candidate_v1_candidates_post(body: CandidateCreate,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function drain_candidate_integrations_v1_candidates_integrations_drain_post(query: { limit?: number }, init?: OmiApiClientInit): Promise<unknown> {
+export async function drain_candidate_integrations_v1_candidates_integrations_drain_post(query: { limit?: number }, init?: OmiApiClientInit): Promise<Record<string, number>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates/integrations/drain`;
   const _params = query ? Object.entries(query)

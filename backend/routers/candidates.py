@@ -97,7 +97,7 @@ def drain_candidate_integrations(
     account_generation: AccountGenerationHeader,
     limit: int = Query(default=100, ge=1, le=500),
     uid: str = Depends(auth.get_current_user_uid),
-):
+) -> dict[str, int]:
     _require_candidate_write_control(uid, account_generation)
     return {
         'scheduled': candidate_service.drain_candidate_integrations(

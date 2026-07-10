@@ -27767,7 +27767,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Drain Candidate Integrations V1 Candidates Integrations Drain Post",
+                  "type": "object"
+                }
               }
             },
             "description": "Successful Response"
