@@ -31,6 +31,7 @@ export interface ActionItem {
   capture_owner?: "user" | "other" | "unknown" | null;
   completed?: boolean;
   completed_at?: string | null;
+  concrete_deliverable?: boolean | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;

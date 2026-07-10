@@ -148,6 +148,7 @@ public enum OmiAPI {
     public let captureOwner: String?
     public let completed: Bool?
     public let completedAt: String?
+    public let concreteDeliverable: Bool?
     public let conversationId: String?
     public let createdAt: String?
     public let description_: String
@@ -163,6 +164,7 @@ public enum OmiAPI {
       case captureOwner = "capture_owner"
       case completed
       case completedAt = "completed_at"
+      case concreteDeliverable = "concrete_deliverable"
       case conversationId = "conversation_id"
       case createdAt = "created_at"
       case description_ = "description"
@@ -180,6 +182,7 @@ public enum OmiAPI {
       captureOwner = try c.decodeIfPresent(String.self, forKey: .captureOwner)
       completed = try c.decodeIfPresent(Bool.self, forKey: .completed)
       completedAt = try c.decodeIfPresent(String.self, forKey: .completedAt)
+      concreteDeliverable = try c.decodeIfPresent(Bool.self, forKey: .concreteDeliverable)
       conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
       createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
       description_ = try c.decode(String.self, forKey: .description_)
@@ -189,13 +192,14 @@ public enum OmiAPI {
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 
-    public init(candidateAction: String?, captureConfidence: Double?, captureKind: String?, captureOwner: String?, completed: Bool?, completedAt: String?, conversationId: String?, createdAt: String?, description_: String, dueAt: String?, ownershipConfidence: Double?, targetTaskId: String?, updatedAt: String?) {
+    public init(candidateAction: String?, captureConfidence: Double?, captureKind: String?, captureOwner: String?, completed: Bool?, completedAt: String?, concreteDeliverable: Bool?, conversationId: String?, createdAt: String?, description_: String, dueAt: String?, ownershipConfidence: Double?, targetTaskId: String?, updatedAt: String?) {
       self.candidateAction = candidateAction
       self.captureConfidence = captureConfidence
       self.captureKind = captureKind
       self.captureOwner = captureOwner
       self.completed = completed
       self.completedAt = completedAt
+      self.concreteDeliverable = concreteDeliverable
       self.conversationId = conversationId
       self.createdAt = createdAt
       self.description_ = description_
