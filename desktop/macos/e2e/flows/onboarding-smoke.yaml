@@ -1,0 +1,27 @@
+version: 2
+name: onboarding-smoke
+tier: manual
+description: "Manual only: reset_onboarding restarts the app. State corruption fixed in Wave 7 — run twice locally before promoting to T2."
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Document reset path (manual — app restart)
+    do: "Manual probe only: `./scripts/omi-ctl action reset_onboarding` (same path as tray Reset Onboarding). Wave 7 fixed @AppStorage writeback ordering and uses AppState.current. App restarts into onboarding step 0. Keep manual until green twice locally."
+    expect:
+      interactive_count: { min: 0 }
+
+  - id: S2
+    name: Expected post-reset surface
+    do: "After restart, verify onboarding welcome / first step is visible. Promote to T2 only after two consecutive local greens."
+    expect:
+      interactive_count: { min: 1 }
