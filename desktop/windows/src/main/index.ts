@@ -1,4 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer,
+  Notification
+} from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -39,6 +48,34 @@ import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
+import { initSentry } from './sentry'
+import { isQuitting, markQuitting, quitApp } from './lifecycle'
+import { createTray, updateTrayState, destroyTray } from './tray'
+import { initAutoUpdater } from './updater'
+import { registerRecordShortcut, setRecordAccelerator, getRecordShortcut } from './shortcuts'
+import { getAppSettings, setAppSettings } from './appSettings'
+
+// Crash/error reporting must init before anything else can throw. No-op unless a
+// DSN is configured; only enabled for packaged builds (see sentry.ts).
+initSentry()
+
+// The main window, hoisted so the tray, updater, second-instance handoff, and
+// lifecycle IPC can all reach it. Assigned once in whenReady (the local
+// `mainWindow` there is the non-null instance; this mirrors it for external use).
+let mainWindowRef: BrowserWindow | null = null
+
+/** Surface the main window: create if missing, un-minimize, show, focus. */
+function surfaceMainWindow(): void {
+  const win = mainWindowRef
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+// Tray-only start: when launched at login with --hidden, create the window but
+// don't show it (the user opens it from the tray). See setLoginItemSettings.
+const startHidden = process.argv.includes('--hidden')
 
 // Default the perf log to the user data dir so marks double as lightweight prod
 // telemetry. The bench runner overrides OMI_PERF_LOG to point at .bench/.
@@ -144,6 +181,13 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
 
+// Single-instance lock: only ONE Omi runs per userData profile. A second launch
+// hands off to the first (see the 'second-instance' handler) and exits. Acquired
+// AFTER the sandbox repin above so distinct OMI_SANDBOX profiles (and the E2E
+// harness's --user-data-dir) each get their own lock instead of contending.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
+
 const icon = nativeImage.createFromPath(iconPath)
 import {
   remapConversationId,
@@ -153,6 +197,23 @@ import {
   deleteLocalConversation,
   updateLocalConversationTitle
 } from './ipc/db'
+
+// The first time the user closes the window to the tray, tell them Omi is still
+// running (otherwise "it disappeared but didn't quit" is confusing). Shown once,
+// persisted in app-settings.json.
+function maybeShowCloseToTrayNotice(): void {
+  if (getAppSettings().closeToTrayNoticeShown) return
+  setAppSettings({ closeToTrayNoticeShown: true })
+  if (!Notification.isSupported()) return
+  try {
+    new Notification({
+      title: 'Omi is still running',
+      body: 'Omi keeps listening in the tray. Right-click the tray icon to pause or quit.'
+    }).show()
+  } catch (e) {
+    console.warn('[tray] close-to-tray notice failed:', e)
+  }
+}
 
 function createWindow(): BrowserWindow {
   // Create the browser window. 1280x820 gives the two-column Record layout
@@ -188,7 +249,26 @@ function createWindow(): BrowserWindow {
   // unchanged frames, and the foreground-window metadata records when Omi is
   // frontmost. (The floating overlay keeps its own protection in overlay/window.ts.)
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // Tray-only login start (--hidden): keep the window hidden until the user
+    // opens it from the tray.
+    if (!startHidden) mainWindow.show()
+  })
+
+  // Close = hide to tray (Windows stays resident in the tray), unless the app is
+  // really quitting. The overlay and background services keep running so Omi
+  // keeps listening. Real teardown happens on quit (see will-quit).
+  mainWindow.on('close', (e) => {
+    if (!isQuitting()) {
+      e.preventDefault()
+      mainWindow.hide()
+      maybeShowCloseToTrayNotice()
+    }
+  })
+
+  // Ctrl+Q quits for real while the window is focused (tray Quit and the
+  // app:quit IPC are the other real-quit paths).
+  mainWindow.webContents.on('before-input-event', (_e, input) => {
+    if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'q') quitApp()
   })
   perfMark('window:created')
 
@@ -249,6 +329,9 @@ function createWindow(): BrowserWindow {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Lost the single-instance race: this process is already quitting — do no
+  // window/service setup, just let it exit and hand off to the first instance.
+  if (!gotSingleInstanceLock) return
   perfMark('main:ready')
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
@@ -377,6 +460,33 @@ app.whenReady().then(async () => {
   registerScreenSynthHandlers()
 
   const mainWindow = createWindow()
+  mainWindowRef = mainWindow
+
+  // System tray: the app's anchor while windows are hidden. Reflects listening
+  // state (renderer reports via tray:state), toggles the window, and owns Quit.
+  createTray({
+    showMainWindow: surfaceMainWindow,
+    hideMainWindow: () => mainWindow.hide(),
+    isMainWindowVisible: () => mainWindow.isVisible() && !mainWindow.isMinimized(),
+    toggleListening: () => mainWindow.webContents.send('tray:toggle-listening'),
+    openSettings: () => {
+      surfaceMainWindow()
+      mainWindow.webContents.send('tray:open-settings')
+    },
+    quit: quitApp
+  })
+
+  // Auto-update (packaged builds only; see updater.ts). Never crashes the app.
+  initAutoUpdater(() => mainWindowRef)
+
+  // E2E hook (only when OMI_E2E=1; never in prod): expose a couple of
+  // main-process facts the lifecycle harness asserts via electronApp.evaluate.
+  if (process.env.OMI_E2E === '1') {
+    ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
+      trayCreated: true,
+      isQuitting: () => isQuitting()
+    }
+  }
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
@@ -404,24 +514,53 @@ app.whenReady().then(async () => {
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
   // first summon (so it inherits the already signed-in Firebase session).
-  registerOverlayHandlers(() => {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
-  })
+  registerOverlayHandlers(surfaceMainWindow)
   const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, toggleOverlay)
   if (!shortcutOk) {
     console.warn(
       '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
     )
   }
-  // Closing the main window must also tear down the always-alive (hidden) overlay
-  // window — otherwise it keeps a window open, 'window-all-closed' never fires, and
-  // the app lingers as an invisible background process (overlay has skipTaskbar).
-  mainWindow.on('closed', () => {
-    const overlay = getOverlayWindow()
-    if (overlay && !overlay.isDestroyed()) overlay.destroy()
+
+  // Mic record chord (default Ctrl+Space, rebindable + persisted). Fires
+  // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
+  // window if it was hidden, so a global hotkey both starts capture AND brings Omi
+  // to the front.
+  const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
+    surfaceMainWindow()
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('recorder:hotkey', 'mic')
+    }
   })
+  if (!recordState.registered) {
+    console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
+  }
+
+  // Renderer → tray: reflect the reported listening state on the tray icon/menu.
+  ipcMain.on('tray:state', (_e, state) => updateTrayState(state))
+
+  // Launch-at-login (writes the HKCU Run key; --hidden → tray-only start).
+  ipcMain.handle('app:get-login-item', () => ({
+    openAtLogin: app.getLoginItemSettings().openAtLogin
+  }))
+  ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath, args: ['--hidden'] })
+  })
+
+  // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
+  // taken chord returns registered=false so the UI can prompt for another.
+  ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  ipcMain.handle('shortcuts:set-record', (_e, accelerator: string) => {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, registered: getRecordShortcut().registered }
+    }
+    const next = setRecordAccelerator(accelerator.trim())
+    if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
+    return { ok: next.registered, registered: next.registered }
+  })
+
+  // Renderer → quit for real (menu/button in the UI).
+  ipcMain.on('app:quit', () => quitApp())
 
   // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
   // flush marks, and quit. Guarded entirely behind OMI_BENCH so prod is unaffected.
@@ -493,22 +632,32 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindowRef = createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+// A second launch attempt handed off to us (see requestSingleInstanceLock):
+// surface the existing window instead of starting a new instance.
+app.on('second-instance', () => {
+  surfaceMainWindow()
 })
 
-// On a normal shutdown: flush buffered perf marks, release the overlay shortcut,
-// and tear down the automation helper process + foreground-window hook.
+// On win32 the app lives in the tray, so it must NOT quit when the last window
+// hides/closes — only an explicit Quit ends it (see lifecycle.quitApp). macOS
+// keeps its historical behavior; other platforms quit when all windows close.
+app.on('window-all-closed', () => {
+  if (process.platform === 'win32' || process.platform === 'darwin') return
+  app.quit()
+})
+
+// On a normal shutdown: mark quitting (so any late close handlers don't cancel),
+// tear down the tray + always-alive overlay window, flush perf marks, release the
+// overlay shortcut, and dispose the automation helper + foreground-window hook.
 app.on('will-quit', () => {
+  markQuitting()
+  destroyTray()
+  const overlay = getOverlayWindow()
+  if (overlay && !overlay.isDestroyed()) overlay.destroy()
   unregisterOverlayShortcut()
   flushPerfMarks()
   automationBridge.dispose()

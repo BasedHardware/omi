@@ -6,20 +6,14 @@
 // in the renderer (overlay.css) recolors it toward black while staying
 // translucent. transparent:false lets the backdrop composite and DWM auto-round
 // the corners. Visual confirmation is manual GUI.
-import { app, BrowserWindow, screen } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { computeOverlayBounds, OVERLAY_WIDTH } from './bounds'
 import { rendererBaseUrl } from '../rendererServer'
+import { isQuitting } from '../lifecycle'
 
 let overlayWindow: BrowserWindow | null = null
-
-// Distinguishes a real app shutdown from the user clicking the overlay's native
-// close button: on quit we let the window actually close; otherwise we hide it.
-let isQuitting = false
-app.on('before-quit', () => {
-  isQuitting = true
-})
 
 export function getOverlayWindow(): BrowserWindow | null {
   return overlayWindow
@@ -88,7 +82,7 @@ export function createOverlayWindow(): BrowserWindow {
   // shortcut can re-open it), not destroy it. Real teardown uses destroy()
   // (main-window close / quit), which bypasses this 'close' handler.
   win.on('close', (e) => {
-    if (!isQuitting) {
+    if (!isQuitting()) {
       e.preventDefault()
       hideOverlay()
     }

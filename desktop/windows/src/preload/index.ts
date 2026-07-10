@@ -151,7 +151,29 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
-  }
+  },
+  // --- Tray + lifecycle (Phase 1) ---
+  trayReportState: (state) => ipcRenderer.send('tray:state', state),
+  onTrayToggleListening: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tray:toggle-listening', listener)
+    return () => ipcRenderer.removeListener('tray:toggle-listening', listener)
+  },
+  onTrayOpenSettings: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tray:open-settings', listener)
+    return () => ipcRenderer.removeListener('tray:open-settings', listener)
+  },
+  getLoginItemSettings: () => ipcRenderer.invoke('app:get-login-item'),
+  setLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:set-login-item', enabled),
+  quitApp: () => ipcRenderer.send('app:quit'),
+  onUpdateReady: (cb: (info: { version: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, info: { version: string }): void => cb(info)
+    ipcRenderer.on('update:ready', listener)
+    return () => ipcRenderer.removeListener('update:ready', listener)
+  },
+  getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
+  setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator)
 }
 
 const omiOverlay: OmiOverlayApi = {

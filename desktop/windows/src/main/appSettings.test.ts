@@ -1,0 +1,58 @@
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+
+// Point the store at a throwaway userData dir so the round-trip touches a real
+// file without hitting the developer's actual profile.
+const dir = mkdtempSync(join(tmpdir(), 'omi-appsettings-'))
+vi.mock('electron', () => ({
+  app: { getPath: (): string => dir },
+  globalShortcut: { register: (): boolean => true, unregister: (): void => {}, isRegistered: (): boolean => false }
+}))
+
+import { getAppSettings, setAppSettings, sanitizeAppSettings } from './appSettings'
+
+afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+describe('appSettings', () => {
+  beforeEach(() => {
+    // Reset to defaults between tests by clearing the file.
+    try {
+      rmSync(join(dir, 'app-settings.json'), { force: true })
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('returns defaults when no file exists', () => {
+    const s = getAppSettings()
+    expect(s.closeToTrayNoticeShown).toBe(false)
+    expect(s.recordHotkey).toBe('Ctrl+Space')
+  })
+
+  it('round-trips a patched flag and preserves untouched fields', () => {
+    setAppSettings({ closeToTrayNoticeShown: true })
+    const s = getAppSettings()
+    expect(s.closeToTrayNoticeShown).toBe(true)
+    expect(s.recordHotkey).toBe('Ctrl+Space')
+  })
+
+  it('round-trips a rebound record hotkey', () => {
+    setAppSettings({ recordHotkey: 'Ctrl+Shift+O' })
+    expect(getAppSettings().recordHotkey).toBe('Ctrl+Shift+O')
+  })
+
+  it('sanitizes bad input back to safe defaults', () => {
+    expect(sanitizeAppSettings({} as never)).toEqual({
+      closeToTrayNoticeShown: false,
+      recordHotkey: 'Ctrl+Space'
+    })
+    expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
+    expect(sanitizeAppSettings({ recordHotkey: 42 } as never).recordHotkey).toBe('Ctrl+Space')
+    expect(sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown).toBe(
+      false
+    )
+    expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+  })
+})
