@@ -2594,6 +2594,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
+    @StateObject private var suggestedStore = SuggestedTasksStore()
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -2698,12 +2699,14 @@ struct TasksPage: View {
         .onAppear {
             Task { @MainActor in
                 await viewModel.loadTasksForFirstUse()
+                await suggestedStore.load()
                 chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
                 // If tasks are already loaded, notify sidebar to clear loading indicator
                 if !viewModel.isLoading {
                     NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
                 }
             }
+            suggestedStore.registerAutomationActions()
             // Restore panel UI if coordinator was open when we navigated away
             if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
                 showChatPanel = true
@@ -2852,7 +2855,8 @@ struct TasksPage: View {
                 loadingView
             } else if let error = viewModel.error, viewModel.tasks.isEmpty {
                 errorView(error)
-            } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating {
+            } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating
+                        && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading {
                 emptyView
             } else {
                 // Render the list view (which hosts the InlineTaskCreationRow) whenever
@@ -3626,6 +3630,13 @@ struct TasksPage: View {
                     let onlyDone = viewModel.selectedTags.contains(.done) && !viewModel.selectedTags.contains(.todo)
                     let onlyDeleted = (viewModel.selectedTags.contains(.removedByAI) || viewModel.selectedTags.contains(.removedByMe)) && !viewModel.selectedTags.contains(.todo) && !viewModel.selectedTags.contains(.done)
                     if !onlyDone && !onlyDeleted && !viewModel.isMultiSelectMode {
+                        SuggestedTasksSection(
+                            store: suggestedStore,
+                            onCanonicalChange: {
+                                await viewModel.loadTasks()
+                            }
+                        )
+
                         // Inline creation at top (Cmd+N)
                         if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
                             InlineTaskCreationRow(
@@ -3834,6 +3845,7 @@ struct TasksPage: View {
             }
             .refreshable {
                 await viewModel.loadTasks()
+                await suggestedStore.load()
             }
             .onAppear { viewModel.scrollProxy = proxy }
         }
@@ -4800,6 +4812,8 @@ struct TaskRow: View {
                         if isNewlyCreated {
                             NewBadge()
                         }
+
+                        AutoAcceptedTaskWhyButton(task: task)
 
                         // Explicit durable-work action. Merely viewing/selecting a
                         // task never creates a thread.

@@ -142,6 +142,68 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertNil(json["source_app"])
   }
 
+  func testSuggestedFeedbackSendsStableIdempotencyWithoutGenerationHeader() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    do {
+      let _: OmiAPI.FeedbackRecord = try await client.recordTaskFeedback(
+        OmiAPI.FeedbackCreate(
+          action: .dismiss,
+          contextSnapshotHash: nil,
+          interventionId: "intervention-1",
+          laterUntil: nil,
+          reason: .not_mine,
+          subjectId: "candidate-1",
+          subjectKind: .candidate
+        ),
+        idempotencyKey: "suggested:candidate-1:not-mine"
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // Expected transport response from the capture protocol.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/task-intelligence/feedback")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "suggested:candidate-1:not-mine")
+    XCTAssertNil(request.headers["X-Account-Generation"])
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["action"] as? String, "dismiss")
+    XCTAssertEqual(json["reason"] as? String, "not_mine")
+    XCTAssertEqual(json["subject_id"] as? String, "candidate-1")
+  }
+
+  func testRejectCandidateSendsGenerationAndReason() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    do {
+      let _: OmiAPI.CandidateResolutionReceipt = try await client.rejectCanonicalCandidate(
+        candidateID: "candidate-1",
+        reason: "already_handled",
+        accountGeneration: 9
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // Expected transport response from the capture protocol.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/candidates/candidate-1/reject")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "9")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["reason"] as? String, "already_handled")
+  }
+
   func testResolveTaskWorkIntentUsesDurableIdentityHeadersAndTaskOrigin() async throws {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [CandidateURLCapture.self]

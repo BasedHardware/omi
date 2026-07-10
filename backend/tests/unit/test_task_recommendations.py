@@ -460,6 +460,27 @@ def test_active_exact_suppression_removes_only_matching_material_version(monkeyp
     assert [item.subject_id for item in visible.recommendations] == ['task-1']
 
 
+def test_candidate_suppression_key_is_bounded_and_shared_across_candidate_surfaces(monkeypatch):
+    task_subject = fixture_subject('candidate-1', {'capture_confidence': 1, 'has_concrete_next_action': True})
+    candidate_subject = recommendations.EvaluationSubject(
+        **{
+            **task_subject.__dict__,
+            'kind': RecommendationSubjectKind.candidate,
+            'feedback_subject_kind': FeedbackSubjectKind.candidate,
+        }
+    )
+    shared_key = recommendations._stable_id('candidate', 'candidate-1')
+    harness = ProjectionHarness(monkeypatch, subjects=[candidate_subject], suppressed={shared_key})
+
+    projection = recommendations.evaluate(
+        'u1', EvaluationRequest(), judgment=RecordedJudgment(['candidate-1']), now=NOW
+    )
+
+    assert projection.recommendations == []
+    assert recommendations._recommendation_dedupe_key(candidate_subject) == shared_key
+    assert len(shared_key) <= 128
+
+
 def test_decision_records_are_bounded_and_do_not_store_private_headline_or_reasoning(monkeypatch):
     private_text = 'Email Sarah about the secret acquisition number 12345'
     subject = fixture_subject('task-private', {'capture_confidence': 1, 'has_concrete_next_action': True})

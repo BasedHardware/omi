@@ -2907,18 +2907,75 @@ extension APIClient {
     method: String,
     body: Body?,
     idempotencyKey: String?,
-    accountGeneration: Int
+    accountGeneration: Int?
   ) async throws -> Response {
     guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
     var request = URLRequest(url: url)
     request.httpMethod = method
     request.allHTTPHeaderFields = try await buildHeaders()
-    request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    if let accountGeneration {
+      request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    }
     if let idempotencyKey {
       request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
     }
     if let body { request.httpBody = try JSONEncoder().encode(body) }
     return try await performRequest(request)
+  }
+}
+
+// MARK: - Suggested task review and feedback
+
+extension APIClient {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
+    let encodedStatus = status.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? status
+    let response: OmiAPI.CandidateListResponse = try await get(
+      "v1/candidates?status=\(encodedStatus)&limit=\(limit)&offset=0")
+    return response.candidates
+  }
+
+  func rejectCanonicalCandidate(
+    candidateID: String,
+    reason: String?,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates/\(candidateID)/reject",
+      method: "POST",
+      body: OmiAPI.CandidateResolutionRequest(reason: reason),
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func registerTaskIntervention(
+    _ request: OmiAPI.InterventionCreate,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.InterventionRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/interventions",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: nil
+    )
+  }
+
+  func recordTaskFeedback(
+    _ request: OmiAPI.FeedbackCreate,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.FeedbackRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/feedback",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: nil
+    )
+  }
+
+  func updateSuggestedTaskDescription(id: String, description: String) async throws {
+    _ = try await updateActionItem(id: id, description: description)
   }
 }
 

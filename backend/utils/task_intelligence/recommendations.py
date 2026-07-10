@@ -92,6 +92,15 @@ def _stable_id(prefix: str, *parts: object) -> str:
     return f'{prefix}_{hashlib.sha256(encoded).hexdigest()[:32]}'
 
 
+def _recommendation_dedupe_key(subject: EvaluationSubject) -> str:
+    # Suggested and What Matters Now are two presentation surfaces for the same
+    # pending Candidate. Keep one bounded key so feedback on either surface
+    # suppresses the equivalent intervention everywhere.
+    if subject.kind == RecommendationSubjectKind.candidate:
+        return _stable_id('candidate', subject.subject_id)
+    return _stable_id('recommendation', subject.kind.value, subject.subject_id, subject.material_token)
+
+
 def _as_aware(value: Any) -> Optional[datetime]:
     if not isinstance(value, datetime):
         return None
@@ -468,7 +477,7 @@ def filter_shortlist(subjects: list[EvaluationSubject], suppressed_dedupe_keys: 
 
     shortlist: list[EvaluationSubject] = []
     for subject in subjects:
-        dedupe_key = _stable_id('recommendation', subject.kind.value, subject.subject_id, subject.material_token)
+        dedupe_key = _recommendation_dedupe_key(subject)
         fact_window = (
             subject.eligibility.recent_material_activity
             or subject.eligibility.inside_due_window
@@ -639,7 +648,7 @@ def evaluate(
     )
     recommendations: list[Recommendation] = []
     for subject, selection in selected:
-        dedupe_key = _stable_id('recommendation', subject.kind.value, subject.subject_id, subject.material_token)
+        dedupe_key = _recommendation_dedupe_key(subject)
         intervention_id = _stable_id('intervention', uid, output_version, dedupe_key)
         recommendations.append(
             Recommendation(
