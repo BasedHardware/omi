@@ -3,11 +3,17 @@ import {
   DOT_COUNT,
   DEFAULT_ORB_PARAMS,
   ORB_PRESETS,
+  AMP_FLOOR,
+  WAVE_GAIN_MIN,
+  WAVE_GAIN_MAX,
+  THINK_WAVE_GAIN,
   easeInOut,
   easeInOutVelocity,
   orbitAngle,
   orbitVelocity,
-  mergeBump,
+  shapeAmplitude,
+  stepAmplitudeEnvelope,
+  stepMergeEnvelope,
   mergeAmount,
   genesisScale,
   genesisSettled,
@@ -21,7 +27,6 @@ describe('easeInOut', () => {
     expect(easeInOut(0)).toBe(0)
     expect(easeInOut(1)).toBe(1)
     expect(easeInOut(0.5)).toBeCloseTo(0.5, 6)
-    // Monotone non-decreasing.
     let prev = 0
     for (let i = 0; i <= 100; i++) {
       const v = easeInOut(i / 100)
@@ -33,7 +38,6 @@ describe('easeInOut', () => {
   it('has the velocity S-curve: zero at both ends, single peak at the middle', () => {
     expect(easeInOutVelocity(0)).toBe(0)
     expect(easeInOutVelocity(1)).toBe(0)
-    // Rises to the midpoint peak, then falls — exactly one sign change of slope.
     let last = easeInOutVelocity(0)
     let phase: 'rising' | 'falling' = 'rising'
     for (let i = 1; i <= 100; i++) {
@@ -43,7 +47,6 @@ describe('easeInOut', () => {
       last = v
     }
     expect(phase).toBe('falling')
-    // Peak is at t=0.5.
     expect(easeInOutVelocity(0.5)).toBeCloseTo(1.875, 3)
   })
 
@@ -62,7 +65,6 @@ describe('orbitAngle', () => {
     expect(orbitAngle(0, P)).toBeCloseTo(0, 9)
     expect(orbitAngle(P.orbitPeriod, P)).toBeCloseTo(step, 9)
     expect(orbitAngle(5 * P.orbitPeriod, P)).toBeCloseTo(5 * step, 9)
-    // During the rest tail of a cycle the angle is pinned at the step.
     const restT = P.orbitPeriod * (1 - P.restFraction / 2)
     expect(orbitAngle(restT, P)).toBeCloseTo(step, 9)
     expect(orbitVelocity(restT, P)).toBe(0)
@@ -74,7 +76,7 @@ describe('orbitAngle', () => {
       const t = (i / 400) * 3 * P.orbitPeriod
       const a = orbitAngle(t, P)
       expect(a).toBeGreaterThanOrEqual(prev - 1e-9)
-      expect(a - prev).toBeLessThan(0.2) // no jumps
+      expect(a - prev).toBeLessThan(0.2)
       prev = a
     }
   })
@@ -89,30 +91,89 @@ describe('orbitAngle', () => {
   })
 })
 
-describe('merge', () => {
-  it('mergeBump eases in, holds, eases out', () => {
-    expect(mergeBump(0)).toBe(0)
-    expect(mergeBump(1)).toBe(0)
-    expect(mergeBump(0.5)).toBe(1)
-    expect(mergeBump(0.15)).toBeGreaterThan(0)
-    expect(mergeBump(0.15)).toBeLessThan(1)
+describe('bounded amplitude (voice → wave)', () => {
+  it('shapeAmplitude maps any input into [AMP_FLOOR, 1] — no spikes, no flatline', () => {
+    expect(shapeAmplitude(0)).toBeCloseTo(AMP_FLOOR, 9)
+    expect(shapeAmplitude(1)).toBeLessThanOrEqual(1)
+    expect(shapeAmplitude(1)).toBeGreaterThan(0.9)
+    // Clipping / absurd input saturates at 1, never beyond.
+    expect(shapeAmplitude(5)).toBeLessThanOrEqual(1)
+    expect(shapeAmplitude(1e6)).toBeLessThanOrEqual(1)
+    expect(shapeAmplitude(-3)).toBeCloseTo(AMP_FLOOR, 9)
+    // Monotone.
+    let prev = 0
+    for (let i = 0; i <= 40; i++) {
+      const v = shapeAmplitude(i / 20)
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-12)
+      prev = v
+    }
   })
 
-  it('idle merges periodically and fully separates in between', () => {
-    // Inside the excursion: merged.
-    expect(mergeAmount(P.mergeDuration / 2, 'idle', 0, P)).toBe(1)
-    // After the excursion, before the next period: separated.
-    expect(mergeAmount(P.mergeDuration + 1, 'idle', 0, P)).toBe(0)
-    // Next period repeats.
-    expect(mergeAmount(P.mergePeriod + P.mergeDuration / 2, 'idle', 0, P)).toBe(1)
+  it('soft knee: compresses the top more than the bottom', () => {
+    const low = shapeAmplitude(0.4) - shapeAmplitude(0.2)
+    const high = shapeAmplitude(1.0) - shapeAmplitude(0.8)
+    expect(high).toBeLessThan(low)
   })
 
-  it('thinking ramps to a held blob; listening/agents stay separated', () => {
-    expect(mergeAmount(100, 'thinking', 0, P)).toBe(0)
-    expect(mergeAmount(100, 'thinking', 0.4, P)).toBeGreaterThan(0)
-    expect(mergeAmount(100, 'thinking', 2, P)).toBe(1)
-    expect(mergeAmount(P.mergeDuration / 2, 'listening', 50, P)).toBe(0)
-    expect(mergeAmount(P.mergeDuration / 2, 'agents', 50, P)).toBe(0)
+  it('envelope: fast attack, slower release, bounded', () => {
+    // Attack from 0 toward 1.
+    const attacked = stepAmplitudeEnvelope(0, 1, 0.06)
+    // Release from 1 toward 0 over the same dt moves less.
+    const released = 1 - stepAmplitudeEnvelope(1, 0, 0.06)
+    expect(attacked).toBeGreaterThan(released)
+    // Square-wave input stays within [0, 1.5-tolerated] and never overshoots.
+    let env = 0
+    for (let i = 0; i < 200; i++) {
+      env = stepAmplitudeEnvelope(env, i % 20 < 10 ? 1 : 0, 1 / 60)
+      expect(env).toBeGreaterThanOrEqual(0)
+      expect(env).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('waveAmp is bounded for ANY amplitude input (fixed design range)', () => {
+    for (const amp of [0, 0.2, 1, 3, 100]) {
+      const f = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 2, speechMerge: 1, amplitude: amp })
+      expect(f.waveAmp).toBeGreaterThanOrEqual(P.noiseAmp * WAVE_GAIN_MIN)
+      expect(f.waveAmp).toBeLessThanOrEqual(P.noiseAmp * WAVE_GAIN_MAX)
+      expect(f.amplitude).toBeGreaterThanOrEqual(AMP_FLOOR)
+      expect(f.amplitude).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('speech merge envelope', () => {
+  it('attacks faster than it releases and clamps to [0,1]', () => {
+    let up = 0
+    let steps = 0
+    while (up < 1 && steps < 1000) {
+      up = stepMergeEnvelope(up, 1, 1 / 60)
+      steps++
+    }
+    const attackSteps = steps
+    let down = 1
+    steps = 0
+    while (down > 0 && steps < 1000) {
+      down = stepMergeEnvelope(down, 0, 1 / 60)
+      steps++
+    }
+    expect(attackSteps).toBeLessThan(steps) // dissolve is slower than the gather
+    expect(stepMergeEnvelope(1, 1, 1)).toBe(1)
+    expect(stepMergeEnvelope(0, 0, 1)).toBe(0)
+  })
+})
+
+describe('mergeAmount', () => {
+  it('speaking/listening/idle follow the speechMerge envelope', () => {
+    expect(mergeAmount('speaking', 5, 0)).toBe(0)
+    expect(mergeAmount('speaking', 5, 1)).toBe(1)
+    expect(mergeAmount('listening', 5, 0.5)).toBeCloseTo(easeInOut(0.5), 9)
+    expect(mergeAmount('idle', 5, 0)).toBe(0)
+  })
+
+  it('thinking is autonomous (ignores speech), agents never merges', () => {
+    expect(mergeAmount('thinking', 0, 1)).toBe(0)
+    expect(mergeAmount('thinking', 2, 0)).toBe(1)
+    expect(mergeAmount('agents', 5, 1)).toBe(0)
   })
 })
 
@@ -121,7 +182,6 @@ describe('genesisScale (summon spring)', () => {
     expect(genesisScale(0, P)).toBe(0)
     expect(genesisScale(0.02, P)).toBeGreaterThan(0)
     expect(genesisScale(0.02, P)).toBeLessThan(0.3)
-    // Overshoot exists but stays tasteful (< 10%).
     let peak = 0
     for (let i = 0; i <= 300; i++) peak = Math.max(peak, genesisScale(i / 100, P))
     expect(peak).toBeGreaterThan(1)
@@ -138,74 +198,121 @@ describe('genesisScale (summon spring)', () => {
 
 describe('computeOrbFrame', () => {
   it('always yields 8 dots, inside the disc', () => {
-    for (const state of ['idle', 'listening', 'thinking', 'agents'] as const) {
-      const f = computeOrbFrame({ t: 7.3, state, stateTime: 2, amplitude: 0.8 })
+    for (const state of ['idle', 'listening', 'speaking', 'thinking', 'agents'] as const) {
+      const f = computeOrbFrame({ t: 7.3, state, stateTime: 2, amplitude: 0.8, speechMerge: 1 })
       expect(f.dots).toHaveLength(DOT_COUNT)
       for (const d of f.dots) {
         const extent = Math.hypot(d.x, d.y) + d.r + d.halfLen
-        expect(extent).toBeLessThanOrEqual(1.001) // disc-radius units
+        expect(extent).toBeLessThanOrEqual(1.001)
       }
     }
   })
 
-  it('listening breathes with amplitude', () => {
-    const quiet = computeOrbFrame({ t: 1, state: 'listening', stateTime: 5, amplitude: 0 })
-    const loud = computeOrbFrame({ t: 1, state: 'listening', stateTime: 5, amplitude: 1 })
-    expect(loud.dots[0].r).toBeGreaterThan(quiet.dots[0].r)
-    expect(Math.hypot(loud.dots[0].x, loud.dots[0].y)).toBeGreaterThan(
-      Math.hypot(quiet.dots[0].x, quiet.dots[0].y)
-    )
-  })
-
-  it('thinking pulls dots to the center (merged blob)', () => {
-    const f = computeOrbFrame({ t: 100, state: 'thinking', stateTime: 3 })
+  it('speaking conglomerates: full speechMerge pulls every dot to the center pool', () => {
+    const f = computeOrbFrame({ t: 100, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.6 })
     expect(f.merge).toBe(1)
+    expect(f.centerR).toBeGreaterThan(0)
     for (const d of f.dots) {
       expect(Math.hypot(d.x, d.y)).toBeLessThan(0.01)
-      expect(d.r).toBeGreaterThan(P.dotRadius) // grown while pooled
+      expect(d.r).toBeGreaterThan(P.dotRadius)
+    }
+  })
+
+  it('the speech wave tracks amplitude; the pool swells with the voice', () => {
+    const quiet = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0 })
+    const loud = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 1 })
+    expect(loud.waveAmp).toBeGreaterThan(quiet.waveAmp)
+    expect(loud.centerR).toBeGreaterThan(quiet.centerR)
+  })
+
+  it('thinking is DISTINCT from the speech blob: tighter pool, fixed lower wave, no audio coupling', () => {
+    const think0 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 0 })
+    const think1 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 1 })
+    const speak = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.9 })
+    // Zero audio coupling.
+    expect(think1.waveAmp).toBe(think0.waveAmp)
+    expect(think1.centerR).toBe(think0.centerR)
+    expect(think0.waveAmp).toBeCloseTo(P.noiseAmp * THINK_WAVE_GAIN, 9)
+    // Tighter + calmer than a loud speech blob.
+    expect(think0.centerR).toBeLessThan(speak.centerR)
+    expect(think0.waveAmp).toBeLessThan(speak.waveAmp)
+  })
+
+  it('quiet listening keeps the calm ring (no merge without a speech signal)', () => {
+    const f = computeOrbFrame({ t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 })
+    expect(f.merge).toBe(0)
+    expect(f.centerR).toBe(0)
+    for (const d of f.dots) {
+      expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
     }
   })
 
   it('agents settles dot pairs onto identical centered capsules (four clean pills)', () => {
     const f = computeOrbFrame({ t: 100, state: 'agents', stateTime: 3 })
     const ys = new Set(f.dots.map((d) => d.y.toFixed(4)))
-    expect(ys.size).toBe(4) // four rows
+    expect(ys.size).toBe(4)
     for (const d of f.dots) {
       expect(d.halfLen).toBeCloseTo(P.pillHalfLen, 6)
-      expect(d.x).toBeCloseTo(0, 6) // centered — superimposed pair = ONE clean bar
+      expect(d.x).toBeCloseTo(0, 6)
     }
-    // Each pair is exactly superimposed (identical primitives, no dumbbell).
-    for (let row = 0; row < 4; row++) {
-      const a = f.dots[row * 2]
-      const b = f.dots[row * 2 + 1]
-      expect(a.x).toBeCloseTo(b.x, 9)
-      expect(a.y).toBeCloseTo(b.y, 9)
-      expect(a.r).toBeCloseTo(b.r, 9)
-      expect(a.halfLen).toBeCloseTo(b.halfLen, 9)
+    // Rows are assigned by ring y-order (not index): group by y — each row
+    // must hold EXACTLY two superimposed identical primitives (one clean bar).
+    const rows = new Map<string, typeof f.dots>()
+    for (const d of f.dots) {
+      const key = d.y.toFixed(6)
+      rows.set(key, [...(rows.get(key) ?? []), d])
+    }
+    expect(rows.size).toBe(4)
+    for (const pair of rows.values()) {
+      expect(pair).toHaveLength(2)
+      expect(pair[0].x).toBeCloseTo(pair[1].x, 9)
+      expect(pair[0].r).toBeCloseTo(pair[1].r, 9)
+      expect(pair[0].halfLen).toBeCloseTo(pair[1].halfLen, 9)
     }
   })
 
-  it('mid-merge frames always carry a center pool (no punched-hole artifact)', () => {
-    for (const stateTime of [0.3, 0.4, 0.6, 1, 3]) {
-      const f = computeOrbFrame({ t: 30, state: 'thinking', stateTime })
-      if (f.merge > 0) expect(f.centerR).toBeGreaterThan(0)
+  it('agents transition is staged: the glide settles before any stretch begins', () => {
+    // While any dot is still gliding (off its row-center x=0... y=row), no
+    // capsule stretch may be engaged — stretching mid-glide bridged pills
+    // across rows (review round 2).
+    const rowYs = [0, 1, 2, 3].map((row) => (row - 1.5) * P.pillRowPitch)
+    for (let s = 0.05; s < 0.7; s += 0.05) {
+      const f = computeOrbFrame({ t: 100, state: 'agents', stateTime: s })
+      const stretched = f.dots.some((d) => d.halfLen > 1e-3)
+      if (!stretched) continue
+      // Once any stretch is engaged, every dot must already be settled on a
+      // row center (x=0, y = one of the four rows).
+      for (const d of f.dots) {
+        expect(Math.abs(d.x)).toBeLessThan(1e-3)
+        expect(Math.min(...rowYs.map((y) => Math.abs(d.y - y)))).toBeLessThan(1e-3)
+      }
     }
-    const separated = computeOrbFrame({ t: 12, state: 'idle', stateTime: 12 })
-    expect(separated.centerR).toBe(0)
+  })
+
+  it('the center pool never exists below the visibility floor (no speck)', () => {
+    for (let m = 0; m <= 1.0001; m += 0.02) {
+      const f = computeOrbFrame({ t: 0.41, state: 'speaking', stateTime: 1, speechMerge: m })
+      expect(f.centerR === 0 || f.centerR > 0.02).toBe(true)
+    }
   })
 
   it('genesis defaults to materialized; genesisTime drives the spring', () => {
     expect(computeOrbFrame({ t: 0, state: 'idle', stateTime: 0 }).genesis).toBe(1)
-    expect(
-      computeOrbFrame({ t: 0, state: 'idle', stateTime: 0, genesisTime: 0 }).genesis
-    ).toBe(0)
+    expect(computeOrbFrame({ t: 0, state: 'idle', stateTime: 0, genesisTime: 0 }).genesis).toBe(0)
   })
 
-  it('all presets produce in-bounds frames across a full cycle', () => {
+  it('all presets produce in-bounds frames across speech and orbit', () => {
     for (const params of Object.values(ORB_PRESETS)) {
       for (let i = 0; i < 24; i++) {
-        const t = (i / 24) * params.mergePeriod
-        const f = computeOrbFrame({ t, state: 'idle', stateTime: t, params })
+        const t = (i / 24) * 12
+        const f = computeOrbFrame({
+          t,
+          state: 'speaking',
+          stateTime: t,
+          speechMerge: (i % 12) / 11,
+          amplitude: 1,
+          params
+        })
         for (const d of f.dots) {
           expect(Math.hypot(d.x, d.y) + d.r + d.halfLen).toBeLessThanOrEqual(1.001)
         }

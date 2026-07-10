@@ -28,12 +28,40 @@ type RenderSpec = {
   t: number
   state?: OrbState
   stateTime?: number
+  /** RAW voice level (shaped/bounded inside choreography). */
   amplitude?: number
+  /** Speech-merge envelope 0..1 (the caller scrubs it deterministically). */
+  speechMerge?: number
+  /** Use the built-in deterministic voice demo timeline: speech starts at
+   *  VOICE_T0, ends at VOICE_T1; amplitude follows a syllable-like envelope.
+   *  Overrides amplitude/speechMerge from `t`. */
+  voiceDemo?: boolean
   genesisTime?: number
   morph?: number
   preset?: string
   params?: Partial<OrbParams>
   rect?: OrbRect
+}
+
+// --- Deterministic recorded "voice" (closed-form, scrubbable) -----------------
+const VOICE_T0 = 1.0
+const VOICE_T1 = 5.0
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
+
+/** Syllable-ish amplitude envelope: sum of hann bumps at ~3.2Hz, plus a slow
+ *  phrase contour. Purely a function of t. */
+export function demoVoice(t: number): { amplitude: number; speechMerge: number } {
+  // Attack (0.45s) after onset minus release (0.85s) after end — the same
+  // shape stepMergeEnvelope converges to for this timeline.
+  const speechMerge = Math.min(clamp01((t - VOICE_T0) / 0.45), 1 - clamp01((t - VOICE_T1) / 0.85))
+  let amplitude = 0
+  if (t >= VOICE_T0 && t <= VOICE_T1) {
+    const u = t - VOICE_T0
+    const syllable = 0.5 - 0.5 * Math.cos(2 * Math.PI * 3.2 * u)
+    const phrase = 0.55 + 0.45 * Math.sin((u / (VOICE_T1 - VOICE_T0)) * Math.PI)
+    amplitude = syllable * phrase
+  }
+  return { amplitude, speechMerge }
 }
 
 const qs = new URLSearchParams(location.search)
@@ -60,11 +88,13 @@ const api = {
   /** Render exactly one deterministic frame. */
   renderAt(spec: RenderSpec): void {
     if (!this.renderer) this.renderer = new OrbRenderer(canvas)
+    const demo = spec.voiceDemo ? demoVoice(spec.t) : null
     const frame = computeOrbFrame({
       t: spec.t,
       state: spec.state ?? (qs.get('state') as OrbState) ?? 'idle',
       stateTime: spec.stateTime ?? spec.t,
-      amplitude: spec.amplitude,
+      amplitude: demo?.amplitude ?? spec.amplitude,
+      speechMerge: demo?.speechMerge ?? spec.speechMerge,
       genesisTime: spec.genesisTime,
       morph: spec.morph,
       params: resolveParams(spec)
@@ -91,6 +121,12 @@ const api = {
   },
   liveSetState(state: OrbState): void {
     this.animator?.setState(state)
+  },
+  liveSetSpeechActive(active: boolean): void {
+    this.animator?.setSpeechActive(active)
+  },
+  liveSetAmplitude(a: number): void {
+    this.animator?.setAmplitude(a)
   },
   liveSetVisible(visible: boolean): void {
     this.animator?.setVisible(visible)

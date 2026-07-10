@@ -17,7 +17,6 @@ const preset = process.argv[2] ?? 'default'
 
 // Default-preset timings (see choreography.ts).
 const ORBIT = 3.6
-const MERGE_DUR = 5.2
 
 function seq(n, fn) {
   return Array.from({ length: n }, (_, i) => fn(i, n))
@@ -29,24 +28,30 @@ const ROWS = [
     frames: seq(16, (i) => ({ t: 7.2 + (i / 15) * ORBIT, state: 'idle' }))
   },
   {
-    name: `idle — merge excursion (dots pool into the puddle blob, split back out), t=0..6.2`,
-    frames: seq(16, (i) => ({ t: (i / 15) * (MERGE_DUR + 1), state: 'idle' }))
-  },
-  {
-    name: 'listening — amplitude sweep 0→1→0 while orbiting (subtle breathe)',
+    name: 'speaking — voice-demo timeline: speech starts at t=1 (dots conglomerate), waves with the voice, ends at t=5 (dissolves back out); t=0.4..6.4',
     frames: seq(16, (i) => ({
-      t: 7.2 + (i / 15) * ORBIT,
-      state: 'listening',
-      stateTime: 5,
-      amplitude: Math.sin((i / 15) * Math.PI)
+      t: 0.4 + (i / 15) * 6.0,
+      state: 'speaking',
+      stateTime: 0.4 + (i / 15) * 6.0,
+      voiceDemo: true
     }))
   },
   {
-    name: 'thinking — ramp into the held oscillating blob, stateTime 0..3',
+    name: 'speaking held — amplitude sweep 0→1→0 on the merged blob (the wave visibly tracks the voice, bounded)',
+    frames: seq(16, (i) => ({
+      t: 40 + (i / 15) * 2,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: Math.sin((i / 15) * Math.PI) * 1.2
+    }))
+  },
+  {
+    name: 'thinking — ramp into the DISTINCT autonomous blob (tighter, faster pulse, no audio), stateTime 0..3',
     frames: seq(16, (i) => ({ t: 30 + (i / 15) * 3, state: 'thinking', stateTime: (i / 15) * 3 }))
   },
   {
-    name: 'agents — dots morph into four status pills, stateTime 0..1.4',
+    name: 'agents — dots glide to rows, then stretch into four status pills, stateTime 0..1.4',
     frames: seq(16, (i) => ({ t: 12 + (i / 15) * 1.4, state: 'agents', stateTime: (i / 15) * 1.4 }))
   },
   {
@@ -62,10 +67,10 @@ const ROWS = [
     }))
   },
   {
-    name: 'presets — default / calm / lively / notch: separated (t=12) then merged (t=2.6)',
+    name: 'presets — default / calm / lively / notch: idle ring (t=12) then speaking blob (amp 0.7)',
     frames: ['default', 'calm', 'lively', 'notch'].flatMap((p) => [
       { t: 12, state: 'idle', preset: p },
-      { t: 2.6, state: 'idle', preset: p }
+      { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.7, preset: p }
     ])
   }
 ]

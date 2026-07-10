@@ -30,6 +30,7 @@ uniform float u_noiseAmp;    // wobble amplitude at full merge (disc units)
 uniform float u_noiseFreq;   // wobble spatial frequency
 uniform float u_sminK;       // smin blend distance at full merge (disc units)
 uniform float u_centerR;     // center pool-blob radius (disc units, 0 = none)
+uniform float u_amplitude;   // shaped voice amplitude 0..1 (bounded upstream)
 
 out vec4 outColor;
 
@@ -97,10 +98,15 @@ void main() {
   }
 
   // Low-frequency wobble on the blob contour, scaled by merge so the resting
-  // ring stays crisp. Two scrolling noise reads → gentle oscillation.
+  // ring stays crisp. Two scrolling noise reads → gentle oscillation; the
+  // finer octave is weighted by the (bounded) voice amplitude so louder
+  // speech reads as finer, livelier ripples — never a spike (u_noiseAmp and
+  // u_amplitude are both compressed into fixed ranges upstream).
+  float o2 = 0.35 + 0.65 * u_amplitude;
   float n = vnoise(q * u_noiseFreq + vec2(u_noiseTime * 0.35, -u_noiseTime * 0.27))
-          + vnoise(q * (u_noiseFreq * 2.1) - vec2(u_noiseTime * 0.22, u_noiseTime * 0.31)) * 0.5;
-  dDots += (n / 1.5 - 0.5) * u_noiseAmp * u_merge * u_disc * 2.0;
+          + vnoise(q * (u_noiseFreq * 2.1) - vec2(u_noiseTime * 0.22, u_noiseTime * 0.31)) * o2;
+  float nspan = 1.0 + o2;
+  dDots += (n / nspan - 0.5) * u_noiseAmp * u_merge * u_disc * 2.0;
 
   // Antialias width from screen-space derivative of the (scaled) field.
   float aa = fwidth(length(q)) * 1.2 + 1e-4;

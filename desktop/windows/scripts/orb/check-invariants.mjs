@@ -3,7 +3,12 @@
 //   2. transparent background (1px border + corners fully alpha-0)
 //   3. orb stays in bounds (never touches the canvas edge)
 //   4. blob count via connected components matches the choreography
-//      (8 separated dots / 1 thinking blob / 4 agent pills / 0 at genesis-zero)
+//      (8 separated dots / 1 speech-or-thinking blob / 4 agent pills / 0 at
+//      genesis-zero), with no punched holes and no stray specks
+//   5. BOUNDED speech wave: for extreme amplitude inputs (silence, clipping,
+//      square wave, seeded noise) the blob's iso-contour stays inside designed
+//      min/max radii every frame and never flatlines to a hard circle
+//   6. agents transition never bridges pills across rows
 // Run: node scripts/orb/check-invariants.mjs  (exit 1 on any violation)
 import { openHarness, renderPixels } from './lib/harness.mjs'
 import {
@@ -16,22 +21,27 @@ import {
 } from './lib/pixels.mjs'
 
 const CASES = [
-  // Idle, dots separated (outside the merge excursion window).
-  { name: 'idle-separated-a', spec: { t: 12, state: 'idle' }, blobs: 8 },
-  { name: 'idle-separated-b', spec: { t: 14.7, state: 'idle' }, blobs: 8 },
-  // Idle, fully merged (inside the excursion hold). Wavy but hole-free.
-  { name: 'idle-merged', spec: { t: 2.6, state: 'idle' }, blobs: 1, noHoles: true, wavy: true },
-  // Idle, mid-transition — anything between one puddle and eight dots is legal,
-  // but never a punched hole (regression: smin ring artifact).
-  { name: 'idle-merging', spec: { t: 0.9, state: 'idle' }, blobsBetween: [1, 8], noHoles: true },
-  { name: 'idle-splitting', spec: { t: 4.4, state: 'idle' }, blobsBetween: [1, 8], noHoles: true },
-  // Listening at high amplitude.
-  { name: 'listening-loud', spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.9 }, blobs: 8 },
-  // Thinking: the held blob — one piece, hole-free at every merge stage, and a
-  // genuinely wavy (but tasteful) contour once held.
-  { name: 'thinking-early', spec: { t: 30.35, state: 'thinking', stateTime: 0.35 }, noHoles: true },
-  { name: 'thinking-mid', spec: { t: 30.6, state: 'thinking', stateTime: 0.6 }, noHoles: true },
-  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1, noHoles: true, wavy: true },
+  // Idle: calm ring — dots separated, never merged without a speech signal.
+  { name: 'idle-a', spec: { t: 12, state: 'idle' }, blobs: 8 },
+  { name: 'idle-b', spec: { t: 14.7, state: 'idle' }, blobs: 8 },
+  // Quiet listening: identical calm ring even with ambient level present.
+  { name: 'listening-quiet', spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 }, blobs: 8 },
+  // Speaking: the voice blob — wavy, solid, hole-free.
+  {
+    name: 'speaking-held',
+    spec: { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.7 },
+    blobs: 1,
+    noHoles: true,
+    wavy: true
+  },
+  // Conglomerate / dissolve mid-points (any 1..8 pieces, no holes, no specks).
+  { name: 'speaking-gather', spec: { t: 1.3, state: 'speaking', stateTime: 0.3, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
+  { name: 'speaking-mid', spec: { t: 1.45, state: 'speaking', stateTime: 0.45, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
+  { name: 'speaking-dissolve', spec: { t: 5.5, state: 'speaking', stateTime: 4.5, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
+  // Thinking: the autonomous blob — solid at every ramp stage.
+  { name: 'thinking-early', spec: { t: 30.35, state: 'thinking', stateTime: 0.35 }, noHoles: true, noSpecks: true },
+  { name: 'thinking-mid', spec: { t: 30.6, state: 'thinking', stateTime: 0.6 }, noHoles: true, noSpecks: true },
+  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1, noHoles: true },
   // Agents: four status pills.
   { name: 'agents', spec: { t: 40, state: 'agents', stateTime: 3 }, blobs: 4 },
   // Genesis: scale zero renders NOTHING; early spring frames stay in bounds.
@@ -44,6 +54,22 @@ const CASES = [
 ]
 
 const PRESETS = ['default', 'calm', 'lively', 'notch']
+
+/** Smallest legitimate feature ≈ a genesis-scale dot; anything under this in a
+ *  normal frame is a stray speck (review round 2: the center-pool speck). */
+const MIN_COMPONENT_PX = 25
+
+// Deterministic seeded PRNG for the noise amplitude sequence.
+function mulberry32(seed) {
+  let a = seed
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
 
 async function main() {
   const { page, close } = await openHarness('?size=96&dpr=2')
@@ -85,6 +111,10 @@ async function main() {
           const holes = countHolePixels(img)
           if (holes > 3) failures.push(`${tag}: ${holes} hole pixel(s) punched inside the blob`)
         }
+        if (c.noSpecks) {
+          const speck = comps.find((k) => k.size < MIN_COMPONENT_PX)
+          if (speck) failures.push(`${tag}: stray ${speck.size}px speck at (${speck.cx | 0},${speck.cy | 0})`)
+        }
         if (c.wavy) {
           const { cv } = contourWaviness(img)
           if (cv < 0.015) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — blob reads as a plain ball`)
@@ -92,17 +122,82 @@ async function main() {
         }
       }
     }
+
+    // --- 5. Bounded wave under EXTREME amplitude sequences ---------------------
+    // For arbitrary input — dead silence, clipping 5x, a square wave, seeded
+    // noise — the held speech blob's contour must stay inside designed radii
+    // every frame: never spikes toward the disc edge, never flatlines into a
+    // hard circle, never collapses.
+    {
+      const rng = mulberry32(1234)
+      const seqs = {
+        silence: () => 0,
+        clipping: () => 5,
+        square: (i) => (i % 6 < 3 ? 1 : 0),
+        noise: () => rng() * 3
+      }
+      // Designed bounds (px at size=96 dpr=2: half-extent 96, disc 0.92·96≈88).
+      const MAX_R = 0.62 * 96 // blob may never reach past ~2/3 of the half-extent
+      const MIN_R = 0.16 * 96 // and never collapse below this
+      for (const [name, amp] of Object.entries(seqs)) {
+        for (let i = 0; i < 12; i++) {
+          const img = await renderPixels(page, {
+            t: 40 + i * 0.18,
+            state: 'speaking',
+            stateTime: 3 + i * 0.18,
+            speechMerge: 1,
+            amplitude: amp(i)
+          })
+          checked++
+          const { mean, cv } = contourWaviness(img)
+          const comps = components(whiteMask(img))
+          const tag = `amp-${name}/frame${i}`
+          if (comps.length !== 1) failures.push(`${tag}: blob split into ${comps.length} pieces`)
+          if (mean > MAX_R) failures.push(`${tag}: contour mean ${mean.toFixed(1)}px exceeds max ${MAX_R.toFixed(1)}px`)
+          if (mean < MIN_R) failures.push(`${tag}: contour mean ${mean.toFixed(1)}px under min ${MIN_R.toFixed(1)}px`)
+          if (cv < 0.008) failures.push(`${tag}: cv ${cv.toFixed(4)} — flatlined to a hard circle mid-speech`)
+          if (cv > 0.22) failures.push(`${tag}: cv ${cv.toFixed(4)} — wave spiked past the designed range`)
+          const holes = countHolePixels(img)
+          if (holes > 3) failures.push(`${tag}: ${holes} hole pixel(s)`)
+        }
+      }
+    }
+
+    // --- 6. Agents transition never bridges rows -------------------------------
+    // Component count must stay within 4..8 and no component may exceed ~1.4×
+    // a settled pill's area (a cross-row bridge is ~2× — review round 2).
+    {
+      const settled = await renderPixels(page, { t: 40, state: 'agents', stateTime: 3 })
+      const pills = components(whiteMask(settled))
+      const pillArea = pills.reduce((a, c) => a + c.size, 0) / pills.length
+      for (let i = 1; i <= 13; i++) {
+        const stateTime = (i / 14) * 0.7
+        const img = await renderPixels(page, { t: 40 + stateTime, state: 'agents', stateTime })
+        checked++
+        const comps = components(whiteMask(img))
+        const tag = `agents-transition/t${stateTime.toFixed(2)}`
+        if (comps.length < 4 || comps.length > 8) {
+          failures.push(`${tag}: ${comps.length} components (want 4..8 — a cross-row bridge collapses below 4)`)
+        }
+        const biggest = comps[0]?.size ?? 0
+        if (biggest > pillArea * 1.4) {
+          failures.push(`${tag}: component ${biggest}px > 1.4× pill area ${pillArea.toFixed(0)}px — rows bridged`)
+        }
+      }
+    }
   } finally {
     await close()
   }
 
-  console.log(`[orb-invariants] ${checked} frames checked across ${PRESETS.length} presets`)
+  console.log(`[orb-invariants] ${checked} frames checked (${PRESETS.length} presets + extremes + transitions)`)
   if (failures.length) {
     console.error(`[orb-invariants] FAIL — ${failures.length} violation(s):`)
     for (const f of failures) console.error('  - ' + f)
     process.exit(1)
   }
-  console.log('[orb-invariants] PASS — zero purple, transparent bg, in bounds, blob counts correct')
+  console.log(
+    '[orb-invariants] PASS — neutral palette, transparent bg, in bounds, correct blob counts, no holes/specks, bounded wave, no row bridging'
+  )
 }
 
 main().catch((e) => {

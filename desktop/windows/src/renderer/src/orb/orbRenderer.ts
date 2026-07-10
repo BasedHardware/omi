@@ -79,7 +79,8 @@ export class OrbRenderer {
       'u_noiseAmp',
       'u_noiseFreq',
       'u_sminK',
-      'u_centerR'
+      'u_centerR',
+      'u_amplitude'
     ]) {
       this.u[name] = gl.getUniformLocation(program, name)
     }
@@ -113,10 +114,13 @@ export class OrbRenderer {
     gl.uniform1f(this.u.u_rectCorner, rect.corner)
     gl.uniform1f(this.u.u_genesis, frame.genesis)
     gl.uniform1f(this.u.u_noiseTime, frame.noiseTime)
-    gl.uniform1f(this.u.u_noiseAmp, frame.params.noiseAmp)
+    // waveAmp is the amplitude-coupled, BOUNDED wobble (choreography shapes
+    // the raw level through a soft-knee into a fixed range).
+    gl.uniform1f(this.u.u_noiseAmp, frame.waveAmp)
     gl.uniform1f(this.u.u_noiseFreq, frame.params.noiseFreq)
     gl.uniform1f(this.u.u_sminK, frame.params.sminK)
     gl.uniform1f(this.u.u_centerR, frame.centerR)
+    gl.uniform1f(this.u.u_amplitude, frame.amplitude)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }

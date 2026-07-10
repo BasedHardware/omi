@@ -1,14 +1,23 @@
 // Self-throttled animation driver for the orb in the APP (the harness never
 // uses this — it scrubs time directly). Owns the clock and the rAF loop:
-//   idle           → 30fps
-//   active states  → 60fps (listening / thinking / agents, genesis, morph)
-//   hidden         → 0fps (loop fully stopped — the orb must cost nothing)
+//   idle / quiet listening → 30fps
+//   active states          → 60fps (speaking / thinking / agents, genesis,
+//                            morph, and while the speech blob is dissolving)
+//   hidden                 → 0fps (loop fully stopped — the orb must cost nothing)
 // Frame timestamps can be logged (OrbAnimator.frameLog) so the throttle states
 // are assertable by the perf harness.
+//
+// Speech visualization: callers feed real signals — setSpeechActive(true) when
+// the VAD gate opens / PTT is capturing, setAmplitude(raw) with the live level.
+// The animator steps the deterministic merge + amplitude envelopes per frame,
+// so the blob conglomerates on speech, waves with the (bounded) voice, and
+// dissolves back to the orbiting dots when speech ends.
 import {
   computeOrbFrame,
   easeInOut,
   genesisSettled,
+  stepMergeEnvelope,
+  stepAmplitudeEnvelope,
   DEFAULT_ORB_PARAMS,
   type OrbParams,
   type OrbState
@@ -28,7 +37,12 @@ export class OrbAnimator {
   private summonedAt: number | null = null
   private morphTarget = 0
   private morph = 0
-  private amplitude = 0
+  /** Raw live level target (from the mic pipeline) and its smoothed envelope. */
+  private rawAmplitude = 0
+  private ampEnvelope = 0
+  /** Speech-merge envelope: eases to 1 while speech is active, dissolves to 0. */
+  private speechActive = false
+  private speechMerge = 0
   private visible = true
   private raf: number | null = null
   private lastFrameAt = 0
@@ -56,11 +70,24 @@ export class OrbAnimator {
     if (state === this.state) return
     this.state = state
     this.stateChangedAt = this.now()
+    // 'speaking' as a STATE opens the speech gate; any other state closes it
+    // (the envelope then dissolves smoothly). Callers using 'listening' +
+    // ambient VAD signals re-open it via setSpeechActive AFTER setState.
+    this.speechActive = state === 'speaking'
     this.kick()
   }
 
+  /** Real speech signal (VAD gate / PTT capturing / live segments). May be used
+   *  with state 'listening' for ambient capture, or implied by 'speaking'. */
+  setSpeechActive(active: boolean): void {
+    if (this.speechActive === active) return
+    this.speechActive = active
+    this.kick()
+  }
+
+  /** RAW live level ≥ 0 (hot input tolerated — shaped downstream). */
   setAmplitude(a: number): void {
-    this.amplitude = Math.min(1, Math.max(0, a))
+    this.rawAmplitude = Math.max(0, a)
   }
 
   /** Play the genesis spring (materialize from scale 0). */
@@ -85,7 +112,8 @@ export class OrbAnimator {
   }
 
   private isActive(): boolean {
-    if (this.state !== 'idle') return true
+    if (this.state !== 'idle' && this.state !== 'listening') return true
+    if (this.speechActive || this.speechMerge > 0) return true
     if (this.morph !== this.morphTarget) return true
     if (this.summonedAt !== null && !genesisSettled(this.now() - this.summonedAt, this.params)) {
       return true
@@ -121,8 +149,11 @@ export class OrbAnimator {
 
   private renderFrame(): void {
     const t = this.now()
-    const dt = Math.max(0, t - this.lastTime)
+    const dt = Math.max(0, Math.min(0.1, t - this.lastTime))
     this.lastTime = t
+    // Deterministic envelope steps (same functions the harness scrubs with).
+    this.speechMerge = stepMergeEnvelope(this.speechMerge, this.speechActive ? 1 : 0, dt)
+    this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, this.rawAmplitude, dt)
     // Ease the morph toward its target at a fixed rate (deterministic per dt).
     const step = dt / MORPH_SECONDS
     if (this.morph < this.morphTarget) this.morph = Math.min(this.morphTarget, this.morph + step)
@@ -133,7 +164,8 @@ export class OrbAnimator {
       t,
       state: this.state,
       stateTime: t - this.stateChangedAt,
-      amplitude: this.amplitude,
+      amplitude: this.ampEnvelope,
+      speechMerge: this.speechMerge,
       genesisTime: this.summonedAt === null ? Infinity : t - this.summonedAt,
       // Linear progress internally; eased at the point of use so the shape
       // change reads as one smooth motion in both directions.
