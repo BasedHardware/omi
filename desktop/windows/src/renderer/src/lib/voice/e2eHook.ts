@@ -13,6 +13,9 @@ import {
   setVoiceOutputDevice,
   speakText
 } from './voiceController'
+import { auth } from '../firebase'
+import { liveConversation } from '../liveConversation'
+import { setPreferences, type Preferences } from '../preferences'
 import type { VoiceProvider } from './sessionMachine'
 
 export function attachVoiceE2eHook(): void {
@@ -34,6 +37,15 @@ export function attachVoiceE2eHook(): void {
       return devices
         .filter((d) => d.kind === 'audiooutput')
         .map((d) => ({ deviceId: d.deviceId, label: d.label }))
-    }
+    },
+    // Loop-check support: the harness signs in by injecting a persisted Firebase
+    // session, flips the continuousRecording pref, and reads the mirrored live
+    // transcript to assert Omi's own words never appear as transcribed speech.
+    getAuthUid: () => auth.currentUser?.uid ?? null,
+    getLiveTranscript: () => ({
+      status: liveConversation.getStatus(),
+      segments: liveConversation.getSegments()
+    }),
+    setPrefs: (patch: Partial<Preferences>) => setPreferences(patch)
   }
 }
