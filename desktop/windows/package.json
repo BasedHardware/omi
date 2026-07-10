@@ -32,7 +32,8 @@
     "soak": "node scripts/run-soak.mjs",
     "soak:verify": "node scripts/soak-verify.mjs",
     "bench": "node scripts/bench/run.mjs",
-    "bench:anim": "node scripts/bench/anim.mjs"
+    "bench:anim": "node scripts/bench/anim.mjs",
+    "test:e2e:meeting": "node scripts/run-meeting-e2e.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

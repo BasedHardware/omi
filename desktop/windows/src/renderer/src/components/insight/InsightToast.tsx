@@ -76,6 +76,12 @@ export function InsightToast(): React.JSX.Element {
     document.body.classList.add('insight-toast-body')
     const offInsight = window.omi.onInsightShow((p) => setContent({ type: 'insight', p }))
     const offMeeting = window.omi.onMeetingToast((p) => setContent({ type: 'meeting', p }))
+    // Pull the pending meeting payload: a push sent while this window was
+    // loading (meeting detected right at startup) lands before this effect
+    // subscribes and would otherwise be lost.
+    void window.omi.meetingGetToast?.().then((p) => {
+      if (p) setContent((cur) => cur ?? { type: 'meeting', p })
+    })
     return () => {
       document.body.classList.remove('insight-toast-body')
       offInsight()

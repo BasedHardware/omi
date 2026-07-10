@@ -25,6 +25,16 @@ const MEETING_ASK_DISMISS_MS = 30_000
 
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
+// The meeting payload currently on screen. Kept so the toast renderer can PULL
+// it on mount ('meeting:getToast'): a push sent between the window's
+// did-finish-load and React's effect subscription would otherwise vanish — a
+// real race when a meeting activates within seconds of startup (E2E, or a
+// meeting already running when Omi launches).
+let currentMeetingToast: MeetingToastPayload | null = null
+
+export function getCurrentMeetingToast(): MeetingToastPayload | null {
+  return currentMeetingToast
+}
 
 function applyMaterial(win: BrowserWindow): void {
   const w = win as BrowserWindow & { setBackgroundMaterial?: (m: string) => void }
@@ -114,6 +124,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
   const win = ensureWindow()
   position(win)
   win.showInactive()
+  currentMeetingToast = payload
   const send = (): void => {
     if (!win.isDestroyed()) win.webContents.send('meeting:toast', payload)
   }
@@ -132,6 +143,7 @@ export function hideMeetingToast(): void {
 }
 
 export function hideInsightToast(): void {
+  currentMeetingToast = null
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null

@@ -397,6 +397,9 @@ export type OmiBridgeApi = {
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
   // --- Meeting detection (Phase 5) ---
   meetingGetSettings: () => Promise<MeetingSettings>
+  /** Toast renderer → main: fetch the pending meeting toast payload on mount
+   *  (a push can arrive before the React subscription exists). */
+  meetingGetToast: () => Promise<MeetingToastPayload | null>
   meetingSetSettings: (patch: Partial<MeetingSettings>) => Promise<MeetingSettings>
   /** Toast renderer → main: a meeting-toast button was clicked. */
   meetingAction: (meetingId: string, action: MeetingToastAction) => void
@@ -413,6 +416,8 @@ export type OmiBridgeApi = {
   // one-time onboarding gate so the bench mounts the authed shell (a returning
   // user is always onboarded), instead of stalling on the wizard.
   isBench: boolean
+  // True only in the E2E harness (OMI_E2E=1) — gates renderer-side test hooks.
+  isE2E: boolean
   // Whether the desktop-automation bridge is enabled (ON unless OMI_AUTOMATION=0).
   // When false the renderer skips its action-planner pre-step so chat behaves
   // like a normal assistant.

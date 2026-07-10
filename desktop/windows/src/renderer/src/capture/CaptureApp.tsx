@@ -5,7 +5,12 @@ import { AudioSessionHost } from './AudioSessionHost'
 import { PttCaptureHost } from './PttCaptureHost'
 import { ScreenSessionHost } from './ScreenSessionHost'
 import { MeetingSessionHost } from './MeetingSessionHost'
+import { installCaptureE2EHooks } from './e2eHooks'
 import { auth } from '../lib/firebase'
+
+// Test hooks (no-op unless OMI_E2E=1) — module scope so they exist as soon as
+// the capture bundle evaluates, before React mounts.
+installCaptureE2EHooks()
 
 // Root of the hidden capture window (renderer #/capture). No visible UI — it only
 // mounts the capture hosts that own ALL capture: Rewind frames, the continuous

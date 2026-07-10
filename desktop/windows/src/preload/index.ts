@@ -144,6 +144,7 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('insight:payload', listener)
   },
   meetingGetSettings: () => ipcRenderer.invoke('meeting:getSettings'),
+  meetingGetToast: () => ipcRenderer.invoke('meeting:getToast'),
   meetingSetSettings: (patch) => ipcRenderer.invoke('meeting:setSettings', patch),
   meetingAction: (meetingId, action) => ipcRenderer.send('meeting:action', meetingId, action),
   onMeetingToast: (cb) => {
@@ -157,6 +158,9 @@ const omi: OmiBridgeApi = {
   isAnimBench: process.env.OMI_ANIM_BENCH === '1',
   benchEcho: (x: number) => ipcRenderer.invoke('bench:echo', x),
   isBench: process.env.OMI_BENCH === '1',
+  // True only in the E2E harness (OMI_E2E=1) — gates renderer-side test hooks
+  // (e.g. the capture window's YAMNet classify hook). Never true in prod.
+  isE2E: process.env.OMI_E2E === '1',
   // Desktop automation bridge. ON by default; OMI_AUTOMATION='0' disables it.
   // The renderer checks `automationEnabled` before its planner pre-step.
   automationEnabled: process.env.OMI_AUTOMATION !== '0',

@@ -57,6 +57,11 @@ let nextMeetingSeq = 1
 // native sources, so the whole pipeline (machine → toast → capture command) is
 // drivable hermetically from the _electron harness.
 let injectedSignals: DetectorSignals | null = null
+// E2E only: shrink debounce/grace + force mode so tests run in seconds.
+let configOverride: Partial<DetectorConfig> | null = null
+// E2E only: meeting-capture-status events seen by main (proves the full
+// main → capture-window → main round trip without auth or network).
+const statusLog: string[] = []
 
 /** Load the pattern list: <userData>/meeting-patterns.json override when valid,
  *  else the bundled default. Read once per process (restart to pick up edits). */
@@ -84,7 +89,8 @@ function config(): DetectorConfig {
     debounceMs: DEBOUNCE_MS,
     endGraceMs: m.endGraceMinutes * 60_000,
     mode: m.mode,
-    perApp: m.perApp
+    perApp: m.perApp,
+    ...configOverride
   }
 }
 
@@ -236,6 +242,7 @@ export function startMeetingMonitor(d: Deps): void {
   // "Omi is capturing" notice instead of lying.
   unsubCaptureEvents = onCaptureEventInMain((ev) => {
     if (ev.type !== 'meeting-capture-status') return
+    statusLog.push(`${ev.meetingId}:${ev.status}`)
     if (!currentMeeting || ev.meetingId !== currentMeeting.id) return
     if (ev.status === 'error') {
       console.warn('[meeting] capture failed:', ev.message)
@@ -271,15 +278,25 @@ export function stopMeetingMonitor(): void {
  *  testable without Zoom or a real mic user. */
 export function meetingDebug(): {
   inject: (sig: DetectorSignals | null) => void
+  override: (cfg: Partial<DetectorConfig> | null) => void
   phase: () => string
   capturing: () => boolean
+  statusLog: () => string[]
+  running: () => boolean
 } {
   return {
+    // The monitor starts on ready-to-show — tests must wait for this before
+    // injecting (an inject against a stopped monitor is dropped).
+    running: () => running,
     inject: (sig): void => {
       injectedSignals = sig
       evaluate() // immediate, not coalesced — tests control timing explicitly
     },
+    override: (cfg): void => {
+      configOverride = cfg
+    },
     phase: () => state.phase,
-    capturing: () => !!currentMeeting?.capturing
+    capturing: () => !!currentMeeting?.capturing,
+    statusLog: () => [...statusLog]
   }
 }
