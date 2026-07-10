@@ -97,8 +97,13 @@ if [[ ! -x "$BACKEND_PYTHON" ]]; then
 fi
 
 run_step() {
+  local started
+  local elapsed
+  started=$SECONDS
   echo "==> $*"
   "$@"
+  elapsed=$((SECONDS - started))
+  echo "<== PASS $* (${elapsed}s)"
 }
 
 changed_matches() {
