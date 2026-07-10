@@ -8,6 +8,23 @@ allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+# Deliberate, narrow exception to pnpm's minimumReleaseAge supply-chain
+# quarantine (not an accidental relaxation) — reviewed and accepted for the
+# coding-agent adapter feature (desktop/windows/src/main/codingAgent/).
+#
+# Why these specific packages: they are the runtime closure of the bundled
+# Claude Code ACP bridge — @agentclientprotocol/claude-agent-acp (the
+# official ACP org's maintained package, successor to the now-deprecated
+# @zed-industries/claude-agent-acp) and its @anthropic-ai/claude-agent-sdk
+# native platform binaries — all published by the same first-party,
+# reputable maintainers (Anthropic / the Agent Client Protocol org), not
+# unknown/anonymous publishers. Freshness (not age) is the only reason they'd
+# otherwise be quarantined.
+#
+# Why this is self-limiting, not a standing bypass: entries are pinned to
+# EXACT versions, matching what's actually installed (see package.json).
+# Bumping any of these packages later requires updating this list too —
+# pnpm re-quarantines any version not explicitly listed here.
 minimumReleaseAgeExclude:
   - '@agentclientprotocol/claude-agent-acp@0.58.1'
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.205'
