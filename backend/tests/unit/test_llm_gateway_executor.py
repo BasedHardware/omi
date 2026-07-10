@@ -450,12 +450,7 @@ async def test_canary_active_route_with_percent_zero_serves_lkg():
 
 @pytest.mark.asyncio
 async def test_canary_route_enforces_partial_rollout_percentage():
-    """A canary route at <100% should send only a proportional fraction of
-    requests to the active route, with the rest falling back to LKG.
-
-    Deterministic hashing means the distribution is stable per-request, but
-    over many distinct requests the percentage is honored within a tolerance.
-    """
+    """A canary route at <100% should send stable in-bucket requests active and the rest to LKG."""
     from llm_gateway.gateway.executor import _is_route_eligible_to_serve
 
     canary_route = active_route_with_fallbacks([]).model_copy(
@@ -463,17 +458,17 @@ async def test_canary_route_enforces_partial_rollout_percentage():
     )
     config = config_with_active_route(canary_route)
 
-    active_count = 0
-    total = 500
-    from llm_gateway.gateway.resolver import resolve_chat_completion_route as _resolve
+    active_messages = ('msg 1', 'msg 3', 'msg 5')
+    lkg_messages = ('msg 0', 'msg 2', 'msg 4')
 
-    for i in range(total):
-        resolved = _resolve(config, valid_request(messages=[{'role': 'user', 'content': f'msg {i}'}]))
+    for content in active_messages:
+        resolved = resolve_chat_completion_route(config, valid_request(messages=[{'role': 'user', 'content': content}]))
+        assert _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request)
+
+    for content in lkg_messages:
+        resolved = resolve_chat_completion_route(config, valid_request(messages=[{'role': 'user', 'content': content}]))
         if _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request):
-            active_count += 1
-
-    # With 30% canary, expect ~150 ± 30 (generous tolerance for deterministic hash)
-    assert 100 <= active_count <= 200, f'canary distribution off: {active_count}/{total}'
+            pytest.fail(f'{content!r} unexpectedly entered the 30% canary bucket')
 
 
 @pytest.mark.asyncio

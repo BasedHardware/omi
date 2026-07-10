@@ -9554,4 +9554,67 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare.';
+
+  @override
+  String get connectRayBanMeta => 'Conectează Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Folosește ochelarii Ray-Ban Meta ca dispozitiv de captură Omi pentru conversații și context vizual. Omi va deschide aplicația Meta AI pentru a-ți conecta ochelarii.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Conectează prin Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Finalizează conectarea în aplicația Meta AI, apoi revino aici.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Verifică din nou';
+
+  @override
+  String get raybanMetaAllowCamera => 'Permite camera pe ochelari';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi folosește camera ochelarilor tăi pentru a adăuga fotografii la conversațiile tale. Poți sări peste acest pas și folosi doar audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Omite deocamdată';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mod doar audio Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Această versiune de Omi poate folosi microfonul ochelarilor tăi prin Bluetooth. Captura de fotografii necesită versiunea Omi pentru dezvoltatori Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Muzica de pe telefonul tău se întrerupe cât timp este utilizat microfonul ochelarilor.';
+
+  @override
+  String get raybanMetaContinue => 'Continuă';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fă o fotografie';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotografie solicitată — va apărea în conversația ta.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microfon pregătit';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Captură de imagine pregătită';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Indisponibil în modul doar audio';
+
+  @override
+  String get raybanMetaCamera => 'Cameră';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Eroare la conectarea la Ray-Ban Meta: $error';
+  }
 }

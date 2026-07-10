@@ -9,8 +9,8 @@ name: Desktop Windows CI
 #   exercising the native paths (better-sqlite3 rebuild, OCR/automation helpers)
 #   that ubuntu cannot.
 #
-# Lint is intentionally not wired here yet — the existing lint errors are cleared
-# in a follow-up, which then adds the lint step as a blocking check.
+# Lint runs as a blocking check: ESLint errors fail the build; Prettier
+# formatting warnings remain non-blocking (formatting is not enforced here).
 
 on:
   push:
@@ -30,7 +30,7 @@ defaults:
 
 jobs:
   checks:
-    name: Typecheck · Test
+    name: Typecheck · Lint · Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +50,10 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Typecheck
         run: pnpm run typecheck
+      # Errors block; Prettier formatting warnings remain non-blocking,
+      # matching the repo's current state (formatting is not enforced here).
+      - name: Lint
+        run: pnpm run lint
       - name: Test
         run: pnpm test
 

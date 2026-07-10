@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, cast
 
-from database import memory_ledger
 from models.memory_contracts import (
     DurableMemoryPatch,
     DurablePatchDecision,
@@ -21,12 +20,12 @@ from utils.memory.memory_tools import (
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 
 try:
-    from utils.llm.durable_memory_patches import PROMOTION_RUBRIC
+    from utils.llm.durable_memory_patches import PROMOTION_RUBRIC as _promotion_rubric
 
-    _PROMOTION_RUBRIC_IMPORT_ERROR = None
+    _promotion_rubric_import_error: Exception | None = None
 except Exception as exc:
-    _PROMOTION_RUBRIC_IMPORT_ERROR = exc
-    PROMOTION_RUBRIC = """
+    _promotion_rubric_import_error = exc
+    _promotion_rubric = """
 - Promote to active when a Future agent/user would benefit from remembering this, it is stable or meaningfully recurring, it is about the primary user, user-owned work, a close relationship, or an entity the user cares about, and it has direct source evidence.
 - Use review when attribution, durability, or sensitivity is uncertain but the packet may still be useful.
 - Use context_only when the source may help future search/reasoning but should not become durable profile memory.
@@ -34,13 +33,58 @@ except Exception as exc:
 - Do not rewrite unidentified non-primary speaker facts as user facts; set relationship_to_user=other_speaker or unclear and choose review/context_only/reject unless the user tie is explicit.
 """.strip()
 
-try:
-    from utils.llm.clients import get_llm
+PROMOTION_RUBRIC = _promotion_rubric
 
-    _GET_LLM_IMPORT_ERROR = None
+try:
+    from utils.llm.clients import get_llm as _get_llm
+
+    _get_llm_import_error: Exception | None = None
 except Exception as exc:
-    get_llm = None
-    _GET_LLM_IMPORT_ERROR = exc
+    _get_llm = None
+    _get_llm_import_error = exc
+
+
+Payload = Dict[str, Any]
+PayloadList = List[Payload]
+
+
+class LlmFactory(Protocol):
+    def __call__(self, lane: str) -> Any: ...
+
+
+class SafetyStatsGuard(Protocol):
+    def validate_tool_call(self, tool_name: str, params: Payload) -> None: ...
+
+    def check_context_size(self, text: str) -> None: ...
+
+    def get_stats(self) -> Payload: ...
+
+
+get_llm = cast(LlmFactory | None, _get_llm)
+
+
+def _empty_payload_list() -> PayloadList:
+    return []
+
+
+def _payload_list(value: object) -> PayloadList:
+    return (
+        [cast(Payload, item) for item in cast(List[object], value) if isinstance(item, dict)]
+        if isinstance(value, list)
+        else []
+    )
+
+
+def _payload_or_empty(value: object) -> Payload:
+    return cast(Payload, value) if isinstance(value, dict) else {}
+
+
+def _object_list(value: object) -> List[object]:
+    return cast(List[object], value) if isinstance(value, list) else []
+
+
+def _string_list(value: object) -> List[str]:
+    return [str(item) for item in _object_list(value) if item]
 
 
 @dataclass(frozen=True)
@@ -65,21 +109,21 @@ class PromotionAgentConfig:
 class PromotionTool:
     name: str
     description: str
-    args_schema: Dict[str, Any]
-    handler: Callable[[Dict[str, Any]], Dict[str, Any]]
+    args_schema: Payload
+    handler: Callable[[Payload], Payload]
 
 
 @dataclass
 class PromotionToolRuntime:
-    bundle: Dict[str, Any]
+    bundle: Payload
     memory_context: MemoryToolContext
     config: PromotionAgentConfig
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    decisions: List[Dict[str, Any]] = field(default_factory=list)
-    results: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: PayloadList = field(default_factory=_empty_payload_list)
+    decisions: PayloadList = field(default_factory=_empty_payload_list)
+    results: PayloadList = field(default_factory=_empty_payload_list)
 
-    def record(self, name: str, args: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
-        summary = {
+    def record(self, name: str, args: Payload, result: Payload) -> Payload:
+        summary: Payload = {
             'name': name,
             'args': args,
             'result': _summarize_tool_result(result),
@@ -116,7 +160,7 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(',', ':'), default=_json_default)
 
 
-def _summarize_tool_result(result: Dict[str, Any]) -> Dict[str, Any]:
+def _summarize_tool_result(result: Payload) -> Payload:
     summary = dict(result)
     for key in ('items', 'edges', 'facts', 'l1_items'):
         if isinstance(summary.get(key), list):
@@ -127,33 +171,35 @@ def _summarize_tool_result(result: Dict[str, Any]) -> Dict[str, Any]:
 
 def _tool_call_name(call: Any) -> str:
     if isinstance(call, dict):
-        return call.get('name') or call.get('tool') or ''
+        payload = cast(Payload, call)
+        return str(payload.get('name') or payload.get('tool') or '')
     return getattr(call, 'name', '') or ''
 
 
-def _tool_call_args(call: Any) -> Dict[str, Any]:
+def _tool_call_args(call: Any) -> Payload:
     if isinstance(call, dict):
-        args = call.get('args') if 'args' in call else call.get('input', {})
+        payload = cast(Payload, call)
+        args = payload.get('args') if 'args' in payload else payload.get('input', {})
     else:
         args = getattr(call, 'args', None)
         if args is None:
             args = getattr(call, 'input', {})
-    return dict(args or {})
+    return _payload_or_empty(args)
 
 
-def _response_tool_calls(response: Any) -> List[Any]:
+def _response_tool_calls(response: Any) -> List[object]:
     calls = getattr(response, 'tool_calls', None)
     if calls is not None:
-        return list(calls)
+        return list(cast(Iterable[object], calls))
     if isinstance(response, dict):
-        return list(response.get('tool_calls') or [])
+        return _object_list(cast(Payload, response).get('tool_calls'))
     return []
 
 
 def _content_from_response(response: Any) -> str:
-    content = getattr(response, 'content', response.get('content') if isinstance(response, dict) else '')
+    content = getattr(response, 'content', cast(Payload, response).get('content') if isinstance(response, dict) else '')
     if isinstance(content, list):
-        return '\n'.join(str(item) for item in content)
+        return '\n'.join(str(item) for item in cast(List[object], content))
     return str(content or '')
 
 
@@ -163,7 +209,7 @@ def _bind_tools(llm: Any, tools: List[PromotionTool]) -> Any:
     return llm
 
 
-def _invoke_llm(llm: Any, messages: List[Dict[str, Any]]) -> Any:
+def _invoke_llm(llm: Any, messages: PayloadList) -> Any:
     if hasattr(llm, 'invoke'):
         return llm.invoke(messages)
     if callable(llm):
@@ -171,7 +217,7 @@ def _invoke_llm(llm: Any, messages: List[Dict[str, Any]]) -> Any:
     raise RuntimeError('promotion agent llm does not support invoke')
 
 
-def _tool_schema(tool: PromotionTool) -> Dict[str, Any]:
+def _tool_schema(tool: PromotionTool) -> Payload:
     return {
         'name': tool.name,
         'description': tool.description,
@@ -179,42 +225,55 @@ def _tool_schema(tool: PromotionTool) -> Dict[str, Any]:
     }
 
 
-def _bundle_prompt(bundle: Dict[str, Any]) -> str:
-    compact = {
+def _bundle_prompt(bundle: Payload) -> str:
+    graph_snapshot = _payload_or_empty(bundle.get('graph_snapshot'))
+    compact: Payload = {
         'bundle_id': bundle.get('bundle_id'),
         'uid': bundle.get('uid'),
-        'session_ids': bundle.get('session_ids') or [],
+        'session_ids': _object_list(bundle.get('session_ids')),
         'observed_head_commit_id': bundle.get('observed_head_commit_id'),
-        'l1_items': bundle.get('l1_items') or [],
-        'evidence_packets': bundle.get('evidence_packets') or [],
-        'vector_seed_count': len(bundle.get('vector_seed') or []),
-        'graph_edge_count': len((bundle.get('graph_snapshot') or {}).get('edges') or []),
+        'l1_items': _payload_list(bundle.get('l1_items')),
+        'evidence_packets': _payload_list(bundle.get('evidence_packets')),
+        'vector_seed_count': len(_object_list(bundle.get('vector_seed'))),
+        'graph_edge_count': len(_object_list(graph_snapshot.get('edges'))),
     }
     return 'Promotion bundle:\n' + json.dumps(compact, sort_keys=True, default=_json_default)
 
 
-def _fact_id(item: Dict[str, Any]) -> Optional[str]:
-    return item.get('id') or item.get('memory_id') or item.get('fact_id')
+def _fact_id(item: Payload) -> Optional[str]:
+    value = item.get('id') or item.get('memory_id') or item.get('fact_id')
+    return str(value) if value else None
 
 
-def _make_patch_id(payload: Dict[str, Any]) -> str:
+def _make_patch_id(payload: Payload) -> str:
     return deterministic_contract_id('l2-promotion-tool-patch', payload)
 
 
-def _build_tool_patch(bundle: Dict[str, Any], args: Dict[str, Any]) -> DurableMemoryPatch:
+def _first_packet_id(bundle: Payload) -> str | None:
+    packets = _payload_list(bundle.get('evidence_packets'))
+    if not packets:
+        return None
+    packet_id = packets[0].get('packet_id')
+    return str(packet_id) if packet_id else None
+
+
+def _build_tool_patch(bundle: Payload, args: Payload) -> DurableMemoryPatch:
     decision = DurablePatchDecision(args.get('decision') or 'review')
     result_status = LifecycleState(
         args.get('result_status') or ('active' if decision == DurablePatchDecision.add else 'review')
     )
-    payload = {
+    arguments = _payload_or_empty(args.get('arguments'))
+    evidence_ids = _string_list(args.get('evidence_ids'))
+    supersedes = _string_list(args.get('supersedes'))
+    payload: Payload = {
         'bundle_id': bundle.get('bundle_id'),
         'decision': decision.value,
         'result_status': result_status.value,
         'target_memory_id': args.get('target_memory_id'),
         'memory_text': args.get('memory_text'),
         'predicate': args.get('predicate'),
-        'arguments': args.get('arguments') or {},
-        'evidence_ids': sorted(args.get('evidence_ids') or []),
+        'arguments': arguments,
+        'evidence_ids': sorted(evidence_ids),
         'subject_entity_id': args.get('subject_entity_id'),
         'rationale': args.get('rationale'),
     }
@@ -224,23 +283,20 @@ def _build_tool_patch(bundle: Dict[str, Any], args: Dict[str, Any]) -> DurableMe
         new_memory_id = new_memory_id or 'mem_' + patch_id[:32]
     return DurableMemoryPatch(
         patch_id=patch_id,
-        packet_id=args.get('packet_id')
-        or (bundle.get('evidence_packets') or [{}])[0].get('packet_id')
-        or bundle.get('bundle_id')
-        or 'unknown_packet',
+        packet_id=args.get('packet_id') or _first_packet_id(bundle) or bundle.get('bundle_id') or 'unknown_packet',
         run_id=args.get('run_id') or f"l2_promotion:{bundle.get('bundle_id') or 'unknown'}",
         observed_head_commit_id=bundle.get('observed_head_commit_id'),
         idempotency_key=deterministic_contract_id('l2-promotion-tool-idempotency', payload),
         decision=decision,
         result_status=result_status,
-        evidence_ids=list(args.get('evidence_ids') or []),
+        evidence_ids=evidence_ids,
         evidence_refs=[],
         target_memory_id=args.get('target_memory_id'),
         new_memory_id=new_memory_id,
         memory_text=args.get('memory_text'),
         predicate=args.get('predicate'),
-        arguments=dict(args.get('arguments') or {}),
-        supersedes=list(args.get('supersedes') or []),
+        arguments=arguments,
+        supersedes=supersedes,
         rationale=args.get('rationale'),
         confidence=args.get('confidence') or 'medium',
         relationship_to_user=args.get('relationship_to_user') or 'unclear',
@@ -251,12 +307,12 @@ def _build_tool_patch(bundle: Dict[str, Any], args: Dict[str, Any]) -> DurableMe
 
 
 def build_promotion_tools(runtime: PromotionToolRuntime) -> List[PromotionTool]:
-    def vector_search(args: Dict[str, Any]) -> Dict[str, Any]:
+    def vector_search(args: Payload) -> Payload:
         query = str(args.get('query') or '')
         k = min(max(int(args.get('k') or 5), 1), runtime.config.max_vector_results)
         query_terms = {term.lower() for term in query.split() if len(term) > 2}
-        scored = []
-        for item in runtime.bundle.get('vector_seed') or []:
+        scored: List[tuple[int, Payload]] = []
+        for item in _payload_list(runtime.bundle.get('vector_seed')):
             content = str(item.get('content') or item.get('memory_text') or '').lower()
             score = sum(1 for term in query_terms if term in content)
             if score or not query_terms:
@@ -264,40 +320,42 @@ def build_promotion_tools(runtime: PromotionToolRuntime) -> List[PromotionTool]:
         scored.sort(key=lambda pair: (-pair[0], str(_fact_id(pair[1]) or '')))
         return runtime.record('vector_search', args, {'items': [item for _, item in scored[:k]]})
 
-    def graph_walk(args: Dict[str, Any]) -> Dict[str, Any]:
+    def graph_walk(args: Payload) -> Payload:
         entity = str(args.get('entity') or '')
         hops = min(max(int(args.get('hops') or 1), 0), runtime.config.max_graph_hops)
-        edges = []
-        for edge in (runtime.bundle.get('graph_snapshot') or {}).get('edges') or []:
+        edges: PayloadList = []
+        graph_snapshot = _payload_or_empty(runtime.bundle.get('graph_snapshot'))
+        for edge in _payload_list(graph_snapshot.get('edges')):
             if not entity or edge.get('subject_entity_id') == entity or edge.get('object') == entity:
                 edges.append(edge)
         return runtime.record('graph_walk', {**args, 'hops': hops}, {'edges': edges})
 
-    def fetch_fact(args: Dict[str, Any]) -> Dict[str, Any]:
+    def fetch_fact(args: Payload) -> Payload:
         fact_id = str(args.get('fact_id') or '')
-        for item in runtime.bundle.get('vector_seed') or []:
+        for item in _payload_list(runtime.bundle.get('vector_seed')):
             if fact_id == _fact_id(item):
                 return runtime.record('fetch_fact', args, {'fact': item})
-        for edge in (runtime.bundle.get('graph_snapshot') or {}).get('edges') or []:
+        graph_snapshot = _payload_or_empty(runtime.bundle.get('graph_snapshot'))
+        for edge in _payload_list(graph_snapshot.get('edges')):
             if fact_id in {edge.get('fact_id'), edge.get('memory_id')}:
                 return runtime.record('fetch_fact', args, {'fact': edge})
         return runtime.record('fetch_fact', args, {'fact': None})
 
-    def list_session_l1(args: Dict[str, Any]) -> Dict[str, Any]:
+    def list_session_l1(args: Payload) -> Payload:
         session_id = str(args.get('session_id') or '')
         items = [
             item
-            for item in runtime.bundle.get('l1_items') or []
+            for item in _payload_list(runtime.bundle.get('l1_items'))
             if not session_id or item.get('session_id') == session_id or item.get('source_id') == session_id
         ]
         return runtime.record('list_session_l1', args, {'l1_items': items})
 
-    def write_memory(args: Dict[str, Any]) -> Dict[str, Any]:
+    def write_memory(args: Payload) -> Payload:
         patch = _build_tool_patch(runtime.bundle, args)
         runtime.decisions.append({'patch': patch.model_dump(mode='json'), 'rationale': patch.rationale})
         try:
             result = apply_patch_with_memory_tools(patch, runtime.memory_context)
-            payload = {
+            payload: Payload = {
                 'ok': True,
                 'patch_id': result.patch_id,
                 'decision': result.decision,
@@ -316,7 +374,7 @@ def build_promotion_tools(runtime: PromotionToolRuntime) -> List[PromotionTool]:
             runtime.results.append(payload)
             return runtime.record('write_memory', args, payload)
 
-    def finish(args: Dict[str, Any]) -> Dict[str, Any]:
+    def finish(args: Payload) -> Payload:
         return runtime.record('finish', args, {'ok': True, 'reason': args.get('reason') or 'finished'})
 
     return [
@@ -372,21 +430,22 @@ def build_promotion_tools(runtime: PromotionToolRuntime) -> List[PromotionTool]:
     ]
 
 
-def _execute_tool(tool: PromotionTool, args: Dict[str, Any], safety_guard: AgentSafetyGuard) -> Dict[str, Any]:
-    safety_guard.validate_tool_call(tool.name, args)
+def _execute_tool(tool: PromotionTool, args: Payload, safety_guard: AgentSafetyGuard) -> Payload:
+    typed_safety_guard = cast(SafetyStatsGuard, safety_guard)
+    typed_safety_guard.validate_tool_call(tool.name, args)
     result = tool.handler(args)
-    safety_guard.check_context_size(_canonical_json(result))
+    typed_safety_guard.check_context_size(_canonical_json(result))
     return result
 
 
 def run_l2_promotion_agent(
     *,
-    bundle: Dict[str, Any],
+    bundle: Payload,
     uid: Optional[str] = None,
-    llm=None,
+    llm: Any = None,
     memory_context: Optional[MemoryToolContext] = None,
     config: Optional[PromotionAgentConfig] = None,
-) -> Dict[str, Any]:
+) -> Payload:
     cfg = config or PromotionAgentConfig()
     bundle_uid = uid or bundle.get('uid')
     if not bundle_uid:
@@ -407,11 +466,11 @@ def run_l2_promotion_agent(
     if model is None:
         raise RuntimeError('missing promotion agent llm')
     bound_model = _bind_tools(model, tools)
-    messages = [
+    messages: PayloadList = [
         {'role': 'system', 'content': PROMOTION_AGENT_SYSTEM_PROMPT},
         {'role': 'user', 'content': _bundle_prompt(bundle)},
     ]
-    errors: List[Dict[str, Any]] = []
+    errors: PayloadList = []
     status = 'success'
 
     while True:
@@ -420,8 +479,8 @@ def run_l2_promotion_agent(
         if not tool_calls:
             messages.append({'role': 'assistant', 'content': _content_from_response(response)})
             break
-        assistant_calls = []
-        tool_results = []
+        assistant_calls: PayloadList = []
+        tool_results: PayloadList = []
         finish_seen = False
         for call in tool_calls:
             name = _tool_call_name(call)
@@ -429,7 +488,7 @@ def run_l2_promotion_agent(
             assistant_calls.append({'name': name, 'args': args})
             tool = tool_registry.get(name)
             if tool is None:
-                result = {'ok': False, 'error_type': 'UnknownTool', 'error': f'unknown tool: {name}'}
+                result: Payload = {'ok': False, 'error_type': 'UnknownTool', 'error': f'unknown tool: {name}'}
                 errors.append({'tool': name, **result})
             else:
                 try:
@@ -451,8 +510,8 @@ def run_l2_promotion_agent(
         if finish_seen:
             break
 
-    safety_stats = safety_guard.get_stats()
-    trace = {
+    safety_stats = cast(SafetyStatsGuard, safety_guard).get_stats()
+    trace: Payload = {
         'schema_version': 'l2_promotion_trace.v1',
         'trace_id': f"trace_{bundle.get('bundle_id') or 'unknown'}",
         'created_at': _trace_time(),
@@ -470,15 +529,17 @@ def run_l2_promotion_agent(
     return trace
 
 
-def replay_l2_promotion_trace(trace: Dict[str, Any]) -> Dict[str, Any]:
+def replay_l2_promotion_trace(trace: Payload) -> Payload:
+    bundle = _payload_or_empty(trace.get('bundle'))
+    results = _payload_list(trace.get('results'))
     return {
         'schema_version': 'l2_promotion_trace_replay.v1',
         'trace_id': trace.get('trace_id'),
         'uid': trace.get('uid'),
-        'bundle_id': (trace.get('bundle') or {}).get('bundle_id'),
-        'decision_count': len(trace.get('decisions') or []),
-        'result_count': len(trace.get('results') or []),
-        'tool_call_count': len(trace.get('tool_calls') or []),
-        'commit_ids': [result.get('commit_id') for result in trace.get('results') or [] if result.get('commit_id')],
+        'bundle_id': bundle.get('bundle_id'),
+        'decision_count': len(_object_list(trace.get('decisions'))),
+        'result_count': len(results),
+        'tool_call_count': len(_object_list(trace.get('tool_calls'))),
+        'commit_ids': [result.get('commit_id') for result in results if result.get('commit_id')],
         'status': trace.get('status') or 'unknown',
     }

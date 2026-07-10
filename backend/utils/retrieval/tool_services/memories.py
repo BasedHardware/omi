@@ -3,8 +3,7 @@ Shared service functions for memory retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
-from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict, List, cast
 
 import database.memories as memory_db
 import database.vector_db as vector_db
@@ -55,7 +54,7 @@ def get_memories_text(
     if memory_system == MemorySystem.CANONICAL:
         memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
         if start_dt or end_dt:
-            filtered = []
+            filtered: List[MemoryDB] = []
             for memory in memories:
                 created = memory.created_at
                 if start_dt and created and created < start_dt:
@@ -86,18 +85,18 @@ def get_memories_text(
         return default_memories.text or "No memories available for this request."
 
     # Fetch
-    memories = []
+    memories_data: List[Dict[str, Any]] = []
     try:
-        memories = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
+        memories_data = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
     except Exception as e:
         logger.error(f"get_memories_text error: {e}")
         return f"Error retrieving memories: {e}"
 
     # Filter locked
-    if memories:
-        memories = [m for m in memories if not m.get('is_locked', False)]
+    if memories_data:
+        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
 
-    if not memories:
+    if not memories_data:
         date_info = ""
         if start_dt and end_dt:
             date_info = f" between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
@@ -108,8 +107,8 @@ def get_memories_text(
         return f"No memories found{date_info}."
 
     # Convert to objects
-    memory_objects = []
-    for memory_data in memories:
+    memory_objects: List[MemoryDB] = []
+    for memory_data in memories_data:
         try:
             memory_objects.append(MemoryDB(**memory_data))
         except Exception as e:
@@ -172,7 +171,7 @@ def search_memories_text(
         if not matches:
             return f"No memories found matching '{query}'."
 
-        memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
+        memory_ids = [cast(str, match.get('memory_id')) for match in matches if match.get('memory_id')]
         scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
 
         if not memory_ids:
@@ -186,7 +185,7 @@ def search_memories_text(
             return f"No memories found matching '{query}'."
 
         # Format with scores
-        memory_objects = []
+        memory_objects: List[Dict[str, Any]] = []
         for memory_data in memories_data:
             try:
                 memory_obj = MemoryDB(**memory_data)

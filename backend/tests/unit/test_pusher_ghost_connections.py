@@ -68,6 +68,7 @@ class TestConstants:
         assert SPEAKER_SAMPLE_MIN_AGE > 0
 
 
+@pytest.mark.slow
 class TestReceiveTimeoutBehavior:
     """Verify receive_tasks() exits on timeout instead of hanging forever."""
 
@@ -119,6 +120,7 @@ class TestReceiveTimeoutBehavior:
         assert frames_received == total_frames
 
 
+@pytest.mark.slow
 class TestDrainTimeout:
     """Verify background tasks are force-cancelled after drain timeout."""
 
@@ -262,6 +264,7 @@ class TestSpeakerSampleShutdownDrain:
         assert 'p1' in processed_ids, "Speaker sample queued < 120s ago should be processed on shutdown, not dropped"
 
 
+@pytest.mark.slow
 class TestGaugeDecrement:
     """Verify the gauge is always decremented regardless of task state."""
 
@@ -383,6 +386,7 @@ class TestGaugeDecrement:
             pass
 
 
+@pytest.mark.slow
 class TestSupervisorBehavior:
     """Verify the supervisor detects bg task crashes during active sessions."""
 

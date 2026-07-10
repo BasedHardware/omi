@@ -56,6 +56,7 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             ("launch an agent to research this", "research this"),
             ("make a floating agent for this task", "this task"),
             ("have an agent make a simple snake facts html page", "make a simple snake facts html page"),
+            ("ask a subagent if it can also see my screen or not", "if it can also see my screen or not"),
         ]
         for (q, task) in spawnRequests {
             XCTAssertTrue(

@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 APPROVED_CLIENT_AUTH_METHODS = {
     "omi-chatgpt-prod": "none",
@@ -40,12 +40,14 @@ def _load_json(path: Path) -> Any:
 def _find_dicts_with_key(value: Any, key: str) -> list[dict[str, Any]]:
     matches: list[dict[str, Any]] = []
     if isinstance(value, dict):
-        if key in value:
-            matches.append(value)
-        for child in value.values():
+        data = cast(dict[str, Any], value)
+        if key in data:
+            matches.append(data)
+        for child in data.values():
             matches.extend(_find_dicts_with_key(child, key))
     elif isinstance(value, list):
-        for child in value:
+        items = cast(list[Any], value)
+        for child in items:
             matches.extend(_find_dicts_with_key(child, key))
     return matches
 
@@ -53,13 +55,15 @@ def _find_dicts_with_key(value: Any, key: str) -> list[dict[str, Any]]:
 def _find_secret_paths(value: Any, prefix: str = "$") -> list[str]:
     paths: list[str] = []
     if isinstance(value, dict):
-        for key, child in value.items():
+        data = cast(dict[str, Any], value)
+        for key, child in data.items():
             child_path = f"{prefix}.{key}"
             if key.lower() in SECRET_FIELD_NAMES and child not in (None, ""):
                 paths.append(child_path)
             paths.extend(_find_secret_paths(child, child_path))
     elif isinstance(value, list):
-        for index, child in enumerate(value):
+        items = cast(list[Any], value)
+        for index, child in enumerate(items):
             paths.extend(_find_secret_paths(child, f"{prefix}[{index}]"))
     return paths
 
@@ -79,7 +83,7 @@ def _extract_oauth_clients(payload: Any) -> list[dict[str, Any] | None]:
         if oauth_client is None and flow_requires_oauth:
             clients.append(None)
         elif isinstance(oauth_client, dict):
-            clients.append(oauth_client)
+            clients.append(cast(dict[str, Any], oauth_client))
         elif oauth_client is not None:
             raise ValidationError("oauth_client must be an object when present")
     return clients
@@ -122,21 +126,29 @@ def _tool_names(value: Any) -> set[str]:
     names: set[str] = set()
 
     if isinstance(value, list):
-        for tool in value:
-            if isinstance(tool, dict) and tool.get("name"):
-                names.add(str(tool["name"]))
+        items = cast(list[Any], value)
+        for tool in items:
+            if isinstance(tool, dict):
+                tool_data = cast(dict[str, Any], tool)
+                if tool_data.get("name"):
+                    names.add(str(tool_data["name"]))
 
     def visit(node: Any) -> None:
         if isinstance(node, dict):
-            tools = node.get("tools")
+            node_data = cast(dict[str, Any], node)
+            tools = node_data.get("tools")
             if isinstance(tools, list):
-                for tool in tools:
-                    if isinstance(tool, dict) and tool.get("name"):
-                        names.add(str(tool["name"]))
-            for child in node.values():
+                tools_list = cast(list[Any], tools)
+                for tool in tools_list:
+                    if isinstance(tool, dict):
+                        tool_data = cast(dict[str, Any], tool)
+                        if tool_data.get("name"):
+                            names.add(str(tool_data["name"]))
+            for child in node_data.values():
                 visit(child)
         elif isinstance(node, list):
-            for child in node:
+            node_items = cast(list[Any], node)
+            for child in node_items:
                 visit(child)
 
     visit(value)

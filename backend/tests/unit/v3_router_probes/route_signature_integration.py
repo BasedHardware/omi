@@ -201,8 +201,8 @@ def _legacy_runtime_calls(route: str, source_segment: str) -> list[str]:
     elif route == 'POST /v3/memories':
         required = [
             (
-                "MemoryDB.from_memory(memory, uid, None, manually_added)",
-                "MemoryDB.from_memory(memory, uid, None, manually_added)",
+                "client_device_id=device_context.client_device_id",
+                "MemoryDB.from_memory includes request device provenance",
             ),
             ("memories_db.create_memory", "memories_db.create_memory(uid, payload)"),
             (

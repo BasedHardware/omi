@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// Connect sheet for a grouped agent (Claude → Claude Code + Cloud, ChatGPT →
 /// Codex + Cloud). Both options are shown on screen at once as cards — no

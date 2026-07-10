@@ -11,7 +11,6 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  legacyControlRequestKey,
   registerSignedDirectControlOwner,
   resolveControlRequestContext,
   type AgentControlToolContext,
@@ -19,6 +18,7 @@ import {
   withMergedOwnerGuard,
 } from "../src/runtime/control-tools.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
+import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -59,7 +59,9 @@ describe("agent control tools", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_background_agent",
-      "delegate_agent",
+      "spawn_agent",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
     ]);
     for (const tool of agentControlToolDefinitions) {
       expect(isAgentControlToolName(tool.name)).toBe(true);
@@ -101,9 +103,7 @@ describe("agent control tools", () => {
 
     expect(parsed.success).toBe(true);
     expect(agentControlToolSchemas.spawn_background_agent.safeParse({
-      prompt: "Do work",
-      surfaceKind: "floating_pill",
-      externalRefKind: "pill",
+      prompt: "",
     }).success).toBe(false);
   });
 
@@ -113,7 +113,9 @@ describe("agent control tools", () => {
       expect(tool.privacyTier).toMatch(/^(low|local_private|sensitive)$/);
       expect(tool.approvalPolicy).toMatch(/^(allow|user_approval|policy_grant)$/);
       expect(tool.bundles.length).toBeGreaterThan(0);
-      expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+      if (tool.name !== "spawn_background_agent" && tool.name !== "resolve_desktop_dispatch") {
+        expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+      }
     }
 
     expect(agentControlCapabilityManifest.find((tool) => tool.name === "list_agent_sessions")).toMatchObject({
@@ -166,17 +168,19 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
-    const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
-    expect(delegateAgent?.description).toContain("canonical child handles");
-    expect(delegateAgent?.description).toContain("does not create or manage floating pill UI");
-    expect(delegateAgent?.promptSnippet).toContain("canonical Omi child agent");
-    expect(delegateAgent?.promptGuidelines).toContain(
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
+  it("documents run_agent_and_wait as synchronous parent-linked delegation", () => {
+    const runAndWait = agentControlCapabilityManifest.find((tool) => tool.name === "run_agent_and_wait");
+    expect(runAndWait?.description).toContain("synchronously");
+    expect(runAndWait?.runtimePreconditions).toContain("Requires parentRunId.");
+    expect(runAndWait?.promptGuidelines?.join("\n")).not.toMatch(/send_agent_message|instead of/i);
+  });
+
+  it("documents send_agent_message as session continuation only", () => {
+    const sendMessage = agentControlCapabilityManifest.find((tool) => tool.name === "send_agent_message");
+    expect(sendMessage?.runtimePreconditions).toContain(
+      "Requires an existing sessionId from list_agent_sessions; cannot create a new session.",
     );
-    expect(delegateAgent?.runtimePreconditions).toContain(
-      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
-    );
+    expect(sendMessage?.promptGuidelines?.join("\n")).not.toMatch(/do not|instead of|delegated child/i);
   });
 
   it("resolves desktop approval dispatches with a scoped grant and event evidence", async () => {
@@ -447,10 +451,10 @@ describe("agent control tools", () => {
     );
     expect(list.ok).toBe(true);
     expect(list.sessions).toHaveLength(1);
-    expect(list.sessions[0].session.omiSessionId).toBe(result.session.sessionId);
+    expect(list.sessions[0].session.sessionId).toBe(result.session.sessionId);
     expect(list.sessions[0].latestRun.runId).toBe(result.run.runId);
     expect(list.sessions[0].adapterBindings[0]).toMatchObject({
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
       adapterId: "fake",
       adapterNativeSessionId: "native-1",
     });
@@ -463,7 +467,7 @@ describe("agent control tools", () => {
     );
     expect(inspected.run).toMatchObject({
       runId: result.run.runId,
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
       status: "succeeded",
     });
     expect(inspected.attempts[0].attemptId).toBe(result.attempt.attemptId);
@@ -578,9 +582,8 @@ describe("agent control tools", () => {
     ).toThrow("ownerId does not match active control owner");
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
-    expect(controlRequestKey({ requestId: "legacy-request" })).toBeUndefined();
-    expect(legacyControlRequestKey({ requestId: "legacy-request" })).toBe(
-      JSON.stringify(["legacy-jsonl-client", "legacy-request"]),
+    expect(controlRequestKey({ requestId: "request", clientId: "client" })).toBe(
+      JSON.stringify(["client", "request"]),
     );
   });
 
@@ -932,7 +935,7 @@ describe("agent control tools", () => {
     expect(inspected.artifacts).toEqual([
       expect.objectContaining({
         artifactId: "art_test",
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         uri: "omi-artifact://art_test",
@@ -951,7 +954,7 @@ describe("agent control tools", () => {
     expect(inspectedByArtifact.artifacts).toHaveLength(1);
     expect(inspectedByArtifact.artifacts[0]).toMatchObject({
       artifactId: "art_test",
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
     });
 
     const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
@@ -994,7 +997,7 @@ describe("agent control tools", () => {
         attemptId: result.attempt.attemptId,
       },
       event: {
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         type: "artifact.lifecycle_updated",
@@ -1235,7 +1238,7 @@ describe("agent control tools", () => {
 
     expect(inspected.artifacts).toEqual([
       expect.objectContaining({
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         uri: "adapter://fake/native-summary",
@@ -1271,13 +1274,13 @@ describe("agent control tools", () => {
     );
 
     expect(sent.ok).toBe(true);
-    expect(sent.session.omiSessionId).toBe(first.session.sessionId);
-    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.session.sessionId).toBe(first.session.sessionId);
+    expect(sent.run.sessionId).toBe(first.session.sessionId);
     expect(sent.run.runId).not.toBe(first.run.runId);
     expect(sent.run.status).toBe("succeeded");
     expect(sent.artifacts).toEqual([
       expect.objectContaining({
-        omiSessionId: first.session.sessionId,
+        sessionId: first.session.sessionId,
         runId: sent.run.runId,
         uri: "adapter://fake/follow-up.md",
         displayName: "follow-up.md",
@@ -1285,7 +1288,7 @@ describe("agent control tools", () => {
     ]);
     expect(adapter.executed).toHaveLength(2);
     expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
-    expect(adapter.executed[1].metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed[1].metadata).not.toMatchObject({ disableSwiftBackedTools: true });
 
     const listed = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
@@ -1313,7 +1316,7 @@ describe("agent control tools", () => {
 
     expect(sent.ok).toBe(true);
     expect(adapter.executed).toHaveLength(2);
-    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.run.sessionId).toBe(first.session.sessionId);
     store.close();
   });
 
@@ -1447,7 +1450,7 @@ describe("agent control tools", () => {
     );
 
     expect(sent.ok).toBe(true);
-    expect(sent.run.omiSessionId).toBe(idleSession.session.sessionId);
+    expect(sent.run.sessionId).toBe(idleSession.session.sessionId);
     expect(adapter.executed).toHaveLength(3);
 
     adapter.resolveDeferred({
@@ -1478,28 +1481,6 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("validates childSessionId before delegate_agent continue mode dispatch", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    const parent = await kernel.executeRun(baseRunInput);
-
-    const invalid = parseToolResult(
-      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
-        mode: "continue",
-        parentRunId: parent.run.runId,
-        objective: "continue without a child id",
-      }),
-    );
-
-    expect(invalid).toMatchObject({
-      ok: false,
-      error: {
-        code: "invalid_tool_input",
-      },
-    });
-    expect(invalid.error.message).toContain("childSessionId");
-    store.close();
-  });
-
   it("spawns a canonical top-level background agent without a parent run", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const spawned = parseToolResult(
@@ -1518,12 +1499,12 @@ describe("agent control tools", () => {
     expect(spawned.session).toMatchObject({
       ownerId: "owner",
       title: "Story Idea",
-      surfaceKind: "background_agent",
+      surfaceKind: "floating_bar",
       externalRefKind: "pill",
       externalRefId: "pill-1",
     });
     expect(spawned.run).toMatchObject({
-      omiSessionId: spawned.session.omiSessionId,
+      sessionId: spawned.session.sessionId,
       parentRunId: null,
       mode: "act",
       status: "queued",
@@ -1536,8 +1517,7 @@ describe("agent control tools", () => {
     const parent = await kernel.executeRun(baseRunInput);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall(ownerContext(kernel), "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "summarize the child task",
         context: "only concise parent context",
@@ -1551,14 +1531,14 @@ describe("agent control tools", () => {
     expect(delegated.delegation).toMatchObject({
       parentSessionId: parent.session.sessionId,
       parentRunId: parent.run.runId,
-      childSessionId: delegated.childSession.omiSessionId,
-      childRunId: delegated.childRun.runId,
+      childSessionId: delegated.session.sessionId,
+      childRunId: delegated.run.runId,
       mode: "call",
       status: "succeeded",
       objective: "summarize the child task",
     });
-    expect(delegated.childSession.omiSessionId).not.toBe(parent.session.sessionId);
-    expect(delegated.childRun.parentRunId).toBe(parent.run.runId);
+    expect(delegated.session.sessionId).not.toBe(parent.session.sessionId);
+    expect(delegated.run.parentRunId).toBe(parent.run.runId);
     expect(delegated.result).toMatchObject({
       summary: expect.stringContaining("done-"),
       verifiedEffects: [],
@@ -1568,7 +1548,7 @@ describe("agent control tools", () => {
 
     const row = store.getRow("SELECT * FROM delegations WHERE delegation_id = ?", [delegated.delegation.delegationId]);
     expect(row.parent_run_id).toBe(parent.run.runId);
-    expect(row.child_run_id).toBe(delegated.childRun.runId);
+    expect(row.child_run_id).toBe(delegated.run.runId);
 
     const parentInspect = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", { runId: parent.run.runId, ownerId: "owner" }),
@@ -1576,7 +1556,7 @@ describe("agent control tools", () => {
     expect(parentInspect.parentDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
     const childInspect = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
-        runId: delegated.childRun.runId,
+        runId: delegated.run.runId,
         ownerId: "owner",
       }),
     );
@@ -1584,17 +1564,21 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("passes only non-Swift-backed MCP tools into delegated child bindings", async () => {
+  it("keeps Swift-backed MCP tools available in delegated child bindings", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const buildMcpServers = vi.fn(() => [
-      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
     ]);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use browser tools if needed",
         requestId: "delegate-tools-1",
@@ -1612,9 +1596,19 @@ describe("agent control tools", () => {
       clientId: "delegate-client",
       adapterId: "fake",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
+      screenContext: true,
     });
+    expect(toolNamesForAdapter("omi-tools-stdio", { screenContext: true })).toEqual(
+      expect.arrayContaining(["get_work_context", "request_permission", "check_permission_status", "capture_screen"]),
+    );
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       {
         name: "playwright",
         command: "node",
@@ -1622,7 +1616,7 @@ describe("agent control tools", () => {
         env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
       },
     ]);
-    expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed.at(-1)?.metadata).not.toMatchObject({ disableSwiftBackedTools: true });
     store.close();
   });
 
@@ -1632,11 +1626,10 @@ describe("agent control tools", () => {
     const buildMcpServers = vi.fn(() => []);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use OpenClaw for this child",
-        defaultAdapterId: "openclaw",
+        adapterId: "openclaw",
         requestId: "delegate-openclaw-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1644,33 +1637,139 @@ describe("agent control tools", () => {
     );
 
     expect(delegated.ok).toBe(true);
-    expect(delegated.childSession.defaultAdapterId).toBe("openclaw");
-    expect(delegated.childRun).toMatchObject({
+    expect(delegated.session.defaultAdapterId).toBe("openclaw");
+    expect(delegated.run).toMatchObject({
       status: "failed",
       errorCode: "adapter_not_registered",
     });
-    expect(delegated.childRun.errorMessage).toContain("Adapter not registered: openclaw");
+    expect(delegated.run.errorMessage).toContain("Adapter not registered: openclaw");
     expect(buildMcpServers).toHaveBeenCalledWith("ask", undefined, undefined, {
       ownerId: "owner",
       requestId: "delegate-openclaw-1",
       clientId: "delegate-client",
       adapterId: "openclaw",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
+      screenContext: true,
     });
     store.close();
   });
 
-  it("delegates spawn mode and returns child handles before the child finishes", async () => {
+  it("rejects non-run parent ids before creating delegated child work", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "run_agent_and_wait", {
+        parentRunId: "ctx_73609606effbbf6d",
+        objective: "try the invalid parent id",
+        requestId: "delegate-invalid-parent-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(false);
+    expect(delegated.error.code).toBe("control_tool_failed");
+    expect(delegated.error.message).toContain("parentRunId must be a canonical Omi run_id");
+    store.close();
+  });
+
+  it("spawn_agent generates a pill external ref when visible without externalRefId", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const spawnedRaw = await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+      objective: "summarize inbox",
+      visible: true,
+      requestId: "spawn-visible-pill-1",
+      clientId: "spawn-client",
+      ownerId: "owner",
+    });
+    const spawned = parseToolResult(spawnedRaw);
+
+    expect(spawned.ok).toBe(true);
+    expect(spawnedRaw).not.toMatch(/errorCode|errorMessage/);
+    expect(spawned.session).toMatchObject({
+      ownerId: "owner",
+      surfaceKind: "floating_bar",
+      externalRefKind: "pill",
+    });
+    expect(spawned.session.externalRefId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    const row = store.getRow("SELECT external_ref_kind, external_ref_id FROM sessions WHERE session_id = ?", [
+      spawned.session.sessionId,
+    ]);
+    expect(row.external_ref_kind).toBe("pill");
+    expect(row.external_ref_id).toBe(spawned.session.externalRefId);
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.ok).toBe(true);
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: spawned.session.externalRefId,
+        sessionId: spawned.session.sessionId,
+        runId: spawned.run.runId,
+        status: expect.any(String),
+        query: "summarize inbox",
+      }),
+    );
+    store.close();
+  });
+
+  it("projects typed failure details for accepted visible spawned agents", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    adapter.failNextExecutionError = new Error("spawn bridge failed after acceptance");
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "summarize inbox",
+        visible: true,
+        externalRefId: "11111111-2222-4333-8444-555555555555",
+        requestId: "spawn-visible-failure-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "failed";
+    });
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: "11111111-2222-4333-8444-555555555555",
+        runId: spawned.run.runId,
+        status: "failed",
+        errorCode: "adapter_execution_failed",
+        errorMessage: expect.stringContaining("spawn bridge failed after acceptance"),
+        latestActivity: expect.stringContaining("spawn bridge failed after acceptance"),
+      }),
+    );
+    store.close();
+  });
+
+  it("spawn_agent with parentRunId returns child handles before the child finishes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     adapter.deferResult();
+    const buildMcpServers = vi.fn(() => []);
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "spawn",
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "run in the background",
+        visible: false,
         requestId: "delegate-spawn-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1678,14 +1777,26 @@ describe("agent control tools", () => {
     );
 
     expect(spawned.ok).toBe(true);
-    expect(spawned.result).toBeNull();
-    expect(spawned.childSession.omiSessionId).not.toBe(parent.session.sessionId);
-    expect(spawned.childRun.status).toBe("queued");
+    expect(spawned.result).toBeUndefined();
+    expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
+    expect(spawned.run.status).toBe("queued");
+    expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
+      ownerId: "owner",
+      requestId: "delegate-spawn-1",
+      clientId: "delegate-client",
+      adapterId: "acp",
+      protocolVersion: 2,
+      surfaceKind: "delegated_agent",
+      externalRefKind: undefined,
+      externalRefId: undefined,
+      includeSwiftBackedTools: true,
+      screenContext: true,
+    });
     await waitUntil(() => adapter.executed.length === 2);
 
     const running = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
-        runId: spawned.childRun.runId,
+        runId: spawned.run.runId,
         ownerId: "owner",
       }),
     );
@@ -1709,10 +1820,10 @@ describe("agent control tools", () => {
     adapter.failNextExecutionError = new Error("spawn failed");
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "spawn",
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "fail in the background",
+        visible: false,
         requestId: "delegate-spawn-failure",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1724,11 +1835,11 @@ describe("agent control tools", () => {
       const row = store.getRow("SELECT status FROM delegations WHERE delegation_id = ?", [spawned.delegation.delegationId]);
       return row.status === "failed";
     });
-    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.childRun.runId]).status).toBe("failed");
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]).status).toBe("failed");
     store.close();
   });
 
-  it("delegates continue mode as another run in an existing child session", async () => {
+  it("send_agent_message continues an existing child session", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const firstChild = await kernel.delegateAgent({
@@ -1741,11 +1852,9 @@ describe("agent control tools", () => {
     });
 
     const continued = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "continue",
-        parentRunId: parent.run.runId,
-        childSessionId: firstChild.childSession.sessionId,
-        objective: "continue the child",
+      await handleAgentControlToolCall(ownerContext(kernel), "send_agent_message", {
+        sessionId: firstChild.childSession.sessionId,
+        prompt: "continue the child",
         requestId: "delegate-continue-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1753,17 +1862,11 @@ describe("agent control tools", () => {
     );
 
     expect(continued.ok).toBe(true);
-    expect(continued.childSession.omiSessionId).toBe(firstChild.childSession.sessionId);
-    expect(continued.childRun.runId).not.toBe(firstChild.childRun.runId);
-    expect(continued.childRun.parentRunId).toBe(parent.run.runId);
-    expect(continued.delegation).toMatchObject({
-      parentRunId: parent.run.runId,
-      childSessionId: firstChild.childSession.sessionId,
-      childRunId: continued.childRun.runId,
-      mode: "continue",
-      status: "succeeded",
-    });
-    expect(adapter.resumed.at(-1)?.sessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.session.sessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.run.runId).not.toBe(firstChild.childRun.runId);
+    expect(continued.run.parentRunId).toBeNull();
+    expect(adapter.executed).toHaveLength(3);
+    expect(adapter.executed[2].sessionId).toBe(firstChild.childSession.sessionId);
     store.close();
   });
 
@@ -1772,8 +1875,7 @@ describe("agent control tools", () => {
     const parent = await kernel.executeRun(baseRunInput);
 
     const invalidBudget = parseToolResult(
-      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ kernel }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "too expensive",
         maxBudgetUsd: 11,

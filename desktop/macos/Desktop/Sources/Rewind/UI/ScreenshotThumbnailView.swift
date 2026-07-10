@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Thumbnail view for a single screenshot in the grid
 struct ScreenshotThumbnailView: View {

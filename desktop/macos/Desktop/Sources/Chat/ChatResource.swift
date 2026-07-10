@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 enum ChatResourceOrigin: Equatable {
   case userAttachment
@@ -27,7 +28,7 @@ struct ChatResource: Identifiable, Equatable {
   let imageData: Data?
   let uri: String?
   let artifactId: String?
-  let omiSessionId: String?
+  let sessionId: String?
   let runId: String?
   let state: State
 
@@ -44,11 +45,36 @@ struct ChatResource: Identifiable, Equatable {
   }
 
   var canOpen: Bool {
-    fileURL != nil
+    guard let fileURL else { return false }
+    return FileManager.default.fileExists(atPath: fileURL.path)
   }
 
   var canRevealInFinder: Bool {
-    fileURL != nil
+    guard let fileURL else { return false }
+    return FileManager.default.fileExists(atPath: fileURL.path)
+  }
+
+  static func localGeneratedFile(
+    id: String,
+    title: String,
+    subtitle: String?,
+    mimeType: String?,
+    uri: String
+  ) -> ChatResource {
+    ChatResource(
+      id: id,
+      origin: .generatedArtifact,
+      title: title,
+      subtitle: subtitle,
+      mimeType: mimeType,
+      thumbnailURL: nil,
+      imageData: nil,
+      uri: uri,
+      artifactId: nil,
+      sessionId: nil,
+      runId: nil,
+      state: .ready
+    )
   }
 
   static func attachment(_ attachment: ChatAttachment) -> ChatResource {
@@ -71,7 +97,7 @@ struct ChatResource: Identifiable, Equatable {
       imageData: attachment.data,
       uri: attachment.localFileURL?.absoluteString,
       artifactId: nil,
-      omiSessionId: nil,
+      sessionId: nil,
       runId: nil,
       state: state
     )
@@ -88,10 +114,177 @@ struct ChatResource: Identifiable, Equatable {
       imageData: nil,
       uri: artifact.uri,
       artifactId: artifact.artifactId,
-      omiSessionId: artifact.omiSessionId,
+      sessionId: artifact.sessionId,
       runId: artifact.runId,
       state: State(artifactLifecycleState: artifact.lifecycleState)
     )
+  }
+
+  /// Key inside chat message `metadata` JSON for persisted resource cards.
+  static let messageMetadataResourcesKey = "resources"
+
+  /// User-visible label when a persisted file path no longer resolves on disk.
+  static let unavailableOnDiskMessage = "Deleted or moved"
+
+  static func encodeResourcesForPersistence(_ resources: [ChatResource]) -> String? {
+    guard !resources.isEmpty else { return nil }
+    let encoded = resources.map(persistenceDictionary(for:))
+    guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+          let json = String(data: data, encoding: .utf8) else { return nil }
+    return json
+  }
+
+  static func decodeResourcesFromPersistence(_ json: String) -> [ChatResource] {
+    guard let data = json.data(using: .utf8),
+          let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+    return decodeResources(fromJSONArray: array)
+  }
+
+  /// Decode resource cards from a chat message's persisted `metadata` JSON blob.
+  static func decodeResourcesFromMessageMetadata(_ metadataJSON: String?) -> [ChatResource] {
+    guard let metadataJSON,
+          let data = metadataJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let array = root[messageMetadataResourcesKey] as? [[String: Any]]
+    else { return [] }
+    return hydrateFileStates(decodeResources(fromJSONArray: array))
+  }
+
+  /// Merge resource cards into an existing metadata JSON object (attachments, tool_calls, etc.).
+  static func mergeResourcesIntoMessageMetadata(
+    _ metadataJSON: String?,
+    resources: [ChatResource]
+  ) -> String? {
+    guard !resources.isEmpty else { return metadataJSON }
+    var root = parseMessageMetadataRoot(metadataJSON)
+    root[messageMetadataResourcesKey] = resources.map(persistenceDictionary(for:))
+    guard let data = try? JSONSerialization.data(withJSONObject: root),
+          let json = String(data: data, encoding: .utf8) else { return metadataJSON }
+    return json
+  }
+
+  /// Re-check local file paths after restart and surface missing artifacts in the UI.
+  static func hydrateFileStates(_ resources: [ChatResource]) -> [ChatResource] {
+    resources.map { resource in
+      guard resource.origin == .generatedArtifact || resource.fileURL != nil else {
+        return resource
+      }
+      guard let fileURL = resource.fileURL else {
+        return resource.markingUnavailableOnDisk()
+      }
+      if FileManager.default.fileExists(atPath: fileURL.path) {
+        return resource
+      }
+      return resource.markingUnavailableOnDisk()
+    }
+  }
+
+  func refreshedFromKernelArtifact(_ artifact: AgentArtifactProjection) -> ChatResource {
+    let refreshed = ChatResource.artifact(artifact)
+    guard let fileURL = refreshed.fileURL else {
+      return markingUnavailableOnDisk()
+    }
+    if FileManager.default.fileExists(atPath: fileURL.path) {
+      return refreshed
+    }
+    return markingUnavailableOnDisk()
+  }
+
+  func markingUnavailableOnDisk() -> ChatResource {
+    ChatResource(
+      id: id,
+      origin: origin,
+      title: title,
+      subtitle: Self.unavailableOnDiskMessage,
+      mimeType: mimeType,
+      thumbnailURL: thumbnailURL,
+      imageData: imageData,
+      uri: uri,
+      artifactId: artifactId,
+      sessionId: sessionId,
+      runId: runId,
+      state: .failed(Self.unavailableOnDiskMessage)
+    )
+  }
+
+  private static func parseMessageMetadataRoot(_ metadataJSON: String?) -> [String: Any] {
+    guard let metadataJSON,
+          let data = metadataJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return [:] }
+    return root
+  }
+
+  private static func decodeResources(fromJSONArray array: [[String: Any]]) -> [ChatResource] {
+    array.compactMap { dict in
+      guard let id = dict["id"] as? String,
+            let title = dict["title"] as? String
+      else { return nil }
+      let origin = (dict["origin"] as? String) == "generatedArtifact"
+        ? ChatResourceOrigin.generatedArtifact
+        : ChatResourceOrigin.userAttachment
+      return ChatResource(
+        id: id,
+        origin: origin,
+        title: title,
+        subtitle: dict["subtitle"] as? String,
+        mimeType: dict["mimeType"] as? String,
+        thumbnailURL: dict["thumbnailURL"] as? String,
+        imageData: nil,
+        uri: dict["uri"] as? String,
+        artifactId: dict["artifactId"] as? String,
+        sessionId: dict["sessionId"] as? String,
+        runId: dict["runId"] as? String,
+        state: persistenceState(from: dict["state"] as? String)
+      )
+    }
+  }
+
+  private static func persistenceDictionary(for resource: ChatResource) -> [String: Any] {
+    var dict: [String: Any] = [
+      "id": resource.id,
+      "origin": resource.origin == .generatedArtifact ? "generatedArtifact" : "userAttachment",
+      "title": resource.title,
+      "state": persistenceStateString(resource.state),
+    ]
+    if let subtitle = resource.subtitle, subtitle != unavailableOnDiskMessage {
+      dict["subtitle"] = subtitle
+    }
+    if let mimeType = resource.mimeType { dict["mimeType"] = mimeType }
+    if let thumbnailURL = resource.thumbnailURL { dict["thumbnailURL"] = thumbnailURL }
+    if let uri = resource.uri { dict["uri"] = uri }
+    if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
+    if let sessionId = resource.sessionId { dict["sessionId"] = sessionId }
+    if let runId = resource.runId { dict["runId"] = runId }
+    return dict
+  }
+
+  private static func persistenceStateString(_ state: State) -> String {
+    switch state {
+    case .uploading: return "uploading"
+    case .ready: return "ready"
+    case .failed(let message) where message == unavailableOnDiskMessage:
+      return "ready"
+    case .failed(let message): return "failed:\(message)"
+    case .retained: return "retained"
+    case .opened: return "opened"
+    case .dismissed: return "dismissed"
+    }
+  }
+
+  private static func persistenceState(from raw: String?) -> State {
+    guard let raw else { return .ready }
+    switch raw {
+    case "uploading": return .uploading
+    case "retained": return .retained
+    case "opened": return .opened
+    case "dismissed": return .dismissed
+    default:
+      if raw.hasPrefix("failed:") {
+        return .failed(String(raw.dropFirst("failed:".count)))
+      }
+      return .ready
+    }
   }
 }
 
@@ -217,7 +410,7 @@ private struct ChatResourceCard: View {
         if let subtitle = resource.subtitle, !subtitle.isEmpty {
           Text(subtitle)
             .scaledFont(size: isCompact ? 10 : 11)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(subtitleColor)
             .lineLimit(1)
             .truncationMode(.middle)
         }
@@ -255,6 +448,13 @@ private struct ChatResourceCard: View {
     resource.origin == .generatedArtifact ? OmiColors.textPrimary : OmiColors.textSecondary
   }
 
+  private var subtitleColor: Color {
+    if case .failed = resource.state {
+      return OmiColors.warning
+    }
+    return OmiColors.textTertiary
+  }
+
   @ViewBuilder
   private var trailingAccessory: some View {
     switch resource.state {
@@ -264,6 +464,7 @@ private struct ChatResourceCard: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: 12)
         .foregroundColor(OmiColors.warning)
+        .help(resource.subtitle ?? "Unavailable")
     default:
       if resource.canOpen {
         HStack(spacing: 2) {

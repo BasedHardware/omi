@@ -9,10 +9,18 @@ from pathlib import Path
 from typing import Any, Dict, Sequence
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+SCRIPTS_DIR = Path(__file__).resolve().parent
+for path in (BACKEND_DIR, SCRIPTS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from readiness_gate_common import (
+    add_require_go_arg,
+    collect_gates_from_artifact,
+    evaluate_gates,
+    exit_code_for_status,
+)
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 
 ROLLLOUT_READINESS_STATUS_NOT_RUN = "NOT_RUN"
@@ -44,6 +52,7 @@ NON_CLAIMS = [
 @dataclass(frozen=True)
 class RolloutSchemaReadinessConfig:
     execute: bool
+    require_go: bool = False
 
 
 def _base_schema_v1_doc(uid: str = "memory-schema-readiness-user") -> Dict[str, Any]:
@@ -156,11 +165,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--execute", action="store_true", help="Emit the same read-only local inventory; no provider calls."
     )
+    add_require_go_arg(parser)
     return parser.parse_args(argv)
 
 
 def config_from_args(args: argparse.Namespace) -> RolloutSchemaReadinessConfig:
-    return RolloutSchemaReadinessConfig(execute=bool(args.execute))
+    return RolloutSchemaReadinessConfig(
+        execute=bool(args.execute),
+        require_go=bool(args.require_go),
+    )
 
 
 def build_readiness_artifact(config: RolloutSchemaReadinessConfig) -> Dict[str, Any]:
@@ -199,7 +212,11 @@ def build_readiness_artifact(config: RolloutSchemaReadinessConfig) -> Dict[str, 
 
 def main(argv: Sequence[str] | None = None) -> int:
     config = config_from_args(parse_args(argv or sys.argv[1:]))
-    print(json.dumps(build_readiness_artifact(config), indent=2, sort_keys=True))
+    artifact = build_readiness_artifact(config)
+    print(json.dumps(artifact, indent=2, sort_keys=True))
+    if config.require_go:
+        overall_status, _ = evaluate_gates(collect_gates_from_artifact(artifact))
+        return exit_code_for_status(overall_status, require_go=True)
     return 0
 
 

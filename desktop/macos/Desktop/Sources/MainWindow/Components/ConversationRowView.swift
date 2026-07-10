@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// Row view for a conversation in the list
 struct ConversationRowView: View {
@@ -107,19 +108,7 @@ struct ConversationRowView: View {
     isStarring = true
     let newStarred = !conversation.starred
 
-    do {
-      try await APIClient.shared.setConversationStarred(id: conversation.id, starred: newStarred)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateStarredByBackendId(
-        conversation.id, starred: newStarred)
-
-      await MainActor.run {
-        appState.setConversationStarred(conversation.id, starred: newStarred)
-      }
-    } catch {
-      log("Failed to update starred status: \(error)")
-    }
+    await appState.setConversationStarred(conversation.id, starred: newStarred)
 
     isStarring = false
   }
@@ -165,21 +154,8 @@ struct ConversationRowView: View {
     guard !isDeleting else { return }
     isDeleting = true
 
-    // Soft-delete in SQLite immediately so reload doesn't restore it
-    do {
-      try await TranscriptionStorage.shared.deleteByBackendId(conversation.id)
-    } catch {
-      log("Failed to soft-delete conversation locally: \(error)")
-    }
-
-    do {
-      try await APIClient.shared.deleteConversation(id: conversation.id)
-      await MainActor.run {
-        appState.deleteConversationLocally(conversation.id)
-      }
+    if await appState.deleteConversation(conversation.id) {
       log("Deleted conversation \(conversation.id)")
-    } catch {
-      log("Failed to delete conversation: \(error)")
     }
 
     isDeleting = false
@@ -189,20 +165,8 @@ struct ConversationRowView: View {
     guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
     isUpdatingTitle = true
 
-    do {
-      try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateTitleByBackendId(
-        conversation.id, title: editedTitle)
-
-      await MainActor.run {
-        appState.updateConversationTitle(conversation.id, title: editedTitle)
-      }
-      log("Updated conversation title to: \(editedTitle)")
-    } catch {
-      log("Failed to update title: \(error)")
-    }
+    await appState.updateConversationTitle(conversation.id, title: editedTitle)
+    log("Updated conversation title to: \(editedTitle)")
 
     isUpdatingTitle = false
   }

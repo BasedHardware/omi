@@ -12,6 +12,9 @@ class ViewModelContainer: ObservableObject {
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
+    /// Brain-map graph — persistent so the SceneKit scene, force layout, and
+    /// camera survive page navigation instead of rebuilding every visit.
+    let memoryGraphViewModel = MemoryGraphViewModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
@@ -29,6 +32,16 @@ class ViewModelContainer: ObservableObject {
         chatProvider = provider
         taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
         ChatProvider.mainInstance = provider
+        RecurringTaskScheduler.shared.configure(taskChatCoordinator: taskChatCoordinator)
+
+        // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
+        // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03
+        // without the Tasks page being on screen. Gated to the automation bridge, which
+        // only runs on non-prod bundles.
+        if DesktopAutomationLaunchOptions.isEnabled {
+            tasksViewModel.registerAutomationActions()
+            memoriesViewModel.registerAutomationActions()
+        }
     }
 
     // Loading state
@@ -123,6 +136,7 @@ class ViewModelContainer: ObservableObject {
         dashboardViewModel.resetSessionState()
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
+        memoryGraphViewModel.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false
@@ -143,6 +157,7 @@ class ViewModelContainer: ObservableObject {
             try await RewindDatabase.shared.initialize()
             databaseInitFailed = false
             warmupCoordinator.markDatabaseRetryComplete()
+            TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
             log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
             schedulePostInteractiveWarmup(dbAvailable: true)
             return true

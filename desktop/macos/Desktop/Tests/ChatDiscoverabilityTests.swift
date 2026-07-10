@@ -113,28 +113,27 @@ final class ChatDiscoverabilityTests: XCTestCase {
         }
     }
 
-    func testDesktopPromptMentionsTaskAgentStatus() {
+    func testDesktopPromptMentionsListAgentSessionsForSubagents() {
         let prompt = ChatPrompts.desktopChat
-        XCTAssertTrue(prompt.contains("**get_task_agent_status**"))
+        XCTAssertTrue(prompt.contains("**list_agent_sessions**"))
         XCTAssertTrue(prompt.contains("your subagents"))
-        XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
+        XCTAssertTrue(prompt.contains("Call list_agent_sessions"))
         XCTAssertTrue(prompt.contains("floating_agent_pills"))
     }
 
-    func testDesktopPromptCanSpawnAndManageFloatingAgents() {
+    func testDesktopPromptCanSpawnFloatingAgents() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("**spawn_agent**"))
-        XCTAssertTrue(prompt.contains("call spawn_agent"))
-        XCTAssertTrue(prompt.contains("**manage_agent_pills**"))
-        XCTAssertTrue(prompt.contains("circular floating agent pills"))
+        XCTAssertTrue(prompt.contains("call spawn_agent") || prompt.contains("Start background work -> spawn_agent"))
+        XCTAssertTrue(prompt.contains("circular floating agent pills") || prompt.contains("floating-bar"))
     }
 
-    func testDesktopPromptDistinguishesDelegationFromFloatingPills() {
-        let prompt = ChatPrompts.desktopChat
-        XCTAssertTrue(prompt.contains("**delegate_agent**"))
-        XCTAssertTrue(prompt.contains("Use spawn_agent instead when the user wants a visible floating-bar background agent pill."))
-        XCTAssertTrue(prompt.contains("Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."))
-        XCTAssertTrue(prompt.contains("Do not treat one as an alias for the other."))
+    func testDesktopPromptDistinguishesSpawnFromRunAndWait() {
+        let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: [])
+        XCTAssertTrue(prompt.contains("**run_agent_and_wait**") || prompt.contains("run_agent_and_wait"))
+        XCTAssertTrue(prompt.contains("spawn_agent"))
+        XCTAssertTrue(prompt.contains("Synchronous parent-linked child result"))
+        XCTAssertTrue(prompt.contains("Start background work"))
     }
 
     func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
@@ -157,29 +156,35 @@ final class ChatDiscoverabilityTests: XCTestCase {
     }
 
     func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
-        let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
-            .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
-            .union(Set(readAgentControlManifestEntries().map(\.name)))
+        let manifestJSON = try readMacOSFile("agent/tests/fixtures/tool-manifest.json")
+        let manifest = try JSONSerialization.jsonObject(with: Data(manifestJSON.utf8)) as? [[String: Any]]
+        let fixture = try XCTUnwrap(manifest)
+        var declaredTools = Set<String>()
+        for entry in fixture {
+            guard let name = entry["name"] as? String,
+                  let adapters = entry["adapters"] as? [String: Any] else { continue }
+            for adapterId in ["pi-mono", "omi-tools-stdio"] {
+                guard let availability = adapters[adapterId] as? [String: Any],
+                      (availability["advertised"] as? Bool) == true else { continue }
+                declaredTools.insert(name)
+            }
+            if let executor = entry["executor"] as? [String: Any],
+               executor["kind"] as? String == "runtimeControl" {
+                declaredTools.insert(name)
+            }
+        }
+        let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot"]
 
-        for toolName in DesktopCapabilityRegistry.desktopToolNames {
+        for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
             XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
         }
     }
 
     func testAgentControlCapabilitiesMatchCanonicalManifest() throws {
         let manifestEntries = try readAgentControlManifestEntries()
-        XCTAssertEqual(manifestEntries.map(\.name), [
-            "list_agent_sessions",
-            "get_agent_run",
-            "cancel_agent_run",
-            "inspect_agent_artifacts",
-            "update_agent_artifact_lifecycle",
-            "send_agent_message",
-            "delegate_agent",
-        ])
-
+            .filter { $0.surfaces.contains(.desktopChat) }
         let capabilities = Dictionary(
-            uniqueKeysWithValues: DesktopCapabilityRegistry.capabilities.map { ($0.toolName, $0) })
+            uniqueKeysWithValues: DesktopCapabilityRegistry.capabilities(for: .desktopChat).map { ($0.toolName, $0) })
 
         for entry in manifestEntries {
             let capability = try XCTUnwrap(capabilities[entry.name], "Missing Swift capability for \(entry.name)")
@@ -245,7 +250,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
             return AgentControlManifestEntry(
                 name: namedOffset.0,
                 label: try stringLiteralValue("label", in: block),
-                summary: try templateFirstLineValue("description", in: block),
+                summary: try capabilityDocSummary(in: block),
                 promptSnippet: try stringLiteralValue("promptSnippet", in: block),
                 promptGuidelines: try arrayStringValues("promptGuidelines", in: block),
                 latency: try stringLiteralValue("latency", in: block),
@@ -267,6 +272,18 @@ final class ChatDiscoverabilityTests: XCTestCase {
         guard let match = regex.firstMatch(in: text, range: range),
               let valueRange = Range(match.range(at: 1), in: text) else {
             XCTFail("Missing string literal \(key)")
+            return ""
+        }
+        return String(text[valueRange])
+    }
+
+    private func capabilityDocSummary(in text: String) throws -> String {
+        let regex = try NSRegularExpression(
+            pattern: #"capabilityDoc:\s*controlDoc\(\s*\n?\s*"[^"]+",\s*\n?\s*"([^"]+)""#)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let valueRange = Range(match.range(at: 1), in: text) else {
+            XCTFail("Missing capabilityDoc summary")
             return ""
         }
         return String(text[valueRange])

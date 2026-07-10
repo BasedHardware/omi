@@ -110,7 +110,14 @@ struct UpdateFailureDiagnostics: Equatable {
   }
 
   var analyticsProperties: [String: Any] {
+    let telemetryMessage = message.isEmpty ? "\(domain) \(code)" : message
     var properties: [String: Any] = [
+      // Emit the human-readable message under "error" so the daily report's
+      // error_or_message column is populated (previously blank on Update Check Failed).
+      "error": telemetryMessage,
+      "phase": reason.rawValue,
+      "update_failure_message": telemetryMessage,
+      "update_failure_phase": reason.rawValue,
       "update_failure_reason": reason.rawValue,
       "update_failure_domain": domain,
       "update_failure_code": code,
@@ -515,16 +522,19 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Installing update v\(version)")
     let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
-    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
+    let attempt = UpdateRelaunchWindowPolicy.markPendingRelaunch(
+      restoreMainWindow: restoreMainWindow,
+      sourceVersion: context.sourceAppVersion,
+      sourceBuild: context.sourceAppBuild,
+      targetVersion: itemAnalytics.targetVersion,
+      targetBuild: itemAnalytics.targetBuild,
+      channel: context.updateChannel
+    )
     logSync(
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
     Task { @MainActor in
-      AnalyticsManager.shared.updateInstalled(
-        version: version,
-        context: context,
-        item: itemAnalytics
-      )
+      AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
       self.viewModel?.updateAvailable = false
     }
   }

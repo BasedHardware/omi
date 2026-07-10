@@ -263,6 +263,7 @@ function CameraRig(): null {
     const aspect = size.width / Math.max(1, size.height)
     const fitForHeight = r / Math.tan(vfov / 2)
     const fitForWidth = r / (Math.tan(vfov / 2) * aspect)
+    // eslint-disable-next-line react-hooks/immutability -- r3f: three.js objects (camera, vectors) are mutated imperatively by design
     cam.position.z = Math.max(fitForHeight, fitForWidth) * FRAME_MARGIN
     cam.lookAt(0, 0, 0)
   })
@@ -283,7 +284,9 @@ function GraphScene({
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
   // recreated on mount, so it can never go stale across hot-reloads.
   const posMapRef = useRef<Map<string, THREE.Vector3>>(undefined)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   if (!posMapRef.current) posMapRef.current = new Map<string, THREE.Vector3>()
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   const posMap = posMapRef.current
 
   // Rearrange the modules on every screen change. Skip the first run so the
@@ -317,6 +320,7 @@ function GraphScene({
       <ambientLight intensity={0.8} />
       <directionalLight position={[200, 300, 400]} intensity={0.6} />
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
+      {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
       {nodes.map((n) => (
         <GraphNodeMesh
           key={n.id}

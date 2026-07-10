@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import importlib
 import json
 import os
@@ -13,6 +14,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.api_core.exceptions import NotFound
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
@@ -133,6 +135,11 @@ class _DocRef:
             self._db.docs[self.path] = self._db.docs[self.path] | data
             return
         self._db.docs[self.path] = data
+
+    def update(self, data):
+        if self.path not in self._db.docs:
+            raise NotFound(f"Document {self.path} not found")
+        self._db.docs[self.path] = self._db.docs[self.path] | data
 
 
 class _CollectionRef:
@@ -550,6 +557,7 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
         limit=5000,
         offset=0,
         device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
+        include_pending_processing=True,
     )
     legacy_get.assert_not_called()
 
@@ -597,6 +605,40 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
     assert result.headers["x-omi-memory-device-scope-supported"] == "false"
     legacy_get.assert_called_once_with("uid-legacy", 10, 0)
     service_read.assert_not_called()
+
+
+def test_v3_memory_creates_forward_request_device_provenance(monkeypatch):
+    memories_router = _load_memories_router(monkeypatch)
+    device_context = SimpleNamespace(client_device_id="macos_a1b2c3d4")
+    forwarded_device_ids = []
+
+    class ProvenanceCaptured(Exception):
+        pass
+
+    async def skip_import_guard(*args, **kwargs):
+        return None
+
+    def capture_from_memory(*args, **kwargs):
+        forwarded_device_ids.append(kwargs["client_device_id"])
+        raise ProvenanceCaptured
+
+    monkeypatch.setattr(memories_router, "resolve_client_device_from_request", lambda request: device_context)
+    monkeypatch.setattr(memories_router, "_guard_import_memory_write", skip_import_guard)
+    monkeypatch.setattr(memories_router.MemoryDB, "from_memory", staticmethod(capture_from_memory))
+
+    memory = SimpleNamespace(category=MemoryCategory.manual, visibility="private", tags=[])
+    with pytest.raises(ProvenanceCaptured):
+        asyncio.run(memories_router.create_memory(MagicMock(), memory, "uid-device-provenance"))
+    with pytest.raises(ProvenanceCaptured):
+        asyncio.run(
+            memories_router.create_memories_batch(
+                MagicMock(),
+                SimpleNamespace(memories=[memory]),
+                "uid-device-provenance",
+            )
+        )
+
+    assert forwarded_device_ids == ["macos_a1b2c3d4", "macos_a1b2c3d4"]
 
 
 def test_legal_state_short_term_active_processed():
@@ -685,7 +727,7 @@ def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
     assert "fetch_memory_dict" in section
     memory_service_source = (BACKEND_DIR / "utils" / "memory" / "memory_service.py").read_text(encoding="utf-8")
     assert "MemorySystem.CANONICAL" in memory_service_source
-    assert "_read_canonical_memory_item" in memory_service_source
+    assert "read_canonical_memory_item" in memory_service_source
 
 
 _WRITER_FILES = [
@@ -784,7 +826,8 @@ def test_offline_rag_script_excluded_from_live_writer_guard():
 def test_memories_router_routes_canonical_create_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
     assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in source
-    assert "run_blocking(db_executor, memory_service.write, uid, payload)" in source
+    assert "memory_service.create_external_memory" in source
+    assert "require_canonical_promotion=True" in source
     create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
     canonical_pos = create_section.find("_canonical_write_enabled_or_fail_closed")
     legacy_pos = create_section.find("memories_db.create_memory")
@@ -807,7 +850,8 @@ def test_preference_tools_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py").read_text(encoding="utf-8")
     assert "resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL" in source
     assert "canonical_write_enabled(" in source
-    assert "MemoryService(db_client=db).write(uid, memory_data)" in source
+    assert "MemoryService(db_client=db).create_external_memory(" in source
+    assert "require_canonical_promotion=True" in source
     canonical_pos = source.find("MemorySystem.CANONICAL")
     legacy_pos = source.find("memory_db.create_memory")
     assert canonical_pos != -1 and legacy_pos != -1

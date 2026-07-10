@@ -1,8 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
+import OmiSupport
 import Sentry
 import Sparkle
 import SwiftUI
+import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments
@@ -38,11 +40,13 @@ class AuthState: ObservableObject {
   private static let kAuthUserEmail = "auth_userEmail"
   private static let kAuthUserId = "auth_userId"
 
-  @Published var isSignedIn: Bool
+  @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
-  @Published var isRestoringAuth: Bool = true
   @Published var error: String?
   @Published var userEmail: String?
+
+  var isSignedIn: Bool { sessionPhase == .authenticated }
+  var isRestoringAuth: Bool { sessionPhase == .restoring }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -53,13 +57,13 @@ class AuthState: ObservableObject {
 
     if DesktopLocalProfile.isEnabled {
       // Harness-owned emulator auth replaces any persisted cloud session.
-      self.isSignedIn = false
+      self.sessionPhase = .restoring
       self.userEmail = nil
-      self.isRestoringAuth = true
     } else {
-      self.isSignedIn = savedSignedIn
+      // `auth_isSignedIn` is only a restore hint. Never expose authenticated UI
+      // until AuthService has validated a usable credential for this launch.
+      self.sessionPhase = savedSignedIn ? .restoring : .signedOut
       self.userEmail = savedEmail
-      self.isRestoringAuth = savedSignedIn
     }
     NSLog(
       "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
@@ -69,8 +73,14 @@ class AuthState: ObservableObject {
   }
 
   func update(isSignedIn: Bool, userEmail: String? = nil) {
-    self.isSignedIn = isSignedIn
+    transition(to: isSignedIn ? .authenticated : .signedOut)
     self.userEmail = userEmail
+  }
+
+  func transition(to phase: AuthSessionPhase) {
+    guard sessionPhase != phase else { return }
+    sessionPhase = phase
+    NSLog("OMI AUTH: session phase -> %@", String(describing: phase))
   }
 
   /// Get the user's Firebase UID from UserDefaults (fallback when Firebase SDK auth fails)
@@ -114,6 +124,7 @@ struct OMIApp: App {
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
+        .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
@@ -240,9 +251,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
 
+  func applicationWillFinishLaunching(_ notification: Notification) {
+    if AuthStorageCanary.isRequested { return }
+    // Single-instance guard: a second live copy of the same bundle id + launch mode
+    // would race the first against the shared Rewind SQLite DB
+    // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
+    // corrupting state. Enforce here — the earliest delegate callback — so a duplicate
+    // exits before any DB open or UserDefaults write in applicationDidFinishLaunching.
+    SingleInstanceGuard.enforceSingleInstanceOrExit(
+      launchMode: OMIApp.launchMode,
+      isExporting: ViewExporter.shouldExport())
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
       ViewExporter.run()
+      return
+    }
+
+    // The release pipeline launches the exact signed artifact in this isolated
+    // mode before publication. Run before installer, database, defaults, or
+    // background-service startup so the probe has no product side effects.
+    if AuthStorageCanary.runIfRequested() { return }
+
+    // Running from the mounted DMG / a translocated mount breaks TCC permissions
+    // and Sparkle updates — install to /Applications and relaunch before any
+    // services start. Returns true when this process is being replaced.
+    if AppInstaller.moveToApplicationsIfNeeded() {
       return
     }
 
@@ -263,7 +298,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
-    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
         "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
@@ -439,14 +475,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     if DesktopLocalProfile.isEnabled {
       log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
-      AuthState.shared.isRestoringAuth = true
+      AuthState.shared.transition(to: .restoring)
       Task { @MainActor in
         await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
         if AuthState.shared.isRestoringAuth {
           log("Local harness auth watchdog: clearing stuck restoring_auth splash")
-          AuthState.shared.isRestoringAuth = false
+          AuthState.shared.transition(to: .recoveryRequired)
         }
       }
     } else if let path = plistPath,
@@ -461,6 +497,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
+    if let attempt = pendingUpdateRelaunch?.attempt {
+      let installedVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown"
+      let installedBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown"
+      if installedBuild == attempt.targetBuild {
+        AnalyticsManager.shared.updateInstalled(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log("Sparkle: Verified installed update attempt \(attempt.id) at build \(installedBuild)")
+      } else {
+        AnalyticsManager.shared.updateInstallVerificationFailed(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log(
+          "Sparkle: Update attempt \(attempt.id) expected build \(attempt.targetBuild), relaunched build \(installedBuild)"
+        )
+      }
+    }
     AnalyticsManager.shared.appLaunched()
 
     // Tier gating: migrate old boolean key to new 6-tier system
@@ -614,17 +673,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
-  /// Start a timer that sends Sentry session snapshots every 5 minutes
-  /// This ensures we have breadcrumbs captured even without errors
+  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
+  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
   private func startSentryHeartbeat() {
     guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      // Capture a session heartbeat event with current breadcrumbs
-      SentrySDK.capture(message: "Session Heartbeat") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "heartbeat", key: "event_type")
-      }
-      log("Sentry: Session heartbeat captured")
+      SentryHeartbeatTelemetry.recordSessionHeartbeat()
+      log("Sentry: Session heartbeat breadcrumb recorded")
     }
   }
 
@@ -637,6 +692,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        Task { @MainActor in
+          await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
+            trigger: .appBecameActive,
+            auth: AuthService.shared
+          )
+        }
       })
     windowObservers.append(
       center.addObserver(
@@ -705,16 +766,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func stripProvenanceXattrs() {
     let bundlePath = Bundle.main.bundlePath
     DispatchQueue.global(qos: .utility).async {
-      let process = Process()
-      process.launchPath = "/usr/bin/xattr"
-      process.arguments = ["-cr", bundlePath]
-      process.standardOutput = nil
-      process.standardError = nil
-      try? process.run()
-      process.waitUntilExit()
-      if process.terminationStatus == 0 {
-        log("AppDelegate: Stripped provenance xattrs from bundle")
-      }
+      // A silent failure here breaks the code-signature seal and causes future
+      // Sparkle updates to fail, so surface it (BL-022) instead of dropping it.
+      SystemCommand.runLogging(
+        "AppDelegate: strip provenance xattrs",
+        executable: "/usr/bin/xattr", arguments: ["-cr", bundlePath])
     }
   }
 
@@ -732,54 +788,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
     DispatchQueue.global(qos: .utility).async {
-      // Unregister to clear stale icon entries
-      let unregister = Process()
-      unregister.executableURL = URL(fileURLWithPath: lsregister)
-      unregister.arguments = ["-u", appPath]
-      unregister.standardOutput = FileHandle.nullDevice
-      unregister.standardError = FileHandle.nullDevice
-      try? unregister.run()
-      unregister.waitUntilExit()
-
-      // Force re-register with updated icon
-      let register = Process()
-      register.executableURL = URL(fileURLWithPath: lsregister)
-      register.arguments = ["-f", appPath]
-      register.standardOutput = FileHandle.nullDevice
-      register.standardError = FileHandle.nullDevice
-      try? register.run()
-      register.waitUntilExit()
-
-      // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
-      let killIcons = Process()
-      killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-      killIcons.arguments = ["iconservicesagent"]
-      killIcons.standardOutput = FileHandle.nullDevice
-      killIcons.standardError = FileHandle.nullDevice
-      try? killIcons.run()
-      killIcons.waitUntilExit()
+      // Best-effort cosmetic maintenance. Capture each step's outcome instead of
+      // dropping it with `try?`, but keep it at info level — some steps exit
+      // non-zero benignly (e.g. killall when the agent isn't running), so this is
+      // not routed through the failure path (BL-022).
+      log(
+        "Icon cache: lsregister unregister \(SystemCommand.run(executable: lsregister, arguments: ["-u", appPath]).summary)"
+      )
+      log(
+        "Icon cache: lsregister register \(SystemCommand.run(executable: lsregister, arguments: ["-f", appPath]).summary)"
+      )
+      log(
+        "Icon cache: kill iconservicesagent \(SystemCommand.run(executable: "/usr/bin/killall", arguments: ["iconservicesagent"]).summary)"
+      )
 
       // Safety net: verify the Dock is still running after 2 seconds.
-      // iconservicesagent restart can occasionally crash the Dock.
+      // iconservicesagent restart can occasionally crash the Dock. pgrep exits
+      // non-zero when Dock isn't found, which is the signal we branch on.
       Thread.sleep(forTimeInterval: 2.0)
-      let dockCheck = Process()
-      dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-      dockCheck.arguments = ["-x", "Dock"]
-      dockCheck.standardOutput = FileHandle.nullDevice
-      dockCheck.standardError = FileHandle.nullDevice
-      try? dockCheck.run()
-      dockCheck.waitUntilExit()
+      let dockRunning = SystemCommand.run(
+        executable: "/usr/bin/pgrep", arguments: ["-x", "Dock"]
+      ).isSuccess
 
-      if dockCheck.terminationStatus != 0 {
+      if !dockRunning {
         // Dock is not running — restart it
         log("AppDelegate: Dock not running after icon cache reset, restarting")
-        let restartDock = Process()
-        restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        restartDock.arguments = ["-a", "Dock"]
-        restartDock.standardOutput = FileHandle.nullDevice
-        restartDock.standardError = FileHandle.nullDevice
-        try? restartDock.run()
-        restartDock.waitUntilExit()
+        log(
+          "Icon cache: restart Dock \(SystemCommand.run(executable: "/usr/bin/open", arguments: ["-a", "Dock"]).summary)"
+        )
       }
 
       log("AppDelegate: Icon cache reset complete")
@@ -1091,7 +1127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    AppState().resetOnboardingAndRestart()
+    (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
   @MainActor @objc private func reportIssue() {
@@ -1180,9 +1216,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return
       }
       if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-        // No permission — revert toggle and open preferences
+        // No permission — revert toggle, register + open preferences (PERM-02)
         sender.state = .off
-        ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
         return
       }
       AssistantSettings.shared.screenAnalysisEnabled = true

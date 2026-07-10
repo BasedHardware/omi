@@ -11,7 +11,7 @@ import uuid
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 from zipfile import ZipFile
 
 import database.import_jobs as import_jobs_db
@@ -84,8 +84,8 @@ def parse_lifelog_md(
     # 1. formatted_summary: H2 as markdown headers, H3 as bullet points (for apps_results)
     #    - If all headers are H2 (no H3s), convert H2s to bullet points instead
     # 2. plain_summary: unformatted text dump (for overview)
-    plain_parts = []
-    header_data = []  # List of (hashes, text) tuples
+    plain_parts: List[str] = []
+    header_data: List[Tuple[str, str]] = []  # List of (hashes, text) tuples
 
     # First pass: collect all headers and check for H3s
     has_h3 = False
@@ -98,7 +98,7 @@ def parse_lifelog_md(
             has_h3 = True
 
     # Second pass: format based on whether H3s exist
-    formatted_parts = []
+    formatted_parts: List[str] = []
     for hashes, text in header_data:
         if hashes == '##':
             if has_h3:
@@ -118,7 +118,7 @@ def parse_lifelog_md(
     # The format is: > [N](#startMs=TIMESTAMP&endMs=TIMESTAMP): TEXT
     quote_pattern = r'>\s*\[(\d+)\]\(#startMs=(\d+)&endMs=(\d+)\):\s*(.+)'
 
-    segments: List[TranscriptSegment] = []
+    segments: List[Dict[str, Any]] = []
     min_timestamp_ms = None
 
     for match in re.finditer(quote_pattern, content):
@@ -182,7 +182,7 @@ def _create_overview_from_transcript(segments: List[TranscriptSegment], max_char
     if not segments:
         return "Imported from Limitless"
 
-    texts = []
+    texts: List[str] = []
     total_chars = 0
 
     for seg in segments:
@@ -266,7 +266,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             processed_files = 0
             conversations_created = 0
-            errors = []
+            errors: List[str] = []
 
             for lifelog_path in lifelog_files:
                 try:
@@ -297,7 +297,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     overview = plain_summary if plain_summary else _create_overview_from_transcript(segments)
 
                     # Create apps_results with formatted markdown summary
-                    apps_results = []
+                    apps_results: List[AppResult] = []
                     if formatted_summary:
                         apps_results.append(AppResult(app_id='01KBTYQAZSQFRZ809BQ46HW76M', content=formatted_summary))
 
@@ -327,7 +327,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     )
 
                     # Save directly to database (skip all AI processing)
-                    conversations_db.upsert_conversation(uid, conversation.dict())
+                    conversations_db.upsert_conversation(uid, conversation.model_dump())
                     conversations_created += 1
 
                 except Exception as e:
@@ -432,5 +432,5 @@ def create_import_job(uid: str, source_type: ImportSourceType = ImportSourceType
         status=ImportJobStatus.pending,
         source_type=source_type,
     )
-    import_jobs_db.create_import_job(job.dict())
+    import_jobs_db.create_import_job(job.model_dump())
     return job

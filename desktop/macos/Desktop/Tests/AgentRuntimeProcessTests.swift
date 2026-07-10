@@ -3,6 +3,58 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  // MARK: - CHAT-02 agent stall hook
+
+  func testSuspendStreamNoOpsWithoutRunningProcess() async {
+    // External contract: the debug suspend never reports success without a real
+    // suspend — it returns an error (prod-gated in the test host, or no running
+    // process on a dev bundle), never suspended:true, and never SIGSTOPs a bogus pid.
+    let result = await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: 190_000)
+    XCTAssertNotEqual(result["suspended"], "true")
+    XCTAssertNotNil(result["error"])
+  }
+
+  func testResumeStreamNoOpsWithoutProcess() async {
+    let result = await AgentRuntimeProcess.shared.debugResumeStream()
+    XCTAssertNotEqual(result["resumed"], "true")
+    XCTAssertNotNil(result["error"])
+  }
+
+  func testAgentStallHookIsNonProdGatedAndSafe() throws {
+    let processSource = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"),
+      encoding: .utf8)
+    // Production gate, live-process guard, real signals, bounded window, and a
+    // generation-guarded auto-resume so a forgotten resume can't wedge the agent.
+    for needle in [
+      "func debugSuspendStream(durationMs: Int)",
+      "guard AppBuild.isNonProduction else",
+      "process.isRunning, process.processIdentifier > 0",
+      "kill(pid, SIGSTOP)",
+      "kill(pid, SIGCONT)",
+      "min(durationMs, 300_000)",
+      "generation == debugSuspendGeneration",
+    ] {
+      XCTAssertTrue(processSource.contains(needle), "AgentRuntimeProcess missing stall-hook invariant: \(needle)")
+    }
+
+    let bridgeSource = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Sources/DesktopAutomationBridge.swift"),
+      encoding: .utf8)
+    for needle in ["name: \"suspend_agent_stream\"", "name: \"resume_agent_stream\""] {
+      XCTAssertTrue(bridgeSource.contains(needle), "bridge missing action: \(needle)")
+    }
+    // Both actions must be behind the non-prod guard.
+    let suspendIdx = bridgeSource.range(of: "name: \"suspend_agent_stream\"")!.lowerBound
+    let afterSuspend = String(bridgeSource[suspendIdx...].prefix(600))
+    XCTAssertTrue(afterSuspend.contains("AppBuild.isNonProduction"),
+      "suspend_agent_stream must be gated to non-production bundles")
+  }
+
   func testV2ResultParsingPreservesCanonicalAndAdapterIds() {
     let line = """
       {"type":"result","protocolVersion":2,"requestId":"req-1","clientId":"client-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","adapterSessionId":"acp-1","terminalStatus":"succeeded","text":"done","costUsd":1.25,"inputTokens":3,"outputTokens":4,"cacheReadTokens":5,"cacheWriteTokens":6}
@@ -50,6 +102,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
   }
 
+  func testUnroutedToolCallsFailClosed() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("Self.unroutedToolCallError(toolName: name)"))
+    XCTAssertTrue(processSource.contains(#""code": "unrouted_tool_call""#))
+    XCTAssertFalse(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
+  }
+
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"result","protocolVersion":2,"requestId":"req-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done"}"#
@@ -87,8 +151,31 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
+  func testPiMonoInvalidTokenRetriesAfterForcedAuthRefresh() throws {
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("error.isSessionAuthenticationFailure"))
+    XCTAssertTrue(bridgeSource.contains("!bridgeOutputTracker.hasOutput"))
+    XCTAssertTrue(bridgeSource.contains("private final class BridgeOutputTracker: @unchecked Sendable"))
+    XCTAssertTrue(bridgeSource.contains("refreshing token and retrying once"))
+    // The refresh must convert real auth failures to authMissing so ChatProvider
+    // routes to the sign-in recovery CTA, while propagating CancellationError so a
+    // cancelled request is not misrouted to auth recovery.
+    XCTAssertTrue(bridgeSource.contains("catch is CancellationError"))
+    XCTAssertTrue(bridgeSource.contains("throw CancellationError()"))
+    XCTAssertTrue(bridgeSource.contains("catch {"))
+    XCTAssertTrue(bridgeSource.contains("throw BridgeError.authMissing"))
+    XCTAssertFalse(bridgeSource.contains("guard try await refreshAuthToken()"))
+    XCTAssertFalse(bridgeSource.contains("(try? await refreshAuthToken()) == true"))
+    XCTAssertTrue(bridgeSource.contains("let retryRequestId = UUID().uuidString"))
   }
 
   func testNamedBundleStateDirectoriesAreIsolated() {
@@ -147,8 +234,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       cacheWriteTokens: 0
     )
 
-    XCTAssertEqual(withAdapter.sessionId, "adapter-session")
-    XCTAssertEqual(withoutAdapter.sessionId, "omi-session")
+    XCTAssertEqual(withAdapter.adapterSessionId, "adapter-session")
+    XCTAssertEqual(withoutAdapter.omiSessionId, "omi-session")
+    XCTAssertNil(withoutAdapter.adapterSessionId)
   }
 
   func testSharedRuntimeDoesNotTrackCurrentHarnessMode() throws {
@@ -182,6 +270,103 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+  }
+
+  @MainActor
+  func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
+    let savedKeys = Dictionary(
+      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
+        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
+      })
+    defer {
+      for provider in BYOKProvider.allCases {
+        if let saved = savedKeys[provider] ?? nil {
+          UserDefaults.standard.set(saved, forKey: provider.storageKey)
+        } else {
+          UserDefaults.standard.removeObject(forKey: provider.storageKey)
+        }
+      }
+      CredentialHealthManager.shared.reset()
+    }
+
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
+    }
+    let openAIKey = APIKeyService.byokKey(.openai)!
+    CredentialHealthManager.shared.recordProviderFailure(
+      .providerAuthFailed(provider: .openai, mode: .byok),
+      provider: .openai,
+      authMode: .byok,
+      fingerprint: APIKeyService.byokFingerprint(openAIKey),
+      context: "test")
+
+    let result = AgentRuntimeProcess.usableBYOKEnvironment()
+
+    XCTAssertTrue(result.values.isEmpty)
+    XCTAssertEqual(result.suppressedProviders, [.openai])
+  }
+
+  @MainActor
+  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+    let savedKeys = Dictionary(
+      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
+        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
+      })
+    defer {
+      for provider in BYOKProvider.allCases {
+        if let saved = savedKeys[provider] ?? nil {
+          UserDefaults.standard.set(saved, forKey: provider.storageKey)
+        } else {
+          UserDefaults.standard.removeObject(forKey: provider.storageKey)
+        }
+      }
+      CredentialHealthManager.shared.reset()
+    }
+
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
+    }
+
+    let result = AgentRuntimeProcess.usableBYOKEnvironment()
+
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
+    XCTAssertTrue(result.suppressedProviders.isEmpty)
+  }
+
+  func testRemoveInheritedByokEnvironmentScrubsPrefixCaseInsensitively() {
+    var env = [
+      "OMI_BYOK_OPENAI": "stale-openai",
+      "omi_byok_experimental": "stale-experimental",
+      "OmI_bYoK_LEGACY": "stale-legacy",
+      "OMI_AUTH_TOKEN": "token",
+      "PATH": "/usr/bin",
+    ]
+
+    AgentRuntimeProcess.removeInheritedBYOKEnvironment(from: &env)
+
+    XCTAssertNil(env["OMI_BYOK_OPENAI"])
+    XCTAssertNil(env["omi_byok_experimental"])
+    XCTAssertNil(env["OmI_bYoK_LEGACY"])
+    XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
+    XCTAssertEqual(env["PATH"], "/usr/bin")
+  }
+
+  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
+    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
+    XCTAssertTrue(source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+    XCTAssertTrue(source.contains("getIdToken(forceRefresh: forceRefreshToken)"))
+    XCTAssertFalse(source.contains("log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
+    XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
@@ -397,5 +582,41 @@ final class AgentRuntimeProcessTests: XCTestCase {
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
 """))
+  }
+
+  func testIsAliveRequiresUnderlyingProcessRunning() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("let processRunning = process?.isRunning ?? false"))
+    XCTAssertTrue(source.contains("return isRunning && processRunning"))
+    XCTAssertTrue(source.contains("recordAgentRuntimeStaleAliveCheck"))
+  }
+
+  func testUnexpectedExitRecordsHealthEvent() throws {
+    let source = try agentRuntimeSource()
+    XCTAssertTrue(source.contains("recordAgentRuntimeUnexpectedExit"))
+    XCTAssertTrue(source.contains("recovery_action=restart_on_next_send"))
+  }
+
+  func testEnsureBridgeStartedPreparesCrashRecoveryBeforeRestart() throws {
+    let chatSource = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(chatSource.contains("prepareForCrashRecovery()"))
+    XCTAssertTrue(chatSource.contains("agent bridge process died, will restart"))
+
+    let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
+    XCTAssertTrue(bridgeSource.contains("func prepareForCrashRecovery()"))
+    XCTAssertTrue(bridgeSource.contains("registered = false"))
+  }
+
+  private func agentRuntimeSource() throws -> String {
+    try sourceFile("Chat/AgentRuntimeProcess.swift")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

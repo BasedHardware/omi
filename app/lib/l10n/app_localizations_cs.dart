@@ -9509,4 +9509,66 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace.';
+
+  @override
+  String get connectRayBanMeta => 'Připojit Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Použijte své brýle Ray-Ban Meta jako záznamové zařízení Omi pro konverzace a vizuální kontext. Omi otevře aplikaci Meta AI pro propojení vašich brýlí.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Připojit přes Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Dokončete připojení v aplikaci Meta AI a poté se vraťte sem.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Zkontrolovat znovu';
+
+  @override
+  String get raybanMetaAllowCamera => 'Povolit fotoaparát na brýlích';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi používá fotoaparát vašich brýlí k přidávání fotek do vašich konverzací. Toto můžete přeskočit a používat pouze zvuk.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Zatím přeskočit';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Režim pouze zvuk pro Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Tato verze Omi umí používat mikrofon vašich brýlí přes Bluetooth. Pořizování fotek vyžaduje vývojářskou verzi Omi od Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Hudba ve vašem telefonu se pozastaví, když se používá mikrofon brýlí.';
+
+  @override
+  String get raybanMetaContinue => 'Pokračovat';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Pořídit fotku';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotka vyžádána — objeví se ve vaší konverzaci.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon připraven';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Zachytávání obrazu připraveno';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nedostupné v režimu pouze zvuk';
+
+  @override
+  String get raybanMetaCamera => 'Fotoaparát';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Chyba při připojování k Ray-Ban Meta: $error';
+  }
 }

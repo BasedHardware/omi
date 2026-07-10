@@ -4,6 +4,7 @@ from typing import Optional, Tuple, List, Dict
 from fastapi import APIRouter, HTTPException
 from enum import Enum
 import ast
+from pydantic import BaseModel, Field
 
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 import logging
@@ -20,6 +21,19 @@ class DeviceModel(int, Enum):
 
 
 router = APIRouter()
+
+
+class FirmwareVersionResponse(BaseModel):
+    version: str | None = None
+    min_version: str | None = None
+    min_app_version: str | None = None
+    min_app_version_code: str | None = None
+    zip_url: str | None = None
+    draft: bool = False
+    ota_update_steps: List[str] = Field(default_factory=list)
+    is_legacy_secure_dfu: bool = True
+    changelog: str | List[str] = ''
+
 
 # Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.
 FIRMWARE_TAG_PATTERN = re.compile(
@@ -217,7 +231,7 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
     }
 
 
-@router.get("/v2/firmware/latest")
+@router.get("/v2/firmware/latest", response_model=FirmwareVersionResponse)
 async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
     device = _get_device_by_model_number(device_model)
     if not device:
@@ -248,7 +262,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     return _extract_firmware_response(device, candidates[0])
 
 
-@router.get("/v2/firmware/stable")
+@router.get("/v2/firmware/stable", response_model=FirmwareVersionResponse)
 async def get_stable_version(device_model: str):
     """Return the latest stable firmware for a device, regardless of current version.
 
@@ -272,7 +286,7 @@ async def get_stable_version(device_model: str):
     return _extract_firmware_response(device, candidates[0])
 
 
-@router.get("/v2/firmware/version")
+@router.get("/v2/firmware/version", response_model=FirmwareVersionResponse)
 async def get_firmware_version(device_model: str, version: str):
     """Return the OTA metadata for a specific published firmware version of a device.
 

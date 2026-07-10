@@ -5,6 +5,11 @@ private let logFile: String = {
   let isDev = AppBuild.isNonProduction
   return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
 }()
+/// The on-disk app-log path for the current build. Single source of truth for
+/// the log location so callers (feedback export, diagnostics bundle) don't
+/// re-derive it. Owner-only permissions are enforced by `ensureLogFileOwnerOnly`.
+func omiLogFilePath() -> String { logFile }
+
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
   let formatter = DateFormatter()
@@ -29,8 +34,49 @@ private func appendToLogFileSync(_ line: String) {
   }
 }
 
+/// Create the file at `path` (if missing) or tighten an existing file so it is
+/// readable and writable only by its owner (0600).
+///
+/// The log lives in the shared, world-*writable* `/tmp` directory and can contain
+/// UIDs, request context, and operational detail, so other local users must not
+/// be able to read it (BL-024 / SET-06). Because any local user can pre-create
+/// the path, we refuse to adopt anything that isn't a regular file owned by the
+/// current user: a symlink, a non-regular node, or someone else's file is removed
+/// and recreated owner-only, so we never chmod a symlink target or hand our logs
+/// to a file we don't control. Uses `lstat` (not `stat`) so a symlink is judged
+/// on its own, not its target. Idempotent and safe to call repeatedly. Returns
+/// whether the path is now a regular, owner-only file under our control.
+@discardableResult
+func ensureLogFileOwnerOnly(atPath path: String) -> Bool {
+  let fileManager = FileManager.default
+  var info = stat()
+  if lstat(path, &info) == 0 {
+    let isRegularFile = (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG)
+    let isOwnedByUs = info.st_uid == getuid()
+    if isRegularFile && isOwnedByUs {
+      // Tighten files created by older builds (or a create without attributes).
+      return (try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)) != nil
+    }
+    // Symlink, non-regular node, or another user's file — never adopt it. In
+    // sticky `/tmp` we may be unable to remove an attacker-owned file; then we
+    // report failure (the caller keeps retrying) rather than trusting it.
+    guard (try? fileManager.removeItem(atPath: path)) != nil else { return false }
+  }
+  return fileManager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
+}
+
+/// Guards the one-time permission normalization. Mutated only on the serial
+/// `logQueue` (every writer hops through it), so it needs no extra locking.
+private var didEnsureLogFilePermissions = false
+
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
+  if !didEnsureLogFilePermissions {
+    // Latch only when normalization actually succeeds, so a transient failure
+    // (e.g. a racing create) is retried on the next write instead of leaving
+    // the log permanently world-readable.
+    didEnsureLogFilePermissions = ensureLogFileOwnerOnly(atPath: logFile)
+  }
   if FileManager.default.fileExists(atPath: logFile) {
     if let handle = FileHandle(forWritingAtPath: logFile) {
       handle.seekToEndOfFile()
@@ -38,7 +84,9 @@ private func writeToLogFile(_ data: Data) {
       handle.closeFile()
     }
   } else {
-    FileManager.default.createFile(atPath: logFile, contents: data)
+    // Recreate owner-only if the file was removed mid-session.
+    FileManager.default.createFile(
+      atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
   }
 }
 
@@ -152,7 +200,7 @@ func log(_ message: String) {
 /// offline, timeouts, dropped connections, cancellations. These dominate event
 /// volume (timeouts, "no internet", socket resets) without indicating an app bug.
 /// We still write them to the local log + breadcrumbs for debugging context.
-private func isNonActionableTransient(_ error: Error?) -> Bool {
+func isNonActionableTransient(_ error: Error?) -> Bool {
   guard let error = error else { return false }
   // Swift structured-concurrency cancellation: thrown when a Task/operation is
   // cancelled (assistant stopped, frame superseded). Expected, not an app bug.
@@ -173,7 +221,11 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   // backfill loops don't create high-volume Sentry issues.
   if let embeddingError = error as? EmbeddingService.EmbeddingError,
      embeddingError.isNonActionableForSentry { return true }
-  let nsError = error as NSError
+  // Rewind encoder disk failures wrap the underlying OS error — inspect that so a
+  // full/read-only disk ("The file couldn't be saved") is classified below rather
+  // than captured as an opaque storage-error cluster (OMI-DESKTOP-28/29).
+  let inspected = (error as? RewindError)?.underlyingError ?? error
+  let nsError = inspected as NSError
   switch nsError.domain {
   case NSURLErrorDomain:
     // -999 cancelled, -1001 timed out, -1003 host not found, -1004 cannot connect,
@@ -189,7 +241,26 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
     return transient.contains(nsError.code)
   case NSPOSIXErrorDomain:
     // 54 connection reset, 57 socket not connected, 89 operation canceled.
-    return [54, 57, 89].contains(nsError.code)
+    // 28 ENOSPC (disk full), 69 EDQUOT (over quota), 30 EROFS (read-only fs) —
+    // environmental storage exhaustion, not app bugs.
+    return [54, 57, 89, 28, 69, 30].contains(nsError.code)
+  case NSCocoaErrorDomain:
+    // Environmental file-write failures (disk full / read-only volume / no write
+    // permission) surface here as "The file couldn't be saved". Not app bugs —
+    // keep them as local logs + breadcrumbs instead of Sentry error clusters.
+    let storageExhausted: Set<Int> = [
+      NSFileWriteOutOfSpaceError,      // 640 — disk full
+      NSFileWriteVolumeReadOnlyError,  // 642 — read-only volume
+      NSFileWriteNoPermissionError,    // 513 — no write permission
+    ]
+    if storageExhausted.contains(nsError.code) { return true }
+    // Cocoa file errors often wrap a POSIX cause in NSUnderlyingErrorKey.
+    if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+       underlying.domain == NSPOSIXErrorDomain,
+       [28, 69, 30].contains(underlying.code) {
+      return true
+    }
+    return false
   default:
     return false
   }

@@ -303,9 +303,21 @@ enum RewindError: LocalizedError {
     case databaseCorrupted(message: String)
     case invalidImage
     case storageError(String)
+    /// A storage failure that preserves the underlying OS error (e.g. an
+    /// AVAssetWriter disk-out-of-space failure). Keeping the wrapped `NSError`
+    /// lets the Sentry classifier recognize environmental disk failures
+    /// ("The file couldn't be saved") and collapse them into breadcrumbs instead
+    /// of flooding Sentry with unactionable error clusters.
+    case storageWriteFailed(String, underlying: Error)
     case ocrFailed(String)
     case screenshotNotFound
     case corruptedVideoChunk(String)
+
+    /// The wrapped OS error, when this error carries one.
+    var underlyingError: Error? {
+        if case .storageWriteFailed(_, let underlying) = self { return underlying }
+        return nil
+    }
 
     var errorDescription: String? {
         switch self {
@@ -317,6 +329,8 @@ enum RewindError: LocalizedError {
             return "Invalid image data"
         case .storageError(let message):
             return "Storage error: \(message)"
+        case .storageWriteFailed(let message, let underlying):
+            return "Storage error: \(message): \(underlying.localizedDescription)"
         case .ocrFailed(let message):
             return "OCR failed: \(message)"
         case .screenshotNotFound:

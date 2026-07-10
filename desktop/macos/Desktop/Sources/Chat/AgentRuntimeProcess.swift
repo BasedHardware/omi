@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
@@ -43,6 +44,9 @@ actor AgentRuntimeProcess {
       case authSuccess
       case cancelAck
       case controlToolResult
+      case turnRecorded
+      case voiceSeedContext
+      case kernelTurnTail
       case unknown(String)
     }
 
@@ -87,6 +91,9 @@ actor AgentRuntimeProcess {
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
       case "control_tool_result": return .controlToolResult
+      case "turn_recorded": return .turnRecorded
+      case "voice_seed_context": return .voiceSeedContext
+      case "kernel_turn_tail": return .kernelTurnTail
       default: return .unknown(type)
       }
     }
@@ -120,6 +127,48 @@ actor AgentRuntimeProcess {
     let continuation: CheckedContinuation<String, Error>
   }
 
+  private struct ActiveVoiceSeedRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
+  }
+
+  struct KernelTurnTailTurn: Sendable {
+    let role: String
+    let content: String
+    let surfaceKind: String
+    let createdAtMs: Int
+    let metadataJson: String
+    let origin: String
+  }
+
+  struct KernelTurnTailResult: Sendable {
+    let conversationId: String
+    let turns: [KernelTurnTailTurn]
+  }
+
+  private struct ActiveKernelTurnTailRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<KernelTurnTailResult, Error>
+  }
+
+  struct KernelTurnRecorded: Sendable {
+    let conversationId: String
+    let surfaceKind: String
+    let externalRefKind: String
+    let externalRefId: String
+    let userText: String
+    let assistantText: String
+    let origin: String
+    let interrupted: Bool
+    let idempotencyKey: String?
+    let userTurnId: String?
+    let assistantTurnId: String?
+  }
+
+  typealias TurnRecordedHandler = @Sendable (KernelTurnRecorded) -> Void
+
   private var process: Process?
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
@@ -131,6 +180,11 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
+  /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
+  /// never append; a second ChatProvider attach must not fan out duplicates.
+  private var turnRecordedHandler: TurnRecordedHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -138,7 +192,21 @@ actor AgentRuntimeProcess {
   private var isRestarting = false
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
-  var isAlive: Bool { isRunning }
+  var isAlive: Bool {
+    let processRunning = process?.isRunning ?? false
+    if isRunning && !processRunning {
+      log(
+        "AgentRuntimeProcess: stale alive latch — process no longer running "
+          + "(failure_class=stale_alive_latch recovery_action=route_to_termination recovery_result=degraded)")
+      DesktopDiagnosticsManager.shared.recordAgentRuntimeStaleAliveCheck()
+      // Route through handleTermination so in-flight continuations are resumed
+      // and the old terminationHandler is properly superseded. Only clearing the
+      // latch here would leave active requests dangling if the terminationHandler
+      // hasn't fired (or is about to be ignored by generation mismatch).
+      handleTermination(reason: .exit)
+    }
+    return isRunning && processRunning
+  }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
     guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
@@ -172,6 +240,14 @@ actor AgentRuntimeProcess {
     }
     for (requestKey, request) in activeControlRequests where request.clientId == clientId {
       activeControlRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
+      activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
+      activeKernelTurnTailRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
 
@@ -237,14 +313,228 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func invalidateSession(clientId: String, sessionKey: String) {
+  func invalidateSurface(clientId: String, surface: AgentSurfaceReference) {
     var dict: [String: Any] = [
       "type": "invalidate_session",
       "protocolVersion": 2,
       "requestId": UUID().uuidString,
       "clientId": clientId,
-      "sessionKey": sessionKey,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
     ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func clearOwnerState(clientId: String) {
+    var dict: [String: Any] = [
+      "type": "clear_owner_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func clearOwnerSurfaceState(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "clear_owner_surface_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  // TODO(desktop-agent-platonic-gap-closure G6): delete importer two desktop releases after platonic ships.
+  func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
+    var dict: [String: Any] = [
+      "type": "import_legacy_main_chat_sessions",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "entries": entries,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func mergeFloatingChatIntoMainChat(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "merge_floating_chat_into_main_chat",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func importConversationTurns(clientId: String, surface: AgentSurfaceReference, turns: [[String: Any]]) {
+    var dict: [String: Any] = [
+      "type": "import_conversation_turns",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "turns": turns,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func setTurnRecordedHandler(_ handler: TurnRecordedHandler?) {
+    turnRecordedHandler = handler
+  }
+
+  func turnRecordedHandlerCount() -> Int {
+    turnRecordedHandler == nil ? 0 : 1
+  }
+
+  /// Test-only: fire the single turn_recorded apply gate without a live node runtime.
+  func dispatchTurnRecordedForTesting(_ turn: KernelTurnRecorded) {
+    turnRecordedHandler?(turn)
+  }
+
+  func recordSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    interrupted: Bool = false,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "record_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+      "interrupted": interrupted,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func getVoiceSeedContext(
+    clientId: String,
+    harnessMode: String,
+    surface: AgentSurfaceReference
+  ) async throws -> (conversationId: String, context: String) {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeVoiceSeedRequests[requestKey] = ActiveVoiceSeedRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_voice_seed_context",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeVoiceSeedRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send voice seed request"))
+      }
+    }
+  }
+
+  func getKernelTurnTail(
+    clientId: String,
+    harnessMode: String,
+    limit: Int = 8,
+    chatId: String = "default"
+  ) async throws -> KernelTurnTailResult {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeKernelTurnTailRequests[requestKey] = ActiveKernelTurnTailRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_kernel_turn_tail",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "limit": limit,
+        "chatId": chatId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send kernel turn tail request"))
+      }
+    }
+  }
+
+  func projectCrossSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "project_cross_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
     }
@@ -300,6 +590,83 @@ actor AgentRuntimeProcess {
     }
   }
 
+  // MARK: - Automation stall hook (non-production only)
+
+  /// Generation guard so a late auto-resume from an earlier suspend can't
+  /// SIGCONT a process that a newer suspend is deliberately holding.
+  private var debugSuspendGeneration: UInt64 = 0
+
+  /// Freeze the agent's stdio stream by sending SIGSTOP to the node bridge
+  /// process. With the process paused it emits no further events, so an in-flight
+  /// chat send stalls exactly like a hung ACP subprocess — driving the
+  /// StallDetector to `.stalled` (20s) and, if held long enough, ChatProvider's
+  /// 180s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
+  /// (hard-capped) so the process can never stay frozen if `debugResumeStream`
+  /// is never called. Non-production bundles only.
+  func debugSuspendStream(durationMs: Int) -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "suspend_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to suspend"]
+    }
+    let pid = process.processIdentifier
+    guard kill(pid, SIGSTOP) == 0 else {
+      return ["error": "SIGSTOP failed for pid \(pid) (errno \(errno))"]
+    }
+    debugSuspendGeneration &+= 1
+    let generation = debugSuspendGeneration
+    // Cap the freeze window so a forgotten resume can't wedge the agent.
+    let cappedMs = max(1_000, min(durationMs, 300_000))
+    log("AgentRuntimeProcess: DEBUG suspended stream pid=\(pid) for \(cappedMs)ms (gen \(generation))")
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(cappedMs) * 1_000_000)
+      await self?.autoResumeStream(pid: pid, generation: generation)
+    }
+    return ["suspended": "true", "pid": "\(pid)", "durationMs": "\(cappedMs)"]
+  }
+
+  /// SIGCONT the agent process immediately (early clear of a debug suspend).
+  func debugResumeStream() -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "resume_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to resume"]
+    }
+    let pid = process.processIdentifier
+    guard kill(pid, SIGCONT) == 0 else {
+      // SIGCONT failed (pid raced to exit, or an unexpected errno). Do NOT bump
+      // the generation here: leaving the pending auto-resume armed is the safe
+      // choice, so a still-frozen process can't stay stuck until app restart.
+      return ["error": "SIGCONT failed for pid \(pid) (errno \(errno))"]
+    }
+    // Only cancel the pending safety auto-resume once the explicit resume
+    // actually succeeded.
+    debugSuspendGeneration &+= 1
+    log("AgentRuntimeProcess: DEBUG resumed stream pid=\(pid)")
+    return ["resumed": "true", "pid": "\(pid)"]
+  }
+
+  private func autoResumeStream(pid: pid_t, generation: UInt64) {
+    // Only the suspend that scheduled this auto-resume may clear it; a newer
+    // suspend or an explicit resume has already moved the generation on.
+    guard generation == debugSuspendGeneration else { return }
+    // Only resume if the SAME process is still alive. A stored Process that has
+    // already exited can still report its original pid (which the OS may have
+    // reused), so require isRunning as well as a pid match — never SIGCONT a
+    // reused pid. restart()/stop() already SIGKILL the old process, so a
+    // torn-down/relaunched agent has nothing to resume here.
+    guard let process, process.isRunning, process.processIdentifier == pid else { return }
+    _ = kill(pid, SIGCONT)
+    log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(pid) (gen \(generation))")
+  }
+  // Caveat: autoResumeStream is actor-isolated, so it can only run once the
+  // actor is idle. The intended stall flow writes only the tiny 180s interrupt
+  // to the frozen process (far below the stdin pipe buffer), so the actor never
+  // blocks on a write while suspended; do not push large stdin payloads to a
+  // suspended agent or the auto-resume could be delayed until the actor frees.
+
   func interrupt(clientId: String, requestId: String) {
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     guard var request = activeRequests[requestKey] else { return }
@@ -330,17 +697,13 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     prompt: String,
     systemPrompt: String,
-    sessionKey: String?,
-    omiSessionId: String?,
-    surfaceKind: String?,
-    externalRefKind: String?,
-    externalRefId: String?,
-    legacyClientScope: String?,
+    surface: AgentSurfaceReference,
     cwd: String?,
     mode: String?,
     model: String?,
-    resume: String?,
     imageData: Data?,
+    attachmentMetadataJson: String?,
+    surfaceContextJson: String?,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolCall: @escaping AgentBridge.ToolCallHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -355,16 +718,7 @@ actor AgentRuntimeProcess {
     }
 
     return try await withCheckedThrowingContinuation { continuation in
-      let surfaceRef: AgentSurfaceReference?
-      if let surfaceKind, let externalRefKind, let externalRefId {
-        surfaceRef = AgentSurfaceReference(
-          surfaceKind: surfaceKind,
-          externalRefKind: externalRefKind,
-          externalRefId: externalRefId
-        )
-      } else {
-        surfaceRef = nil
-      }
+      let surfaceRef = surface
       let request = ActiveRequest(
         clientId: clientId,
         requestId: requestId,
@@ -379,10 +733,8 @@ actor AgentRuntimeProcess {
         continuation: continuation
       )
       activeRequests[RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)] = request
-      if let surfaceRef {
-        Task { @MainActor in
-          AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
-        }
+      Task { @MainActor in
+        AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
       }
 
       var queryDict: [String: Any] = [
@@ -394,35 +746,21 @@ actor AgentRuntimeProcess {
         "prompt": prompt,
         "systemPrompt": systemPrompt,
         "adapterId": adapterId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
       ]
-      if let sessionKey {
-        queryDict["sessionKey"] = sessionKey
-        queryDict["legacySessionKey"] = sessionKey
-      }
-      if let omiSessionId {
-        queryDict["sessionId"] = omiSessionId
-      }
-      if let surfaceKind {
-        queryDict["surfaceKind"] = surfaceKind
-      }
-      if let externalRefKind {
-        queryDict["externalRefKind"] = externalRefKind
-      }
-      if let externalRefId {
-        queryDict["externalRefId"] = externalRefId
-      }
-      if let legacyClientScope {
-        queryDict["legacyClientScope"] = legacyClientScope
-      }
       if let cwd { queryDict["cwd"] = cwd }
       if let mode { queryDict["mode"] = mode }
       if let model { queryDict["model"] = model }
-      if let resume {
-        queryDict["legacyAdapterSessionId"] = resume
-        queryDict["resume"] = resume
-      }
       if let imageData {
         queryDict["imageBase64"] = imageData.base64EncodedString()
+      }
+      if let attachmentMetadataJson, !attachmentMetadataJson.isEmpty {
+        queryDict["attachmentMetadataJson"] = attachmentMetadataJson
+      }
+      if let surfaceContextJson, !surfaceContextJson.isEmpty {
+        queryDict["surfaceContextJson"] = surfaceContextJson
       }
       if let ownerId = currentOwnerId() {
         queryDict["ownerId"] = ownerId
@@ -483,17 +821,25 @@ actor AgentRuntimeProcess {
       throw BridgeError.bridgeScriptNotFound
     }
 
+    Self.removeInheritedBYOKEnvironment(from: &env)
+    let byok = await Self.usableBYOKEnvironment()
+    for (key, value) in byok.values {
+      env[key] = value
+    }
     if APIKeyService.isByokActive {
-      for provider in BYOKProvider.allCases {
-        if let key = APIKeyService.byokKey(provider) {
-          env["OMI_BYOK_\(provider.rawValue.uppercased())"] = key
+      if !byok.suppressedProviders.isEmpty {
+        for provider in byok.suppressedProviders {
+          log(
+            "CredentialHealth: context=agent_runtime_env failure_class=byok_invalid_suppressed provider=\(provider.rawValue)"
+          )
         }
       }
-      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(BYOKProvider.allCases.count) user keys")
+      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
     let authService = await MainActor.run { AuthService.shared }
-    if let token = try? await authService.getIdToken(), !token.isEmpty {
+    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
+    if let token = try? await authService.getIdToken(forceRefresh: forceRefreshToken), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
@@ -624,6 +970,40 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+  }
+
+  static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
+    "OMI_BYOK_\(provider.rawValue.uppercased())"
+  }
+
+  static func removeInheritedBYOKEnvironment(from env: inout [String: String]) {
+    let inheritedBYOKKeys = env.keys.filter { $0.uppercased().hasPrefix("OMI_BYOK_") }
+    for key in inheritedBYOKKeys {
+      env.removeValue(forKey: key)
+    }
+  }
+
+  @MainActor
+  static func usableBYOKEnvironment() -> (values: [String: String], suppressedProviders: [BYOKProvider]) {
+    guard APIKeyService.isByokActive else {
+      return ([:], [])
+    }
+
+    var candidateValues: [String: String] = [:]
+    var suppressedProviders: [BYOKProvider] = []
+    for provider in BYOKProvider.allCases {
+      guard let key = APIKeyService.byokKey(provider) else { continue }
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = key
+      } else {
+        suppressedProviders.append(provider)
+      }
+    }
+    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+      return ([:], suppressedProviders)
+    }
+    return (candidateValues, [])
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -854,6 +1234,17 @@ actor AgentRuntimeProcess {
     case .controlToolResult:
       completeControlRequest(message)
 
+    case .voiceSeedContext:
+      completeVoiceSeedRequest(message)
+
+    case .kernelTurnTail:
+      completeKernelTurnTailRequest(message)
+
+    case .turnRecorded:
+      if let recorded = kernelTurnRecorded(from: message) {
+        turnRecordedHandler?(recorded)
+      }
+
     case .result:
       completeRequest(message)
 
@@ -869,9 +1260,6 @@ actor AgentRuntimeProcess {
     if let requestKey = message.requestKey {
       return activeRequests[requestKey]
     }
-    if message.protocolVersion != 2 && activeRequests.count == 1 {
-      return activeRequests.values.first
-    }
     return nil
   }
 
@@ -879,17 +1267,13 @@ actor AgentRuntimeProcess {
     let callId = message.payload["callId"] as? String ?? ""
     let name = message.payload["name"] as? String ?? ""
     guard let request = routedRequest(for: message) else {
-      if let requestKey = message.requestKey, activeControlRequests[requestKey] != nil {
-        log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
-        completeToolCall(
-          callId: callId,
-          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs",
-          requestId: message.requestId,
-          clientId: message.clientId
-        )
-        return
-      }
-      log("AgentRuntimeProcess: dropping unroutable tool call")
+      log("AgentRuntimeProcess: rejecting unrouted tool call \(name)")
+      completeToolCall(
+        callId: callId,
+        result: Self.unroutedToolCallError(toolName: name),
+        requestId: message.requestId,
+        clientId: message.clientId
+      )
       return
     }
     if request.isInterrupted {
@@ -901,6 +1285,23 @@ actor AgentRuntimeProcess {
       let result = await request.onToolCall(callId, name, input)
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
+  }
+
+  private static func unroutedToolCallError(toolName: String) -> String {
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": [
+        "code": "unrouted_tool_call",
+        "message": "Tool call '\(toolName)' was rejected because it was not attached to an active trusted request.",
+      ],
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let text = String(data: data, encoding: .utf8)
+    else {
+      return #"{"ok":false,"error":{"code":"unrouted_tool_call"}}"#
+    }
+    return text
   }
 
   private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
@@ -952,6 +1353,58 @@ actor AgentRuntimeProcess {
     request.continuation.resume(returning: message.payload["result"] as? String ?? "")
   }
 
+  private func completeVoiceSeedRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeVoiceSeedRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable voice seed context")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let context = message.payload["context"] as? String ?? ""
+    request.continuation.resume(returning: (conversationId: conversationId, context: context))
+  }
+
+  private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable kernel turn tail")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let rawTurns = message.payload["turns"] as? [[String: Any]] ?? []
+    let turns = rawTurns.map { row in
+      KernelTurnTailTurn(
+        role: row["role"] as? String ?? "",
+        content: row["content"] as? String ?? "",
+        surfaceKind: row["surfaceKind"] as? String ?? "",
+        createdAtMs: row["createdAtMs"] as? Int ?? 0,
+        metadataJson: row["metadataJson"] as? String ?? "{}",
+        origin: row["origin"] as? String ?? ""
+      )
+    }
+    request.continuation.resume(returning: KernelTurnTailResult(conversationId: conversationId, turns: turns))
+  }
+
+  private func kernelTurnRecorded(from message: RuntimeMessage) -> KernelTurnRecorded? {
+    let payload = message.payload
+    guard let conversationId = payload["conversationId"] as? String else { return nil }
+    return KernelTurnRecorded(
+      conversationId: conversationId,
+      surfaceKind: payload["surfaceKind"] as? String ?? "",
+      externalRefKind: payload["externalRefKind"] as? String ?? "",
+      externalRefId: payload["externalRefId"] as? String ?? "",
+      userText: payload["userText"] as? String ?? "",
+      assistantText: payload["assistantText"] as? String ?? "",
+      origin: payload["origin"] as? String ?? "",
+      interrupted: payload["interrupted"] as? Bool ?? false,
+      idempotencyKey: payload["idempotencyKey"] as? String,
+      userTurnId: payload["userTurnId"] as? String,
+      assistantTurnId: payload["assistantTurnId"] as? String
+    )
+  }
+
   private func failRequest(_ message: RuntimeMessage) {
     let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
     let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
@@ -972,10 +1425,8 @@ actor AgentRuntimeProcess {
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
     let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? message.payload["omiSessionId"] as? String ?? ""
-    let adapterSessionId =
-      payload["adapterSessionId"] as? String
-      ?? payload["legacyAdapterSessionId"] as? String
+    let omiSessionId = payload["sessionId"] as? String ?? ""
+    let adapterSessionId = payload["adapterSessionId"] as? String
     return AgentBridge.QueryResult(
       text: payload["text"] as? String ?? "",
       costUsd: payload["costUsd"] as? Double ?? 0,
@@ -990,6 +1441,9 @@ actor AgentRuntimeProcess {
       cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
       artifacts: AgentArtifactProjection.parseList(
         fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
+      ),
+      completionDeltaArtifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
       )
     )
   }
@@ -1009,10 +1463,7 @@ actor AgentRuntimeProcess {
   }
 
   private func currentOwnerId() -> String? {
-    guard let value = UserDefaults.standard.string(forKey: "auth_userId"), !value.isEmpty else {
-      return nil
-    }
-    return value
+    RuntimeOwnerIdentity.currentOwnerId()
   }
 
   private func handleTermination(
@@ -1042,6 +1493,14 @@ actor AgentRuntimeProcess {
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
 
+    log(
+      "AgentRuntimeProcess: process terminated "
+        + "(failure_class=\(likelyOOM ? "out_of_memory" : "process_exited") "
+        + "recovery_action=restart_on_next_send recovery_result=degraded code=\(exitCode))")
+    DesktopDiagnosticsManager.shared.recordAgentRuntimeUnexpectedExit(
+      exitCode: exitCode,
+      oom: likelyOOM
+    )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false
@@ -1060,6 +1519,16 @@ actor AgentRuntimeProcess {
     let controlRequests = activeControlRequests.values
     activeControlRequests.removeAll()
     for request in controlRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let seedRequests = activeVoiceSeedRequests.values
+    activeVoiceSeedRequests.removeAll()
+    for request in seedRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let tailRequests = activeKernelTurnTailRequests.values
+    activeKernelTurnTailRequests.removeAll()
+    for request in tailRequests {
       request.continuation.resume(throwing: error)
     }
   }

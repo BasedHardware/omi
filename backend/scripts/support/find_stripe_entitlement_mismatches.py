@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from google.cloud import firestore
 
@@ -132,11 +132,13 @@ def build_stripe_source_of_truth(
     skipped: list[dict[str, Any]] = []
 
     for sub in iter_stripe_subscriptions(api_key, statuses):
-        metadata = sub.get("metadata") or {}
-        uid = metadata.get("uid")
-        items = (sub.get("items") or {}).get("data") or []
-        price_id = items[0].get("price", {}).get("id") if items else None
-        expected_plan = plan_by_price.get(price_id or "")
+        metadata: dict[str, Any] = cast(dict[str, Any], sub.get("metadata") or {})
+        uid: Any = metadata.get("uid")
+        items: list[dict[str, Any]] = cast(
+            list[dict[str, Any]], cast(dict[str, Any], sub.get("items") or {}).get("data") or []
+        )
+        price_id: Any = items[0].get("price", {}).get("id") if items else None
+        expected_plan: Any = plan_by_price.get(price_id or "")
         if not uid or not expected_plan:
             skipped.append(
                 {
@@ -149,10 +151,13 @@ def build_stripe_source_of_truth(
             )
             continue
 
-        customer = sub.get("customer")
+        customer: Any = sub.get("customer")
+        customer_id: Any
+        customer_email: Any
         if isinstance(customer, dict):
-            customer_id = customer.get("id")
-            customer_email = customer.get("email")
+            customer_dict: dict[str, Any] = cast(dict[str, Any], customer)
+            customer_id = customer_dict.get("id")
+            customer_email = customer_dict.get("email")
         else:
             customer_id = customer
             customer_email = None
@@ -184,7 +189,7 @@ def compare_firestore(project: str, stripe_by_uid: dict[str, StripeSub]) -> list
     mismatches: list[Mismatch] = []
 
     for uid, stripe_sub in sorted(stripe_by_uid.items()):
-        snap = db.collection("users").document(uid).get()
+        snap: Any = cast(Any, db.collection("users").document(uid).get())  # type: ignore[reportUnknownMemberType]
         if not snap.exists:
             mismatches.append(
                 Mismatch(
@@ -204,14 +209,15 @@ def compare_firestore(project: str, stripe_by_uid: dict[str, StripeSub]) -> list
             )
             continue
 
-        data = snap.to_dict() or {}
-        fs_sub = data.get("subscription") or {}
-        fs_plan = fs_sub.get("plan")
-        fs_status = fs_sub.get("status")
-        fs_sub_id = fs_sub.get("stripe_subscription_id")
-        fs_customer_id = data.get("stripe_customer_id")
+        data: dict[str, Any] = cast(dict[str, Any], snap.to_dict() or {})
+        fs_sub: dict[str, Any] = cast(dict[str, Any], data.get("subscription") or {})
+        fs_plan: Any = fs_sub.get("plan")
+        fs_status: Any = fs_sub.get("status")
+        fs_sub_id: Any = fs_sub.get("stripe_subscription_id")
+        fs_customer_id: Any = data.get("stripe_customer_id")
 
-        reasons = []
+        reasons: list[str] = []
+
         if fs_plan != stripe_sub.expected_plan:
             reasons.append(f"plan:{fs_plan}->{stripe_sub.expected_plan}")
         if fs_status != "active":

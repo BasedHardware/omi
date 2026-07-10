@@ -222,6 +222,10 @@ def perform_merge_async(
         # Geolocation: use first conversation's
         geolocation = sorted_convs[0].get('geolocation')
 
+        # Capture provenance is safe to retain only when every source came
+        # from the same known device.
+        client_device_id, client_platform = _shared_client_device_provenance(sorted_convs)
+
         # 5. Create merge metadata
         merge_metadata = {
             'merged_at': datetime.now(timezone.utc).isoformat(),
@@ -254,11 +258,13 @@ def perform_merge_async(
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             discarded=discarded,
             status=ConversationStatus.processing,
+            client_device_id=client_device_id,
+            client_platform=client_platform,
             external_data={'merge_metadata': merge_metadata},
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
 
         # Store photos in subcollection if any
         if merged_photos:
@@ -472,6 +478,24 @@ def _determine_visibility(conversations: List[Dict]) -> str:
             min_visibility = vis
 
     return min_visibility
+
+
+def _shared_client_device_provenance(conversations: List[Dict]) -> Tuple[Optional[str], Optional[str]]:
+    """Return capture provenance only when every merged conversation agrees.
+
+    A merged conversation can represent multiple devices. Assigning one source
+    device to that output would make a cross-device capture appear in the wrong
+    device-scoped memory view, so mixed or missing provenance stays unknown.
+    """
+    provenance = {
+        (conversation.get('client_device_id'), conversation.get('client_platform')) for conversation in conversations
+    }
+    if len(provenance) != 1:
+        return None, None
+    client_device_id, client_platform = provenance.pop()
+    if not client_device_id or not client_platform:
+        return None, None
+    return client_device_id, client_platform
 
 
 def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> None:

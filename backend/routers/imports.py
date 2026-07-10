@@ -2,19 +2,17 @@
 Import endpoints for importing data from external sources.
 """
 
-import asyncio
 import logging
 import os
-import uuid
-from typing import List, Optional
+from typing import List
 
 from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 import database.import_jobs as import_jobs_db
-import database.conversations as conversations_db
-from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
+from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
 
@@ -24,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+class DeleteLimitlessConversationsResponse(BaseModel):
+    deleted_count: int
+    message: str
 
 
 @router.post(
@@ -94,7 +97,7 @@ async def import_limitless_data(
 def get_import_jobs(
     uid: str = Depends(auth.get_current_user_uid),
     limit: int = 50,
-):
+) -> List[ImportJobResponse]:
     """
     Get all import jobs for the current user.
 
@@ -105,7 +108,7 @@ def get_import_jobs(
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in
     # the ImportJobStatus enum) doesn't fail the whole list with a 500.
-    result = []
+    result: List[ImportJobResponse] = []
     for job in jobs:
         try:
             result.append(
@@ -192,7 +195,12 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
     )
 
 
-@router.delete('/v1/import/jobs/{job_id}', tags=['import'])
+class DeleteImportJobResponse(BaseModel):
+    status: str
+    job_id: str
+
+
+@router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
 def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
     job = import_jobs_db.get_import_job(job_id)
@@ -209,6 +217,7 @@ def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
 
 @router.delete(
     '/v1/import/limitless/conversations',
+    response_model=DeleteLimitlessConversationsResponse,
     tags=['import'],
 )
 def delete_limitless_conversations(

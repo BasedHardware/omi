@@ -137,6 +137,7 @@ def test_gateway_validation_rejects_conversation_structure_defaults_masking_miss
         (
             {
                 'feature': 'conversation_structure.extract.shadow',
+                'mode': 'fallback',
                 'outcome': 'fallback',
                 'reason': 'schema_validation',
             },
@@ -308,6 +309,7 @@ def test_chat_structured_gateway_records_success_metric(monkeypatch, caplog):
         (
             {
                 'feature': 'chat_extraction.requires_context',
+                'mode': 'serving',
                 'outcome': 'success',
                 'reason': 'ok',
             },
@@ -337,6 +339,7 @@ def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
         (
             {
                 'feature': 'chat_extraction.requires_context',
+                'mode': 'fallback',
                 'outcome': 'fallback',
                 'reason': 'schema_validation',
             },
@@ -563,6 +566,7 @@ def test_action_items_gateway_shadow_disabled_skips_submit(monkeypatch):
     assert (
         {
             'feature': 'conversation_action_items.extract.shadow',
+            'mode': 'shadow',
             'outcome': 'skipped',
             'reason': 'disabled',
         },
@@ -707,6 +711,7 @@ def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
     assert (
         {
             'feature': 'conversation_structure.extract.shadow',
+            'mode': 'shadow',
             'outcome': 'skipped',
             'reason': 'disabled',
         },

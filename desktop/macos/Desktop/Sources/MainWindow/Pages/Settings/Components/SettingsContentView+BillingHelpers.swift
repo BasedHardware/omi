@@ -2,6 +2,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+import OmiTheme
 
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
@@ -536,7 +537,7 @@ extension SettingsContentView {
     if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
       permissionError = "Screen recording permission required"
       isMonitoring = false
-      ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
       return
     }
 

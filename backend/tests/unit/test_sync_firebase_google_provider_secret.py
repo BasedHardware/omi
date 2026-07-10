@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts.sync_firebase_google_provider_secret import (
@@ -102,6 +104,12 @@ def test_static_review_guards_cover_secret_sync_regressions():
 
 def test_secret_sync_tests_are_registered_in_backend_test_sh():
     test_sh = TEST_SH_PATH.read_text()
+    selected_tests = subprocess.check_output(
+        [sys.executable, str(BACKEND_DIR / "scripts" / "select_backend_unit_tests.py"), "--all"],
+        text=True,
+        cwd=BACKEND_DIR,
+    ).splitlines()
 
-    assert "pytest tests/unit/test_mcp_oauth_template.py -v" in test_sh
-    assert "pytest tests/unit/test_sync_firebase_google_provider_secret.py -v" in test_sh
+    assert "scripts/select_backend_unit_tests.py --all" in test_sh
+    assert "tests/unit/test_mcp_oauth_template.py" in selected_tests
+    assert "tests/unit/test_sync_firebase_google_provider_secret.py" in selected_tests

@@ -14,7 +14,7 @@ from typing import Optional
 
 from cachetools import TTLCache
 
-_DEV_STATUS_CACHE: TTLCache = TTLCache(maxsize=4096, ttl=300)
+_DEV_STATUS_CACHE: TTLCache[str, bool] = TTLCache(maxsize=4096, ttl=300)
 _lock = threading.Lock()
 
 

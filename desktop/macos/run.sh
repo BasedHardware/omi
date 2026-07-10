@@ -104,25 +104,6 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-# Serialize bundle builds — parallel ./run.sh invocations corrupt the same build/Omi Dev.app tree.
-RUN_SH_LOCK_DIR="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-_release_run_sh_lock() {
-    rmdir "$RUN_SH_LOCK_DIR" 2>/dev/null || true
-}
-_run_sh_lock_waited=0
-while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
-    if [ "$_run_sh_lock_waited" -eq 0 ]; then
-        printf "[%6.1fs]   ├─ Waiting for another ./run.sh to finish...\n" "$(echo "$(date +%s.%N) - $SCRIPT_START_TIME" | bc)"
-    fi
-    sleep 2
-    _run_sh_lock_waited=$((_run_sh_lock_waited + 2))
-    if [ "$_run_sh_lock_waited" -ge 600 ]; then
-        echo "ERROR: timed out after 10 minutes waiting for ./run.sh lock ($RUN_SH_LOCK_DIR)"
-        exit 1
-    fi
-done
-trap '_release_run_sh_lock' EXIT INT TERM
-
 macos_copy_tree() {
     local src="$1"
     local dest="$2"
@@ -141,6 +122,16 @@ macos_copy_tree() {
 source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
 BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
+
+# Serialize same-worktree builds only (shared Desktop/.build + build/$APP_NAME.app).
+# Cross-worktree ./run.sh must not block each other. Hold through install/seed/open,
+# then release before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported
+# (/Applications/$APP_NAME.app is machine-global and not cross-locked).
+source "$SCRIPT_DIR/scripts/run-sh-build-lock.sh"
+omi_run_sh_acquire_build_lock "another ./run.sh in this worktree" 600 || exit 1
+# Temporary until `trap cleanup EXIT` below chains release into cleanup().
+trap 'omi_run_sh_release_build_lock' EXIT INT TERM
 
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
@@ -209,11 +200,10 @@ AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
-    # Release the serialization lock acquired above. This must be chained
-    # into cleanup rather than set via a separate `trap` because the
-    # `trap cleanup EXIT` below overwrites any earlier trap, so a standalone
-    # `trap _release_run_sh_lock EXIT` would never fire on normal exit.
-    _release_run_sh_lock
+    # Release the build lock if still held (early exit before install, or if
+    # the post-install release was skipped). Chained here because
+    # `trap cleanup EXIT` overwrites the earlier lock-only trap.
+    omi_run_sh_release_build_lock
     if [ -n "$AUTH_CACHE" ]; then
         rm -f "$AUTH_CACHE"
     fi
@@ -470,6 +460,27 @@ done
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
 
+step "Generating tool surfaces..."
+(
+  cd agent
+  NODE_BIN=""
+  for candidate in \
+    "../Desktop/Sources/Resources/node" \
+    "/opt/homebrew/opt/node@22/bin/node" \
+    "/usr/local/opt/node@22/bin/node" \
+    "$(command -v node 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$NODE_BIN" ]]; then
+    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
+    exit 1
+  fi
+  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
+)
+
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
     bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"
@@ -574,7 +585,6 @@ if [ -d "$AGENT_DIR/dist" ]; then
     fi
     macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -836,7 +846,11 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
         if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+            # Pass the just-installed app path so seed can resolve Team ID and
+            # clear any prior CLI-written Keychain item (apple-tool: partition).
+            # Tokens are seeded into UserDefaults; the app migrates them into
+            # Keychain on launch with the correct teamid: partition (no prompt).
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
                 auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
             else
                 echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
@@ -893,6 +907,12 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
+
+# Launch finished — free this worktree's lock so other checkouts (and a later
+# rebuild here) are not blocked by the long-running wait below. Kept through
+# open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
+omi_run_sh_release_build_lock
+substep "Released per-worktree build lock"
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

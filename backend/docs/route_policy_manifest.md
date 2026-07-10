@@ -2,7 +2,9 @@
 
 Issue #8959 tracks a route policy manifest and generated inventory for backend routes.
 
-The first rollout is metadata-only and report-only. It does not change request handling, middleware, authentication, rate limiting, or OpenAPI output.
+The rollout is metadata-only. It does not change request handling, middleware, authentication, rate limiting, or OpenAPI output.
+
+The full manifest coverage check remains report-only while legacy routes are baselined. CI also runs a strict missing-route baseline check: new backend routes must add a matching policy entry instead of expanding the legacy baseline.
 
 ## Scope
 
@@ -40,6 +42,13 @@ cd backend
 scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --check --report-only
 ```
 
+Run the CI baseline gate:
+
+```bash
+cd backend
+scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --enforce-missing-baseline
+```
+
 Print deterministic JSON inventory:
 
 ```bash
@@ -54,10 +63,20 @@ cd backend
 scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --write-inventory /tmp/backend-route-inventory.json
 ```
 
+Regenerate the legacy missing-route baseline after reviewed routes are added to the manifest or removed:
+
+```bash
+cd backend
+scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --write-missing-baseline route_policy_legacy_missing_routes.txt
+```
+
+Do not add newly introduced routes to `route_policy_legacy_missing_routes.txt`. That file is only for the pre-existing route inventory from the initial rollout.
+On pull requests, CI compares this file with the target branch copy and fails if the legacy baseline grows.
+
 ## Adding Or Changing A Route
 
 1. Add or update the FastAPI route.
-2. Run the route policy inventory command.
+2. Run the route policy inventory command and the CI baseline gate.
 3. Add or update the matching manifest entry in `backend/route_policy_manifest.yaml`.
 4. Prefer `review_status: reviewed` when the route policy has been checked by the route owner.
 5. Use `review_status: legacy_unreviewed` only for baseline migration entries that still need policy review.

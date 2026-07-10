@@ -1,11 +1,11 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 import threading
 import uuid
 import logging
 import json
 from concurrent.futures import as_completed
 
-from utils.executors import db_executor, llm_executor
+from utils.executors import db_executor, llm_executor  # pyright: ignore[reportUnusedImport]
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +80,11 @@ def extract_knowledge_from_memory(
     memory_id: str,
     user_name: str = "User",
     *,
-    db_client=None,
+    db_client: Any = None,
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
     existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
-    existing_nodes_summary = []
+    existing_nodes_summary: List[Dict[str, Any]] = []
     for node in existing_nodes:
         existing_nodes_summary.append(
             {
@@ -110,27 +110,27 @@ def extract_knowledge_from_memory(
             response = get_llm('knowledge_graph').invoke(prompt)
 
         try:
-            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+            extraction: KnowledgeGraphExtraction = parser.parse(cast(str, cast(Any, response).content))
         except Exception as e:
             logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
             if strict_parse:
                 return None
             extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
-        label_to_node_id = {}
+        label_to_node_id: Dict[str, str] = {}
         for existing in existing_nodes:
             label_to_node_id[existing['label'].lower()] = existing['id']
             for alias in existing.get('aliases', []):
                 label_to_node_id[alias.lower()] = existing['id']
 
-        created_nodes = []
+        created_nodes: List[Any] = []
         for node in extraction.nodes:
             existing_id = label_to_node_id.get(node.label.lower())
             for alias in node.aliases:
                 if not existing_id:
                     existing_id = label_to_node_id.get(alias.lower())
 
-            node_id = existing_id or str(uuid.uuid4())
+            node_id = cast(str, existing_id) or str(uuid.uuid4())
 
             node_data = {
                 'id': node_id,
@@ -146,7 +146,7 @@ def extract_knowledge_from_memory(
             for alias in node.aliases:
                 label_to_node_id[alias.lower()] = node_id
 
-        created_edges = []
+        created_edges: List[Any] = []
         for edge in extraction.edges:
             source_id = label_to_node_id.get(edge.source_label.lower())
             target_id = label_to_node_id.get(edge.target_label.lower())
@@ -176,20 +176,20 @@ def rebuild_knowledge_graph(
     memories: List[Dict[str, Any]],
     user_name: str = "User",
     *,
-    db_client=None,
+    db_client: Any = None,
 ) -> Dict[str, Any]:
     kg_db.delete_knowledge_graph(uid, db_client=db_client)
 
     node_lock = threading.Lock()
 
-    def process_memory(memory):
+    def process_memory(memory: Dict[str, Any]) -> Dict[str, Any]:
         memory_id = memory.get('id', str(uuid.uuid4()))
         memory_content = memory.get('content', '')
         if not memory_content:
             return {'nodes': [], 'edges': []}
 
         existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
-        existing_nodes_summary = []
+        existing_nodes_summary: List[Dict[str, Any]] = []
         for node in existing_nodes:
             existing_nodes_summary.append(
                 {
@@ -215,16 +215,16 @@ def rebuild_knowledge_graph(
                 response = get_llm('knowledge_graph').invoke(prompt)
 
             try:
-                extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+                extraction: KnowledgeGraphExtraction = parser.parse(cast(str, cast(Any, response).content))
             except Exception as e:
                 logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
                 extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
-            created_nodes = []
-            created_edges = []
+            created_nodes: List[Any] = []
+            created_edges: List[Any] = []
 
             with node_lock:
-                label_to_node_id = {}
+                label_to_node_id: Dict[str, str] = {}
                 current_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
                 for existing in current_nodes:
                     label_to_node_id[existing['label'].lower()] = existing['id']
@@ -237,7 +237,7 @@ def rebuild_knowledge_graph(
                         if not existing_id:
                             existing_id = label_to_node_id.get(alias.lower())
 
-                    node_id = existing_id or str(uuid.uuid4())
+                    node_id = cast(str, existing_id) or str(uuid.uuid4())
 
                     node_data = {
                         'id': node_id,
@@ -273,10 +273,10 @@ def rebuild_knowledge_graph(
             logging.exception(f"Error extracting knowledge graph from memory_id: {memory_id}")
             return {'nodes': [], 'edges': []}
 
-    all_nodes = []
-    all_edges = []
+    all_nodes: List[Any] = []
+    all_edges: List[Any] = []
 
-    futures = []
+    futures: List[Any] = []
     for m in memories:
         _KG_REBUILD_SEM.acquire()
         try:
@@ -288,7 +288,7 @@ def rebuild_knowledge_graph(
             raise
     for future in as_completed(futures):
         try:
-            result = future.result()
+            result = cast(Dict[str, Any], future.result())
             all_nodes.extend(result.get('nodes', []))
             all_edges.extend(result.get('edges', []))
         except Exception:

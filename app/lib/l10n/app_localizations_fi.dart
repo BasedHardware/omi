@@ -9509,4 +9509,66 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.';
+
+  @override
+  String get connectRayBanMeta => 'Yhdistä Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Käytä Ray-Ban Meta -laseja Omi-tallennuslaitteena keskusteluihin ja visuaaliseen kontekstiin. Omi avaa Meta AI -sovelluksen lasien yhdistämistä varten.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Yhdistä Meta AI:n kautta';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa sitten tänne.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tarkista uudelleen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Salli lasien kamera';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi käyttää lasiesi kameraa lisätäkseen valokuvia keskusteluihisi. Voit ohittaa tämän ja käyttää vain ääntä.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Ohita toistaiseksi';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Metan vain ääni -tila';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Tämä Omi-versio voi käyttää lasiesi mikrofonia Bluetoothin kautta. Valokuvien ottaminen vaatii Omin Meta-kehittäjäversion.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Puhelimesi musiikki keskeytyy, kun lasien mikrofoni on käytössä.';
+
+  @override
+  String get raybanMetaContinue => 'Jatka';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Ota valokuva';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Valokuvaa pyydetty — se näkyy keskustelussasi.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofoni valmis';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Kuvan kaappaus valmis';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Ei käytettävissä vain ääni -tilassa';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Virhe yhdistettäessä Ray-Ban Metaan: $error';
+  }
 }

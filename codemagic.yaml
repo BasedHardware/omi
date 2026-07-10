@@ -2035,6 +2035,20 @@ workflows:
 
       - name: Test desktop tool surfaces
         script: |
+          cd agent
+          NODE_BIN=""
+          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
+            if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+              NODE_BIN="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$NODE_BIN" ]]; then
+            echo "ERROR: Node.js 22.6+ with --experimental-strip-types required" >&2
+            exit 1
+          fi
+          "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
+          cd ..
           scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
@@ -2350,7 +2364,6 @@ workflows:
             fi
             cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -2639,6 +2652,18 @@ workflows:
           echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
+      - name: Smoke signed desktop artifact
+        script: |
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$APP_BUNDLE" \
+            --zip "$SPARKLE_ZIP_PATH" \
+            --dmg "$DMG_PATH" \
+            --tag "$CM_TAG" \
+            --expected-channel beta \
+            --auth-storage-canary \
+            --result-json "$BUILD_DIR/desktop-smoke-result.json"
+
       - name: Create GitHub release
         script: |
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
@@ -2656,8 +2681,8 @@ workflows:
           - **Auto-Update**: Existing users will receive this update automatically via Sparkle
 
           <!-- KEY_VALUE_START
-          isLive: true
-          channel: beta
+          isLive: false
+          channel: candidate
           edSignature: ${ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
@@ -2668,180 +2693,23 @@ workflows:
 
           gh release create "$CM_TAG" \
             --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION}" \
+            --title "Omi Desktop v${VERSION} (candidate)" \
             --notes "$RELEASE_NOTES" \
             "$SPARKLE_ZIP_PATH" \
             "$DMG_PATH"
 
-          echo "GitHub release created: $CM_TAG"
-
-      - name: Publish static beta redirect artifacts
-        script: |
-          set -e
-
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-          export BETA_DMG_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/omi.dmg"
-          export RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          cat > /tmp/macos-beta-index.html <<EOF
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=${BETA_DMG_URL}">
-            <meta name="robots" content="noindex">
-            <title>Redirecting to latest Omi Beta download…</title>
-          </head>
-          <body>
-            <p>Redirecting to the latest Omi Beta download.</p>
-            <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
-            <script>window.location.replace("${BETA_DMG_URL}");</script>
-          </body>
-          </html>
-          EOF
-
-          python3 - <<'PY' > /tmp/macos-beta-redirect.json
-          import json, os
-          print(json.dumps({
-              "channel": "beta",
-              "version": os.environ["VERSION"],
-              "build_number": int(os.environ["BUILD_NUMBER"]),
-              "tag": os.environ["CM_TAG"],
-              "download_url": os.environ["BETA_DMG_URL"],
-              "published_at": os.environ["RELEASED_AT"],
-          }, indent=2))
-          PY
-
-          echo "$BETA_DMG_URL" > /tmp/macos-beta-latest-url.txt
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-index.html \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/index.html"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-redirect.json \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/redirect.json"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-latest-url.txt \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/latest-url.txt"
-
-          echo "Static beta redirect artifacts published to $GCS_DESKTOP_UPDATES_BUCKET/beta/"
-
-      - name: Bridge release to Firestore for old clients
-        script: |
-          # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
-          # /appcast.xml which reads from Firestore. Register as beta here; the
-          # manual desktop_promote_prod.yml workflow promotes this same Firestore
-          # release to stable only after the prod Rust backend is deployed and
-          # verified. Remove this step once the Rust backend is decommissioned.
-          export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
-
-          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
-
-          RELEASE_JSON=$(python3 -c "
-          import json, os
-          data = {
-            'version':      os.environ['VERSION'],
-            'build_number': int(os.environ['BUILD_NUMBER']),
-            'download_url': os.environ.get('DOWNLOAD_URL', ''),
-            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
-            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
-            'is_live':      True,
-            'is_critical':  False,
-            'channel':      'beta',
-          }
-          print(json.dumps(data))
-          ")
-
-          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Release-Secret: $RELEASE_SECRET" \
-            -d "$RELEASE_JSON" \
-            "$OMI_DESKTOP_API_URL/updates/releases")
-
-          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "Bridge: Release registered in Firestore for old clients (channel: beta)"
-          else
-            echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
-            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
-          fi
+          echo "GitHub release candidate created: $CM_TAG"
+          echo "Run desktop/macos/scripts/bless-release.sh $CM_TAG to execute T2 qualification and promote beta."
 
     artifacts:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/desktop-smoke-result.json
     publishing:
       email:
         recipients:
           - i@m13v.com
         notify:
           success: true
-          failure: true
-
-  # ============================================
-  # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
-  # Triggered on push to main when desktop/macos/agent-cloud/ changes.
-  # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
-  # ============================================
-  agent-cloud-auto-deploy:
-    name: Auto Deploy Agent Cloud to GCS
-    instance_type: linux_x2
-    max_build_duration: 10
-    environment:
-      groups:
-        - desktop_secrets
-      vars:
-        GCS_BUCKET: "gs://based-hardware-agent"
-        GCP_PROJECT: "based-hardware"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'desktop/macos/agent-cloud/agent.mjs'
-          - 'desktop/macos/agent-cloud/scripts/startup.sh'
-    scripts:
-      - name: Authenticate with GCP
-        script: |
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-      - name: Deploy agent.mjs and startup.sh to GCS
-        script: |
-          VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
-          echo "Deploying version $VERSION to $GCS_BUCKET..."
-
-          gsutil cp desktop/macos/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
-          echo "Uploaded agent.mjs"
-
-          gsutil cp desktop/macos/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
-          echo "Uploaded startup.sh"
-
-          # Update version.txt last — triggers hot-reload on running VMs
-          echo "$VERSION" | gsutil cp - "$GCS_BUCKET/version.txt"
-          echo "Version bumped to $VERSION"
-          echo "Running VMs will hot-reload within 10 minutes."
-    publishing:
-      email:
-        recipients:
-          - i@m13v.com
-        notify:
-          success: false
           failure: true

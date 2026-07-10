@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct ManualInstallationDisclosure<Content: View>: View {
   @Binding private var isExpanded: Bool

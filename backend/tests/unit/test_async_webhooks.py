@@ -102,7 +102,9 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("connect timeout"))
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+        ):
             # Should not raise
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
 
@@ -394,7 +396,7 @@ class TestCircuitBreakerIntegration:
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ):
+        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
 

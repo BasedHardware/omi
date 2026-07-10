@@ -423,6 +423,30 @@ async fn fetch_sentry_event_details(
     (feedback_message, reporter_name, reporter_email, Some(extra))
 }
 
+/// Maps a non-success Sentry API HTTP status to a compact, typed reason string so the
+/// poll endpoint can classify expected external states instead of emitting a 500.
+fn sentry_poll_skip_reason(status: u16) -> &'static str {
+    match status {
+        401 | 403 => "sentry_auth_error",
+        429 => "sentry_rate_limited",
+        _ => "sentry_upstream_error",
+    }
+}
+
+/// Builds the typed 2xx body returned when a poll is skipped due to an expected external
+/// state (auth expiry, rate limit, upstream/network failure). Shape mirrors the success
+/// response so callers can treat "ok" and "skipped" uniformly.
+fn sentry_poll_skipped_body(reason: &str, sentry_status: Option<u16>) -> Value {
+    json!({
+        "status": "skipped",
+        "reason": reason,
+        "sentry_status": sentry_status,
+        "created": 0,
+        "skipped": 0,
+        "total_fetched": 0,
+    })
+}
+
 /// POST /v1/webhooks/sentry/poll - Poll Sentry for new feedback and create action items
 /// This is needed because Sentry webhooks don't fire for feedback category issues
 /// (see https://github.com/getsentry/sentry/issues/89436)
@@ -490,29 +514,48 @@ async fn poll_sentry_feedback(State(state): State<AppState>) -> Result<Json<Valu
         top_10_score,
     );
 
-    // 2. Fetch recent feedback issues from Sentry
+    // 2. Fetch recent feedback issues from Sentry.
+    // Expected external states (auth expiry/permission, rate limit, upstream/network
+    // failure, unparseable body) are transient and outside this service's control, so
+    // they return a typed 2xx "skipped" response instead of a 500 — a 500 here wrongly
+    // implies desktop-backend broke and spams the prod error logs. See issue #9139.
     let client = reqwest::Client::new();
     let sentry_url = "https://sentry.io/api/0/organizations/mediar-n5/issues/?query=issue.category:feedback&limit=25&sort=date";
 
-    let response = client
+    let response = match client
         .get(sentry_url)
         .header("Authorization", format!("Bearer {}", auth_token))
         .send()
         .await
-        .map_err(|e| {
-            tracing::error!("Sentry poll: API request failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::warn!("Sentry poll: skipping, Sentry API unreachable: {}", e);
+            return Ok(Json(sentry_poll_skipped_body("sentry_unreachable", None)));
+        }
+    };
 
     if !response.status().is_success() {
-        tracing::error!("Sentry poll: API returned {}", response.status());
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = response.status().as_u16();
+        let reason = sentry_poll_skip_reason(status);
+        tracing::warn!(
+            "Sentry poll: skipping, Sentry API returned {} ({})",
+            status,
+            reason
+        );
+        return Ok(Json(sentry_poll_skipped_body(reason, Some(status))));
     }
 
-    let issues: Vec<Value> = response.json().await.map_err(|e| {
-        tracing::error!("Sentry poll: failed to parse issues: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let issues: Vec<Value> = match response.json().await {
+        Ok(issues) => issues,
+        Err(e) => {
+            tracing::warn!(
+                "Sentry poll: skipping, failed to parse Sentry response: {}",
+                e
+            );
+            return Ok(Json(sentry_poll_skipped_body("sentry_bad_response", None)));
+        }
+    };
 
     tracing::info!(
         "Sentry poll: fetched {} feedback issues from Sentry",
@@ -642,4 +685,31 @@ pub fn webhook_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/webhooks/sentry", post(handle_sentry_webhook))
         .route("/v1/webhooks/sentry/poll", post(poll_sentry_feedback))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentry_poll_skip_reason_classifies_expected_states() {
+        // Regression for #9139: a persistent 403 from Sentry must classify as an auth
+        // error (typed skip), not fall through to a 500 and spam prod error logs.
+        assert_eq!(sentry_poll_skip_reason(401), "sentry_auth_error");
+        assert_eq!(sentry_poll_skip_reason(403), "sentry_auth_error");
+        assert_eq!(sentry_poll_skip_reason(429), "sentry_rate_limited");
+        assert_eq!(sentry_poll_skip_reason(500), "sentry_upstream_error");
+        assert_eq!(sentry_poll_skip_reason(502), "sentry_upstream_error");
+    }
+
+    #[test]
+    fn sentry_poll_skipped_body_is_typed_non_500_shape() {
+        let body = sentry_poll_skipped_body("sentry_auth_error", Some(403));
+        assert_eq!(body["status"], "skipped");
+        assert_eq!(body["reason"], "sentry_auth_error");
+        assert_eq!(body["sentry_status"], 403);
+        assert_eq!(body["created"], 0);
+        assert_eq!(body["skipped"], 0);
+        assert_eq!(body["total_fetched"], 0);
+    }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 // MARK: - NSHostingView sizingOptions access
 
@@ -17,7 +18,7 @@ struct DesktopHomeView: View {
   private let minimumWindowHeight: CGFloat = 680
   private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
-  @StateObject private var appState = AppState()
+  @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
@@ -81,6 +82,11 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing auth loading splash")
         }
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
         SignInView(authState: authState)
@@ -223,12 +229,12 @@ struct DesktopHomeView: View {
                 sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
               )
 
-              // Set up floating control bar (only show if user hasn't disabled it)
+              // Set up floating control bar. Product invariant: normal signed-in
+              // launches must show the enabled bar immediately; hide-until-PTT is
+              // only for explicit onboarding/demo/minimal-mode contexts.
               FloatingControlBarManager.shared.setup(
                 appState: appState, chatProvider: viewModelContainer.chatProvider)
-              if FloatingControlBarManager.shared.isEnabled {
-                FloatingControlBarManager.shared.showInitial()
-              }
+              FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
 
               // Set up push-to-talk voice input
               if let barState = FloatingControlBarManager.shared.barState {
@@ -292,7 +298,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.reset()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil
@@ -563,6 +569,7 @@ struct DesktopHomeView: View {
 
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
+    if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"
@@ -574,6 +581,8 @@ struct DesktopHomeView: View {
     let currentWindow = NSApp.windows.first(where: {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
+    let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
+    let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
@@ -584,6 +593,7 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
@@ -619,10 +629,15 @@ struct DesktopHomeView: View {
       }
     }
 
-    if let sectionRaw = settingsSectionRaw,
-      let section = SettingsContentView.SettingsSection(rawValue: sectionRaw)
-    {
-      selectedSettingsSection = section
+    if let sectionRaw = settingsSectionRaw {
+      // Tolerant match (SET-01): omi-ctl sends the caller's casing verbatim (docs use
+      // lowercase, raw values are Title Case), so a strict rawValue init silently left
+      // navigation on General for every sub-section command.
+      if let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw) {
+        selectedSettingsSection = section
+      } else {
+        log("AutomationNavigation: unknown settings section '\(sectionRaw)'")
+      }
     }
     highlightedSettingId = settingId
 
@@ -910,6 +925,9 @@ struct DesktopHomeView: View {
             selectedTabIndex: $selectedIndex
           )
         }
+        .onExitCommand {
+          navigateHomeOnEscapeIfNeeded()
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
@@ -1015,6 +1033,15 @@ struct DesktopHomeView: View {
       restorePreChatWindowWidth()
     }
   }
+
+  private func navigateHomeOnEscapeIfNeeded() {
+    guard !useLegacyHomeDesign else { return }
+    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
+    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    withAnimation(Self.pageNavigationAnimation) {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+    }
+  }
 }
 
 private struct PageChromeBar: View {
@@ -1092,7 +1119,9 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
@@ -1144,5 +1173,6 @@ private struct ConversationsPageHost: View {
 #if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
+    .environmentObject(AppState())
 }
 #endif

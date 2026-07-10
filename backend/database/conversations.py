@@ -46,6 +46,36 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
     return dt
 
 
+def _firestore_revision_datetime(value: Any) -> Optional[datetime]:
+    """Normalize Firestore snapshot metadata to an aware API datetime.
+
+    The production client exposes ``DatetimeWithNanoseconds`` (a datetime
+    subclass), while Firestore emulators and fakes may expose protobuf-like
+    ``seconds``/``nanos`` values. Keep that SDK variation at the database
+    boundary so response models always receive the same public type.
+    """
+    if isinstance(value, datetime):
+        return _ensure_timezone_aware(value)
+
+    to_datetime = getattr(value, 'ToDatetime', None)
+    if callable(to_datetime):
+        try:
+            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    try:
+        seconds = getattr(value, 'seconds')
+        nanos = getattr(value, 'nanos')
+        if isinstance(seconds, str) and isinstance(nanos, str):
+            timestamp = float(f'{seconds}.{nanos}')
+        else:
+            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+        return None
+
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -104,6 +134,15 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
         return None
 
     data = copy.deepcopy(conversation_data)
+    # User titles are durable overrides. Conversation processing owns the
+    # generated title, but must never erase an explicit user edit.
+    user_title = data.get('user_title')
+    if isinstance(user_title, str):
+        structured = data.get('structured')
+        if not isinstance(structured, dict):
+            structured = {}
+            data['structured'] = structured
+        structured['title'] = user_title
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
@@ -119,6 +158,17 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 logger.error(e)
                 pass
 
+    return data
+
+
+def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
+    """Return Firestore document data with its canonical server revision."""
+    data = document.to_dict()
+    if data is None:
+        return None
+    revision = _firestore_revision_datetime(getattr(document, 'update_time', None))
+    if revision is not None:
+        data['updated_at'] = revision
     return data
 
 
@@ -162,6 +212,9 @@ def get_conversation_photos(uid: str, conversation_id: str):
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation(uid: str, conversation_data: dict):
+    # `updated_at` is Firestore document metadata exposed by reads, never an
+    # application-owned field to replay into a later write.
+    conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
@@ -169,13 +222,43 @@ def upsert_conversation(uid: str, conversation_data: dict):
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    conversation_ref.set(conversation_data)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _write_processing_result(transaction):
+        write_data = copy.deepcopy(conversation_data)
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if getattr(existing_snapshot, 'exists', False):
+            existing = existing_snapshot.to_dict() or {}
+
+            # Processing owns generated content, while these fields are explicitly
+            # user-owned. The transaction retries if a concurrent mutation lands,
+            # so an older in-memory Conversation cannot clobber that edit.
+            for field in ('starred', 'folder_id', 'visibility', 'user_title'):
+                if field in existing:
+                    write_data[field] = existing[field]
+
+            user_title = existing.get('user_title')
+            if isinstance(user_title, str):
+                structured = write_data.get('structured')
+                if not isinstance(structured, dict):
+                    structured = {}
+                    write_data['structured'] = structured
+                structured['title'] = user_title
+
+            transaction.set(conversation_ref, write_data, merge=True)
+            return
+
+        transaction.set(conversation_ref, write_data)
+
+    _write_processing_result(transaction)
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
+    conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
@@ -195,7 +278,7 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_data = conversation_ref.get().to_dict()
+    conversation_data = _document_data_with_revision(conversation_ref.get())
     return conversation_data
 
 
@@ -242,7 +325,8 @@ def get_conversations(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
+    conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
 
@@ -322,7 +406,8 @@ def get_conversations_without_photos(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
+    conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
 
@@ -458,7 +543,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title})
 
 
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
@@ -597,22 +682,36 @@ def delete_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids):
+def get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_by_id_without_photos(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
-    conversations = []
+    conversations_by_id = {}
     for doc in docs:
         if doc.exists:
             data = doc.to_dict()
-            if data.get('discarded'):
+            if data.get('discarded') and not include_discarded:
                 continue
-            conversations.append(data)
+            data.setdefault('id', doc.id)
+            conversations_by_id[str(data['id'])] = data
 
-    return conversations
+    return [
+        conversations_by_id[str(conversation_id)]
+        for conversation_id in conversation_ids
+        if str(conversation_id) in conversations_by_id
+    ]
 
 
 # **************************************
@@ -1025,7 +1124,7 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
-        batch.set(segment_ref, segment.dict())
+        batch.set(segment_ref, segment.model_dump())
         if i >= 400:
             batch.commit()
             batch = db.batch()
@@ -1096,7 +1195,7 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
     for photo in photos:
         photo_id = photo.id or str(uuid.uuid4())
         photo_ref = photos_ref.document(photo_id)
-        data = photo.dict()
+        data = photo.model_dump()
         data['id'] = photo_id
         prepared_data = _prepare_photo_for_write(data, uid, level)
         batch.set(photo_ref, prepared_data)

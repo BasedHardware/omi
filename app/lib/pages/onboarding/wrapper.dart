@@ -26,6 +26,7 @@ import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -271,6 +272,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (!mounted) return;
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
+          // Refresh subscription on sign-in: AppShell only fetches it on mount,
+          // so an in-session re-login would otherwise leave it null until the
+          // Plan & Usage page is opened (missing Pro badge).
+          context.read<UsageProvider>().fetchSubscription();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           // Consent is checked first regardless of server-side onboarding
           // state so a returning user signing in on a fresh install still
@@ -477,7 +482,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                     _controller!.animateTo(_controller!.index - 1);
                                   }
                                 },
-                                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
                               ),
                             ),
                           ),
@@ -559,7 +564,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                       _controller!.animateTo(_controller!.index - 1);
                                     }
                                   },
-                                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                                  icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
                                 ),
                               ),
                             ),

@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::services::RedisService;
 
 // Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
@@ -142,6 +143,13 @@ impl GeminiRateLimiter {
     ) -> RateDecision {
         // Phase 1: No Redis → unmetered (skip cache entirely)
         let Some(redis) = redis else {
+            record_fallback(
+                "redis_ratelimit",
+                "enforced",
+                "unmetered",
+                "config_incomplete",
+                FallbackOutcome::Degraded,
+            );
             tracing::warn!(
                 "{} rate limit: Redis not configured, request unmetered",
                 self.redis_ns
@@ -219,6 +227,13 @@ impl GeminiRateLimiter {
                 decision
             }
             Err(e) => {
+                record_fallback(
+                    "redis_ratelimit",
+                    "enforced",
+                    "unmetered",
+                    "other",
+                    FallbackOutcome::Degraded,
+                );
                 tracing::error!(
                     "{} rate limit: Redis error, request unmetered: {}",
                     self.redis_ns,
@@ -274,6 +289,7 @@ pub fn rate_limit_error_json(message: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

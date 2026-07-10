@@ -5,7 +5,7 @@ Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 import asyncio
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from google.cloud import firestore
@@ -57,7 +57,7 @@ class GoogleAPIError(Exception):
 
 
 async def _mark_google_integration_reauth_required(
-    uid: str, integration: dict, integration_key: str, reason: str
+    uid: str, integration: dict[str, Any], integration_key: str, reason: str
 ) -> None:
     updated = dict(integration)
     updated['connected'] = False
@@ -69,7 +69,7 @@ async def _mark_google_integration_reauth_required(
 
 async def refresh_google_token(
     uid: str,
-    integration: dict,
+    integration: dict[str, Any],
     *,
     integration_name: str = GOOGLE_CALENDAR,
     integration_key: str = 'google_calendar',
@@ -166,10 +166,10 @@ async def google_api_request(
     method: str,
     url: str,
     access_token: str,
-    params: dict | None = None,
-    body: dict | None = None,
+    params: Optional[Dict[str, Any]] = None,
+    body: Optional[Dict[str, Any]] = None,
     allow_204: bool = False,
-):
+) -> Any:
     """
     Make a Google API request with automatic retry for transient failures.
 
@@ -234,7 +234,7 @@ async def google_api_request(
         raise GoogleAPIError(r.status_code, snippet)
 
     # All retries exhausted
-    if last_error and isinstance(last_error, (httpx.TimeoutException, httpx.ConnectError)):
+    if last_error:
         raise last_error
     # Unreachable with _MAX_RETRIES >= 1, but kept as a safety net
     raise GoogleAPIError(0, "All retries exhausted with no response")

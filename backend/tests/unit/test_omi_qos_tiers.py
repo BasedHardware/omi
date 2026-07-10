@@ -106,7 +106,7 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -203,6 +203,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_cache_retention,
     supports_prompt_cache,
 )
 
@@ -437,7 +438,9 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_gpt51_constructor_receives_extra_body(self):
+    @pytest.mark.parametrize('model_name', ['gpt-5.1', 'gpt-4.1-mini'])
+    def test_openai_constructor_applies_cache_retention_by_capability(self, model_name):
+        """The production constructor receives retention only for supported model families."""
         from unittest.mock import patch as _patch
 
         saved = dict(_llm_cache)
@@ -454,34 +457,13 @@ class TestGetOrCreateLlmBehavioral:
                 original_init(self, **kwargs)
 
             with _patch.object(RealChatOpenAI, '__init__', capturing_init):
-                _get_or_create_openai_llm('gpt-5.1')
+                _get_or_create_openai_llm(model_name)
 
-            assert 'extra_body' in captured_kwargs, "gpt-5.1 must receive extra_body kwarg"
-            assert captured_kwargs['extra_body'] == {"prompt_cache_retention": "24h"}
-        finally:
-            _llm_cache.clear()
-            _llm_cache.update(saved)
-
-    def test_non_gpt51_constructor_no_extra_body(self):
-        from unittest.mock import patch as _patch
-
-        saved = dict(_llm_cache)
-        _llm_cache.clear()
-        captured_kwargs = {}
-
-        try:
-            from langchain_openai import ChatOpenAI as RealChatOpenAI
-
-            original_init = RealChatOpenAI.__init__
-
-            def capturing_init(self, **kwargs):
-                captured_kwargs.update(kwargs)
-                original_init(self, **kwargs)
-
-            with _patch.object(RealChatOpenAI, '__init__', capturing_init):
-                _get_or_create_openai_llm('gpt-4.1-mini')
-
-            assert 'extra_body' not in captured_kwargs
+            if supports_cache_retention(model_name):
+                assert captured_kwargs['extra_body'] == {"prompt_cache_retention": "24h"}
+            else:
+                assert 'extra_body' not in captured_kwargs
+            assert 'prompt_cache_key' not in captured_kwargs.get('model_kwargs', {})
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
@@ -1181,3 +1163,15 @@ class TestGeminiThinkingBudget:
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
+
+    def test_structured_output_route_omits_thinking_budget(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('trends', 'gemini-2.5-flash-lite', 'gemini')
+        assert 'thinking_budget' not in opts
+
+    def test_non_structured_gemini_route_sets_thinking_budget_zero(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
+        assert opts.get('thinking_budget') == 0

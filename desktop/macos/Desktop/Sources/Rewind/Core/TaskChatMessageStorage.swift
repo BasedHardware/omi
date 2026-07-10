@@ -9,7 +9,6 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     var id: Int64?
 
     var taskId: String                    // action_items backendId
-    var acpSessionId: String?             // Legacy ACP adapter-native session ID for resume/adoption
     var messageId: String                 // UUID from ChatMessage.id
     var sender: String                    // "user" or "ai"
     var messageText: String
@@ -29,7 +28,6 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     init(
         id: Int64? = nil,
         taskId: String,
-        acpSessionId: String? = nil,
         messageId: String,
         sender: String,
         messageText: String,
@@ -43,7 +41,6 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     ) {
         self.id = id
         self.taskId = taskId
-        self.acpSessionId = acpSessionId
         self.messageId = messageId
         self.sender = sender
         self.messageText = messageText
@@ -63,19 +60,18 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     // MARK: - ChatMessage Conversion
 
     /// Create a record from a ChatMessage for a given task
-    static func from(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) -> TaskChatMessageRecord {
+    static func from(_ message: ChatMessage, taskId: String) -> TaskChatMessageRecord {
         let senderStr = message.sender == .user ? "user" : "ai"
 
         // Encode content blocks as JSON for AI messages
         var blocksJson: String?
         if message.sender == .ai && !message.contentBlocks.isEmpty {
-            blocksJson = encodeContentBlocks(message.contentBlocks)
+            blocksJson = ChatContentBlockCodec.encode(message.contentBlocks)
         }
-        let resourcesJson = encodeResources(message.displayResources)
+        let resourcesJson = ChatResource.encodeResourcesForPersistence(message.displayResources)
 
         return TaskChatMessageRecord(
             taskId: taskId,
-            acpSessionId: acpSessionId,
             messageId: message.id,
             sender: senderStr,
             messageText: message.text,
@@ -89,8 +85,10 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     /// Convert back to a ChatMessage for UI display
     func toChatMessage() -> ChatMessage {
         let chatSender: ChatSender = sender == "user" ? .user : .ai
-        let blocks = contentBlocksJson.flatMap { Self.decodeContentBlocks($0) } ?? []
-        let resources = resourcesJson.flatMap { Self.decodeResources($0) } ?? []
+        let blocks = contentBlocksJson.flatMap { ChatContentBlockCodec.decode($0) } ?? []
+        let resources = ChatResource.hydrateFileStates(
+            resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
+        )
 
         return ChatMessage(
             id: messageId,
@@ -103,185 +101,8 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
         )
     }
 
-    // MARK: - Resource Serialization
-
-    private static func encodeResources(_ resources: [ChatResource]) -> String? {
-        guard !resources.isEmpty else { return nil }
-        let encoded = resources.map { resource -> [String: Any] in
-            var dict: [String: Any] = [
-                "id": resource.id,
-                "origin": resource.origin == .generatedArtifact ? "generatedArtifact" : "userAttachment",
-                "title": resource.title,
-                "state": stateString(resource.state)
-            ]
-            if let subtitle = resource.subtitle { dict["subtitle"] = subtitle }
-            if let mimeType = resource.mimeType { dict["mimeType"] = mimeType }
-            if let thumbnailURL = resource.thumbnailURL { dict["thumbnailURL"] = thumbnailURL }
-            if let uri = resource.uri { dict["uri"] = uri }
-            if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
-            if let omiSessionId = resource.omiSessionId { dict["omiSessionId"] = omiSessionId }
-            if let runId = resource.runId { dict["runId"] = runId }
-            return dict
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        return json
-    }
-
-    private static func decodeResources(_ json: String) -> [ChatResource]? {
-        guard let data = json.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
-        return array.compactMap { dict in
-            guard let id = dict["id"] as? String,
-                  let title = dict["title"] as? String
-            else { return nil }
-            let origin = (dict["origin"] as? String) == "generatedArtifact"
-                ? ChatResourceOrigin.generatedArtifact
-                : ChatResourceOrigin.userAttachment
-            return ChatResource(
-                id: id,
-                origin: origin,
-                title: title,
-                subtitle: dict["subtitle"] as? String,
-                mimeType: dict["mimeType"] as? String,
-                thumbnailURL: dict["thumbnailURL"] as? String,
-                imageData: nil,
-                uri: dict["uri"] as? String,
-                artifactId: dict["artifactId"] as? String,
-                omiSessionId: dict["omiSessionId"] as? String,
-                runId: dict["runId"] as? String,
-                state: state(from: dict["state"] as? String)
-            )
-        }
-    }
-
-    private static func stateString(_ state: ChatResource.State) -> String {
-        switch state {
-        case .uploading: return "uploading"
-        case .ready: return "ready"
-        case .failed(let message): return "failed:\(message)"
-        case .retained: return "retained"
-        case .opened: return "opened"
-        case .dismissed: return "dismissed"
-        }
-    }
-
-    private static func state(from raw: String?) -> ChatResource.State {
-        guard let raw else { return .ready }
-        switch raw {
-        case "uploading": return .uploading
-        case "retained": return .retained
-        case "opened": return .opened
-        case "dismissed": return .dismissed
-        default:
-            if raw.hasPrefix("failed:") {
-                return .failed(String(raw.dropFirst("failed:".count)))
-            }
-            return .ready
-        }
-    }
-
-    // MARK: - Content Block Serialization
-
-    /// Encode ChatContentBlock array to JSON string
-    private static func encodeContentBlocks(_ blocks: [ChatContentBlock]) -> String? {
-        var encoded: [[String: Any]] = []
-        for block in blocks {
-            switch block {
-            case .text(let id, let text):
-                encoded.append(["type": "text", "id": id, "text": text])
-            case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
-                // Three-way mapping: in-flight (.running, .slow, .stalled)
-                // persists as "running" so reload resumes the spinner;
-                // .completed → "completed"; .failed → "failed". .stalled
-                // doesn't get its own code because it's a transient
-                // detector-promoted state — on reload, a stalled turn is
-                // already over and re-classifying as "failed" would be a
-                // semantic change; keep it as "running" so existing UI
-                // semantics persist. If the turn ended cleanly while the
-                // tool was .slow/.stalled, completeRemainingToolCalls
-                // would have already collapsed it to .completed before
-                // persistence.
-                let statusCode: String
-                switch status {
-                case .running, .slow, .stalled: statusCode = "running"
-                case .completed: statusCode = "completed"
-                case .failed: statusCode = "failed"
-                }
-                var dict: [String: Any] = [
-                    "type": "toolCall",
-                    "id": id,
-                    "name": name,
-                    "status": statusCode
-                ]
-                if let toolUseId { dict["toolUseId"] = toolUseId }
-                if let input {
-                    dict["inputSummary"] = input.summary
-                    if let details = input.details { dict["inputDetails"] = details }
-                }
-                if let output { dict["output"] = output }
-                encoded.append(dict)
-            case .thinking(let id, let text):
-                encoded.append(["type": "thinking", "id": id, "text": text])
-            case .discoveryCard(let id, let title, let summary, let fullText):
-                encoded.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
-            }
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        return json
-    }
-
-    /// Decode JSON string back to ChatContentBlock array
-    private static func decodeContentBlocks(_ json: String) -> [ChatContentBlock]? {
-        guard let data = json.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
-
-        var blocks: [ChatContentBlock] = []
-        for dict in array {
-            guard let type = dict["type"] as? String,
-                  let id = dict["id"] as? String else { continue }
-
-            switch type {
-            case "text":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.text(id: id, text: text))
-            case "toolCall":
-                let name = dict["name"] as? String ?? ""
-                let statusStr = dict["status"] as? String ?? "completed"
-                // Reverse of the three-way write mapping. Unknown
-                // strings fall back to .completed for forward-compat
-                // with future status codes.
-                let status: ToolCallStatus
-                switch statusStr {
-                case "running": status = .running
-                case "completed": status = .completed
-                case "failed": status = .failed
-                default: status = .completed
-                }
-                let toolUseId = dict["toolUseId"] as? String
-                let input: ToolCallInput?
-                if let summary = dict["inputSummary"] as? String {
-                    input = ToolCallInput(summary: summary, details: dict["inputDetails"] as? String)
-                } else {
-                    input = nil
-                }
-                let output = dict["output"] as? String
-                blocks.append(.toolCall(id: id, name: name, status: status, toolUseId: toolUseId, input: input, output: output))
-            case "thinking":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.thinking(id: id, text: text))
-            case "discoveryCard":
-                let title = dict["title"] as? String ?? ""
-                let summary = dict["summary"] as? String ?? ""
-                let fullText = dict["fullText"] as? String ?? ""
-                blocks.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
-            default:
-                break
-            }
-        }
-        return blocks
-    }
+    // Resource JSON encoding lives on ChatResource (protocol layer).
+    // Content-block encode/decode lives on ChatContentBlockCodec.
 }
 
 // MARK: - Task Chat Message Storage
@@ -337,8 +158,8 @@ actor TaskChatMessageStorage {
 
     /// Save a ChatMessage for a task (convenience)
     @discardableResult
-    func saveMessage(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) async throws -> TaskChatMessageRecord {
-        let record = TaskChatMessageRecord.from(message, taskId: taskId, acpSessionId: acpSessionId)
+    func saveMessage(_ message: ChatMessage, taskId: String) async throws -> TaskChatMessageRecord {
+        let record = TaskChatMessageRecord.from(message, taskId: taskId)
         let db = try await ensureInitialized()
         let result = try await db.write { database -> TaskChatMessageRecord in
             let record = record
@@ -358,19 +179,6 @@ actor TaskChatMessageStorage {
                 .filter(Column("taskId") == taskId)
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
-        }
-    }
-
-    /// Get the ACP session ID for a task (from the most recent message)
-    func getACPSessionId(forTaskId taskId: String) async throws -> String? {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            try TaskChatMessageRecord
-                .filter(Column("taskId") == taskId)
-                .filter(Column("acpSessionId") != nil)
-                .order(Column("createdAt").desc)
-                .fetchOne(database)?
-                .acpSessionId
         }
     }
 

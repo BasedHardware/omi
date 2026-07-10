@@ -45,6 +45,13 @@ actor MemoryStorage {
         return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
     }
 
+    private static func applyLifecycleExposureFilter(
+        _ query: QueryInterfaceRequest<MemoryRecord>,
+        includeExplicitLifecycleRows: Bool
+    ) -> QueryInterfaceRequest<MemoryRecord> {
+        includeExplicitLifecycleRows ? query : query.filter(Column("tierIsExplicit") == false)
+    }
+
     private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryLayer]?) {
         guard let tiers = tiers, !tiers.isEmpty else { return }
         let placeholders = tiers.map { _ in "?" }.joined(separator: ", ")
@@ -66,6 +73,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -84,6 +92,10 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             // Tag filtering using JSON
             if let tags = tags, !tags.isEmpty {
@@ -107,6 +119,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -125,6 +138,10 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -145,6 +162,7 @@ actor MemoryStorage {
         matchAnyCategory: [String]? = nil, // OR logic: matches any of these categories
         excludeTags: [String]? = nil,      // Exclude memories containing these tags
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -159,6 +177,9 @@ actor MemoryStorage {
             }
 
             Self.appendTierCondition(&conditions, &arguments, tiers: tiers)
+            if !includeExplicitLifecycleRows {
+                conditions.append("tierIsExplicit = 0")
+            }
 
             // Tag OR conditions
             if let tags = matchAnyTag, !tags.isEmpty {
@@ -219,6 +240,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
+        includeExplicitLifecycleRows: Bool = true,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -241,6 +263,10 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
+            query = Self.applyLifecycleExposureFilter(
+                query,
+                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+            )
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {

@@ -6,6 +6,13 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 import database.staged_tasks as staged_tasks_db
+from models.staged_task import (
+    StagedTask,
+    StagedTaskListResponse,
+    PromoteStagedTaskResponse,
+    MigrateConversationItemsResponse,
+)
+from models.shared import StatusResponse
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -40,7 +47,7 @@ class BatchUpdateScoresRequest(BaseModel):
 # ============================================================================
 
 
-@router.post('/v1/staged-tasks', tags=['staged-tasks'])
+@router.post('/v1/staged-tasks', tags=['staged-tasks'], response_model=StagedTask)
 def create_staged_task(
     request: CreateStagedTaskRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -57,7 +64,7 @@ def create_staged_task(
     )
 
 
-@router.get('/v1/staged-tasks', tags=['staged-tasks'])
+@router.get('/v1/staged-tasks', tags=['staged-tasks'], response_model=StagedTaskListResponse)
 def get_staged_tasks(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -77,7 +84,7 @@ def clear_staged_tasks(uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok', 'deleted_count': count}
 
 
-@router.delete('/v1/staged-tasks/{task_id}', tags=['staged-tasks'])
+@router.delete('/v1/staged-tasks/{task_id}', tags=['staged-tasks'], response_model=StatusResponse)
 def delete_staged_task(
     task_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -86,7 +93,7 @@ def delete_staged_task(
     return {'status': 'ok'}
 
 
-@router.patch('/v1/staged-tasks/batch-scores', tags=['staged-tasks'])
+@router.patch('/v1/staged-tasks/batch-scores', tags=['staged-tasks'], response_model=StatusResponse)
 def batch_update_staged_scores(
     request: BatchUpdateScoresRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -95,7 +102,7 @@ def batch_update_staged_scores(
     return {'status': 'ok'}
 
 
-@router.post('/v1/staged-tasks/promote', tags=['staged-tasks'])
+@router.post('/v1/staged-tasks/promote', tags=['staged-tasks'], response_model=PromoteStagedTaskResponse)
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
     action_item = staged_tasks_db.promote_staged_task(uid)
     if action_item is None:
@@ -111,13 +118,17 @@ def promote_staged_task_by_id(task_id: str, uid: str = Depends(auth.get_current_
     return {'promoted': True, 'reason': None, 'promoted_task': action_item}
 
 
-@router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'])
+@router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'], response_model=StatusResponse)
 def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
     result = staged_tasks_db.migrate_ai_tasks(uid)
     return {'status': f"moved {result['moved']}, kept {result['kept']}"}
 
 
-@router.post('/v1/staged-tasks/migrate-conversation-items', tags=['staged-tasks'])
+@router.post(
+    '/v1/staged-tasks/migrate-conversation-items',
+    tags=['staged-tasks'],
+    response_model=MigrateConversationItemsResponse,
+)
 def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
     result = staged_tasks_db.migrate_conversation_items_to_staged(uid)
     return {'status': 'ok', 'migrated': result['moved'], 'deleted': 0}

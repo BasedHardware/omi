@@ -276,7 +276,8 @@ extension PostHogManager {
         retryCount: Int,
         hasBackendId: Bool,
         hasClientConversationId: Bool,
-        segmentCount: Int?
+        segmentCount: Int?,
+        diagnostics: ReconciliationFailureDiagnostics? = nil
     ) {
         var properties: [String: Any] = [
             "platform": "macos",
@@ -295,6 +296,32 @@ extension PostHogManager {
         if let segmentCount {
             properties["segment_count"] = segmentCount
             properties["has_local_segments"] = segmentCount > 0
+        }
+        if let diagnostics {
+            if let sessionStatus = diagnostics.sessionStatus {
+                properties["session_status"] = sessionStatus
+            }
+            if let conversationStatus = diagnostics.conversationStatus {
+                properties["conversation_status"] = conversationStatus
+            }
+            if let finalizationReason = diagnostics.finalizationReason {
+                properties["finalization_reason"] = finalizationReason
+            }
+            properties["has_finished_at"] = diagnostics.hasFinishedAt
+            properties["has_finalization_started_at"] = diagnostics.hasFinalizationStartedAt
+            properties["has_finalization_completed_at"] = diagnostics.hasFinalizationCompletedAt
+            properties["has_input_device_name"] = diagnostics.hasInputDeviceName
+            properties["local_fallback_available"] = diagnostics.localFallbackAvailable
+            properties["local_fallback_retries_remaining"] = diagnostics.localFallbackRetriesRemaining
+            if let hasLocalSegments = diagnostics.hasLocalSegments {
+                properties["has_local_segments"] = hasLocalSegments
+            }
+            if let sessionAgeSeconds = diagnostics.sessionAgeSeconds {
+                properties["session_age_seconds"] = sessionAgeSeconds
+            }
+            if let sessionDurationSeconds = diagnostics.sessionDurationSeconds {
+                properties["session_duration_seconds"] = sessionDurationSeconds
+            }
         }
         track("Desktop Conversation Reconciliation Failed", properties: properties)
     }
@@ -433,10 +460,10 @@ extension PostHogManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+    func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext,
+            "has_selected_app_context": hasSelectedAppContext,
             "source": source
         ])
     }
@@ -656,8 +683,36 @@ extension PostHogManager {
         track("Update Available", properties: updateProperties(version: version, context: context, item: item))
     }
 
-    func updateInstalled(version: String, context: UpdateAnalyticsContext, item: UpdateItemAnalytics) {
-        track("Update Installed", properties: updateProperties(version: version, context: context, item: item))
+    func updateInstallStarted(attempt: UpdateInstallAttempt) {
+        track("Update Install Started", properties: attempt.analyticsProperties)
+    }
+
+    func updateInstalled(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = true
+        track("Update Installed", properties: properties)
+    }
+
+    func updateInstallVerificationFailed(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = false
+        properties["error"] = "post_relaunch_build_mismatch"
+        properties["phase"] = "post_relaunch_verification"
+        track("Update Install Verification Failed", properties: properties)
     }
 
     func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

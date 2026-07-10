@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 struct ExcludedAppRow: View {
   let appName: String

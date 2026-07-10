@@ -82,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: DESKTOP_UPDATE_POINTERS_MODE
+    value: "primary"
+  - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
+    value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
   - name: GEMINI_API_KEY
@@ -113,16 +117,20 @@ env:
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "dev"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
+  - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "gateway"
+  - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "true"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -133,13 +141,14 @@ env:
   - name: MEMORY_MODE
     value: "read"
   - name: MEMORY_ENABLED_USERS
+    # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: MEMORY_V3_GET_ENABLED
     value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
     value: "false"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
-    value: "false"
+    value: "true"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
