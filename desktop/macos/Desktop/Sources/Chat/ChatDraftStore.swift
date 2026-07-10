@@ -64,7 +64,7 @@ final class ChatDraftStore {
         fileManager: FileManager = .default,
         writeDelay: TimeInterval = 0.2,
         ownerIDProvider: @escaping () -> String? = {
-            UserDefaults.standard.string(forKey: "auth_userId")
+            UserDefaults.standard.string(forKey: .authUserId)
         }
     ) {
         self.fileManager = fileManager
