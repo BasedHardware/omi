@@ -130,7 +130,13 @@ actor AgentRuntimeProcess {
   private struct ActiveVoiceSeedRequest {
     let clientId: String
     let requestId: String
-    let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
+    let continuation: CheckedContinuation<VoiceSeedContextResult, Error>
+  }
+
+  private struct ActiveSurfaceTurnRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<Bool, Error>
   }
 
   struct KernelTurnTailTurn: Sendable {
@@ -140,6 +146,12 @@ actor AgentRuntimeProcess {
     let createdAtMs: Int
     let metadataJson: String
     let origin: String
+  }
+
+  struct VoiceSeedContextResult: Sendable {
+    let conversationId: String
+    let context: String
+    let idempotencyKeys: [String]
   }
 
   struct KernelTurnTailResult: Sendable {
@@ -181,6 +193,7 @@ actor AgentRuntimeProcess {
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var activeSurfaceTurnRequests: [RuntimeMessage.RequestKey: ActiveSurfaceTurnRequest] = [:]
   private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
   /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
   /// never append; a second ChatProvider attach must not fan out duplicates.
@@ -244,6 +257,10 @@ actor AgentRuntimeProcess {
     }
     for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
       activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeSurfaceTurnRequests where request.clientId == clientId {
+      activeSurfaceTurnRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
     for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
@@ -418,16 +435,20 @@ actor AgentRuntimeProcess {
   func recordSurfaceTurn(
     clientId: String,
     surface: AgentSurfaceReference,
+    ownerID: String? = nil,
     userText: String,
     assistantText: String,
     origin: String,
     interrupted: Bool = false,
     idempotencyKey: String? = nil
-  ) {
+  ) async throws -> Bool {
+    guard isRunning else { throw BridgeError.stopped }
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     var dict: [String: Any] = [
       "type": "record_surface_turn",
       "protocolVersion": 2,
-      "requestId": UUID().uuidString,
+      "requestId": requestId,
       "clientId": clientId,
       "surfaceKind": surface.surfaceKind,
       "externalRefKind": surface.externalRefKind,
@@ -440,17 +461,34 @@ actor AgentRuntimeProcess {
     if let idempotencyKey, !idempotencyKey.isEmpty {
       dict["idempotencyKey"] = idempotencyKey
     }
-    if let ownerId = currentOwnerId() {
+    if let ownerId = ownerID ?? currentOwnerId() {
       dict["ownerId"] = ownerId
     }
-    sendJson(dict)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeSurfaceTurnRequests[requestKey] = ActiveSurfaceTurnRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      guard sendJson(dict) else {
+        activeSurfaceTurnRequests.removeValue(forKey: requestKey)?.continuation.resume(
+          throwing: BridgeError.processExited
+        )
+        return
+      }
+      Task {
+        try? await Task.sleep(nanoseconds: 5_000_000_000)
+        guard let request = self.activeSurfaceTurnRequests.removeValue(forKey: requestKey) else { return }
+        request.continuation.resume(throwing: BridgeError.timeout)
+      }
+    }
   }
 
   func getVoiceSeedContext(
     clientId: String,
     harnessMode: String,
     surface: AgentSurfaceReference
-  ) async throws -> (conversationId: String, context: String) {
+  ) async throws -> VoiceSeedContextResult {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -1242,6 +1280,11 @@ actor AgentRuntimeProcess {
 
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
+        if let requestKey = message.requestKey,
+          let request = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
+        {
+          request.continuation.resume(returning: true)
+        }
         turnRecordedHandler?(recorded)
       }
 
@@ -1362,7 +1405,12 @@ actor AgentRuntimeProcess {
     }
     let conversationId = message.payload["conversationId"] as? String ?? ""
     let context = message.payload["context"] as? String ?? ""
-    request.continuation.resume(returning: (conversationId: conversationId, context: context))
+    let idempotencyKeys = message.payload["idempotencyKeys"] as? [String] ?? []
+    request.continuation.resume(
+      returning: VoiceSeedContextResult(
+        conversationId: conversationId,
+        context: context,
+        idempotencyKeys: idempotencyKeys))
   }
 
   private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
@@ -1413,6 +1461,15 @@ actor AgentRuntimeProcess {
     {
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
       controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
+      return
+    }
+    if let requestKey = message.requestKey,
+      let surfaceRequest = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
+    {
+      log("AgentRuntimeProcess: surface turn error (raw): \(raw)")
+      surfaceRequest.continuation.resume(
+        throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+      )
       return
     }
     guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
@@ -1524,6 +1581,11 @@ actor AgentRuntimeProcess {
     let seedRequests = activeVoiceSeedRequests.values
     activeVoiceSeedRequests.removeAll()
     for request in seedRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let surfaceRequests = activeSurfaceTurnRequests.values
+    activeSurfaceTurnRequests.removeAll()
+    for request in surfaceRequests {
       request.continuation.resume(throwing: error)
     }
     let tailRequests = activeKernelTurnTailRequests.values

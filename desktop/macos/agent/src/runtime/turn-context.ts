@@ -9,8 +9,11 @@ import {
   listUndeliveredConversationTurns,
 } from "./conversation-turns.js";
 
-export const VOICE_SEED_MAX_TURNS = 8;
-export const VOICE_SEED_MAX_CHARACTERS = 3_500;
+// Retains a long rapid-PTT burst, including an optional assistant row per turn,
+// while staying comfortably inside provider context budgets (~6k tokens at the
+// character cap).
+export const VOICE_SEED_MAX_TURNS = 64;
+export const VOICE_SEED_MAX_CHARACTERS = 24_000;
 import type { AgentArtifact, AgentStore, ConversationTurn } from "./types.js";
 import type { SurfaceRef } from "./surface-session.js";
 import { surfaceRefKey as surfaceKeyFor } from "./surface-session.js";
@@ -426,19 +429,25 @@ export function sanitizeVoiceSeedText(text: string, maxLength = 2_000): string {
     .slice(0, maxLength);
 }
 
-export function getVoiceSeedContext(
+export interface VoiceSeedSnapshot {
+  context: string;
+  idempotencyKeys: string[];
+}
+
+export function getVoiceSeedSnapshot(
   store: AgentStore,
   conversationId: string,
   options?: { maxTurns?: number; maxCharacters?: number },
-): string {
+): VoiceSeedSnapshot {
   const maxTurns = options?.maxTurns ?? VOICE_SEED_MAX_TURNS;
   const maxCharacters = options?.maxCharacters ?? VOICE_SEED_MAX_CHARACTERS;
   const recent = listRecentConversationTurns(store, conversationId, maxTurns);
-  if (recent.length === 0) return "";
+  if (recent.length === 0) return { context: "", idempotencyKeys: [] };
 
-  const lines: string[] = [];
+  const newestFirstLines: string[] = [];
+  const includedKeyState = new Map<string, { hasUser: boolean; allRowsComplete: boolean }>();
   let remaining = maxCharacters;
-  for (const turn of recent) {
+  for (const turn of [...recent].reverse()) {
     if (remaining <= 0) break;
     const content = sanitizeVoiceSeedText(turn.content);
     if (!content) continue;
@@ -458,13 +467,35 @@ export function getVoiceSeedContext(
           : "Omi";
     const prefix = `${attribution} ${role}: `;
     const contentBudget = Math.max(0, remaining - prefix.length);
+    if (contentBudget <= 0) break;
     const line = `${prefix}${content.slice(0, contentBudget)}`;
     if (!line.trim()) continue;
-    lines.push(line);
+    newestFirstLines.push(line);
+    if (typeof metadata.idempotencyKey === "string" && metadata.idempotencyKey.trim()) {
+      const key = metadata.idempotencyKey.trim();
+      const prior = includedKeyState.get(key) ?? { hasUser: false, allRowsComplete: true };
+      includedKeyState.set(key, {
+        hasUser: prior.hasUser || turn.role === "user",
+        allRowsComplete: prior.allRowsComplete && content.length <= contentBudget,
+      });
+    }
     remaining -= line.length + 1;
   }
 
-  return lines.join("\n");
+  return {
+    context: newestFirstLines.reverse().join("\n"),
+    idempotencyKeys: [...includedKeyState.entries()]
+      .filter(([, state]) => state.hasUser && state.allRowsComplete)
+      .map(([key]) => key),
+  };
+}
+
+export function getVoiceSeedContext(
+  store: AgentStore,
+  conversationId: string,
+  options?: { maxTurns?: number; maxCharacters?: number },
+): string {
+  return getVoiceSeedSnapshot(store, conversationId, options).context;
 }
 
 export function turnSourceAttribution(turn: ConversationTurn): string {

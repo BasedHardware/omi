@@ -119,14 +119,16 @@ enum AgentClient {
 
     func recordSurfaceTurn(
       surface: AgentSurfaceReference,
+      ownerID: String? = nil,
       userText: String,
       assistantText: String,
       origin: String,
       interrupted: Bool = false,
       idempotencyKey: String? = nil
-    ) async {
-      await bridge.recordSurfaceTurn(
+    ) async throws -> Bool {
+      try await bridge.recordSurfaceTurn(
         surface: surface,
+        ownerID: ownerID,
         userText: userText,
         assistantText: assistantText,
         origin: origin,
@@ -135,7 +137,7 @@ enum AgentClient {
       )
     }
 
-    func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> (conversationId: String, context: String) {
+    func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> AgentRuntimeProcess.VoiceSeedContextResult {
       try await bridge.getVoiceSeedContext(surface: surface)
     }
 

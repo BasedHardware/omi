@@ -25,6 +25,41 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         nil, activeTurnID: turnA, activeResponseID: responseA))
   }
 
+  func testGeminiInputTranscriptCannotCrossCompletedTurnBoundary() {
+    let turnA = RealtimeHubEventIdentity(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("response-a"))
+    let turnB = RealtimeHubEventIdentity(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("response-b"))
+
+    XCTAssertEqual(
+      GeminiRealtimeEventOwnership.inputIdentity(active: turnA, completed: nil),
+      turnA)
+    XCTAssertEqual(
+      GeminiRealtimeEventOwnership.inputIdentity(active: turnA, completed: turnA),
+      turnA)
+    XCTAssertEqual(
+      GeminiRealtimeEventOwnership.inputIdentity(active: nil, completed: turnA),
+      turnA)
+    XCTAssertNil(
+      GeminiRealtimeEventOwnership.inputIdentity(active: turnB, completed: turnA))
+  }
+
+  func testGeminiReplacementAudioBufferIsBounded() {
+    var pending = PendingBargeInReplacementTurn(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("pending"))
+    let first = Data(repeating: 1, count: PendingBargeInReplacementTurn.maxBufferedAudioBytes - 8)
+
+    XCTAssertTrue(pending.appendAudio(first))
+    XCTAssertFalse(pending.appendAudio(Data(repeating: 2, count: 16)))
+    XCTAssertEqual(
+      pending.bufferedAudioBytes,
+      PendingBargeInReplacementTurn.maxBufferedAudioBytes)
+    XCTAssertFalse(pending.appendAudio(Data([3])))
+    XCTAssertEqual(
+      pending.audioBuffer.reduce(0) { $0 + $1.count },
+      PendingBargeInReplacementTurn.maxBufferedAudioBytes)
+  }
+
   func testAudioIngressClosesAtCommitAndCannotRebindToNextTurn() {
     let turnA = VoiceTurnID()
     let turnB = VoiceTurnID()
@@ -106,6 +141,16 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("let previous = turnPersistenceTask"))
     XCTAssertTrue(source.contains("if let previous { await previous.value }"))
     XCTAssertTrue(source.contains("enqueueTurnPersistence { [weak self] in"))
+    XCTAssertTrue(source.contains("persistTurnToKernelThroughTransientFailures"))
+    XCTAssertTrue(source.contains("let acknowledged = await recordTurnToKernelAwaiting("))
+    XCTAssertTrue(source.contains("try? await Task.sleep(nanoseconds: 250_000_000)"))
+    XCTAssertTrue(source.contains("voiceTurnOutbox.enqueue(entry)"))
+    XCTAssertTrue(source.contains("scheduleVoiceTurnOutboxDrain"))
+    XCTAssertTrue(source.contains("voiceTurnOutbox.seedContext("))
+    XCTAssertTrue(source.contains("excludingIdempotencyKeys: prefetchedVoiceSeedIdempotencyKeys"))
+    XCTAssertTrue(source.contains("kernelVoiceSeedSnapshot()"))
+    XCTAssertTrue(source.contains("stageRealtimeVoiceTurn("))
+    XCTAssertTrue(source.contains("await self.awaitTurnPersistenceFence()"))
     XCTAssertTrue(source.contains("let interruptedContinuityTask = bargeInContinuityTask"))
     XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_seed_changed\""))
@@ -163,10 +208,46 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         "if pendingBargeInReplacement != nil {\n      finishBargeInReplacementAfterSessionReady()"))
     XCTAssertTrue(
       source.contains(
-        "if pendingBargeInReplacement != nil {\n      pendingBargeInReplacement?.audioBuffer.append"
+        "if pendingBargeInReplacement != nil {\n      if pendingBargeInReplacement?.appendAudio"
       ))
     XCTAssertTrue(source.contains("if var pending = pendingBargeInReplacement"))
     XCTAssertTrue(source.contains("responding = true\n      session?.commitInputTurn()"))
+  }
+
+  func testCompletedGeminiTurnRequiresFreshSessionBeforeNextPTT() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("private var geminiSessionNeedsTurnBoundary = false"))
+    XCTAssertTrue(source.contains("sessionProvider == .gemini && geminiSessionNeedsTurnBoundary"))
+    XCTAssertTrue(source.contains("restartSessionForBargeIn(interruptedTurnTask: nil)"))
+    XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_seed_changed\""))
+    XCTAssertTrue(
+      source.contains("replacing completed-turn session before next PTT"))
+  }
+
+  func testNewPTTRotatesAnInFlightGeminiReplacementInsteadOfCoalescingAudio() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("let supersedesPendingReplacement = pendingBargeInReplacement != nil"))
+    XCTAssertTrue(source.contains("if supersedesPendingReplacement {"))
+    XCTAssertTrue(source.contains("restartSessionForBargeIn(interruptedTurnTask: interruptedTurnTask)"))
+    XCTAssertTrue(source.contains("rotating pending replacement to the newest PTT turn"))
+    XCTAssertTrue(source.contains("turnID: pending.turnID"))
+    XCTAssertTrue(source.contains("responseID: pending.responseID"))
+    XCTAssertTrue(source.contains("if let interruptedTurnTask, !supersedesPendingReplacement"))
+  }
+
+  func testFailoverRemintKeepsReplacementRotatableAndRejectsStaleMint() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("pendingBargeInProvider = alternate"))
+    XCTAssertTrue(source.contains("pendingBargeInAuth = .ephemeral(\"\")"))
+    XCTAssertTrue(source.contains("private var bargeInReplacementGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("generation == self.bargeInReplacementGeneration"))
+    XCTAssertTrue(source.contains("let currentProvider = pendingBargeInProvider"))
+    XCTAssertGreaterThanOrEqual(
+      source.components(separatedBy: "redriveReplacementMintIfStale(generation: generation)").count - 1,
+      5)
   }
 
   func testProviderResponseAndInputItemIDsOwnCallbackIdentity() throws {
@@ -194,6 +275,43 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let providerCommit = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
     XCTAssertLessThan(begin.lowerBound, providerCommit.lowerBound)
+  }
+
+  func testHeadlessPTTHarnessDrivesReducerRouteAndFinalizeBeforeCommit() throws {
+    let source = try realtimeHubControllerSource()
+    let harness = try XCTUnwrap(
+      source.range(of: "private func runHeadlessPTTTurn("))
+    let tail = source[harness.lowerBound...]
+    let begin = try XCTUnwrap(
+      tail.range(of: "let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+    let route = try XCTUnwrap(
+      tail.range(of: ".selectRoute(turnID: turnID, route: .hub(sessionID: nil))"))
+    let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
+    let finalize = try XCTUnwrap(
+      tail.range(of: "VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))"))
+    let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
+
+    XCTAssertLessThan(begin.lowerBound, route.lowerBound)
+    XCTAssertLessThan(route.lowerBound, controllerBegin.lowerBound)
+    XCTAssertLessThan(controllerBegin.lowerBound, finalize.lowerBound)
+    XCTAssertLessThan(finalize.lowerBound, commit.lowerBound)
+  }
+
+  func testRapidBurstHarnessCommitsEveryClipWithoutWaitingForReplies() throws {
+    let source = try realtimeHubControllerSource()
+    let harness = try XCTUnwrap(
+      source.range(of: "private func runHeadlessRapidPTTBurst("))
+    let tail = source[harness.lowerBound...]
+    let loop = try XCTUnwrap(tail.range(of: "for clip in clips"))
+    let begin = try XCTUnwrap(tail.range(of: "VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+    let finalize = try XCTUnwrap(tail.range(of: ".finalize(turnID: turnID)"))
+    let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
+    let wait = try XCTUnwrap(tail.range(of: "while Date() < deadline"))
+
+    XCTAssertLessThan(loop.lowerBound, begin.lowerBound)
+    XCTAssertLessThan(begin.lowerBound, finalize.lowerBound)
+    XCTAssertLessThan(finalize.lowerBound, commit.lowerBound)
+    XCTAssertLessThan(commit.lowerBound, wait.lowerBound)
   }
 
   func testIdleSessionCanBeReplaced() {
