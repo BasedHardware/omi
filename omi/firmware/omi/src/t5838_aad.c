@@ -115,18 +115,31 @@ static void aad_unlock_sequence(void)
 
 int t5838_aad_init(void)
 {
+    int ret;
+
     if (!device_is_ready(clk_port)) {
         LOG_ERR("gpio1 (PDMCLK) not ready");
         return -ENODEV;
     }
-    if (thsel.port == NULL || pdm_en.port == NULL) {
-        LOG_ERR("THSEL/PDM_EN gpio spec missing");
+    /* gpio_is_ready_dt() also catches the GPIO_DT_SPEC_GET_OR {0} fallback
+     * (port == NULL -> device_is_ready(NULL) is false). */
+    if (!gpio_is_ready_dt(&pdm_en) || !gpio_is_ready_dt(&thsel)) {
+        LOG_ERR("THSEL/PDM_EN gpio not ready");
         return -ENODEV;
     }
 
-    /* PDM_EN high: power the 1.8V rail (mic VDD + level-shifter VCCA). */
-    gpio_pin_configure_dt(&pdm_en, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_configure_dt(&thsel, GPIO_OUTPUT_INACTIVE);
+    /* PDM_EN high: power the 1.8V rail (mic VDD + level-shifter VCCA). Propagate
+     * configure failures so callers don't treat a dead rail as ready. */
+    ret = gpio_pin_configure_dt(&pdm_en, GPIO_OUTPUT_ACTIVE);
+    if (ret) {
+        LOG_ERR("PDM_EN configure failed: %d", ret);
+        return ret;
+    }
+    ret = gpio_pin_configure_dt(&thsel, GPIO_OUTPUT_INACTIVE);
+    if (ret) {
+        LOG_ERR("THSEL configure failed: %d", ret);
+        return ret;
+    }
     LOG_INF("t5838 ll init: PDM_EN driven high, THSEL out low");
     return 0;
 }
