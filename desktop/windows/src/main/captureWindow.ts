@@ -8,6 +8,7 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import iconPath from '../../resources/icon.png?asset'
 import { rendererBaseUrl } from './rendererServer'
 import { isQuitting } from './lifecycle'
 import { emitCaptureEventFromMain } from './ipc/captureBridge'
@@ -52,6 +53,9 @@ export function createCaptureWindow(): BrowserWindow {
     height: 320,
     show: false,
     skipTaskbar: true,
+    // Never shown, but set the app icon anyway so it can't surface the default
+    // Electron icon in Alt-Tab/Task-Manager style listings.
+    icon: iconPath,
     // Never visible, but a real (offscreen) window so getUserMedia/AudioContext
     // and the Rewind <video> decode run exactly as they would in a UI window.
     webPreferences: {
