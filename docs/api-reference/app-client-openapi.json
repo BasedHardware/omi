@@ -44297,19 +44297,51 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Version",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Version",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Version",
+            "name": "X-Request-ID",
             "required": false,
             "schema": {
-              "title": "X-App-Version",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Cloud-Trace-Context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cloud-Trace-Context"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
               "type": "string"
             }
           }
