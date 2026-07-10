@@ -14,6 +14,7 @@ import {
   resolveSurfaceSession,
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
+  type ResolveSurfaceSessionResult,
 } from "./surface-session.js";
 import {
   appendConversationTurn,
@@ -134,8 +135,119 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelSessions } from "./kernel-sessions.js";
+import {
+  buildWorkstreamOpenLoopSnapshot,
+  deliverDesktopTaskCandidate,
+  exportWorkstreamContinuationCheckpoint,
+  importWorkstreamContinuationCheckpoint,
+  migrateTaskSessionsToWorkstreams,
+  persistWorkstreamArtifactVersion,
+  persistWorkstreamContextPacket,
+  projectCanonicalCandidateResolution,
+  readWorkstreamContinuationCheckpoint,
+  reconcileLegacyTaskCandidateOutbox,
+  resolveWorkstreamSession,
+  type CanonicalCandidateTransport,
+  type PersistWorkstreamArtifactVersionInput,
+  type PersistWorkstreamContextInput,
+  type TaskSessionMigrationReport,
+  type WorkstreamContinuationCheckpoint,
+  type WorkstreamOpenLoopSnapshot,
+  type WorkstreamProductContext,
+  type WorkstreamSessionInput,
+} from "./workstream-continuity.js";
 
 export class AgentRuntimeKernel extends KernelSessions {
+  resolveWorkstreamSession(input: WorkstreamSessionInput): ResolveSurfaceSessionResult {
+    return resolveWorkstreamSession(this.store, input);
+  }
+
+  persistWorkstreamContextPacket(input: PersistWorkstreamContextInput): BuiltDesktopContextPacket {
+    return persistWorkstreamContextPacket(this.store, input);
+  }
+
+  persistWorkstreamArtifactVersion(input: PersistWorkstreamArtifactVersionInput) {
+    return persistWorkstreamArtifactVersion(this.store, input);
+  }
+
+  exportWorkstreamContinuationCheckpoint(input: WorkstreamSessionInput & {
+    sourceRuntimeId?: string;
+    context: WorkstreamProductContext;
+    ttlMs: number;
+    nowMs?: number;
+    exportDispatchId?: string;
+  }): WorkstreamContinuationCheckpoint {
+    return exportWorkstreamContinuationCheckpoint(this.store, {
+      ...input,
+      sourceRuntimeId: input.sourceRuntimeId ?? this.runtimeNodeId,
+    });
+  }
+
+  importWorkstreamContinuationCheckpoint(
+    checkpoint: WorkstreamContinuationCheckpoint,
+    input: { targetRuntimeId?: string; nowMs?: number } = {},
+  ): ResolveSurfaceSessionResult {
+    return importWorkstreamContinuationCheckpoint(this.store, checkpoint, {
+      ...input,
+      targetRuntimeId: input.targetRuntimeId ?? this.runtimeNodeId,
+    });
+  }
+
+  deliverDesktopTaskCandidate(input: {
+    ownerId: string;
+    candidateId: string;
+    transport: CanonicalCandidateTransport;
+    nowMs?: () => number;
+  }) {
+    return deliverDesktopTaskCandidate(this.store, input);
+  }
+
+  projectCanonicalCandidateResolution(input: Parameters<typeof projectCanonicalCandidateResolution>[1]) {
+    return projectCanonicalCandidateResolution(this.store, input);
+  }
+
+  reconcileLegacyTaskCandidateOutbox(input: Parameters<typeof reconcileLegacyTaskCandidateOutbox>[1]) {
+    return reconcileLegacyTaskCandidateOutbox(this.store, input);
+  }
+
+  readWorkstreamContinuationCheckpoint(input: Parameters<typeof readWorkstreamContinuationCheckpoint>[1]) {
+    return readWorkstreamContinuationCheckpoint(this.store, input);
+  }
+
+  buildWorkstreamOpenLoopSnapshot(input: {
+    ownerId?: string;
+    ttlMs?: number;
+    nowMs?: number;
+    limit?: number;
+  } = {}): WorkstreamOpenLoopSnapshot {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    const sessionWorkstreamIds = new Map(
+      this.store
+        .allRows(
+          `SELECT session_id, external_ref_id FROM sessions
+           WHERE owner_id = ? AND external_ref_kind = 'workstream'`,
+          [ownerId],
+        )
+        .map((row) => [String(row.session_id), String(row.external_ref_id)] as const),
+    );
+    return buildWorkstreamOpenLoopSnapshot({
+      ownerId,
+      sourceRuntimeId: this.runtimeNodeId,
+      actionQueue: this.listDesktopActionQueue({ ownerId, limit: input.limit }),
+      sessionWorkstreamIds,
+      ttlMs: input.ttlMs,
+      nowMs: input.nowMs,
+    });
+  }
+
+  migrateTaskSessionsToWorkstreams(input: {
+    ownerId: string;
+    mappings: Array<{ taskId: string; workstreamId: string }>;
+    nowMs?: number;
+  }): TaskSessionMigrationReport {
+    return migrateTaskSessionsToWorkstreams(this.store, input);
+  }
+
   buildDesktopAwarenessSnapshot(input: DesktopAwarenessSnapshotInput): DesktopAwarenessSnapshot {
     const ownerId = input.ownerId ?? "desktop-local-user";
     const limit = boundedLimit(input.limit, 50, 200);
@@ -216,10 +328,8 @@ export class AgentRuntimeKernel extends KernelSessions {
     });
   }
 
-  getDesktopOpenLoops(input: DesktopOpenLoopsInput): DesktopActionQueueItem[] {
-    return this.listDesktopActionQueue(input).filter((item) =>
-      ["dispatch", "failed_run", "artifact_delivery", "stale_run", "candidate_review"].includes(item.kind)
-    );
+  getDesktopOpenLoops(input: DesktopOpenLoopsInput): WorkstreamOpenLoopSnapshot {
+    return this.buildWorkstreamOpenLoopSnapshot(input);
   }
 
   persistDesktopContextPacket(input: DesktopContextPacketPersistInput): BuiltDesktopContextPacket {

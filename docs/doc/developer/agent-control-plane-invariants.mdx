@@ -40,6 +40,21 @@ Guard surface:
 - `run-attempt-lifecycle.test.ts` and `adapter-binding.test.ts` cover stale
   binding retry, compatibility changes, and request-scoped MCP env stripping.
 
+### Workstream identity is the reusable task-work boundary
+
+For durable task work, the kernel resolves `surface_kind=workstream`,
+`external_ref_kind=workstream`, and `external_ref_id=<workstream_id>`. All task
+views linked to that workstream reuse one local conversation per owner/runtime.
+Task IDs may remain compatibility surface mappings during migration, but they
+do not own independent agent continuity.
+
+Guard surface:
+
+- `surface_conversations` and the existing session external-reference index are
+  the only binding mechanism; there is no parallel workstream binding store.
+- `workstream-continuity.test.ts` covers reuse, task-session migration, and
+  shared artifact history.
+
 ## Authority
 
 ### Owner authority comes from active Omi context
@@ -163,3 +178,37 @@ they persist both a state transition and an event row.
 Startup reconciliation must be deterministic and idempotent. Re-running it
 should either no-op or strictly refine stale interrupted state without producing
 duplicate recovery dispatches.
+
+### Product continuity never imports execution authority
+
+Workstream context packets and continuation checkpoints contain bounded product
+summaries, selected events, task state, artifact heads, and provenance. They do
+not copy adapter transcripts or import another runtime's run/attempt status.
+Each runtime establishes its own binding and remains authoritative for its local
+execution state.
+
+Checkpoint freshness is the backend workstream journal's canonical event
+sequence, never the local kernel `events.event_seq`. Upserts are monotonic and
+import persists an expiring product-context packet for restart. Provenance uses
+the canonical typed `EvidenceRef` contract, including device-local scope rules;
+device-local or sensitive evidence cannot be exported without a resolved,
+export-specific dispatch. Export replaces sensitive source content with its
+redacted representation and removes source-runtime dispatch state before a
+target runtime can import it.
+
+Local task Candidates are outbox records until backend delivery. Delivery uses
+a stable idempotency key and stores a bounded receipt; after receipt, local state
+is `forwarded` or a projection of canonical resolution and must not remain in a
+local review queue.
+
+Pre-contract Candidate rows migrate as `blocked`. Reconciliation must supply
+the current account generation before an eligible pending row can enter the
+outbox; historical accepted, rejected, or expired rows remain non-deliverable.
+Creation and resolution receipts are bounded and retained separately.
+
+Guard surface:
+
+- `workstream-continuity.test.ts` covers bounded context, cross-runtime
+  checkpoints, Candidate retry/receipt/projection, and rank-free open-loop
+  snapshots.
+- `sqlite-store.test.ts` covers interrupted-delivery startup reconciliation.
