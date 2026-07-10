@@ -201,6 +201,18 @@
             "description": "When the action item was completed",
             "title": "Completed At"
           },
+          "concrete_deliverable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True only when the commitment names a concrete deliverable or outcome",
+            "title": "Concrete Deliverable"
+          },
           "conversation_id": {
             "anyOf": [
               {
