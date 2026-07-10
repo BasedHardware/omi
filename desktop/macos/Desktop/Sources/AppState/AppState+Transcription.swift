@@ -1290,6 +1290,81 @@ extension AppState {
     ]
   }
 
+  /// Hermetic multi-speaker inject: accepts a JSON array of segment objects
+  /// `[{"text":"...","speaker":"SPEAKER_00","speaker_id":0,"is_user":true}, ...]`.
+  func automationInjectCaptureTestTranscriptMulti(segmentsJSON: String) async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test transcript disabled on production bundles"]
+    }
+    let trimmed = segmentsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return ["error": "missing segments JSON"] }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot inject into non-automation capture session"]
+      }
+      return ["error": "no active capture session"]
+    }
+    guard isTranscribing else { return ["error": "no active capture session"] }
+    guard let data = trimmed.data(using: .utf8),
+      let rawSegments = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+      !rawSegments.isEmpty
+    else {
+      return ["error": "segments must be a non-empty JSON array"]
+    }
+
+    let start = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+    var backendSegments: [TranscriptionService.BackendSegment] = []
+    var offset = max(0, start)
+    var speakerLabels: [String] = []
+    for (index, raw) in rawSegments.enumerated() {
+      guard let text = raw["text"] as? String,
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      else {
+        return ["error": "segment \(index) missing text"]
+      }
+      let speaker = (raw["speaker"] as? String) ?? "SPEAKER_00"
+      var speakerId = raw["speaker_id"] as? Int ?? 0
+      // Derive speaker_id from the label (e.g. SPEAKER_02 → 2) when omitted,
+      // preventing silent collapse to SPEAKER_00 for multi-speaker fixtures.
+      if raw["speaker_id"] == nil, let labelNum = speaker.split(separator: "_").last,
+        let parsed = Int(labelNum)
+      {
+        speakerId = parsed
+      }
+      let isUser = raw["is_user"] as? Bool ?? (speakerId == 0)
+      let segmentStart = raw["start"] as? Double ?? offset
+      let segmentEnd = raw["end"] as? Double ?? (segmentStart + 0.5)
+      backendSegments.append(
+        TranscriptionService.BackendSegment(
+          id: UUID().uuidString.lowercased(),
+          text: text,
+          speaker: speaker,
+          speaker_id: speakerId,
+          is_user: isUser,
+          person_id: nil,
+          start: segmentStart,
+          end: max(segmentEnd, segmentStart + 0.1),
+          translations: nil
+        )
+      )
+      speakerLabels.append(speaker)
+      offset = max(segmentEnd, segmentStart + 0.5) + 0.1
+    }
+
+    handleBackendSegments(backendSegments)
+    if let sessionId = currentSessionId {
+      await persistBackendSegmentsToStorage(backendSegments, sessionId: sessionId)
+    }
+    let uniqueSpeakers = Set(speakerLabels).sorted().joined(separator: ",")
+    return [
+      "injected_count": "\(backendSegments.count)",
+      "session_id": currentSessionId.map { "\($0)" } ?? "",
+      "segment_count": "\(totalSegmentCount)",
+      "unique_speakers": uniqueSpeakers,
+      "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+    ]
+  }
+
   /// Hermetic capture teardown: mirrors the session-finalization portion of
   /// `stopTranscription()` (finish session, finalize conversation, clear live
   /// transcript state, reload conversations) without stopping the audio engine
@@ -1356,12 +1431,14 @@ extension AppState {
 
     await loadConversations()
     let afterCount = totalConversationsCount ?? conversations.count
+    let latestConversationId = conversations.first?.id ?? ""
     return [
       "stopped": "true",
       "conversation_count_before": "\(beforeCount)",
       "conversation_count_after": "\(afterCount)",
       "conversation_count_increased": afterCount > beforeCount ? "true" : "false",
       "segment_count": "\(segmentCount)",
+      "latest_conversation_id": latestConversationId,
     ]
   }
 

@@ -33,6 +33,8 @@ enum DefaultsKey: String {
     /// `auth_userId` with a synthetic owner.
     case automationOwnerABackup = "automation_swap_owner_a_backup"
     case chatBridgeMode = "chatBridgeMode"
+    case multiChatEnabled = "multiChatEnabled"
+    case aiChatWorkingDirectory = "aiChatWorkingDirectory"
     case onboardingStep = "onboardingStep"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
 }

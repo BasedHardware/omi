@@ -1,0 +1,43 @@
+version: 2
+name: vocabulary
+tier: 2
+description: Hermetic transcription vocabulary read/write via bridge actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AssistantSettings.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
+
+  - id: S2
+    name: Set hermetic vocabulary terms
+    bridge.action:
+      name: vocabulary_set_terms
+      params:
+        terms: "Omi,[[MARKER:vocabulary]]"
+    expect:
+      result.detail.saved: "true"
+      result.detail.term_count: "2"
+
+  - id: S3
+    name: Vocabulary snapshot
+    bridge.action:
+      name: vocabulary_snapshot
+    expect:
+      result.detail.term_count: "2"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
