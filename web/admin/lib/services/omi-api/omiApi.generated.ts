@@ -2535,6 +2535,8 @@ export interface RebuildResponse {
 export interface Recommendation {
   alternative_action?: string | null;
   dedupe_key: string;
+  destination_task_id?: string | null;
+  destination_workstream_id?: string | null;
   evidence_preview: string;
   evidence_refs?: Array<EvidenceRef>;
   expires_at: string;
@@ -5717,6 +5719,16 @@ export interface OmiApiPaths {
       operationId: "get_all_goals_v1_goals_all_get";
       responses: {
         "200": Array<GoalResponse>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/canonical": {
+    post: {
+      operationId: "create_canonical_goal_v1_goals_canonical_post";
+      responses: {
+        "200": GoalResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11070,6 +11082,29 @@ export async function get_all_goals_v1_goals_all_get(query: { include_ended?: bo
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function create_canonical_goal_v1_goals_canonical_post(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GoalCreate, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/canonical`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function extract_and_update_progress_v1_goals_extract_progress_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProgressExtractRequest, init?: OmiApiClientInit): Promise<ProgressExtractResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/extract-progress`;
@@ -12861,7 +12896,7 @@ export async function get_evaluation_debug_projection_v1_task_intelligence_debug
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_feedback_v1_task_intelligence_feedback_post(header: { Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FeedbackCreate, init?: OmiApiClientInit): Promise<FeedbackRecord> {
+export async function create_feedback_v1_task_intelligence_feedback_post(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FeedbackCreate, init?: OmiApiClientInit): Promise<FeedbackRecord> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-intelligence/feedback`;
   const _search = "";
@@ -12872,6 +12907,7 @@ export async function create_feedback_v1_task_intelligence_feedback_post(header:
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -12883,7 +12919,7 @@ export async function create_feedback_v1_task_intelligence_feedback_post(header:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function register_intervention_v1_task_intelligence_interventions_post(header: { Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: InterventionCreate, init?: OmiApiClientInit): Promise<InterventionRecord> {
+export async function register_intervention_v1_task_intelligence_interventions_post(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: InterventionCreate, init?: OmiApiClientInit): Promise<InterventionRecord> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-intelligence/interventions`;
   const _search = "";
@@ -12894,6 +12930,7 @@ export async function register_intervention_v1_task_intelligence_interventions_p
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -12926,7 +12963,7 @@ export async function replace_open_loop_snapshot_v1_task_intelligence_open_loop_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_outcome_v1_task_intelligence_outcomes_post(header: { Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: OutcomeCreate, init?: OmiApiClientInit): Promise<OutcomeRecord> {
+export async function create_outcome_v1_task_intelligence_outcomes_post(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: OutcomeCreate, init?: OmiApiClientInit): Promise<OutcomeRecord> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-intelligence/outcomes`;
   const _search = "";
@@ -12937,6 +12974,7 @@ export async function create_outcome_v1_task_intelligence_outcomes_post(header: 
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -15281,4 +15319,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 377 client methods generated.
+// Total: 378 client methods generated.

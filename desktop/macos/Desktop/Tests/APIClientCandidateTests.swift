@@ -142,7 +142,7 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertNil(json["source_app"])
   }
 
-  func testSuggestedFeedbackSendsStableIdempotencyWithoutGenerationHeader() async throws {
+  func testSuggestedFeedbackSendsStableIdempotencyAndGenerationHeaders() async throws {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [CandidateURLCapture.self]
     let client = APIClient(session: URLSession(configuration: config))
@@ -159,7 +159,8 @@ final class APIClientCandidateTests: XCTestCase {
           subjectId: "candidate-1",
           subjectKind: .candidate
         ),
-        idempotencyKey: "suggested:candidate-1:not-mine"
+        idempotencyKey: "suggested:candidate-1:not-mine",
+        accountGeneration: 14
       )
       XCTFail("The stubbed service should fail after capturing the request")
     } catch {
@@ -170,7 +171,7 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertEqual(request.url.path, "/v1/task-intelligence/feedback")
     XCTAssertEqual(request.method, "POST")
     XCTAssertEqual(request.headers["Idempotency-Key"], "suggested:candidate-1:not-mine")
-    XCTAssertNil(request.headers["X-Account-Generation"])
+    XCTAssertEqual(request.headers["X-Account-Generation"], "14")
     let body = try XCTUnwrap(request.body)
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["action"] as? String, "dismiss")
@@ -202,6 +203,78 @@ final class APIClientCandidateTests: XCTestCase {
     let body = try XCTUnwrap(request.body)
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["reason"] as? String, "already_handled")
+  }
+
+  func testWhatMattersNowUsesCanonicalProjectionEndpoint() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    _ = try? await client.getWhatMattersNow(deviceID: "device-hash")
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/what-matters-now")
+    XCTAssertEqual(URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "device-hash")
+    XCTAssertEqual(request.method, "GET")
+  }
+
+  func testGoalFocusSendsExplicitReplacementAndCanonicalMutationHeaders() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    do {
+      let _: OmiAPI.GoalResponse = try await client.focusCanonicalGoal(
+        goalID: "goal-new",
+        replacementGoalID: "goal-old",
+        focusRank: 2,
+        accountGeneration: 14,
+        idempotencyKey: "goal-focus-occurrence"
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // Expected transport response from the capture protocol.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/goals/goal-new/focus")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "14")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "goal-focus-occurrence")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["replacement_goal_id"] as? String, "goal-old")
+    XCTAssertEqual(json["focus_rank"] as? Int, 2)
+  }
+
+  func testCanonicalGoalCreateUsesQualitativeContractWithoutLegacyDescription() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    _ = try? await client.createCanonicalGoal(
+      title: "Investor pipeline",
+      desiredOutcome: "Build a repeatable investor pipeline",
+      whyItMatters: "Fund the next stage",
+      successCriteria: ["Ten qualified conversations"],
+      accountGeneration: 14,
+      idempotencyKey: "goal-create-occurrence"
+    )
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/goals/canonical")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "14")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "goal-create-occurrence")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["desired_outcome"] as? String, "Build a repeatable investor pipeline")
+    XCTAssertEqual(json["why_it_matters"] as? String, "Fund the next stage")
+    XCTAssertEqual(json["success_criteria"] as? [String], ["Ten qualified conversations"])
+    XCTAssertNil(json["description"])
   }
 
   func testResolveTaskWorkIntentUsesDurableIdentityHeadersAndTaskOrigin() async throws {

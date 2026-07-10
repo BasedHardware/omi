@@ -95,6 +95,8 @@ class Recommendation(BaseModel):
     subject_id: StableId
     feedback_subject_kind: FeedbackSubjectKind
     feedback_subject_id: StableId
+    destination_task_id: Optional[StableId] = None
+    destination_workstream_id: Optional[StableId] = None
     headline: str = Field(min_length=1, max_length=256)
     why_now: str = Field(min_length=1, max_length=1024)
     goal_or_workstream_label: Optional[str] = Field(default=None, max_length=256)

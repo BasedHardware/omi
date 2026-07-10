@@ -71,6 +71,28 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     return normalize_goal_response(created_goal)
 
 
+@router.post('/v1/goals/canonical', tags=['goals'], response_model=GoalResponse)
+def create_canonical_goal(
+    goal: GoalCreate,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> dict:
+    """Create a generation-scoped canonical goal with safe retry semantics."""
+
+    try:
+        created_goal = goals_db.create_goal_idempotent(
+            uid,
+            goal.model_dump(mode='python', exclude_none=True),
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    return normalize_goal_response(created_goal)
+
+
 def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc

@@ -1964,6 +1964,23 @@ class TasksViewModel: ObservableObject {
         await store.loadTasks()
     }
 
+    func revealTaskForNavigation(_ task: TaskActionItem) {
+        searchText = ""
+        if task.completed {
+            if !store.completedTasks.contains(where: { $0.id == task.id }) {
+                store.completedTasks = sortTasks(store.completedTasks + [task])
+            }
+            selectedTags = [.done]
+        } else {
+            if !store.incompleteTasks.contains(where: { $0.id == task.id }) {
+                store.incompleteTasks = sortTasks(store.incompleteTasks + [task])
+            }
+            selectedTags = [.todo]
+        }
+        selectedDynamicTags.removeAll()
+        recomputeDisplayCaches()
+    }
+
     /// Throttled wrapper called from .onAppear — skips if called too recently
     func throttledLoadMoreIfNeeded(currentTask: TaskActionItem) async {
         let now = Date()
@@ -2700,6 +2717,7 @@ struct TasksPage: View {
             Task { @MainActor in
                 await viewModel.loadTasksForFirstUse()
                 await suggestedStore.load()
+                hydratePendingDashboardNavigationTarget()
                 chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
                 // If tasks are already loaded, notify sidebar to clear loading indicator
                 if !viewModel.isLoading {
@@ -3847,7 +3865,47 @@ struct TasksPage: View {
                 await viewModel.loadTasks()
                 await suggestedStore.load()
             }
-            .onAppear { viewModel.scrollProxy = proxy }
+            .onAppear {
+                viewModel.scrollProxy = proxy
+                schedulePendingDashboardNavigation(proxy: proxy)
+            }
+            .onChange(of: dashboardNavigationRenderKey) { _, _ in
+                schedulePendingDashboardNavigation(proxy: proxy)
+            }
+        }
+    }
+
+    private var dashboardNavigationRenderKey: String {
+        let taskIDs = viewModel.displayTasks.map(\.id).joined(separator: ",")
+        let candidateIDs = suggestedStore.candidates.map(\.id).joined(separator: ",")
+        return "\(taskIDs)|\(candidateIDs)"
+    }
+
+    private func schedulePendingDashboardNavigation(proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            hydratePendingDashboardNavigationTarget()
+            guard let target = TaskNavigationRequestStore.shared.consumeIfAvailable(
+                taskIDs: Set(viewModel.displayTasks.map(\.id)),
+                candidateIDs: Set(suggestedStore.candidates.map(\.id))
+            ) else { return }
+            switch target {
+            case .task(let taskID):
+                guard let task = viewModel.displayTasks.first(where: { $0.id == taskID }) else { return }
+                selectTask(task)
+                proxy.scrollTo(taskID, anchor: .center)
+            case .candidate(let candidateID):
+                proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
+            }
+        }
+    }
+
+    private func hydratePendingDashboardNavigationTarget() {
+        let navigation = TaskNavigationRequestStore.shared
+        if let task = navigation.pendingTask {
+            viewModel.revealTaskForNavigation(task)
+        }
+        if let candidate = navigation.pendingCandidate {
+            _ = suggestedStore.revealCandidateForNavigation(candidate)
         }
     }
 }

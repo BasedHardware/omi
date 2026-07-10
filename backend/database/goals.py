@@ -309,6 +309,12 @@ def create_goal(
     client = _get_db(firestore_client)
     now = datetime.now(timezone.utc)
     goal_id = str(goal_data.get('goal_id') or goal_data.get('id') or f'goal_{uuid4().hex[:12]}')
+    payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now)
+    client.collection(users_collection).document(uid).collection(goals_collection).document(goal_id).create(payload)
+    return normalize_goal_storage(payload, goal_id=goal_id)
+
+
+def _new_goal_payload(goal_data: Dict[str, Any], *, goal_id: str, now: datetime) -> dict[str, Any]:
     metric = _metric_from_storage(goal_data)
     status = GoalStatus(goal_data.get('status', GoalStatus.background.value))
     if status == GoalStatus.focused:
@@ -333,8 +339,52 @@ def create_goal(
     if not payload['title'] or not payload['desired_outcome']:
         raise ValueError('goal title and desired_outcome are required')
     payload.update(_metric_aliases(metric))
-    client.collection(users_collection).document(uid).collection(goals_collection).document(goal_id).create(payload)
-    return normalize_goal_storage(payload, goal_id=goal_id)
+    return payload
+
+
+def create_goal_idempotent(
+    uid: str,
+    goal_data: Dict[str, Any],
+    *,
+    idempotency_key: str,
+    account_generation: int,
+    firestore_client: Any = None,
+) -> Dict[str, Any]:
+    """Create one canonical goal for a generation-scoped UI occurrence."""
+
+    client = _get_db(firestore_client)
+    transaction = client.transaction()
+    now = datetime.now(timezone.utc)
+    raw_goal_id = f'{uid}\x1f{account_generation}\x1fgoal-create\x1f{idempotency_key}'.encode('utf-8')
+    goal_id = f'goal_{hashlib.sha256(raw_goal_id).hexdigest()[:12]}'
+
+    @firestore.transactional
+    def apply(write_transaction):
+        receipt_ref, stored_result, request_hash = _begin_goal_mutation(
+            write_transaction,
+            uid=uid,
+            operation='goal-create',
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+            request_payload=goal_data,
+            firestore_client=client,
+        )
+        if stored_result is not None:
+            return normalize_goal_storage(stored_result, goal_id=goal_id)
+        payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now)
+        goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
+        write_transaction.create(goal_ref, payload)
+        result = normalize_goal_storage(payload, goal_id=goal_id)
+        _finish_goal_mutation(
+            write_transaction,
+            receipt_ref,
+            request_hash=request_hash,
+            result=result,
+            now=now,
+        )
+        return result
+
+    return apply(transaction)
 
 
 def update_goal(

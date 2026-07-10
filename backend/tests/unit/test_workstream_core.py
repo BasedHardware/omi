@@ -207,6 +207,40 @@ def test_goal_contract_supports_qualitative_outcomes_and_never_evicts_on_create(
     assert all(goal['is_active'] for goal in goals)
 
 
+def test_canonical_goal_create_is_generation_scoped_and_idempotent(fake_db):
+    seed_control(fake_db, generation=3)
+    request = {
+        'title': 'Investor pipeline',
+        'desired_outcome': 'Build a repeatable investor pipeline',
+        'why_it_matters': 'Fund the next stage',
+        'success_criteria': ['Ten qualified conversations'],
+        'status': 'background',
+        'source': 'user',
+    }
+
+    first = goals_db.create_goal_idempotent(
+        'u1', request, idempotency_key='create-occurrence', account_generation=3, firestore_client=fake_db
+    )
+    replay = goals_db.create_goal_idempotent(
+        'u1', request, idempotency_key='create-occurrence', account_generation=3, firestore_client=fake_db
+    )
+
+    assert replay == first
+    assert len(goals_db.get_all_goals('u1', include_inactive=True, firestore_client=fake_db)) == 1
+    with pytest.raises(goals_db.GoalConflictError, match='different content'):
+        goals_db.create_goal_idempotent(
+            'u1',
+            {**request, 'title': 'Different goal'},
+            idempotency_key='create-occurrence',
+            account_generation=3,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(goals_db.GoalConflictError, match='generation mismatch'):
+        goals_db.create_goal_idempotent(
+            'u1', request, idempotency_key='another-occurrence', account_generation=4, firestore_client=fake_db
+        )
+
+
 def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
     seed_control(fake_db)
     for index in range(6):

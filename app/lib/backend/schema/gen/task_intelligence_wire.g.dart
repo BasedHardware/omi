@@ -2169,6 +2169,8 @@ class GeneratedDecisionDebugProjection {
 class GeneratedRecommendation {
   final String? alternativeAction;
   final String dedupeKey;
+  final String? destinationTaskId;
+  final String? destinationWorkstreamId;
   final String evidencePreview;
   final List<GeneratedEvidenceRef>? evidenceRefs;
   final DateTime expiresAt;
@@ -2186,6 +2188,8 @@ class GeneratedRecommendation {
   const GeneratedRecommendation({
     this.alternativeAction,
     required this.dedupeKey,
+    this.destinationTaskId,
+    this.destinationWorkstreamId,
     required this.evidencePreview,
     this.evidenceRefs,
     required this.expiresAt,
@@ -2205,6 +2209,8 @@ class GeneratedRecommendation {
     return GeneratedRecommendation(
       alternativeAction: _readFieldValue<String>(_readField(json, const ["alternative_action"]), "alternative_action", _readString, requiredField: false, nullable: true),
       dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      destinationTaskId: _readFieldValue<String>(_readField(json, const ["destination_task_id"]), "destination_task_id", _readString, requiredField: false, nullable: true),
+      destinationWorkstreamId: _readFieldValue<String>(_readField(json, const ["destination_workstream_id"]), "destination_workstream_id", _readString, requiredField: false, nullable: true),
       evidencePreview: _required(_readFieldValue<String>(_readField(json, const ["evidence_preview"]), "evidence_preview", _readString, requiredField: true, nullable: false), "evidence_preview"),
       evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
@@ -2225,6 +2231,8 @@ class GeneratedRecommendation {
     return {
       'alternative_action': alternativeAction,
       'dedupe_key': dedupeKey,
+      'destination_task_id': destinationTaskId,
+      'destination_workstream_id': destinationWorkstreamId,
       'evidence_preview': evidencePreview,
       'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
       'expires_at': expiresAt.toUtc().toIso8601String(),

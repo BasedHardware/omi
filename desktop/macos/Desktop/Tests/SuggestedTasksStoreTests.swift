@@ -41,6 +41,17 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertEqual(api.registeredInterventionCandidateIDs, Set(["pending", "proposal"]))
   }
 
+  func testExactRecommendedCandidateCanBeInsertedOutsideThePagedList() async {
+    let api = FakeSuggestedTasksClient()
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    await store.load()
+
+    let revealed = store.revealCandidateForNavigation(candidate(id: "candidate-101", status: .pending))
+
+    XCTAssertTrue(revealed)
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-101"])
+  }
+
   func testTaskMutationCandidateFailsClosedWithoutAConcreteDiff() async {
     let api = FakeSuggestedTasksClient()
     api.records = [taskMutationCandidate(id: "blind-complete")]
@@ -443,7 +454,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   }
 
   func registerTaskIntervention(
-    _ request: OmiAPI.InterventionCreate, idempotencyKey: String
+    _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
@@ -462,7 +473,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   }
 
   func recordTaskFeedback(
-    _ request: OmiAPI.FeedbackCreate, idempotencyKey: String
+    _ request: OmiAPI.FeedbackCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord {
     feedbackAttempts += 1
     if failFeedback { throw FakeError.failed }

@@ -263,6 +263,8 @@ def fixture_subject(subject_id: str, facts_payload: dict) -> recommendations.Eva
         subject_id=subject_id,
         feedback_subject_kind=FeedbackSubjectKind.task,
         feedback_subject_id=subject_id,
+        destination_task_id=subject_id,
+        destination_workstream_id=None,
         headline=f'Fixture {subject_id}',
         label=None,
         evidence_preview='Fixture evidence.',
@@ -592,6 +594,7 @@ def test_open_loop_subjects_are_device_scoped_actionable_and_expiring():
     assert loop_subject.eligibility.passes_recommendation_gates
     assert loop_subject.feedback_subject_kind == FeedbackSubjectKind.artifact
     assert loop_subject.feedback_subject_id == 'artifact-1'
+    assert loop_subject.destination_workstream_id == 'workstream-1'
     assert loop_subject.evidence_refs[0].device_id == 'device-1'
     assert not expired_subject.eligibility.passes_recommendation_gates
 
@@ -609,6 +612,7 @@ def test_open_loop_subjects_are_device_scoped_actionable_and_expiring():
     )
     assert decision_subject.subject_id == 'decision-1'
     assert decision_subject.feedback_subject_kind == FeedbackSubjectKind.decision
+    assert decision_subject.destination_workstream_id == 'workstream-1'
 
     closed_state = deepcopy(state)
     closed_state['workstreams'][0]['status'] = 'completed'

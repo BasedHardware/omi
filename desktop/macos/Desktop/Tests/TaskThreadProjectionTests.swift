@@ -214,6 +214,39 @@ final class TaskThreadProjectionTests: XCTestCase {
     XCTAssertEqual(calls.first?.2, 9)
   }
 
+  func testDashboardResumeSelectsTheExactPreferredTask() async throws {
+    let coordinator = TaskChatCoordinator(
+      chatProvider: ChatProvider(),
+      workstreamAPI: FakeTaskWorkstreamAPI(),
+      persistWorkstreamLink: { _, _ in }
+    )
+
+    let selected = try await coordinator.existingThreadTask(
+      workstreamID: TaskThreadScenario13Fixture.workstreamID,
+      preferredTaskID: TaskThreadScenario13Fixture.secondTaskID
+    )
+
+    XCTAssertEqual(selected.id, TaskThreadScenario13Fixture.secondTaskID)
+    XCTAssertEqual(selected.workstreamId, TaskThreadScenario13Fixture.workstreamID)
+  }
+
+  func testDashboardResumeFailsWhenPreferredTaskIsMissing() async {
+    let coordinator = TaskChatCoordinator(
+      chatProvider: ChatProvider(),
+      workstreamAPI: FakeTaskWorkstreamAPI(),
+      persistWorkstreamLink: { _, _ in }
+    )
+
+    let opened = await coordinator.openExistingThread(
+      workstreamID: TaskThreadScenario13Fixture.workstreamID,
+      preferredTaskID: "missing-task"
+    )
+
+    XCTAssertFalse(opened)
+    XCTAssertNil(coordinator.activeTaskId)
+    XCTAssertEqual(coordinator.errorMessage, "The requested task is no longer part of this thread.")
+  }
+
   func testRuntimeSurfaceUsesWorkstreamAuthority() {
     let surface = AgentSurfaceReference.workstream(workstreamId: "ws-1")
     XCTAssertEqual(surface.surfaceKind, "workstream")

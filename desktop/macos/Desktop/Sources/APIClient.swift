@@ -2950,32 +2950,139 @@ extension APIClient {
 
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate,
-    idempotencyKey: String
+    idempotencyKey: String,
+    accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
     try await taskIntelligenceMutation(
       endpoint: "v1/task-intelligence/interventions",
       method: "POST",
       body: request,
       idempotencyKey: idempotencyKey,
-      accountGeneration: nil
+      accountGeneration: accountGeneration
     )
   }
 
   func recordTaskFeedback(
     _ request: OmiAPI.FeedbackCreate,
-    idempotencyKey: String
+    idempotencyKey: String,
+    accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord {
     try await taskIntelligenceMutation(
       endpoint: "v1/task-intelligence/feedback",
       method: "POST",
       body: request,
       idempotencyKey: idempotencyKey,
-      accountGeneration: nil
+      accountGeneration: accountGeneration
     )
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
     _ = try await updateActionItem(id: id, description: description)
+  }
+}
+
+// MARK: - What Matters Now and canonical Goals
+
+extension APIClient {
+  func getWhatMattersNow(deviceID: String? = nil) async throws -> OmiAPI.WhatMattersNowProjection {
+    let suffix = deviceID.map {
+      "?device_id=\($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0)"
+    } ?? ""
+    return try await get("v1/what-matters-now\(suffix)")
+  }
+
+  func getCanonicalGoals(includeEnded: Bool = true) async throws -> [OmiAPI.GoalResponse] {
+    try await get("v1/goals/all?include_ended=\(includeEnded ? "true" : "false")")
+  }
+
+  func getCanonicalGoalDetail(goalID: String) async throws -> OmiAPI.GoalDetailProjection {
+    try await get("v1/goals/\(goalID)/detail")
+  }
+
+  func createCanonicalGoal(
+    title: String,
+    desiredOutcome: String,
+    whyItMatters: String?,
+    successCriteria: [String],
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let title: String
+      let desired_outcome: String
+      let why_it_matters: String?
+      let success_criteria: [String]
+      let status: String
+      let source: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/canonical",
+      method: "POST",
+      body: Request(
+        title: title,
+        desired_outcome: desiredOutcome,
+        why_it_matters: whyItMatters,
+        success_criteria: successCriteria,
+        status: "background",
+        source: "user"
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func focusCanonicalGoal(
+    goalID: String,
+    replacementGoalID: String?,
+    focusRank: Int?,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let replacement_goal_id: String?
+      let focus_rank: Int?
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "POST",
+      body: Request(replacement_goal_id: replacementGoalID, focus_rank: focusRank),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func unfocusCanonicalGoal(
+    goalID: String,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "DELETE",
+      body: Optional<String>.none,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func transitionCanonicalGoal(
+    goalID: String,
+    status: OmiAPI.GoalStatus,
+    relationshipDisposition: String = "retain",
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let status: OmiAPI.GoalStatus
+      let relationship_disposition: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/lifecycle",
+      method: "POST",
+      body: Request(status: status, relationship_disposition: relationshipDisposition),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
   }
 }
 

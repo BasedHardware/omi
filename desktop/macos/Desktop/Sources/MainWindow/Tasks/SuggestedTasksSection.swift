@@ -47,7 +47,7 @@ struct SuggestedTasksSection: View {
               await store.dismiss(candidateID: candidate.id, reason: reason)
             }
           )
-          .id(candidate.id)
+          .id("suggested-\(candidate.id)")
           .task { await store.presented(candidateID: candidate.id) }
         }
 

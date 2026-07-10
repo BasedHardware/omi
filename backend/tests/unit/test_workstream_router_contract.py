@@ -4,11 +4,13 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
 
 import routers.goals as goals_router
+import routers.task_recommendations as task_recommendations_router
 import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
@@ -17,6 +19,7 @@ from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, Workstrea
 def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create():
     app = FastAPI()
     app.include_router(goals_router.router)
+    app.include_router(task_recommendations_router.router)
     app.include_router(workstreams_router.router)
     schema = app.openapi()
 
@@ -29,6 +32,7 @@ def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_c
     request_schema = schema['paths']['/v1/work-intents']['post']['requestBody']['content']['application/json']['schema']
     assert request_schema['discriminator']['propertyName'] == 'origin'
     canonical_writes = [
+        ('/v1/goals/canonical', 'post'),
         ('/v1/goals/{goal_id}/focus', 'post'),
         ('/v1/goals/{goal_id}/focus', 'delete'),
         ('/v1/goals/{goal_id}/lifecycle', 'post'),
@@ -40,6 +44,9 @@ def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_c
         ('/v1/workstreams/{workstream_id}/artifacts/{artifact_id}/status', 'patch'),
         ('/v1/workstreams/{workstream_id}/checkpoints/{runtime_id}', 'put'),
         ('/v1/workflow-migrations/task-goal-links', 'post'),
+        ('/v1/task-intelligence/interventions', 'post'),
+        ('/v1/task-intelligence/feedback', 'post'),
+        ('/v1/task-intelligence/outcomes', 'post'),
     ]
     for path, method in canonical_writes:
         headers = {
@@ -49,6 +56,20 @@ def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_c
         }
         assert headers['Idempotency-Key']['required'] is True
         assert headers['X-Account-Generation']['required'] is True
+
+
+def test_task_intelligence_mutations_reject_stale_account_generation(monkeypatch):
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda _uid: SimpleNamespace(intelligence_product_enabled=True, account_generation=8),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        task_recommendations_router._require_mutation_generation('u1', 7)
+
+    assert error.value.status_code == 409
+    assert error.value.detail == 'account generation mismatch'
 
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):

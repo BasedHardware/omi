@@ -72,6 +72,8 @@ class EvaluationSubject:
     subject_id: str
     feedback_subject_kind: FeedbackSubjectKind
     feedback_subject_id: str
+    destination_task_id: Optional[str]
+    destination_workstream_id: Optional[str]
     headline: str
     label: Optional[str]
     evidence_preview: str
@@ -199,6 +201,8 @@ def _subject(
     subject_id: str,
     feedback_subject_kind: Optional[FeedbackSubjectKind] = None,
     feedback_subject_id: Optional[str] = None,
+    destination_task_id: Optional[str] = None,
+    destination_workstream_id: Optional[str] = None,
     headline: str,
     label: Optional[str],
     evidence: tuple[EvidenceRef, ...],
@@ -220,6 +224,8 @@ def _subject(
         subject_id=subject_id,
         feedback_subject_kind=resolved_feedback_kind,
         feedback_subject_id=feedback_subject_id or subject_id,
+        destination_task_id=destination_task_id,
+        destination_workstream_id=destination_workstream_id,
         headline=headline[:256] or 'Untitled work',
         label=label[:256] if label else None,
         evidence_preview=_canonical_evidence_preview(facts, evidence),
@@ -272,6 +278,8 @@ def _build_subjects(
             _subject(
                 kind=kind,
                 subject_id=subject_id,
+                destination_task_id=subject_id,
+                destination_workstream_id=workstream_id or None,
                 headline=str(task.get('description') or ''),
                 label=label,
                 evidence=evidence,
@@ -307,6 +315,8 @@ def _build_subjects(
             _subject(
                 kind=kind,
                 subject_id=subject_id,
+                destination_task_id=str(candidate.get('task_id') or '') or None,
+                destination_workstream_id=str(candidate.get('workstream_id') or '') or None,
                 headline=headline,
                 label=str(goals.get(goal_id, {}).get('title') or '') or None,
                 evidence=evidence,
@@ -353,6 +363,7 @@ def _build_subjects(
             _subject(
                 kind=kind,
                 subject_id=workstream_id,
+                destination_workstream_id=workstream_id,
                 headline=headline,
                 label=str(goals.get(goal_id, {}).get('title') or '') or None,
                 evidence=tuple(event_evidence[:50]),
@@ -391,6 +402,7 @@ def _build_subjects(
             _subject(
                 kind=kind,
                 subject_id=subject_id,
+                destination_workstream_id=workstream_id or None,
                 headline=f"Review {str(artifact.get('kind') or 'artifact').replace('_', ' ')}",
                 label=str(workstream.get('title') or '') or None,
                 evidence=evidence,
@@ -448,6 +460,8 @@ def _build_subjects(
                     subject_id=recommendation_subject_id,
                     feedback_subject_kind=feedback_kind,
                     feedback_subject_id=feedback_id,
+                    destination_task_id=loop.subject_id if loop.kind.value == 'task' else None,
+                    destination_workstream_id=snapshot.workstream_id,
                     headline=(
                         'Decision needed'
                         if kind == RecommendationSubjectKind.decision
@@ -658,6 +672,8 @@ def evaluate(
                 subject_id=subject.subject_id,
                 feedback_subject_kind=subject.feedback_subject_kind,
                 feedback_subject_id=subject.feedback_subject_id,
+                destination_task_id=subject.destination_task_id,
+                destination_workstream_id=subject.destination_workstream_id,
                 headline=subject.headline,
                 why_now=selection.why_now,
                 goal_or_workstream_label=subject.label,

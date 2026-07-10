@@ -5,10 +5,10 @@ protocol SuggestedTasksClient: AnyObject {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
   func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord]
   func registerTaskIntervention(
-    _ request: OmiAPI.InterventionCreate, idempotencyKey: String
+    _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord
   func recordTaskFeedback(
-    _ request: OmiAPI.FeedbackCreate, idempotencyKey: String
+    _ request: OmiAPI.FeedbackCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
@@ -181,6 +181,20 @@ final class SuggestedTasksStore: ObservableObject {
     }
   }
 
+  @discardableResult
+  func revealCandidateForNavigation(_ record: OmiAPI.CandidateRecord) -> Bool {
+    guard let projected = Self.project(record) else { return false }
+    recordsByID[record.candidateId] = record
+    if !candidates.contains(where: { $0.id == record.candidateId }) {
+      candidates.insert(projected, at: 0)
+    }
+    return true
+  }
+
+  static func canPresentForNavigation(_ record: OmiAPI.CandidateRecord) -> Bool {
+    project(record) != nil
+  }
+
   func presented(candidateID: String) async {
     guard let record = recordsByID[candidateID],
       interventionIDs[candidateID] == nil,
@@ -324,7 +338,8 @@ final class SuggestedTasksStore: ObservableObject {
         request: pendingInterventionRequest
       )
       preparedRequest = Self.feedbackRequest(request, interventionID: interventionID)
-      _ = try await client.recordTaskFeedback(preparedRequest, idempotencyKey: idempotencyKey)
+      _ = try await client.recordTaskFeedback(
+        preparedRequest, idempotencyKey: idempotencyKey, accountGeneration: record.accountGeneration)
       pendingFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
       feedbackOutboxStore.save(pendingFeedback)
       return true
@@ -360,11 +375,13 @@ final class SuggestedTasksStore: ObservableObject {
         {
           let intervention = try await client.registerTaskIntervention(
             interventionRequest,
-            idempotencyKey: interventionKey
+            idempotencyKey: interventionKey,
+            accountGeneration: entry.accountGeneration
           )
           request = Self.feedbackRequest(request, interventionID: intervention.interventionId)
         }
-        _ = try await client.recordTaskFeedback(request, idempotencyKey: entry.idempotencyKey)
+        _ = try await client.recordTaskFeedback(
+          request, idempotencyKey: entry.idempotencyKey, accountGeneration: entry.accountGeneration)
       } catch {
         remaining.append(
           PendingSuggestedFeedback(
@@ -387,7 +404,8 @@ final class SuggestedTasksStore: ObservableObject {
     if let existing = interventionIDs[record.candidateId] { return existing }
     let intervention = try await client.registerTaskIntervention(
       request ?? Self.interventionRequest(for: record),
-      idempotencyKey: Self.interventionIdempotencyKey(for: record)
+      idempotencyKey: Self.interventionIdempotencyKey(for: record),
+      accountGeneration: record.accountGeneration
     )
     interventionIDs[record.candidateId] = intervention.interventionId
     return intervention.interventionId

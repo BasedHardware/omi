@@ -30,6 +30,7 @@ from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 router = APIRouter()
 
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=512)]
+AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
 def _live_judgment() -> LiveRecommendationJudgment:
@@ -62,6 +63,14 @@ def _rollout(uid: str):
 def _require_product(uid: str) -> None:
     if not _rollout(uid).intelligence_product_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+
+
+def _require_mutation_generation(uid: str, account_generation: int) -> None:
+    rollout = _rollout(uid)
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    if rollout.account_generation != account_generation:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch')
 
 
 def _require_evaluation_ingress(uid: str) -> None:
@@ -109,9 +118,10 @@ def evaluate_what_matters_now(
 def register_intervention(
     request: InterventionCreate,
     idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    _require_mutation_generation(uid, account_generation)
     try:
         return recommendations.register_intervention(uid, request, idempotency_key=idempotency_key)
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
@@ -122,9 +132,10 @@ def register_intervention(
 def create_feedback(
     request: FeedbackCreate,
     idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    _require_mutation_generation(uid, account_generation)
     try:
         return recommendations.record_feedback(uid, request, idempotency_key=idempotency_key)
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
@@ -135,9 +146,10 @@ def create_feedback(
 def create_outcome(
     request: OutcomeCreate,
     idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    _require_mutation_generation(uid, account_generation)
     try:
         return recommendations.record_outcome(uid, request, idempotency_key=idempotency_key)
     except recommendation_db.TaskRecommendationStoreError as exc:

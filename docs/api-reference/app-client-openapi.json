@@ -15386,6 +15386,34 @@
             "title": "Dedupe Key",
             "type": "string"
           },
+          "destination_task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Task Id"
+          },
+          "destination_workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Workstream Id"
+          },
           "evidence_preview": {
             "maxLength": 512,
             "title": "Evidence Preview",
@@ -35913,6 +35941,115 @@
         ]
       }
     },
+    "/v1/goals/canonical": {
+      "post": {
+        "description": "Create a generation-scoped canonical goal with safe retry semantics.",
+        "operationId": "create_canonical_goal_v1_goals_canonical_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Canonical Goal",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/extract-progress": {
       "post": {
         "description": "Extract goal progress from conversation/chat text and update if found.\nUses LLM to understand context and extract numeric progress.",
@@ -43797,6 +43934,16 @@
           },
           {
             "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -43891,6 +44038,16 @@
               "minLength": 1,
               "title": "Idempotency-Key",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
             }
           },
           {
@@ -44076,6 +44233,16 @@
               "minLength": 1,
               "title": "Idempotency-Key",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
             }
           },
           {

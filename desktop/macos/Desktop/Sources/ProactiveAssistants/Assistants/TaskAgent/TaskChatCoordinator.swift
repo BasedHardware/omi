@@ -75,6 +75,42 @@ final class TaskChatCoordinator: ObservableObject {
     return activeTaskId == task.id && activeWorkstreamId == expectedWorkstreamId
   }
 
+  /// Resume an existing thread from dashboard/goal projections without
+  /// manufacturing a second workstream or relying on a locally cached task.
+  @discardableResult
+  func openExistingThread(workstreamID: String, preferredTaskID: String? = nil) async -> Bool {
+    do {
+      let task = try await existingThreadTask(
+        workstreamID: workstreamID,
+        preferredTaskID: preferredTaskID
+      )
+      await openThread(for: task, createIfNeeded: false)
+      return activeTaskId == task.id && activeWorkstreamId == workstreamID
+    } catch {
+      errorMessage = error.localizedDescription
+      logError("TaskChatCoordinator: Failed to resume projected thread \(workstreamID)", error: error)
+      return false
+    }
+  }
+
+  func existingThreadTask(workstreamID: String, preferredTaskID: String? = nil) async throws -> TaskActionItem {
+    let detail = try await workstreamAPI.detail(workstreamId: workstreamID)
+    let wireTask: OmiAPI.ActionItemResponse
+    if let preferredTaskID {
+      guard let preferred = detail.tasks.first(where: { $0.id == preferredTaskID }) else {
+        throw TaskThreadError.requestedTaskUnavailable
+      }
+      wireTask = preferred
+    } else {
+      guard let first = detail.tasks.first else { throw TaskThreadError.threadHasNoTasks }
+      wireTask = first
+    }
+    return try JSONDecoder().decode(
+      TaskActionItem.self,
+      from: JSONEncoder().encode(wireTask)
+    )
+  }
+
   func switchToTask(_ task: TaskActionItem) async {
     guard task.id != activeTaskId else { return }
     await openThread(for: task, createIfNeeded: false)
@@ -733,6 +769,8 @@ private enum TaskThreadScenario13HarnessWindow {
 enum TaskThreadError: LocalizedError {
   case taskIsUnlinked
   case unresolvedWorkflowControl
+  case requestedTaskUnavailable
+  case threadHasNoTasks
 
   var errorDescription: String? {
     switch self {
@@ -740,6 +778,10 @@ enum TaskThreadError: LocalizedError {
       "Choose Work on this with Omi to start ongoing work for this task."
     case .unresolvedWorkflowControl:
       "Omi could not safely resolve task continuity yet. Try again."
+    case .requestedTaskUnavailable:
+      "The requested task is no longer part of this thread."
+    case .threadHasNoTasks:
+      "This thread has no task to open."
     }
   }
 }
