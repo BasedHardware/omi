@@ -152,6 +152,23 @@ async function main() {
   try {
     await app.firstWindow()
 
+    // Wait for the CAPTURE window's renderer to be loaded and its command
+    // subscription mounted — audio-start is fire-and-forget, so sending it
+    // before the hidden window subscribes drops it silently (found live: the
+    // harness raced the capture window's boot and asserted on a void session).
+    let captureWin = null
+    for (let i = 0; i < 40 && !captureWin; i++) {
+      captureWin = app.windows().find((w) => w.url().includes('#/capture')) ?? null
+      if (!captureWin) await new Promise((r) => setTimeout(r, 500))
+    }
+    if (!captureWin) {
+      log('FAIL: capture window never appeared')
+      exitCode = 1
+      return
+    }
+    await captureWin.waitForLoadState('domcontentloaded')
+    await new Promise((r) => setTimeout(r, 2000)) // React mount + host subscriptions
+
     // Ask the capture window to open the real capture→gate→feed path (no backend).
     const started = await app.evaluate(async () => {
       const hook = globalThis.__omiE2E
@@ -171,17 +188,20 @@ async function main() {
       return
     }
 
+    // Let gUM + the pipeline spin up before the baseline read (the VAD warm-up
+    // passthrough would otherwise count ambient cable noise as 'silence bytes').
+    await new Promise((r) => setTimeout(r, 3000))
     const base = totalBytes(await readStats(app))
     log('playing SILENCE fixture…')
     playWav(silenceWav)
-    await new Promise((r) => setTimeout(r, 1500)) // let any trailing chunks flush
+    await new Promise((r) => setTimeout(r, 3000)) // let any trailing chunks flush
     const afterSilence = totalBytes(await readStats(app))
     const silenceDelta = afterSilence - base
     log(`bytes during silence: ${silenceDelta}`)
 
     log('playing SPEECH fixture…')
     playWav(speechWav)
-    await new Promise((r) => setTimeout(r, 1500))
+    await new Promise((r) => setTimeout(r, 3000))
     const afterSpeech = totalBytes(await readStats(app))
     const speechDelta = afterSpeech - afterSilence
     log(`bytes during speech: ${speechDelta}`)

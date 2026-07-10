@@ -40,7 +40,20 @@ export function createPcmPipeline(
   stream: MediaStream,
   onChunk: (pcm: Int16Array) => void
 ): PcmPipeline {
-  return makePipelineHandle(stream, createWorkletPipeline(stream, onChunk))
+  return makePipelineHandle(
+    stream,
+    createWorkletPipeline(stream, onChunk, (reason) => {
+      // The pipeline degraded to ScriptProcessor (audio still flows) — same
+      // bounded fallback shape as the VAD gate's, different component.
+      trackEvent('fallback_triggered', {
+        component: 'pcm_pipeline',
+        from: 'worklet',
+        to: 'script_processor',
+        reason,
+        outcome: 'degraded'
+      })
+    })
+  )
 }
 
 /**
