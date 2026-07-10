@@ -112,6 +112,29 @@ interface PiUsage {
   };
 }
 
+const REQUIRED_AGENT_CONTROL_TOOLS = new Set([
+  "send_agent_message",
+  "spawn_background_agent",
+  "spawn_agent",
+  "run_agent_and_wait",
+]);
+
+function requiredAgentControlFailure(toolName: string, output: string): string | undefined {
+  if (!REQUIRED_AGENT_CONTROL_TOOLS.has(toolName)) return undefined;
+  if (output.startsWith("Error:")) return output;
+  try {
+    const parsed = JSON.parse(output) as { ok?: unknown; error?: { message?: unknown } };
+    if (parsed.ok === false) {
+      const detail = typeof parsed.error?.message === "string" ? parsed.error.message : output;
+      return `Required ${toolName} operation failed: ${detail}`;
+    }
+  } catch {
+    // A successful control tool always returns the canonical JSON envelope.
+    // Preserve a prior failure until an explicit successful retry clears it.
+  }
+  return undefined;
+}
+
 /**
  * PiMonoAdapter spawns pi-mono in RPC mode and translates its events
  * into the normalized bridge protocol.
@@ -209,6 +232,8 @@ export class PiMonoAdapter implements HarnessAdapter {
   private nextRequestId = 1;
   private eventHandler: EventCallback | null = null;
   private toolExecutor: ToolExecutor | null = null;
+  /** A failed required agent-control operation must not become a green parent completion. */
+  private requiredAgentControlFailure: string | undefined;
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
@@ -424,6 +449,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
+    this.requiredAgentControlFailure = undefined;
     this.currentAbortController = new AbortController();
     this.writeRelayContext(relayContext);
 
@@ -821,6 +847,23 @@ export class PiMonoAdapter implements HarnessAdapter {
       .map((c) => c.text || "")
       .join("") || "";
 
+    if (REQUIRED_AGENT_CONTROL_TOOLS.has(name)) {
+      const failure = requiredAgentControlFailure(name, output);
+      if (failure) {
+        this.requiredAgentControlFailure = failure;
+      } else {
+        // A successful retry of any required agent-control operation resolves
+        // the pending operation failure for this turn.
+        try {
+          if ((JSON.parse(output) as { ok?: unknown }).ok === true) {
+            this.requiredAgentControlFailure = undefined;
+          }
+        } catch {
+          // Non-canonical output cannot clear a prior control-operation failure.
+        }
+      }
+    }
+
     this.eventHandler?.({
       type: "tool_activity",
       name,
@@ -885,6 +928,21 @@ export class PiMonoAdapter implements HarnessAdapter {
       process.stderr.write(
         `[pi-mono] intermediate turn_end (${stopReason}) — keeping prompt alive\n`
       );
+      return;
+    }
+
+    if (this.requiredAgentControlFailure) {
+      const controlFailure = this.requiredAgentControlFailure;
+      this.eventHandler?.({
+        type: "error",
+        message: controlFailure,
+        adapterSessionId: pending.sessionId,
+      });
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(controlFailure));
+      this.eventHandler = null;
+      this.toolExecutor = null;
       return;
     }
 

@@ -1408,17 +1408,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             await resolvedAgentClient().setGlobalAuthHandlers(
                 onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
-                        self?.claudeAuthMethods = methods
-                        self?.claudeAuthUrl = authUrl
-                        self?.isClaudeAuthRequired = true
-                        self?.startClaudeAuth()
+                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
-                        self?.isClaudeAuthRequired = false
-                        self?.claudeAuthLaunchRequested = false
-                        self?.checkClaudeConnectionStatus()
+                        self?.handleClaudeAuthSuccess()
                     }
                 }
             )
@@ -1680,15 +1675,81 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard isUserClaudeMode else { return }
         guard !claudeAuthLaunchRequested else { return }
 
-        if let urlString = claudeAuthUrl, let url = URL(string: urlString) {
-            claudeAuthLaunchRequested = true
-            log("ChatProvider: Opening Claude OAuth URL in browser")
-            NSWorkspace.shared.open(url)
-        } else {
-            logError("ChatProvider: No auth URL available from bridge")
+        guard let url = Self.validatedClaudeOAuthURL(claudeAuthUrl) else {
+            logError("ChatProvider: Bridge supplied an invalid Claude OAuth URL")
             isClaudeAuthRequired = false
             claudeAuthLaunchRequested = false
+            errorMessage = "Unable to start Claude sign-in. Try again."
+            return
         }
+
+        claudeAuthLaunchRequested = true
+        log("ChatProvider: Opening validated Claude OAuth URL in browser")
+        NSWorkspace.shared.open(url)
+    }
+
+    private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+        // A fresh bridge-issued authorization URL represents a new OAuth
+        // attempt (for example after the bounded callback timeout). Reset the
+        // launch latch so a retry can open the new URL, while duplicate events
+        // for the same in-flight flow still open at most one browser tab.
+        if Self.isNewClaudeOAuthAttempt(previousAuthURL: claudeAuthUrl, nextAuthURL: authUrl) {
+            claudeAuthLaunchRequested = false
+        }
+        claudeAuthMethods = methods
+        claudeAuthUrl = authUrl
+        isClaudeAuthRequired = true
+        startClaudeAuth()
+    }
+
+    private func handleClaudeAuthSuccess() {
+        isClaudeAuthRequired = false
+        claudeAuthLaunchRequested = false
+        claudeAuthUrl = nil
+        checkClaudeConnectionStatus()
+    }
+
+    nonisolated static func validatedClaudeOAuthURL(_ urlString: String?) -> URL? {
+        guard
+            let urlString,
+            let components = URLComponents(string: urlString),
+            components.scheme?.lowercased() == "https",
+            components.host?.lowercased() == "claude.ai",
+            components.port == nil,
+            components.path == "/oauth/authorize",
+            components.user == nil,
+            components.password == nil,
+            components.fragment == nil
+        else {
+            return nil
+        }
+
+        let queryItems = components.queryItems ?? []
+        func queryValue(_ name: String) -> String? {
+            let values = queryItems.compactMap { $0.name == name ? $0.value : nil }
+            guard values.count == 1, let value = values.first, !value.isEmpty else { return nil }
+            return value
+        }
+        guard
+            queryValue("response_type") == "code",
+            queryValue("client_id") != nil,
+            queryValue("state") != nil,
+            queryValue("code_challenge") != nil,
+            queryValue("code_challenge_method") == "S256",
+            let redirectURLString = queryValue("redirect_uri"),
+            let redirectURL = URLComponents(string: redirectURLString),
+            redirectURL.scheme?.lowercased() == "http",
+            redirectURL.host?.lowercased() == "localhost",
+            redirectURL.port != nil,
+            redirectURL.path == "/callback"
+        else {
+            return nil
+        }
+        return components.url
+    }
+
+    nonisolated static func isNewClaudeOAuthAttempt(previousAuthURL: String?, nextAuthURL: String?) -> Bool {
+        previousAuthURL != nextAuthURL
     }
 
     /// Check whether a cached Claude OAuth token exists (config file or Keychain)
@@ -4226,17 +4287,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onToolResultDisplay: toolResultDisplayHandler,
                 onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
-                        self?.claudeAuthMethods = methods
-                        self?.claudeAuthUrl = authUrl
-                        self?.isClaudeAuthRequired = true
-                        self?.startClaudeAuth()
+                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
-                        self?.isClaudeAuthRequired = false
-                        self?.claudeAuthLaunchRequested = false
-                        self?.checkClaudeConnectionStatus()
+                        self?.handleClaudeAuthSuccess()
                     }
                 }
             )

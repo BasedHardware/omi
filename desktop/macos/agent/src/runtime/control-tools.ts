@@ -355,12 +355,20 @@ function defaultControlAdapterId(context: AgentControlToolContext): string {
 }
 
 function assertAdapterAllowedForControlRun(context: AgentControlToolContext, adapterId: string): void {
-  // ACP is the user's locally authenticated Claude Code process.  A managed
-  // Omi session must never drift into it merely because a control-tool input
-  // omitted an adapter id.  Local ACP remains available only when the parent
-  // desktop surface explicitly selected the User Claude harness.
-  if (adapterId === "acp" && defaultControlAdapterId(context) !== "acp") {
+  const owningAdapterId = defaultControlAdapterId(context);
+  // A managed desktop surface must never let a control-tool argument switch
+  // execution to any locally credentialed adapter.  Keep this allowlist
+  // explicit: adding a new cloud-managed adapter requires adding it here,
+  // while unknown (and therefore potentially local) adapters fail closed.
+  const managedCloudAdapters = new Set(["pi-mono"]);
+  // ACP is the user's locally authenticated Claude Code process. It remains
+  // available only when the owning desktop surface explicitly selected User
+  // Claude mode; the same rule preserves explicit local Hermes/OpenClaw modes.
+  if (adapterId === "acp" && owningAdapterId !== "acp") {
     throw new Error("Local Claude is available only when the User Claude mode is selected.");
+  }
+  if (managedCloudAdapters.has(owningAdapterId) && !managedCloudAdapters.has(adapterId)) {
+    throw new Error("Managed Omi agents can only use Omi cloud routing.");
   }
 }
 
@@ -640,6 +648,7 @@ export async function handleAgentControlToolCall(
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
+        assertAdapterAllowedForControlRun(context, adapterId);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -796,6 +805,7 @@ export async function handleAgentControlToolCall(
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
+        assertAdapterAllowedForControlRun(context, adapterId);
         const result = await context.kernel.delegateAgent({
           ...controlRunRecovery(context, adapterId),
           mode: "call",

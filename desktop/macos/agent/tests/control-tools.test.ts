@@ -1565,6 +1565,79 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("keeps every managed control entry point on Omi cloud routing", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const context = { ...ownerContext(kernel), defaultAdapterId: "pi-mono" };
+    const parent = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+
+    for (const provider of ["hermes", "openclaw"] as const) {
+      const spawned = parseToolResult(
+        await handleAgentControlToolCall(context, "spawn_agent", {
+          objective: `do not route to ${provider}`,
+          provider,
+          requestId: `managed-provider-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(spawned).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const background = parseToolResult(
+        await handleAgentControlToolCall(context, "spawn_background_agent", {
+          prompt: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-background-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(background).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const continued = parseToolResult(
+        await handleAgentControlToolCall(context, "send_agent_message", {
+          sessionId: parent.session.sessionId,
+          prompt: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-continue-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(continued).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const delegated = parseToolResult(
+        await handleAgentControlToolCall(context, "run_agent_and_wait", {
+          parentRunId: parent.run.runId,
+          objective: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-delegate-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(delegated).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+    }
+
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
+  });
+
   it("prevents leaf background workers from spawning more agents", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
     const result = parseToolResult(
