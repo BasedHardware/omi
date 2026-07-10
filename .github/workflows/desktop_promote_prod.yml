@@ -95,9 +95,14 @@ jobs:
             > /tmp/desktop-release.json
 
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          BREAK_GLASS_ARGS=()
+          PROMOTION_CHECK_ARGS=(
+            --release-json /tmp/desktop-release.json
+            --release-tag "$RELEASE_TAG"
+            --target-sha "$TARGET_SHA"
+            --github-output "$GITHUB_OUTPUT"
+          )
           if [ "$BREAK_GLASS" = "true" ]; then
-            BREAK_GLASS_ARGS=(
+            PROMOTION_CHECK_ARGS+=(
               --break-glass
               --break-glass-confirm "$BREAK_GLASS_CONFIRM"
               --break-glass-reason "$BREAK_GLASS_REASON"
@@ -107,11 +112,7 @@ jobs:
           fi
 
           python3 .github/scripts/check-desktop-release-promotion.py \
-            --release-json /tmp/desktop-release.json \
-            --release-tag "$RELEASE_TAG" \
-            --target-sha "$TARGET_SHA" \
-            --github-output "$GITHUB_OUTPUT" \
-            "${BREAK_GLASS_ARGS[@]}"
+            "${PROMOTION_CHECK_ARGS[@]}"
 
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 

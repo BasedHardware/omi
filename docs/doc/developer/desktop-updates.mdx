@@ -38,7 +38,7 @@ desktop/macos/scripts/qualify-desktop-beta.sh vX.Y.Z+BUILD-macos
 
 The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and writes canonical `qualifiedBeta*` metadata before dispatching beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
 
-After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
+After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
 ## Developer head-of-main
 

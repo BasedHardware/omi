@@ -185,7 +185,7 @@ Rules of thumb:
 
 ## 5. Nominate the stable candidate
 
-Nomination is a non-customer-facing decision record. It validates that the release is a qualified beta and equals the current macOS beta pointer, then records operator, rationale, qualification evidence, soak review, telemetry review, and release-note review. It does not move beta or stable, deploy a backend, or change customer visibility.
+Nomination is a non-customer-facing decision record. It validates that the release is a qualified beta, equals the current macOS beta pointer, and matches that pointer's immutable manifest source SHA. It then records operator, rationale, qualification evidence, soak review, telemetry review, and release-note review. It does not move beta or stable, deploy a backend, or change customer visibility.
 
 ```bash
 RELEASE_TAG='vX.Y.Z+BUILD-macos'

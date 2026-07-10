@@ -66,6 +66,7 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     )
     assert manifest["build_number"] == 12064
     assert manifest["qualification"]["tier"] == "T2"
+    assert manifest["qualification"]["qualified_at"] == "2026-07-09T12:00:00Z"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
 
 
@@ -86,7 +87,8 @@ def test_prepare_manifest_accepts_legacy_qualification_metadata():
         "b" * 64,
         "c" * 64,
     )
-    assert manifest["qualification"]["metadata_source"] == "legacy"
+    assert manifest["qualification"]["blessed_at"] == "2026-07-09T12:00:00Z"
+    assert "qualified_at" not in manifest["qualification"]
 
 
 def test_prepare_manifest_rejects_unqualified_candidate():
@@ -112,6 +114,7 @@ def test_qualified_beta_can_be_nominated_as_stable_candidate():
         release_tag="v0.12.64+12064-macos",
         target_sha="a" * 40,
         beta_release_id="v0.12.64+12064-macos",
+        beta_source_sha="a" * 40,
         nominator="release-operator",
         rationale="soak gates passed",
         soak_review="24h reviewed",
@@ -134,6 +137,28 @@ def test_stable_nomination_rejects_non_current_beta():
             release_tag="v0.12.64+12064-macos",
             target_sha="a" * 40,
             beta_release_id="v0.12.63+12063-macos",
+            beta_source_sha="a" * 40,
+            nominator="release-operator",
+            rationale="soak gates passed",
+            soak_review="24h reviewed",
+            telemetry_review="crash telemetry reviewed",
+            release_notes_review="stable notes reviewed",
+            nominated_at="2026-07-10T12:00:00Z",
+        )
+
+
+def test_stable_nomination_rejects_beta_manifest_from_another_sha():
+    release = _release()
+    release["body"] = (
+        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: beta")
+    )
+    with pytest.raises(SystemExit, match="beta manifest source SHA"):
+        nominate_stable.nominate(
+            release,
+            release_tag="v0.12.64+12064-macos",
+            target_sha="a" * 40,
+            beta_release_id="v0.12.64+12064-macos",
+            beta_source_sha="b" * 40,
             nominator="release-operator",
             rationale="soak gates passed",
             soak_review="24h reviewed",

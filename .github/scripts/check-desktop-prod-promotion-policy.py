@@ -77,6 +77,13 @@ def main() -> int:
     require("--target-sha", text, "workflow must validate qualification and nomination against the tag SHA")
     require("Audited break glass by", text, "workflow must record the actor and break-glass reason")
     require(
+        "PROMOTION_CHECK_ARGS=(",
+        text,
+        "workflow must keep promotion-check arguments populated when break glass is disabled under set -u",
+    )
+    if "BREAK_GLASS_ARGS=()" in text:
+        fail("normal stable promotion must not expand an empty optional array under set -u")
+    require(
         'git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"',
         text,
         "workflow must reject tags that cannot consume release identity env vars",

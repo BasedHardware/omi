@@ -77,8 +77,11 @@ jobs:
 
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           POINTER_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels/macos-beta"
+          MANIFEST_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_release_manifests/${RELEASE_TAG}"
           curl -fsS -H "Authorization: Bearer ${ACCESS_TOKEN}" "$POINTER_URL" \
             > /tmp/desktop-beta-pointer.json
+          curl -fsS -H "Authorization: Bearer ${ACCESS_TOKEN}" "$MANIFEST_URL" \
+            > /tmp/desktop-beta-manifest.json
           BETA_RELEASE_ID=$(python3 - <<'PY'
           import json
 
@@ -90,12 +93,24 @@ jobs:
             echo "The macOS beta pointer is missing release_id" >&2
             exit 1
           fi
+          BETA_SOURCE_SHA=$(python3 - <<'PY'
+          import json
+
+          manifest = json.load(open("/tmp/desktop-beta-manifest.json", encoding="utf-8"))
+          print(manifest.get("fields", {}).get("source_sha", {}).get("stringValue", ""))
+          PY
+          )
+          if [ -z "$BETA_SOURCE_SHA" ]; then
+            echo "The macOS beta manifest is missing source_sha" >&2
+            exit 1
+          fi
 
           python3 .github/scripts/nominate-desktop-stable-candidate.py \
             --release-json /tmp/desktop-stable-candidate-release.json \
             --release-tag "$RELEASE_TAG" \
             --target-sha "$TARGET_SHA" \
             --beta-release-id "$BETA_RELEASE_ID" \
+            --beta-source-sha "$BETA_SOURCE_SHA" \
             --nominator "$NOMINATOR" \
             --rationale "$RATIONALE" \
             --soak-review "$SOAK_REVIEW" \

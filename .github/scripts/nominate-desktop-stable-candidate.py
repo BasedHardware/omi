@@ -34,6 +34,7 @@ def nominate(
     release_tag: str,
     target_sha: str,
     beta_release_id: str,
+    beta_source_sha: str,
     nominator: str,
     rationale: str,
     soak_review: str,
@@ -47,6 +48,8 @@ def nominate(
         fail("stable candidates must be published GitHub releases")
     if beta_release_id != release_tag:
         fail(f"beta pointer references {beta_release_id!r}, not requested release {release_tag!r}")
+    if beta_source_sha != target_sha:
+        fail(f"beta manifest source SHA {beta_source_sha!r} does not match tag commit {target_sha!r}")
 
     metadata = parse_metadata(release.get("body") or "")
     if metadata.get("channel") != "beta":
@@ -79,6 +82,7 @@ def main() -> int:
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--target-sha", required=True)
     parser.add_argument("--beta-release-id", required=True)
+    parser.add_argument("--beta-source-sha", required=True)
     parser.add_argument("--nominator", required=True)
     parser.add_argument("--rationale", required=True)
     parser.add_argument("--soak-review", required=True)
@@ -95,6 +99,7 @@ def main() -> int:
         release_tag=args.release_tag,
         target_sha=args.target_sha,
         beta_release_id=args.beta_release_id,
+        beta_source_sha=args.beta_source_sha,
         nominator=args.nominator,
         rationale=args.rationale,
         soak_review=args.soak_review,
