@@ -54,11 +54,11 @@ def _subject(payload: dict[str, Any], *, device_id: str) -> recommendations.Eval
     facts = DeterministicFacts.model_validate(
         {key: value for key, value in raw_facts.items() if key in DeterministicFacts.model_fields}
     )
-    evidence = recommendations._valid_evidence(payload.get('evidence_refs', []), device_id=device_id)
+    evidence = recommendations.valid_evidence(payload.get('evidence_refs', []), device_id=device_id)
     recent_material_activity = bool(
         payload.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
     )
-    return recommendations._subject(
+    return recommendations.build_evaluation_subject(
         kind=RecommendationSubjectKind.task,
         subject_id=payload['subject_id'],
         destination_task_id=payload['subject_id'],

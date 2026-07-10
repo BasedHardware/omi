@@ -238,6 +238,49 @@ def _subject(
     )
 
 
+def valid_evidence(raw: Any, *, device_id: Optional[str] = None) -> tuple[EvidenceRef, ...]:
+    """Public evidence normalization for fixture and live-eval harnesses."""
+
+    return _valid_evidence(raw, device_id=device_id)
+
+
+def build_evaluation_subject(
+    *,
+    kind: RecommendationSubjectKind,
+    subject_id: str,
+    feedback_subject_kind: Optional[FeedbackSubjectKind] = None,
+    feedback_subject_id: Optional[str] = None,
+    destination_task_id: Optional[str] = None,
+    destination_workstream_id: Optional[str] = None,
+    headline: str,
+    label: Optional[str],
+    evidence: tuple[EvidenceRef, ...],
+    facts: DeterministicFacts,
+    is_open: bool,
+    unexpired: bool,
+    recent_material_activity: bool,
+    material_token: str,
+) -> EvaluationSubject:
+    """Public EvaluationSubject builder for fixture and live-eval harnesses."""
+
+    return _subject(
+        kind=kind,
+        subject_id=subject_id,
+        feedback_subject_kind=feedback_subject_kind,
+        feedback_subject_id=feedback_subject_id,
+        destination_task_id=destination_task_id,
+        destination_workstream_id=destination_workstream_id,
+        headline=headline,
+        label=label,
+        evidence=evidence,
+        facts=facts,
+        is_open=is_open,
+        unexpired=unexpired,
+        recent_material_activity=recent_material_activity,
+        material_token=material_token,
+    )
+
+
 def _build_subjects(
     state: dict[str, list[dict[str, Any]]],
     *,
@@ -993,6 +1036,7 @@ __all__ = [
     'PROMPT_VERSION',
     'RecommendationJudgment',
     'SnapshotValidationError',
+    'build_evaluation_subject',
     'evaluate',
     'filter_shortlist',
     'get_debug_projection',
@@ -1001,4 +1045,5 @@ __all__ = [
     'record_feedback',
     'record_outcome',
     'register_intervention',
+    'valid_evidence',
 ]

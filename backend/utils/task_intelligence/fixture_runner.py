@@ -74,8 +74,6 @@ def run_recorded_association_case(case: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fixture_ranking_subject(subject: dict[str, Any], *, device_id: str | None) -> recommendations.EvaluationSubject:
-    if not isinstance(subject, dict):
-        raise ValueError('ranking subject must be an object')
     subject_id = subject.get('subject_id')
     if not isinstance(subject_id, str) or not subject_id:
         raise ValueError('ranking subject requires subject_id')
@@ -85,11 +83,11 @@ def _fixture_ranking_subject(subject: dict[str, Any], *, device_id: str | None) 
     facts = DeterministicFacts.model_validate(
         {key: value for key, value in raw_facts.items() if key in DeterministicFacts.model_fields}
     )
-    evidence = recommendations._valid_evidence(subject.get('evidence_refs', []), device_id=device_id)
+    evidence = recommendations.valid_evidence(subject.get('evidence_refs', []), device_id=device_id)
     recent_material_activity = bool(
         subject.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
     )
-    return recommendations._subject(
+    return recommendations.build_evaluation_subject(
         kind=RecommendationSubjectKind.task,
         subject_id=subject_id,
         destination_task_id=subject_id,
