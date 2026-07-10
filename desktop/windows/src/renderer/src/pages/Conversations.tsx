@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   GanttChartSquare,
@@ -17,10 +17,15 @@ import {
   subscribeConversations,
   subscribeCloudRefresh,
   invalidateConversationsCache,
+  refreshCloudConversations,
   getPendingConversations,
   reconcilePending,
   type ConversationRow
 } from '../lib/pageCache'
+import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
+import { resyncConversation, retryUnsyncedConversations } from '../lib/sync/conversationSync'
+import { backfillCandidates, runBackfill, type BackfillProgress } from '../lib/sync/backfill'
+import type { CloudConversationLite } from '../lib/sync/outbox'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import type { LocalConversation } from '../../../shared/types'
@@ -32,6 +37,14 @@ function summarize(segments: { text: string }[] | undefined): string {
     .map((s) => s.text)
     .filter(Boolean)
     .join(' ')
+}
+
+function syncBadgeFor(c: LocalConversation): 'pending' | 'failed' | undefined {
+  if (c.kind === 'chat') return undefined
+  const s = c.syncState
+  if (s === 'pending' || s === 'posting' || s === 'unconfirmed') return 'pending'
+  if (s === 'failed') return 'failed'
+  return undefined
 }
 
 function localToRow(c: LocalConversation): ConversationRow {
@@ -55,8 +68,39 @@ function localToRow(c: LocalConversation): ConversationRow {
     preview,
     source: 'local',
     localKind: isChat ? 'chat' : 'recording',
+    sync: syncBadgeFor(c),
     sortAt: c.createdAt
   }
+}
+
+// Right-hand badge for a list row. Local recordings surface their sync-outbox
+// state: queued/in-flight/unconfirmed → "Sync pending" (neutral — it resolves
+// itself), a definitive failure → "Sync failed" with a Retry action, legacy
+// pre-sync rows → "Not synced" (the backfill banner offers to push those).
+function RowBadge({ r, onRetry }: { r: ConversationRow; onRetry?: (id: string) => void }): React.JSX.Element | null {
+  if (r.localKind === 'chat') return <span className="badge shrink-0">Chat</span>
+  if (r.source !== 'local') return null
+  if (r.sync === 'pending') return <span className="badge shrink-0">Sync pending</span>
+  if (r.sync === 'failed') {
+    return (
+      <span className="flex shrink-0 items-center gap-1.5">
+        <span className="badge-warning">Sync failed</span>
+        {onRetry && (
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onRetry(r.id)
+            }}
+            className="text-xs font-medium text-white/70 transition-colors hover:text-white"
+          >
+            Retry
+          </button>
+        )}
+      </span>
+    )
+  }
+  return <span className="badge-warning shrink-0">Not synced</span>
 }
 
 function ConversationSkeleton(): React.JSX.Element {
@@ -84,16 +128,23 @@ export function Conversations(): React.JSX.Element {
   const [deleting, setDeleting] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(null)
   const pendingTimeoutRef = useRef<number | null>(null)
+  // Full local set (including hidden synced rows) — drives the backfill banner.
+  const [locals, setLocals] = useState<LocalConversation[]>([])
+  const [backfill, setBackfill] = useState<BackfillProgress | null>(null)
+  const [backfillRunning, setBackfillRunning] = useState(false)
+  const backfillRunningRef = useRef(false)
 
   const loadAll = useCallback(async (): Promise<void> => {
     conversationsCache.error = null
     setError(null)
     const out: ConversationRow[] = []
+    let cloudLite: CloudConversationLite[] = []
     try {
       const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
         params: { limit: 100, offset: 0 }
       })
       const list = Array.isArray(r.data) ? r.data : []
+      cloudLite = list
       for (const c of list) {
         const created = c.created_at ? new Date(c.created_at).getTime() : 0
         out.push({
@@ -112,8 +163,21 @@ export function Conversations(): React.JSX.Element {
       setError(msg)
     }
     try {
-      const locals = await window.omi.listLocalConversations()
-      for (const c of locals) out.push(localToRow(c))
+      // Reconcile: rows still awaiting sync whose cloud twin has now appeared
+      // (same started_at/finished_at we posted) are adopted as done — this is
+      // what dissolves a "Sync pending" row into its cloud conversation.
+      const localRows = reconcileSyncedLocals(await window.omi.listLocalConversations(), cloudLite, (id, patch) =>
+        window.omi.updateLocalConversationSync(id, patch)
+      )
+      setLocals(localRows)
+      // Synced rows whose cloud twin is in this fetch are hidden (the cloud row
+      // is the real one); if the cloud fetch failed the local copy stays visible.
+      const cloudIds = new Set(cloudLite.map((c) => c.id))
+      for (const c of hideSyncedLocals(localRows, cloudIds)) out.push(localToRow(c))
+      // Opportunistic retry of rows still waiting (throttled inside; serial).
+      void retryUnsyncedConversations(localRows).then((anyDone) => {
+        if (anyDone) refreshCloudConversations()
+      })
     } catch (e) {
       console.error('Failed to load local conversations:', e)
     }
@@ -149,12 +213,14 @@ export function Conversations(): React.JSX.Element {
     return subscribeConversations(() => {
       window.omi
         .listLocalConversations()
-        .then((locals) => {
-          const localRows = locals.map(localToRow)
+        .then((freshLocals) => {
+          setLocals(freshLocals)
           setRows((prev) => {
             // Keep the already-loaded CLOUD rows (not the optimistic pendings — those
             // come fresh from getPendingConversations so titles/removals reflect).
             const cloud = prev.filter((r) => r.source === 'cloud' && !r.pending)
+            const cloudIds = new Set(cloud.map((r) => r.id))
+            const localRows = hideSyncedLocals(freshLocals, cloudIds).map(localToRow)
             const merged = [...getPendingConversations(), ...cloud, ...localRows].sort(
               (a, b) => b.sortAt - a.sortAt
             )
@@ -166,6 +232,38 @@ export function Conversations(): React.JSX.Element {
         .catch((e) => console.error('Live local refresh failed:', e))
     })
   }, [])
+
+  // Legacy local-only recordings eligible for backfill; recomputed only when
+  // the local set actually changes.
+  const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
+
+  // Manual per-row re-sync of a wedged 'Sync failed' row (resets the attempt cap).
+  const handleRetrySync = useCallback((id: string): void => {
+    void resyncConversation(id).then((out) => {
+      if (out?.status === 'done') refreshCloudConversations()
+      invalidateConversationsCache()
+    })
+  }, [])
+
+  // One-time, user-confirmed backfill of pre-sync local recordings (paced to
+  // stay under the from-segments rate limit; resumable across runs).
+  const startBackfill = async (): Promise<void> => {
+    if (backfillRunningRef.current) return
+    backfillRunningRef.current = true
+    setBackfillRunning(true)
+    setBackfill({ total: unsyncedPast, synced: 0, failed: 0, capped: false })
+    try {
+      const result = await runBackfill(locals, (p) => setBackfill({ ...p }))
+      setBackfill(result)
+      if (result.synced > 0) refreshCloudConversations()
+      else void loadAll()
+    } catch (e) {
+      console.error('Backfill failed:', e)
+    } finally {
+      backfillRunningRef.current = false
+      setBackfillRunning(false)
+    }
+  }
 
   const filtered = rows.filter((r) => {
     if (filter === 'chat' && r.localKind !== 'chat') return false
@@ -357,6 +455,26 @@ export function Conversations(): React.JSX.Element {
             Cloud conversations: {error}
           </div>
         )}
+        {(unsyncedPast > 0 || backfillRunning) && (
+          <div className="glass-subtle mx-auto mb-5 flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+            <span className="text-sm text-white/60">
+              {backfillRunning && backfill
+                ? `Syncing past recordings… ${backfill.synced + backfill.failed}/${backfill.total}`
+                : `${unsyncedPast} past recording${unsyncedPast === 1 ? ' is' : 's are'} only on this device`}
+              {!backfillRunning && backfill?.capped && (
+                <span className="text-white/40"> · hourly sync limit reached, run again later</span>
+              )}
+            </span>
+            {!backfillRunning && (
+              <button
+                onClick={() => void startBackfill()}
+                className="shrink-0 text-sm font-semibold text-white transition-colors hover:text-white/70"
+              >
+                Sync past recordings
+              </button>
+            )}
+          </div>
+        )}
         {loading && (
           <ul className="mx-auto max-w-3xl space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -421,11 +539,7 @@ export function Conversations(): React.JSX.Element {
                           <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
                         )}
                       </div>
-                      {r.localKind === 'chat' ? (
-                        <span className="badge shrink-0">Chat</span>
-                      ) : r.source === 'local' ? (
-                        <span className="badge-warning shrink-0">Not synced</span>
-                      ) : null}
+                      <RowBadge r={r} />
                     </button>
                   ) : (
                     <Link
@@ -437,13 +551,7 @@ export function Conversations(): React.JSX.Element {
                           {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
                           {r.title || <span className="italic text-text-tertiary">loading…</span>}
                         </div>
-                        {r.localKind === 'chat' ? (
-                          <span className="badge shrink-0">Chat</span>
-                        ) : (
-                          r.source === 'local' && (
-                            <span className="badge-warning shrink-0">Not synced</span>
-                          )
-                        )}
+                        <RowBadge r={r} onRetry={handleRetrySync} />
                       </div>
                       {r.subtitle && (
                         <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
