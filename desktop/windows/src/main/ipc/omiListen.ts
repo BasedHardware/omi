@@ -84,7 +84,15 @@ function recordFed(mode: ListenMode, source: 'mic' | 'system', bytes: number): v
  * counts via recordFed then drops the bytes (stub is never OPEN/CONNECTING). */
 export function startTestListenSession(sessionId: string, source: 'mic' | 'system'): boolean {
   if (process.env.OMI_E2E !== '1') return false
-  const stub = { readyState: 3, close(): void {}, send(): void {} } as unknown as WebSocket
+  const stub = {
+    readyState: 3, // CLOSED — feedSession counts, then neither sends nor buffers
+    close(): void {
+      /* no socket */
+    },
+    send(): void {
+      /* no socket */
+    }
+  } as unknown as WebSocket
   sessions.set(sessionId, {
     ws: stub,
     ownerId: -1,
