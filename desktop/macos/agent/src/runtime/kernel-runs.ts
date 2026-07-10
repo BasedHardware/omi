@@ -155,6 +155,8 @@ export class KernelRuns extends KernelCore {
       cwd: input.cwd ?? session.defaultCwd ?? undefined,
       model: input.model,
       mcpServers: input.mcpServers,
+      maxAttempts: input.maxAttempts,
+      recoverAfterError: input.recoverAfterError,
       metadata: input.metadata,
     });
   }
@@ -175,6 +177,8 @@ export class KernelRuns extends KernelCore {
       cwd: input.cwd,
       model: input.model,
       mcpServers: input.mcpServers,
+      maxAttempts: input.maxAttempts,
+      recoverAfterError: input.recoverAfterError,
       metadata: {
         ...(input.metadata ?? {}),
         spawnKind: "background_agent",
@@ -215,6 +219,8 @@ export class KernelRuns extends KernelCore {
       cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
       model: input.model,
       mcpServers: input.mcpServers,
+      maxAttempts: input.maxAttempts,
+      recoverAfterError: input.recoverAfterError,
       parentRunId: parentRun.runId,
       metadata: {
         ...(input.metadata ?? {}),

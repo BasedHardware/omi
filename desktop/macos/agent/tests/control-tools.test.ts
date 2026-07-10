@@ -1693,6 +1693,159 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("inherits the managed adapter for background agents instead of local ACP", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono" },
+        "spawn_agent",
+        {
+          objective: "research managed routing",
+          visible: true,
+          requestId: "spawn-managed-routing-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "succeeded";
+    });
+    expect(spawned.session.defaultAdapterId).toBe("pi-mono");
+    expect(adapter.executed).toHaveLength(1);
+    store.close();
+  });
+
+  it("rejects an explicit local ACP override from a managed agent", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono" },
+        "spawn_agent",
+        {
+          objective: "do not use local credentials",
+          visible: true,
+          adapterId: "acp",
+          requestId: "spawn-managed-local-acp-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Local Claude is available only when the User Claude mode is selected.",
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("keeps every managed control entry point on Omi cloud routing", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const context = { ...ownerContext(kernel), defaultAdapterId: "pi-mono" };
+    const parent = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+
+    for (const provider of ["hermes", "openclaw"] as const) {
+      const spawned = parseToolResult(
+        await handleAgentControlToolCall(context, "spawn_agent", {
+          objective: `do not route to ${provider}`,
+          provider,
+          requestId: `managed-provider-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(spawned).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const background = parseToolResult(
+        await handleAgentControlToolCall(context, "spawn_background_agent", {
+          prompt: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-background-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(background).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const continued = parseToolResult(
+        await handleAgentControlToolCall(context, "send_agent_message", {
+          sessionId: parent.session.sessionId,
+          prompt: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-continue-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(continued).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+
+      const delegated = parseToolResult(
+        await handleAgentControlToolCall(context, "run_agent_and_wait", {
+          parentRunId: parent.run.runId,
+          objective: `do not route to ${provider}`,
+          adapterId: provider,
+          requestId: `managed-delegate-${provider}`,
+          clientId: "managed-routing",
+          ownerId: "owner",
+        }),
+      );
+      expect(delegated).toMatchObject({
+        ok: false,
+        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+      });
+    }
+
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
+  });
+
+  it("prevents leaf background workers from spawning more agents", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono", canSpawnAgents: false },
+        "spawn_agent",
+        {
+          objective: "fan out more work",
+          visible: true,
+          requestId: "leaf-worker-spawn-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Background agents are leaf workers and cannot start additional agents.",
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
   it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
@@ -1937,6 +2090,51 @@ describe("agent control tools", () => {
         latestActivity: expect.stringContaining("spawn bridge failed after acceptance"),
       }),
     );
+    store.close();
+  });
+
+  it("retries an accepted ACP spawn after control-tool credential recovery", async () => {
+    const authError = new Error("Invalid authentication credentials");
+    let recoveries = 0;
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "acp",
+      4,
+      undefined,
+      (adapterId) =>
+        adapterId === "acp"
+          ? {
+              maxAttempts: 2,
+              recoverAfterError: async (error) => {
+                recoveries += 1;
+                return error === authError;
+              },
+            }
+          : {},
+    );
+    adapter.failNextExecutionError = authError;
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "research PXMX",
+        visible: true,
+        requestId: "spawn-auth-recovery-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "succeeded";
+    });
+    expect(recoveries).toBe(1);
+    expect(store.allRows("SELECT attempt_no, retry_reason, status FROM run_attempts WHERE run_id = ? ORDER BY attempt_no", [
+      spawned.run.runId,
+    ])).toEqual([
+      expect.objectContaining({ attempt_no: 1, retry_reason: null, status: "failed" }),
+      expect.objectContaining({ attempt_no: 2, retry_reason: "recoverable_error", status: "succeeded" }),
+    ]);
     store.close();
   });
 
