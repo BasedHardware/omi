@@ -1,17 +1,17 @@
 import Foundation
 
-/// Shared agent bridge for all task-chat surfaces. Session identity and execution
-/// truth live in the kernel (`surfaceKind = task_chat`); this bridge is transport only.
+/// Shared agent bridge for task-backed workstream surfaces. Session identity and
+/// execution truth live in the kernel; this bridge is transport only.
 @MainActor
 enum TaskChatRuntime {
     private static var agentBridge: AgentBridge?
     private static var bridgeStarted = false
-    private static var activeTaskId: String?
+    private static var activeWorkstreamId: String?
 
     static func query(
         prompt: String,
         systemPrompt: String,
-        taskId: String,
+        workstreamId: String,
         workspacePath: String,
         mode: String,
         surfaceContextJson: String?,
@@ -25,19 +25,19 @@ enum TaskChatRuntime {
         onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
     ) async throws -> AgentBridge.QueryResult {
         let bridge = try await sharedBridge()
-        if activeTaskId != nil {
+        if activeWorkstreamId != nil {
             throw BridgeError.requestAlreadyActive
         }
-        activeTaskId = taskId
+        activeWorkstreamId = workstreamId
         defer {
-            if activeTaskId == taskId {
-                activeTaskId = nil
+            if activeWorkstreamId == workstreamId {
+                activeWorkstreamId = nil
             }
         }
         return try await bridge.query(
             prompt: prompt,
             systemPrompt: systemPrompt,
-            surface: .taskChat(taskId: taskId),
+            surface: .workstream(workstreamId: workstreamId),
             cwd: workspacePath.isEmpty ? nil : workspacePath,
             mode: mode,
             model: model,
@@ -52,10 +52,48 @@ enum TaskChatRuntime {
         )
     }
 
-    static func interrupt(taskId: String) async {
-        guard activeTaskId == taskId else { return }
+    static func importLegacyHistory(
+        workstreamId: String,
+        messages: [ChatMessage]
+    ) async throws {
+        guard !messages.isEmpty else { return }
+        let bridge = try await sharedBridge()
+        await bridge.importConversationTurns(
+            surface: .workstream(workstreamId: workstreamId),
+            turns: messages.suffix(100).map {
+                (
+                    role: $0.sender == .user ? "user" : "assistant",
+                    content: $0.text,
+                    createdAtMs: Int($0.createdAt.timeIntervalSince1970 * 1_000)
+                )
+            }
+        )
+    }
+
+    static func interrupt(workstreamId: String) async {
+        guard activeWorkstreamId == workstreamId else { return }
         await agentBridge?.interrupt()
     }
+
+    static func controlTool(name: String, input: [String: Any]) async throws -> String {
+        let bridge = try await sharedBridge()
+        return try await bridge.controlTool(name: name, input: input)
+    }
+
+#if DEBUG
+    static func debugAutomationControlTool(name: String, input: [String: Any]) async throws -> String {
+        let bridge = try await sharedBridge()
+        return try await bridge.debugAutomationControlTool(name: name, input: input)
+    }
+
+    static func debugImportLegacyTurn(taskId: String) async throws {
+        let bridge = try await sharedBridge()
+        await bridge.importConversationTurns(
+            surface: .taskChat(taskId: taskId),
+            turns: [(role: "user", content: "Draft the launch email", createdAtMs: 1_783_669_600_000)]
+        )
+    }
+#endif
 
     private static func sharedBridge() async throws -> AgentBridge {
         if bridgeStarted {

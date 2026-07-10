@@ -1112,6 +1112,7 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
         ConversationsPageHost(appState: appState)
@@ -1158,6 +1159,7 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       }
     }

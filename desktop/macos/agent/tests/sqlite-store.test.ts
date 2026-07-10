@@ -19,10 +19,12 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(9);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(13);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
+      "completion_delta_checkpoints",
+      "conversation_turns",
       "delegations",
       "desktop_artifact_deliveries",
       "desktop_attention_overrides",
@@ -37,6 +39,10 @@ describe("SqliteAgentStore", () => {
       "runs",
       "schema_migrations",
       "sessions",
+      "surface_conversations",
+      "workstream_artifact_heads",
+      "workstream_artifact_versions",
+      "workstream_continuation_checkpoints",
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 

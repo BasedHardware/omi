@@ -41,6 +41,9 @@ class ViewModelContainer: ObservableObject {
         // only runs on non-prod bundles.
         if DesktopAutomationLaunchOptions.isEnabled {
             tasksViewModel.registerAutomationActions()
+#if DEBUG
+            taskChatCoordinator.registerAutomationActions()
+#endif
             memoriesViewModel.registerAutomationActions()
         }
     }

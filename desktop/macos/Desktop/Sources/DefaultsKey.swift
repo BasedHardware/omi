@@ -44,6 +44,16 @@ enum DefaultsKey: String {
     case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
 }
 
+/// Compile-checked owner-scoped defaults keys whose final storage key is
+/// derived at runtime.
+struct ScopedDefaultsKey {
+    fileprivate let rawValue: String
+
+    static func taskContextSubjectMatches(ownerHash: String) -> Self {
+        Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
+    }
+}
+
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
 ///
 /// Each forwards to the stdlib `String`-keyed method via `key.rawValue`, so
@@ -55,8 +65,10 @@ extension UserDefaults {
     func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+    func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
     func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
+    func set(_ value: Any?, forKey key: ScopedDefaultsKey) { set(value, forKey: key.rawValue) }
     func removeObject(forKey key: DefaultsKey) { removeObject(forKey: key.rawValue) }
 }

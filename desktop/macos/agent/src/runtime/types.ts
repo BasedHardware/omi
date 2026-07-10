@@ -120,7 +120,9 @@ export type DesktopArtifactDeliveryTargetKind = "ask_omi" | "task_chat" | "local
 export type DesktopArtifactDeliveryReviewStatus = "not_required" | "pending" | "approved" | "rejected";
 export type DesktopArtifactDeliveryStatus = "pending" | "delivered" | "failed" | "retrying" | "cancelled";
 export type DesktopCandidateStatus = "pending" | "accepted" | "rejected" | "expired";
-export type DesktopTaskCandidateAction = "create" | "update" | "complete" | "delete";
+export type DesktopTaskCandidateStatus = DesktopCandidateStatus | "forwarded";
+export type DesktopTaskCandidateAction = "create" | "update" | "complete" | "delete" | "supersede";
+export type DesktopTaskCandidateDeliveryStatus = "pending" | "delivering" | "delivered" | "failed" | "blocked";
 export type DesktopContextSourceKind =
   | "omi_db"
   | "rewind_timeline"
@@ -356,9 +358,25 @@ export interface DesktopTaskCandidate {
   proposedChangeJson: string;
   evidenceRefsJson: string;
   confidence: number;
+  ownershipConfidence: number;
   requiresApproval: 0 | 1;
-  status: DesktopCandidateStatus;
+  goalRef: string | null;
+  workstreamRef: string | null;
+  sourceSurface: string;
+  accountGeneration: number;
+  generationReconciled: 0 | 1;
+  status: DesktopTaskCandidateStatus;
+  deliveryStatus: DesktopTaskCandidateDeliveryStatus;
+  deliveryAttemptCount: number;
+  deliveryKey: string;
+  backendCandidateId: string | null;
+  backendReceiptJson: string | null;
+  backendResolutionReceiptJson: string | null;
+  backendResolutionStatus: string | null;
+  lastDeliveryErrorJson: string | null;
   createdAtMs: number;
+  updatedAtMs: number;
+  deliveredAtMs: number | null;
   resolvedAtMs: number | null;
 }
 
@@ -462,7 +480,9 @@ export interface StartupReconciliationResult {
   orphanedRunIds: string[];
   staleBindingIds: string[];
   expiredContextPacketIds: string[];
+  expiredContinuationCheckpointIds: string[];
   failedArtifactDeliveryIds: string[];
+  failedTaskCandidateDeliveryIds: string[];
   recoveryDispatchIds: string[];
   clearedAttemptInstanceIds: number;
   clearedBindingInstanceIds: number;
