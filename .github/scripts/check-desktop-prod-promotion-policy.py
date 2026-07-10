@@ -54,6 +54,7 @@ def main() -> int:
         fail(f"prod promotion must allow only workflow_dispatch, got: {', '.join(triggers) or '<none>'}")
     require("release_tag:", text, "manual promotion must require an explicit release tag")
     require("confirm:", text, "manual promotion must require an explicit confirmation input")
+    require("python_backend_sha:", text, "manual promotion must require an explicit compatible python backend SHA")
     require("promote-stable", text, "manual promotion confirmation phrase must remain explicit")
     if "\n      force:" in text or "inputs.force" in text:
         fail("prod promotion must stay roll-forward only; do not expose a force rollback input")
@@ -70,6 +71,16 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
+    require("check-python-backend-blessing.py", text, "workflow must validate the compatible python-backend blessing")
+    require("python-backend-bless-${PYTHON_BACKEND_SHA}", text, "workflow must look up the explicit python-backend blessing")
+    require("--tag-sha", text, "workflow must verify the python-backend blessing tag points to the explicit SHA")
+    require(
+        'git merge-base --is-ancestor "$PYTHON_BACKEND_SHA" "$TARGET_SHA"',
+        text,
+        "workflow must enforce backend SHA ancestry",
+    )
+    require("backend/scripts/bless-python-backend.sh", text, "workflow must tell operators how to bless python-backend")
+    require("PYTHON_BACKEND_CHECK_ARGS=(", text, "workflow must keep python-backend check args populated under set -u")
     require("--break-glass", text, "workflow must expose an audited emergency bypass")
     require("--break-glass-confirm", text, "workflow must require typed break-glass confirmation")
     require("--break-glass-reason", text, "workflow must require a break-glass audit rationale")

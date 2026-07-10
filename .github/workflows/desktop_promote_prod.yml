@@ -21,6 +21,10 @@ on:
       confirm:
         description: 'Type promote-stable to deploy prod and mark the release stable'
         required: true
+      python_backend_sha:
+        description: 'Compatible python-backend SHA attested for this desktop release'
+        required: false
+        default: ''
       break_glass:
         description: 'DANGER: bypass qualification and stable-candidate gates'
         required: false
@@ -70,6 +74,7 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
+          PYTHON_BACKEND_SHA: ${{ inputs.python_backend_sha }}
           BREAK_GLASS: ${{ inputs.break_glass }}
           BREAK_GLASS_CONFIRM: ${{ inputs.break_glass_confirm }}
           BREAK_GLASS_REASON: ${{ inputs.break_glass_reason }}
@@ -113,6 +118,63 @@ jobs:
 
           python3 .github/scripts/check-desktop-release-promotion.py \
             "${PROMOTION_CHECK_ARGS[@]}"
+
+          if [ -z "$PYTHON_BACKEND_SHA" ]; then
+            if [ "$BREAK_GLASS" = "true" ]; then
+              echo "::warning::python_backend_sha is missing; allowed by audited break glass"
+              echo "python_backend_sha is missing; allowed by audited break glass" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "python_backend_sha is required for desktop stable promotion." >&2
+              echo "Provide a SHA attested by backend/scripts/bless-python-backend.sh (python-backend surface; not desktop legacy qualification), or enable audited break glass." >&2
+              exit 1
+            fi
+          else
+            if ! git cat-file -e "${PYTHON_BACKEND_SHA}^{commit}" 2>/dev/null; then
+              git fetch --depth=1 origin "$PYTHON_BACKEND_SHA"
+            fi
+            # Tag prefix is python-backend surface naming (not desktop legacy qualification).
+            PYTHON_BACKEND_ATTEST_TAG="python-backend-bless-${PYTHON_BACKEND_SHA}"  # not desktop legacy qualification
+            git fetch --force --tags origin "+refs/tags/${PYTHON_BACKEND_ATTEST_TAG}:refs/tags/${PYTHON_BACKEND_ATTEST_TAG}" || true
+            if ! gh release view "$PYTHON_BACKEND_ATTEST_TAG" --repo "$REPO" \
+              --json tagName,body,isDraft,isPrerelease,assets \
+              > /tmp/python-backend-attestation.json; then
+              if [ "$BREAK_GLASS" = "true" ]; then
+                echo "::warning::No python-backend attestation release found for ${PYTHON_BACKEND_SHA}; allowed by audited break glass"
+                echo "No python-backend attestation release found for ${PYTHON_BACKEND_SHA}; allowed by audited break glass" >> "$GITHUB_STEP_SUMMARY"
+                printf '{"tagName":"missing-%s","body":""}\n' "$PYTHON_BACKEND_ATTEST_TAG" > /tmp/python-backend-attestation.json
+              else
+                echo "Missing python-backend attestation release: ${PYTHON_BACKEND_ATTEST_TAG}" >&2
+                echo "Create it with backend/scripts/bless-python-backend.sh (python-backend surface; not desktop legacy qualification)." >&2
+                exit 1
+              fi
+            fi
+
+            # Keep args populated under set -u; override only when break glass is enabled.
+            PYTHON_BACKEND_CHECK_ARGS=(
+              --release-json /tmp/python-backend-attestation.json
+              --target-sha "$PYTHON_BACKEND_SHA"
+              --tag-sha "$(git rev-list -n1 "$PYTHON_BACKEND_ATTEST_TAG" 2>/dev/null || true)"
+            )
+            if [ "$BREAK_GLASS" = "true" ]; then
+              PYTHON_BACKEND_CHECK_ARGS+=(
+                --override-unblessed
+                --override-confirm "I-ACCEPT-UNBLESSED-PROD-RISK"
+              )
+            fi
+            PYTHON_BACKEND_CHECKER='.github/scripts/check-python-backend-blessing.py'  # not desktop legacy qualification
+            python3 "$PYTHON_BACKEND_CHECKER" \
+              "${PYTHON_BACKEND_CHECK_ARGS[@]}"
+
+            if ! git merge-base --is-ancestor "$PYTHON_BACKEND_SHA" "$TARGET_SHA"; then
+              if [ "$BREAK_GLASS" = "true" ]; then
+                echo "::warning::python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA); allowed by audited break glass"
+                echo "python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA); allowed by audited break glass" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA)" >&2
+                exit 1
+              fi
+            fi
+          fi
 
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 
