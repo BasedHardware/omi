@@ -2,8 +2,8 @@ name: Build Desktop Release Candidate
 
 on:
   schedule:
-    # One weekday candidate at most. Developers use scripts/omi-main for head.
-    - cron: '17 10 * * 1-5'
+    # One daily candidate at most. Developers use scripts/omi-main for head.
+    - cron: '17 10 * * *'
   workflow_dispatch:
     inputs:
       release_mode:
