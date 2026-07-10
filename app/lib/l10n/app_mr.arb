@@ -1,5 +1,6 @@
 {
     "@@locale": "mr",
+    "sessionExpiredSignInAgain": "सत्राची मुदत संपली — पुन्हा साइन इन करा.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

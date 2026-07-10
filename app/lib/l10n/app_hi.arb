@@ -1,5 +1,6 @@
 {
     "@@locale": "hi",
+    "sessionExpiredSignInAgain": "सत्र की समय-सीमा समाप्त हो गई — फिर से साइन इन करें।",
     "appTitle": "ओमी",
     "conversationTab": "बातचीत",
     "transcriptTab": "प्रतिलेख",

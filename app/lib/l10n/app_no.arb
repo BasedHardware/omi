@@ -1,5 +1,6 @@
 {
     "@@locale": "no",
+    "sessionExpiredSignInAgain": "Økten er utløpt — logg på igjen.",
     "appTitle": "Omi",
     "conversationTab": "Samtale",
     "transcriptTab": "Transkripsjon",

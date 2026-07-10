@@ -9,6 +9,9 @@ class AppLocalizationsMr extends AppLocalizations {
   AppLocalizationsMr([String locale = 'mr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'सत्राची मुदत संपली — पुन्हा साइन इन करा.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

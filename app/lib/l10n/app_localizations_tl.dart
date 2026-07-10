@@ -9,6 +9,9 @@ class AppLocalizationsTl extends AppLocalizations {
   AppLocalizationsTl([String locale = 'tl']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Nag-expire ang session — mag-sign in ulit.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

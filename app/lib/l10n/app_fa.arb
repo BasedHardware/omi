@@ -1,5 +1,6 @@
 {
     "@@locale": "fa",
+    "sessionExpiredSignInAgain": "جلسه منقضی شد — دوباره وارد شوید.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

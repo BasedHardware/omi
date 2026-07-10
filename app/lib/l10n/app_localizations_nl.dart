@@ -9,6 +9,9 @@ class AppLocalizationsNl extends AppLocalizations {
   AppLocalizationsNl([String locale = 'nl']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'De sessie is verlopen — log opnieuw in.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

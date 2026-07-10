@@ -1,5 +1,6 @@
 {
     "@@locale": "cs",
+    "sessionExpiredSignInAgain": "Platnost relace vypršela — přihlaste se znovu.",
     "appTitle": "Omi",
     "conversationTab": "Konverzace",
     "transcriptTab": "Přepis",

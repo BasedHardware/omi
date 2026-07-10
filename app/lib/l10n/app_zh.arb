@@ -1,5 +1,6 @@
 {
     "@@locale": "zh",
+    "sessionExpiredSignInAgain": "会话已过期，请重新登录。",
     "appTitle": "Omi",
     "conversationTab": "对话",
     "transcriptTab": "转录",
