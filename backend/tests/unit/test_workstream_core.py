@@ -1,14 +1,15 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 
 import pytest
 
 import database.action_items as action_items_db
 import database.goals as goals_db
+import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
-from models.action_item import EvidenceRef
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.goal import (
     GoalCreate,
@@ -17,6 +18,8 @@ from models.goal import (
     GoalRelationshipDisposition,
     GoalStatus,
 )
+from models.memory_recurrence import CanonicalRecurrenceSignal
+from models.workstream_association import RecurrenceOutcomeKind
 from models.workstream import (
     ArtifactDescriptorCreate,
     ArtifactStatusTransitionRequest,
@@ -25,6 +28,7 @@ from models.workstream import (
     TaskGoalLinkImportRequest,
     TaskOriginWorkIntent,
     WorkstreamEventCreate,
+    WorkstreamStatus,
     WorkstreamUpdate,
 )
 
@@ -164,6 +168,7 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(goals_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(workstreams_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(recurrence_inbox_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(action_items_db, 'db', database)
     return database
@@ -537,6 +542,50 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0):
     }
 
 
+def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
+    now = datetime.now(timezone.utc)
+    signal = CanonicalRecurrenceSignal(
+        signal_id='observation-1',
+        title='Investor update',
+        objective='Send the revised investor update',
+        anchor_task_description='Prepare the investor email',
+        occurrence_count=2,
+        distinct_day_count=2,
+        unresolved=True,
+        confidence=0.9,
+        first_seen_at=now - timedelta(days=1),
+        last_seen_at=now,
+        evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
+    )
+    first = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=3, firestore_client=fake_db)
+    replay = recurrence_inbox_db.enqueue_recurrence_signal(
+        'u1',
+        signal.model_copy(update={'signal_id': 'observation-2'}),
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    next_generation = recurrence_inbox_db.enqueue_recurrence_signal(
+        'u1', signal, account_generation=4, firestore_client=fake_db
+    )
+
+    assert replay.receipt_id == first.receipt_id
+    assert replay.signal.signal_id == 'observation-1'
+    assert next_generation.receipt_id != first.receipt_id
+    assert recurrence_inbox_db.list_pending_recurrence_receipts(
+        'u1', account_generation=3, firestore_client=fake_db
+    ) == [replay]
+
+    recurrence_inbox_db.complete_recurrence_receipt(
+        'u1',
+        first.receipt_id,
+        outcome=RecurrenceOutcomeKind.candidate_created,
+        firestore_client=fake_db,
+    )
+    assert (
+        recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3, firestore_client=fake_db) == []
+    )
+
+
 def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuity(fake_db):
     seed_control(fake_db)
     seed_workstream(fake_db)
@@ -557,6 +606,21 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         account_generation=3,
         firestore_client=fake_db,
     )
+    fake_db.rows[('users', 'u1', 'workstreams', 'closed-race')] = {
+        **fake_db.rows[('users', 'u1', 'workstreams', 'w1')],
+        'workstream_id': 'closed-race',
+        'status': WorkstreamStatus.completed.value,
+    }
+    with pytest.raises(workstreams_db.WorkstreamConflictError, match='must be open'):
+        workstreams_db.append_workstream_event(
+            'u1',
+            'closed-race',
+            WorkstreamEventCreate(kind='system', summary='Late association'),
+            idempotency_key='late-association',
+            account_generation=3,
+            firestore_client=fake_db,
+            required_status=WorkstreamStatus.open,
+        )
     v1 = workstreams_db.create_artifact_descriptor(
         'u1',
         'w1',

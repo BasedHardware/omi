@@ -22,6 +22,7 @@ from models.workstream import (
     WorkstreamUpdate,
 )
 from utils.other import endpoints as auth
+from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
@@ -49,12 +50,14 @@ def resolve_work_intent(
     """Idempotent backend operation behind the “Work on this with Omi” affordance."""
 
     try:
-        return workstreams_db.resolve_work_intent(
+        receipt = workstreams_db.resolve_work_intent(
             uid,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
+        refresh_workstream_association_index(uid, receipt.workstream_id)
+        return receipt
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
         raise AssertionError('unreachable')
@@ -81,13 +84,15 @@ def update_workstream(
     uid: str = Depends(auth.get_current_user_uid),
 ) -> Workstream:
     try:
-        return workstreams_db.update_workstream(
+        workstream = workstreams_db.update_workstream(
             uid,
             workstream_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
+        refresh_workstream_association_index(uid, workstream.workstream_id)
+        return workstream
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
         raise AssertionError('unreachable')

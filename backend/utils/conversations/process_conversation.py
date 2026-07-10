@@ -34,6 +34,8 @@ from database.vector_db import upsert_vector2, update_vector_metadata, upsert_tr
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory, render_memory
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
+from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -51,6 +53,8 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
+from utils.observability.fallback import record_fallback
+from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
 from models.structured import Structured
@@ -533,6 +537,44 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
     for memory_db_obj in parsed_memories:
         memory_service.write(uid, memory_db_obj.model_dump(mode="json"))
+
+    if not is_locked:
+        memory_refs = [
+            EvidenceRef(
+                kind=EvidenceKind.memory_item,
+                id=cast(str, memory_db_obj.id),
+                scope=EvidenceScope.canonical,
+            )
+            for memory_db_obj in parsed_memories[:49]
+        ]
+        evidence_summary = '\n'.join(memory.content.strip() for memory in parsed_memories if memory.content.strip())[
+            :2000
+        ]
+        try:
+            associate_canonical_evidence(
+                uid,
+                AssociationEvidence(
+                    evidence_id=conversation.id,
+                    summary=evidence_summary,
+                    evidence_refs=[
+                        EvidenceRef(
+                            kind=EvidenceKind.conversation,
+                            id=conversation.id,
+                            scope=EvidenceScope.canonical,
+                        ),
+                        *memory_refs,
+                    ],
+                ),
+                firestore_client=db_client,
+            )
+        except Exception:
+            record_fallback(
+                component='other',
+                from_mode='canonical_memory_workflow_association',
+                to_mode='memory_write_only',
+                reason='other',
+                outcome='degraded',
+            )
 
     record_usage(uid, memories_created=len(parsed_memories))
 

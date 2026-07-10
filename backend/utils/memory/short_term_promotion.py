@@ -750,6 +750,7 @@ def run_canonical_short_term_maintenance(
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
+    recurrence_signal_sink: Optional[Callable[..., int]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Canonical-only wrapper: TTL audit → consolidation → batch-or-daily promotion."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -764,6 +765,7 @@ def run_canonical_short_term_maintenance(
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
+        recurrence_signal_sink=recurrence_signal_sink,
     )
     # Promotion gate: None = consolidation did not fire; empty set = fired but blocked (defer all);
     # non-empty set = fired cleanly — only items batched this pass may promote.

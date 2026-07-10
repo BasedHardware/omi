@@ -86,6 +86,12 @@ OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     ['mode'],
 )
 
+TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
+    'task_workstream_association_total',
+    'Canonical evidence association outcomes with bounded adjudication reasons',
+    ['outcome', 'reason'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',

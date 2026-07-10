@@ -159,6 +159,12 @@ def test_work_intent_route_forwards_idempotency_and_generation(monkeypatch):
         return receipt
 
     monkeypatch.setattr(workstreams_router.workstreams_db, 'resolve_work_intent', resolve)
+    refreshed = []
+    monkeypatch.setattr(
+        workstreams_router,
+        'refresh_workstream_association_index',
+        lambda uid, workstream_id: refreshed.append((uid, workstream_id)),
+    )
     result = workstreams_router.resolve_work_intent(
         TaskOriginWorkIntent(task_id='t1'),
         idempotency_key='click-1',
@@ -169,3 +175,4 @@ def test_work_intent_route_forwards_idempotency_and_generation(monkeypatch):
     assert result == receipt
     assert captured['idempotency_key'] == 'click-1'
     assert captured['account_generation'] == 7
+    assert refreshed == [('u1', 'w1')]

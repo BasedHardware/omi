@@ -18,6 +18,7 @@ from utils.executors import postprocess_executor, submit_with_context
 from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
+from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
 
 class WorkstreamCandidateResolver(Protocol):
@@ -162,6 +163,8 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
             raise candidates_db.CandidateGenerationMismatchError(candidate_id) from exc
         except workstreams_db.WorkstreamConflictError as exc:
             raise candidates_db.CandidateConflictError(str(exc)) from exc
+        if receipt.workstream_id:
+            refresh_workstream_association_index(uid, receipt.workstream_id)
         if receipt.task_id:
             _dispatch_task_integration(
                 uid,

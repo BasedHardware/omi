@@ -302,6 +302,30 @@ def get_workstream_goal_id(uid: str, workstream_id: str, *, firestore_client: An
     return workstream.goal_id
 
 
+def get_task_workflow_control(uid: str, *, firestore_client: Any = None) -> TaskWorkflowControl:
+    snapshot = _control_ref(uid, firestore_client=firestore_client).get()
+    if not snapshot.exists:
+        return TaskWorkflowControl()
+    return TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+
+
+def list_open_workstreams(
+    uid: str,
+    *,
+    limit: int = 500,
+    firestore_client: Any = None,
+) -> list[Workstream]:
+    query = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(WORKSTREAMS_COLLECTION)
+        .where(filter=FieldFilter('status', '==', WorkstreamStatus.open.value))
+        .limit(limit)
+    )
+    records = [_workstream_from_snapshot(snapshot) for snapshot in query.stream()]
+    records.sort(key=lambda record: record.updated_at, reverse=True)
+    return records
+
+
 def list_workstreams_for_goal(
     uid: str,
     goal_id: str,
@@ -377,6 +401,7 @@ def append_workstream_event(
     idempotency_key: str,
     account_generation: int,
     firestore_client: Any = None,
+    required_status: Optional[WorkstreamStatus] = None,
 ) -> WorkstreamEvent:
     client = _get_db(firestore_client)
     workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
@@ -405,6 +430,8 @@ def append_workstream_event(
                 raise WorkstreamConflictError('event idempotency key was reused with different content')
             return stored
         workstream = _workstream_from_snapshot(workstream_snapshot)
+        if required_status is not None and workstream.status != required_status:
+            raise WorkstreamConflictError(f'workstream must be {required_status.value}')
         sequence = workstream.latest_event_sequence + 1
         record = WorkstreamEvent(
             event_id=event_id,
