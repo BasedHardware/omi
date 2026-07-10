@@ -186,14 +186,25 @@ describe('cancel and watchdog — no path can hang or leak', () => {
       expect(commitOf(effects)).toBeNull()
     })
 
-    it(`WATCHDOG from ${name} → idle with teardown + timeout error`, () => {
-      const setup = run(events)
-      const { state, effects } = run([{ type: 'WATCHDOG' }], setup.state)
-      expect(state.phase).toBe('idle')
-      expect(kinds(effects)).toContain('showError')
-      expect(commitOf(effects)).toBeNull()
-    })
+    if (name !== 'holding') {
+      it(`WATCHDOG from ${name} → idle with teardown + timeout error`, () => {
+        const setup = run(events)
+        const { state, effects } = run([{ type: 'WATCHDOG' }], setup.state)
+        expect(state.phase).toBe('idle')
+        expect(kinds(effects)).toContain('showError')
+        expect(commitOf(effects)).toBeNull()
+      })
+    }
   }
+
+  it('WATCHDOG during holding is a NO-OP — a hold is user-bounded and may run for minutes', () => {
+    // Regression: the watchdog used to fire from `holding` too, silently
+    // discarding any dictation longer than 25s mid-speech.
+    const holding = run([{ type: 'HOLD_START' }])
+    const step = reduce(holding.state, { type: 'WATCHDOG' })
+    expect(step.state.phase).toBe('holding')
+    expect(step.effects).toEqual([])
+  })
 
   it('CANCEL and WATCHDOG in idle are no-ops', () => {
     expect(reduce(initialState, { type: 'CANCEL' }).effects).toEqual([])

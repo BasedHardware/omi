@@ -189,7 +189,11 @@ export function reduce(s: PttState, e: PttEvent): Step {
     }
 
     case 'WATCHDOG': {
-      if (s.phase === 'idle') return stay(s)
+      // A hold is user-bounded — the key is physically down, and the buffer cap
+      // provisions 4.5 MINUTES of speech. The watchdog only guards the
+      // post-release pipeline (draining/finalize/batching), where a bug could
+      // otherwise strand the "Transcribing…" UI.
+      if (s.phase === 'idle' || s.phase === 'holding') return stay(s)
       return {
         state: { ...s, phase: 'idle' },
         effects: [...TEARDOWN, { kind: 'showError', message: 'Voice input timed out' }]

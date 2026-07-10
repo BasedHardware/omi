@@ -21,6 +21,10 @@ type StreamCbs = {
 const h = vi.hoisted(() => {
   const state = {
     drainBuffer: new Int16Array(0),
+    /** When true, startPttStream stays pending until releaseStream() is called —
+     *  simulates the window where audio flows before the session exists. */
+    deferStream: false,
+    streamReleasers: [] as Array<() => void>,
     captureOpts: [] as CaptureOpts[],
     captures: [] as Array<{ analyser: object; drain: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }>,
     streamCbs: [] as StreamCbs[],
@@ -48,11 +52,14 @@ const h = vi.hoisted(() => {
       state.captures.push(capture)
       return capture
     }),
-    startPttStream: vi.fn(async (cb: StreamCbs) => {
+    startPttStream: vi.fn((cb: StreamCbs) => {
       state.streamCbs.push(cb)
       const stream = { feed: vi.fn(), finalize: vi.fn(), stop: vi.fn() }
       state.streams.push(stream)
-      return stream
+      if (!state.deferStream) return Promise.resolve(stream)
+      return new Promise<typeof stream>((resolve) => {
+        state.streamReleasers.push(() => resolve(stream))
+      })
     }),
     batchTranscribe: vi.fn(
       (pcm: Int16Array, signal: AbortSignal) =>
@@ -118,6 +125,8 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   h.state.drainBuffer = VOICED_1S
+  h.state.deferStream = false
+  h.state.streamReleasers = []
   h.state.captureOpts = []
   h.state.captures = []
   h.state.streamCbs = []
@@ -148,6 +157,47 @@ describe('space gesture', () => {
     // Warm-mic backfill covers exactly the hold threshold (fake timers → precise).
     expect(h.state.captureOpts[0].backfillMs).toBe(HOLD_THRESHOLD_MS)
     expect(h.startPttStream).toHaveBeenCalledOnce()
+  })
+
+  it('a LONG hold (30s+) keeps recording — the watchdog never fires while the key is down', async () => {
+    // Regression: the watchdog used to arm at hold start and silently discard
+    // any dictation longer than 25s with a false "timed out" error.
+    const { result, onCommit } = setup()
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    await advance(30_000)
+    expect(result.current.recording).toBe(true)
+    expect(result.current.error).toBeNull()
+    releaseSpace()
+    await advance(0)
+    await act(async () => {
+      h.state.batchCalls[0].resolve('long dictation')
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(onCommit).toHaveBeenCalledWith('long dictation')
+  })
+
+  it('audio captured before the stream session exists (backfill + early speech) is flushed into it in order', async () => {
+    h.state.deferStream = true
+    setup()
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    // The capture emits chunks while startPttStream is still pending.
+    const early1 = new Int16Array([1, 1])
+    const early2 = new Int16Array([2, 2])
+    act(() => {
+      h.state.captureOpts[0].onChunk?.(early1)
+      h.state.captureOpts[0].onChunk?.(early2)
+    })
+    expect(h.state.streams[0].feed).not.toHaveBeenCalled()
+    // Session resolves → queued audio flushes first, then live audio flows direct.
+    await act(async () => {
+      h.state.streamReleasers[0]()
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const live = new Int16Array([3, 3])
+    act(() => h.state.captureOpts[0].onChunk?.(live))
+    expect(h.state.streams[0].feed.mock.calls.map((c) => c[0])).toEqual([early1, early2, live])
   })
 })
 

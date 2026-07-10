@@ -54,9 +54,12 @@ export const TOO_LONG_HINT_MS = 4000
 /** Error strip auto-clear (macOS shows batch errors ~3s then resets). */
 export const ERROR_STRIP_MS = 3000
 
-/** Last-resort escape hatch: no capture may hold non-idle UI longer than this
- *  (macOS thinkingWatchdogDelay). Every inner wait is far shorter — this catches
- *  bugs, not flows; a stuck "Transcribing…" is impossible. */
+/** Last-resort escape hatch for the POST-RELEASE pipeline: from release, no
+ *  capture may hold the "Transcribing…" UI longer than this (macOS
+ *  thinkingWatchdogDelay). Armed at RELEASE — never during the hold itself,
+ *  which is user-bounded and may legitimately run for minutes. Every inner wait
+ *  (drain 0.3s + finalize 3s + batch 20s) is shorter — this catches bugs, not
+ *  flows; a stuck "Transcribing…" is impossible. */
 export const WATCHDOG_MS = 25000
 
 /** The mic graph is acquired at Space KEY-DOWN (macOS starts capture at key-down

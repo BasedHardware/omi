@@ -222,6 +222,10 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
   let capped = false
   let detached = false
 
+  // The stream lane must hear the backfill too — otherwise a fast stream commit
+  // would be missing the opening words that only the batch buffer had.
+  for (const c of chunks) opts.onChunk?.(c)
+
   const onPcm = (i16: Int16Array): void => {
     if (bufferedBytes + i16.byteLength <= MAX_BUFFER_BYTES) {
       chunks.push(i16)

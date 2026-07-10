@@ -70,6 +70,11 @@ type Job = {
   capturePromise: Promise<PttCapture | null> | null
   stream: PttStream | null
   streamStopped: boolean
+  /** Chunks produced before the stream session resolved (incl. the key-down
+   *  backfill) — flushed into the stream in order the moment it exists, so the
+   *  stream lane hears the same audio the batch buffer holds. Bounded. */
+  pendingStream: Int16Array[]
+  pendingStreamBytes: number
   buffer: Int16Array | null
   abort: AbortController | null
   deadlineTimer: ReturnType<typeof setTimeout> | null
@@ -78,6 +83,12 @@ type Job = {
    *  warm mic backfills this much pre-roll so the threshold costs no speech. */
   backfillMs: number
 }
+
+/** Cap on renderer-side chunks queued while the stream session is still being
+ *  created (~5s of 16kHz PCM16, mirroring the main process's pre-OPEN buffer).
+ *  If the stream takes longer than this it's effectively dead — the batch lane
+ *  owns the capture anyway, so dropping oldest is harmless. */
+const PENDING_STREAM_MAX_BYTES = 16000 * 2 * 5
 
 function isSpace(e: { key: string; code: string }): boolean {
   return e.key === ' ' || e.code === 'Space'
@@ -93,6 +104,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // The ACTIVE (foreground) job — the one bound to UI state. Superseded jobs run
   // headless until they finish.
   const jobRef = useRef<Job | null>(null)
+  // Every job still in flight (foreground + background) — so unmount can cancel
+  // background captures too, not just the active one.
+  const liveJobsRef = useRef(new Set<Job>())
   // Mirrors the active job's phase for synchronous reads in key handlers.
   const recordingRef = useRef(false)
   // Pending hold timer (armed at key-down; firing starts the capture).
@@ -157,7 +171,20 @@ export function usePushToTalk(opts: Options): PushToTalk {
       switch (eff.kind) {
         case 'startCapture': {
           job.capturePromise = startPttCapture({
-            onChunk: (pcm) => job.stream?.feed(pcm),
+            onChunk: (pcm) => {
+              // Until the stream session exists, queue (bounded) so the stream
+              // lane hears the backfill + early speech too — otherwise the fast
+              // short-circuit commit would be missing the opening words.
+              if (job.stream) {
+                job.stream.feed(pcm)
+              } else if (!job.streamStopped) {
+                job.pendingStream.push(pcm)
+                job.pendingStreamBytes += pcm.byteLength
+                while (job.pendingStreamBytes > PENDING_STREAM_MAX_BYTES && job.pendingStream.length > 1) {
+                  job.pendingStreamBytes -= job.pendingStream.shift()!.byteLength
+                }
+              }
+            },
             onCapped: () => dispatch(job, { type: 'BUFFER_CAPPED' }),
             backfillMs: job.backfillMs
           })
@@ -189,6 +216,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
                 stream.stop()
                 return
               }
+              // Flush the audio captured while the session was being created
+              // (backfill + early speech), in order, then go live.
+              for (const pcm of job.pendingStream) stream.feed(pcm)
+              job.pendingStream = []
+              job.pendingStreamBytes = 0
               job.stream = stream
             })
             .catch(() => dispatch(job, { type: 'STREAM_DEAD' }))
@@ -216,6 +248,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
           job.streamStopped = true
           job.stream?.stop()
           job.stream = null
+          job.pendingStream = []
+          job.pendingStreamBytes = 0
           break
         }
         case 'sendFinalize': {
@@ -270,6 +304,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
     if (job.state.phase === 'idle' && prevPhase !== 'idle') {
       clearJobTimers(job)
+      liveJobsRef.current.delete(job)
       // The gesture completed (committed / hinted / silent / failed) — cancel is
       // the one exit that isn't a completed gesture. Holding→idle only happens on
       // cancel/watchdog, so a threshold-crossed-but-aborted hold doesn't count.
@@ -294,6 +329,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
       capturePromise: null,
       stream: null,
       streamStopped: false,
+      pendingStream: [],
+      pendingStreamBytes: 0,
       buffer: null,
       abort: null,
       deadlineTimer: null,
@@ -301,18 +338,23 @@ export function usePushToTalk(opts: Options): PushToTalk {
       backfillMs: keyDownAtRef.current > 0 ? Date.now() - keyDownAtRef.current : 0
     }
     jobRef.current = job
+    liveJobsRef.current.add(job)
     setError(null)
     setHint(null)
     // Take back the space(s) auto-repeat typed while holding, then clear the box
     // so the live transcript renders cleanly.
     optsRef.current.restoreDraft(snapshotRef.current)
-    job.watchdogTimer = setTimeout(() => dispatch(job, { type: 'WATCHDOG' }), WATCHDOG_MS)
     dispatch(job, { type: 'HOLD_START' })
   }
 
   const release = (): void => {
     const job = jobRef.current
-    if (job && job.state.phase === 'holding') dispatch(job, { type: 'RELEASE' })
+    if (job && job.state.phase === 'holding') {
+      // The watchdog guards the post-RELEASE pipeline only — the hold itself is
+      // user-bounded (the key is down) and may legitimately run for minutes.
+      job.watchdogTimer = setTimeout(() => dispatch(job, { type: 'WATCHDOG' }), WATCHDOG_MS)
+      dispatch(job, { type: 'RELEASE' })
+    }
   }
 
   const cancel = (): void => {
@@ -415,8 +457,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
       if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
-      const job = jobRef.current
-      if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
+      // Cancel EVERY in-flight job (foreground and superseded background ones) so
+      // no timer or transport callback fires into an unmounted tree.
+      for (const job of [...liveJobsRef.current]) {
+        if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
+      }
       releasePttMic()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

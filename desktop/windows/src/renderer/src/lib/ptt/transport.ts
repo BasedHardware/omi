@@ -70,13 +70,18 @@ export async function startPttStream(cb: PttStreamCallbacks): Promise<PttStream>
     }
   })
 
-  await window.omi.listenStart({
-    sessionId,
-    source: 'mic',
-    token,
-    language: getPreferences().language,
-    mode: 'ptt'
-  })
+  try {
+    await window.omi.listenStart({
+      sessionId,
+      source: 'mic',
+      token,
+      language: getPreferences().language,
+      mode: 'ptt'
+    })
+  } catch (e) {
+    unsub()
+    throw e
+  }
 
   return {
     feed: (pcm: Int16Array): void => {
