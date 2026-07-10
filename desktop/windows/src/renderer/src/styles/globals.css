@@ -398,20 +398,21 @@
     }
   }
 
-  /* Chat bubble entrance — a gentle, slow rise + fade for a smooth feel. */
+  /* Chat message entrance — quick, well-damped rise + fade (macOS content
+     springs land in 220–350ms with minimal overshoot). */
   .bubble-in {
-    animation: bubbleIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: bubbleIn 0.38s var(--ease-out) both;
     will-change: transform, opacity;
   }
 
   @keyframes bubbleIn {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(8px) scale(0.985);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
     }
   }
 
