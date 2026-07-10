@@ -36,10 +36,16 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   sendRef.current = send
   const sendChainRef = useRef<Promise<void>>(Promise.resolve())
+  // Whether the message list should stay pinned to the live edge (see the
+  // ResizeObserver pin effect below).
+  const followRef = useRef(true)
   const enqueueSend = useCallback((text: string): void => {
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
     // user asked something in the bar.
     window.omiOverlay.notifyAsked()
+    // Asking something = wanting to see the answer: re-engage bottom-following
+    // even if the reader had scrolled up earlier.
+    followRef.current = true
     sendChainRef.current = sendChainRef.current.then(() => sendRef.current(text)).catch(() => {})
   }, [])
 
@@ -87,18 +93,36 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // messages wrapper re-pins on EVERY height change — new message, streamed chunk,
   // or animation — so the latest line is always visible. Re-binds when the scroll
   // container mounts (it only renders once there's history).
+  //
+  // …but only while the reader is AT the live edge: scrolling up mid-reply must
+  // disengage the pin (each streamed chunk yanked the view back down — reported
+  // bug), and returning to the bottom re-engages it.
   const hasHistory = history.length > 0
   useEffect(() => {
     const el = scrollRef.current
     const content = messagesRef.current
     if (!el || !content) return
     const pin = (): void => {
-      el.scrollTop = el.scrollHeight
+      if (followRef.current) el.scrollTop = el.scrollHeight
     }
     pin()
     const ro = new ResizeObserver(pin)
     ro.observe(content)
-    return () => ro.disconnect()
+    const onWheel = (e: WheelEvent): void => {
+      // Upward wheel is reader intent to leave the live edge (only meaningful
+      // when the thread actually overflows).
+      if (e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) followRef.current = false
+    }
+    const onScroll = (): void => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) followRef.current = true
+    }
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('scroll', onScroll)
+    }
   }, [hasHistory])
 
   // Each summon: refocus the input and clear any leftover `leaving` (overlay-leave)

@@ -262,7 +262,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          // Same convention as the macOS/Flutter clients — lets the backend give
+          // Windows-appropriate answers instead of defaulting to macOS steps.
+          'X-App-Platform': 'windows'
         },
         body: JSON.stringify({ text: textToSend })
       })
