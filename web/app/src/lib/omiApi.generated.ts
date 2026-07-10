@@ -2474,8 +2474,23 @@ export interface SyncBatchRequest {
   items: Array<SyncBatchItem>;
 }
 
+export interface SyncCaptureManifestFile {
+  name: string;
+  sha256: string;
+}
+
+export interface SyncCaptureManifestRequest {
+  conversation_id: string;
+  files: Array<SyncCaptureManifestFile>;
+}
+
+export interface SyncCaptureManifestResponse {
+  manifest: string;
+}
+
 export interface SyncJobStartResponse {
   job_id: string;
+  lane?: string;
   poll_after_ms: number;
   status: string;
   total_files: number;
@@ -2486,8 +2501,12 @@ export interface SyncJobStatusResponse {
   error?: string | null;
   failed_segments?: number;
   job_id: string;
+  lane?: string;
   processed_segments?: number;
+  reason_code?: string | null;
+  recording_age_seconds?: number | null;
   result?: SyncLocalFilesResultResponse | null;
+  retry_after?: number | null;
   status: string;
   successful_segments?: number;
   total_segments?: number;
@@ -3268,6 +3287,9 @@ export interface OmiApiSchemas {
   "SubscriptionStatus": SubscriptionStatus;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
+  "SyncCaptureManifestFile": SyncCaptureManifestFile;
+  "SyncCaptureManifestRequest": SyncCaptureManifestRequest;
+  "SyncCaptureManifestResponse": SyncCaptureManifestResponse;
   "SyncJobStartResponse": SyncJobStartResponse;
   "SyncJobStatusResponse": SyncJobStatusResponse;
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
@@ -6568,6 +6590,16 @@ export interface OmiApiPaths {
       operationId: "report_message_v2_messages__message_id__report_post";
       responses: {
         "200": MessageReportResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/sync-capture-manifest": {
+    post: {
+      operationId: "create_sync_capture_manifest_v2_sync_capture_manifest_post";
+      responses: {
+        "200": SyncCaptureManifestResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12098,6 +12130,23 @@ export async function report_message_v2_messages__message_id__report_post(path: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function create_sync_capture_manifest_v2_sync_capture_manifest_post(body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<SyncCaptureManifestResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-capture-manifest`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
@@ -12413,4 +12462,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.

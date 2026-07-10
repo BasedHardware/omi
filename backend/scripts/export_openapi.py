@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v2/firmware',
     '/v2/initial-message',
     '/v2/messages',
+    '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
     '/v2/voice-message',
