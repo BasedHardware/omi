@@ -27,6 +27,7 @@
     "fixtures:audio": "node scripts/gen-audio-fixtures.mjs",
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
     "test:e2e:ptt": "node scripts/run-ptt-e2e.mjs",
+    "test:e2e:conv-sync": "node scripts/run-conv-sync-e2e.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
     "vad:playback": "node scripts/run-vad-playback.mjs",
     "soak": "node scripts/run-soak.mjs",
