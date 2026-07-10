@@ -13,6 +13,16 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+/// Whether a non-200 response from POST /v1/conversations (process in-progress
+/// conversation) is a benign race rather than a failure worth crash-reporting.
+///
+/// The backend returns 404 when there is no in-progress conversation to
+/// process — which happens when the WS auto-finalize path already consumed the
+/// in-progress conversation and cleared its Redis pointer before this
+/// client-initiated create ran. Nothing to recover; the conversation is
+/// already finalized. Reporting it floods crash reporting with noise.
+bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
+
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
@@ -24,8 +34,9 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
+    Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
   } else {
-    // TODO: Server returns 304 doesn't recover
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Failed to create conversation'),
       StackTrace.current,
