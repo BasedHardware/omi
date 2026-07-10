@@ -12,7 +12,7 @@ class McpApi {
 
     if (response != null && response.statusCode == 200) {
       final List<dynamic> body = jsonDecode(response.body);
-      return body.map((dynamic item) => McpApiKey.fromJson(item)).toList();
+      return body.map((dynamic item) => McpApiKey.fromJson(item as Map<String, dynamic>)).toList();
     } else {
       throw Exception('Failed to load API keys: ${response?.body}');
     }
@@ -27,7 +27,7 @@ class McpApi {
     );
 
     if (response != null && response.statusCode == 200) {
-      return McpApiKeyCreated.fromJson(jsonDecode(response.body));
+      return McpApiKeyCreated.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to create API key: ${response?.body}');
     }

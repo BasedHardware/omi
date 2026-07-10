@@ -24,4 +24,28 @@ final class HubEscalationTests: XCTestCase {
     XCTAssertFalse(messages[1]["content"]!.contains("Context"))
     XCTAssertFalse(messages[1]["content"]!.contains("Answer concisely for a spoken reply"))
   }
+
+  func testRejectsUnexpectedLanguageEscalationQueryForDefaultEnglishVoice() {
+    XCTAssertTrue(
+      RealtimeHubTools.shouldRejectEscalationQueryForLanguage(
+        "¿Qué es el número de serie?",
+        userLanguages: [],
+        preferredLanguages: ["en-US"]))
+  }
+
+  func testAllowsEscalationQueryInConfiguredVoiceLanguage() {
+    XCTAssertFalse(
+      RealtimeHubTools.shouldRejectEscalationQueryForLanguage(
+        "¿Qué es el número de serie?",
+        userLanguages: ["es"],
+        preferredLanguages: ["en-US"]))
+  }
+
+  func testAllowsEnglishEscalationQueryForDefaultEnglishVoice() {
+    XCTAssertFalse(
+      RealtimeHubTools.shouldRejectEscalationQueryForLanguage(
+        "What is the serial number?",
+        userLanguages: [],
+        preferredLanguages: ["en-US"]))
+  }
 }

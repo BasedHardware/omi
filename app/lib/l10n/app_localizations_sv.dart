@@ -9,6 +9,9 @@ class AppLocalizationsSv extends AppLocalizations {
   AppLocalizationsSv([String locale = 'sv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sessionen har gått ut — logga in igen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -1715,7 +1718,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -9340,7 +9348,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
+      'Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9369,16 +9377,23 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Den här enheten';
+
   @override
   String get memoryThisIphone => 'Den här iPhone';
+
   @override
   String get memoryThisPhone => 'Den här telefonen';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Så använder du Omi';
 
   @override
@@ -9480,4 +9495,88 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get latest => 'Senaste';
+
+  @override
+  String get flashFirmware => 'Installera firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Spelar in på hänget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserar inspelningar från ditt hänge…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min lagrat';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera.';
+
+  @override
+  String get connectRayBanMeta => 'Anslut Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Använd dina Ray-Ban Meta-glasögon som din Omi-inspelningsenhet för konversationer och visuell kontext. Omi öppnar Meta AI-appen för att länka dina glasögon.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Anslut via Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Slutför anslutningen i Meta AI-appen och kom sedan tillbaka hit.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Kontrollera igen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Tillåt kamera på glasögonen';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi använder dina glasögons kamera för att lägga till foton i dina konversationer. Du kan hoppa över detta och endast använda ljud.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Hoppa över för nu';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta läge med endast ljud';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Den här versionen av Omi kan använda dina glasögons mikrofon via Bluetooth. Fotografering kräver Meta-utvecklarversionen av Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Musik på din telefon pausas medan glasögonens mikrofon används.';
+
+  @override
+  String get raybanMetaContinue => 'Fortsätt';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Ta foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto begärt — det visas i din konversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon redo';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Bildtagning redo';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Inte tillgängligt i läge med endast ljud';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Fel vid anslutning till Ray-Ban Meta: $error';
+  }
 }

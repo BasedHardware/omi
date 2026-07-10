@@ -10,7 +10,7 @@ class CapabilitiesCard extends StatelessWidget {
 
   const CapabilitiesCard({super.key, required this.capabilities});
 
-  IconData _getCapabilityIcon(String id) {
+  FaIconData _getCapabilityIcon(String id) {
     switch (id) {
       case 'chat':
         return FontAwesomeIcons.solidComment;

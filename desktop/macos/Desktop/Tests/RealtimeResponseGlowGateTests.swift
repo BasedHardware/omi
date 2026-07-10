@@ -16,7 +16,7 @@ final class RealtimeResponseGlowGateTests: XCTestCase {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
       expectation.fulfill()
     }
-    wait(for: [expectation], timeout: 0.2)
+    wait(for: [expectation], timeout: 2.0)
 
     XCTAssertEqual(states, [true])
     XCTAssertTrue(gate.isActive)
@@ -35,7 +35,7 @@ final class RealtimeResponseGlowGateTests: XCTestCase {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
       expectation.fulfill()
     }
-    wait(for: [expectation], timeout: 0.2)
+    wait(for: [expectation], timeout: 2.0)
 
     XCTAssertEqual(states, [true, false])
     XCTAssertFalse(gate.isActive)

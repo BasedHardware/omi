@@ -1,52 +1,9 @@
-import importlib
-import os
-import sys
-import types
 from unittest.mock import MagicMock
 
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, BACKEND_DIR)
+import pytest
+from google.api_core.exceptions import NotFound
 
-
-class _FakeNotFound(Exception):
-    pass
-
-
-google_mod = sys.modules.setdefault('google', types.ModuleType('google'))
-api_core_mod = sys.modules.setdefault('google.api_core', types.ModuleType('google.api_core'))
-exceptions_mod = sys.modules.setdefault('google.api_core.exceptions', types.ModuleType('google.api_core.exceptions'))
-exceptions_mod.NotFound = _FakeNotFound
-setattr(google_mod, 'api_core', api_core_mod)
-setattr(api_core_mod, 'exceptions', exceptions_mod)
-
-cloud_mod = sys.modules.setdefault('google.cloud', types.ModuleType('google.cloud'))
-firestore_mod = sys.modules.setdefault('google.cloud.firestore', types.ModuleType('google.cloud.firestore'))
-firestore_v1_mod = sys.modules.setdefault('google.cloud.firestore_v1', types.ModuleType('google.cloud.firestore_v1'))
-firestore_mod.ArrayUnion = MagicMock
-firestore_mod.ArrayRemove = MagicMock
-firestore_mod.Increment = MagicMock
-firestore_mod.SERVER_TIMESTAMP = object()
-firestore_mod.DELETE_FIELD = object()
-firestore_mod.Query = MagicMock
-firestore_v1_mod.FieldFilter = MagicMock
-firestore_v1_mod.transactional = lambda fn: fn
-setattr(google_mod, 'cloud', cloud_mod)
-setattr(cloud_mod, 'firestore', firestore_mod)
-setattr(cloud_mod, 'firestore_v1', firestore_v1_mod)
-
-database_pkg = sys.modules.get('database')
-if not isinstance(database_pkg, types.ModuleType):
-    database_pkg = types.ModuleType('database')
-    sys.modules['database'] = database_pkg
-database_pkg.__path__ = [os.path.join(BACKEND_DIR, 'database')]
-
-sys.modules['database.users'] = types.ModuleType('database.users')
-sys.modules['database.redis_db'] = types.ModuleType('database.redis_db')
-sys.modules['database.redis_db'].get_user_data_protection_level = MagicMock(return_value='standard')
-sys.modules['database.redis_db'].set_user_data_protection_level = MagicMock()
-sys.modules.setdefault('utils.encryption', types.ModuleType('utils.encryption'))
-sys.modules['utils.encryption'].encrypt = lambda value, _uid: value
-sys.modules['utils.encryption'].decrypt = lambda value, _uid: value
+import database.memories as memories_module
 
 
 class _FakeDb:
@@ -78,24 +35,32 @@ def _append_commit_with_projection(**kwargs):
     return None
 
 
-def _load_memories_module(memory_ref):
-    client_mod = types.ModuleType('database._client')
-    client_mod.db = _FakeDb(memory_ref)
-    setattr(client_mod, 'get_firestore_client', lambda: client_mod.db)
-    setattr(client_mod, 'document_id_from_seed', lambda seed: f'doc-{seed}')
-    sys.modules['database._client'] = client_mod
-    sys.modules.pop('database.memories', None)
-    memories = importlib.import_module('database.memories')
-    memories.memory_ledger.append_commit = MagicMock(
-        side_effect=lambda *args, **kwargs: _append_commit_with_projection(**kwargs)
-    )
-    return memories
+@pytest.fixture
+def patch_memories(monkeypatch):
+    """Wire ``database.memories`` to a fake db rooted at ``memory_ref`` and mock the ledger.
+
+    ``database.memories`` imports cleanly now (``db`` is a lazy proxy, no import-time
+    side effects), so the sanctioned seam is ``monkeypatch.setattr`` on the module
+    attributes rather than ``sys.modules`` mutation. See backend/docs/test_isolation.md.
+    """
+
+    def _configure(memory_ref):
+        fake_db = _FakeDb(memory_ref)
+        monkeypatch.setattr(memories_module, 'get_firestore_client', lambda: fake_db)
+        monkeypatch.setattr(
+            memories_module.memory_ledger,
+            'append_commit',
+            MagicMock(side_effect=lambda *args, **kwargs: _append_commit_with_projection(**kwargs)),
+        )
+        return memories_module
+
+    return _configure
 
 
-def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog):
+def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog, patch_memories):
     memory_ref = MagicMock()
-    memory_ref.update.side_effect = _FakeNotFound('No document to update: users/u/memories/m')
-    memories = _load_memories_module(memory_ref)
+    memory_ref.update.side_effect = NotFound('No document to update: users/u/memories/m')
+    memories = patch_memories(memory_ref)
 
     assert memories.set_memory_kg_extracted('uid-abc', 'memory-1') is None
 
@@ -104,10 +69,10 @@ def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog):
     assert 'No document to update' not in caplog.text
 
 
-def test_invalidate_memory_missing_doc_is_idempotent(caplog):
+def test_invalidate_memory_missing_doc_is_idempotent(caplog, patch_memories):
     memory_ref = MagicMock()
-    memory_ref.update.side_effect = _FakeNotFound('No document to update: users/u/memories/m')
-    memories = _load_memories_module(memory_ref)
+    memory_ref.update.side_effect = NotFound('No document to update: users/u/memories/m')
+    memories = patch_memories(memory_ref)
 
     assert memories.invalidate_memory('uid-abc', 'memory-1', superseded_by='memory-2') is None
 

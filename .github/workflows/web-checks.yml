@@ -1,0 +1,119 @@
+name: Web Checks
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+concurrency:
+  group: web-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      has_admin: ${{ steps.changes.outputs.has_admin }}
+      has_frontend: ${{ steps.changes.outputs.has_frontend }}
+      has_personas: ${{ steps.changes.outputs.has_personas }}
+      has_web_app: ${{ steps.changes.outputs.has_web_app }}
+      has_web_build: ${{ steps.changes.outputs.has_web_build }}
+      has_web_lint: ${{ steps.changes.outputs.has_web_lint }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_web_lint == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            web/frontend/package-lock.json
+            web/personas-open-source/package-lock.json
+
+      - name: Lint Frontend
+        if: needs.changes.outputs.has_frontend == 'true'
+        working-directory: ./web/frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run lint:format -- --check
+
+      - name: Lint Personas
+        if: needs.changes.outputs.has_personas == 'true'
+        working-directory: ./web/personas-open-source
+        run: |
+          npm ci --legacy-peer-deps
+          npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_web_build == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            web/app/package-lock.json
+            web/admin/package-lock.json
+
+      - name: Build Web App
+        if: needs.changes.outputs.has_web_app == 'true'
+        working-directory: ./web/app
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: dummy
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
+          NEXT_PUBLIC_FIREBASE_VAPID_KEY: dummy
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Admin Dashboard
+        if: needs.changes.outputs.has_admin == 'true'
+        working-directory: ./web/admin
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: dummy
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
+          NEXT_PUBLIC_FIREBASE_VAPID_KEY: dummy
+          NEXT_PUBLIC_PLUGINS_APP_ID: dummy
+          NEXT_PUBLIC_OMI_API_URL: https://api.omiapi.com
+        run: |
+          npm ci
+          npm run build

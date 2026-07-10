@@ -28,6 +28,50 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
   static var mcpTokenURL: String { "\(mcpBaseURL)token" }
 
+  /// Registered OAuth client for ChatGPT custom connectors on this backend.
+  /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
+  /// endpoint rejects any client secret for it, so setup must leave the
+  /// secret blank. Dev registers `omi-chatgpt-dev`.
+  static var chatgptOAuthClientID: String {
+    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+  }
+
+  var cloudOAuthClientID: String? {
+    switch self {
+    case .chatgpt: return Self.chatgptOAuthClientID
+    case .claude: return "omi-claude-prod"
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return nil
+    }
+  }
+
+  var cloudOAuthClientSecret: String? {
+    switch self {
+    case .chatgpt, .claude:
+      return nil
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return nil
+    }
+  }
+
+  var cloudTokenAuthMethod: String? {
+    switch self {
+    case .chatgpt: return "none"
+    case .claude:
+      return nil
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return nil
+    }
+  }
+
+  var usesPublicCloudOAuthClient: Bool {
+    cloudOAuthClientID != nil && cloudOAuthClientSecret == nil
+  }
+
+  var requiresHostedMCPKeyForSetup: Bool {
+    !usesPublicCloudOAuthClient
+  }
+
   var title: String {
     switch self {
     case .notion: return "Notion"
@@ -62,8 +106,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
-    case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
-    case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
+    case .chatgpt:
+      return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
+    case .claude:
+      return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
     case .agents: return "Give your agent one prompt that connects Omi memories and this Mac."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
@@ -111,19 +157,30 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// - `.localAutonomous`: deterministic local CLI/config/file work.
   /// - `.browserAutonomous`: open the cloud connector in the user's default
   ///   signed-in browser and use native macOS automation, with assisted fallback
-  ///   on blockers.
-  /// - `.assisted`: open/copy only.
+  ///   on blockers. Currently unmapped: ChatGPT/Claude moved to `.assisted`
+  ///   because cross-browser AX automation is too brittle — see
+  ///   docs/cloud-connectors-roadmap.md before mapping anything back here.
+  /// - `.assisted`: deterministic open + copy, with an on-screen guidance card
+  ///   for cloud connectors. The user performs the final paste/click.
   enum MCPExecuteKind { case localAutonomous, browserAutonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
-    case .chatgpt, .claude: return .browserAutonomous
     case .claudeCode, .codex, .openclaw, .hermes: return .localAutonomous
-    case .notion, .obsidian, .gemini, .agents: return .assisted
+    case .chatgpt, .claude, .notion, .obsidian, .gemini, .agents: return .assisted
     }
   }
 
   var supportsAgentSetup: Bool {
     self == .agents
+  }
+
+  var hasLocallyVerifiableLiveSetup: Bool {
+    switch self {
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return true
+    case .notion, .obsidian, .chatgpt, .claude, .gemini:
+      return false
+    }
   }
 
   /// Whether this destination offers the classic copy/paste memory-pack export.
@@ -203,7 +260,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         steps: [
           "Open Claude → Customize → Connectors → Add custom connector",
           "Copy Name and Remote MCP server URL into the first two Claude fields",
-          "Open Advanced settings and copy OAuth Client ID and OAuth Client Secret into the matching fields",
+          "Open Advanced settings, set OAuth Client ID “\(cloudOAuthClientID ?? "")”, and leave OAuth Client Secret blank",
           "Click Add, then Connect. Syncs to Claude desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://claude.ai/customize/connectors?modal=add-custom-connector"),
@@ -215,13 +272,12 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         copyTitle: nil,
         copyText: nil,
         steps: [
-          "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
-          "Create app → name it “Omi Memory” and paste the server URL below",
-          "Authentication: OAuth. In Advanced OAuth settings set Client ID “omi”, Client Secret to your key, token auth method “client_secret_post”",
-          "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
-          "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
+          "Open ChatGPT → Settings → Apps → Advanced, then enable Developer mode",
+          "Click Create app, then fill the first visible fields: Name “Omi Memory”, Connection / server URL, and Authentication OAuth",
+          "Paste OAuth Client ID “\(cloudOAuthClientID ?? "")”, leave Client Secret blank, set token auth method “\(cloudTokenAuthMethod ?? "none")”, Auth URL, and Token URL",
+          "Click Create app, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
-        openURL: URL(string: "https://chatgpt.com/"),
+        openURL: URL(string: "https://chatgpt.com/#settings/Connectors"),
         openTitle: "Open ChatGPT"
       )
     case .claudeCode:
@@ -270,17 +326,19 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         openTitle: nil
       )
     case .openclaw:
+      let serverJSON =
+        #"{"enabled":true,"url":"\#(url)","transport":"streamable-http","headers":{"Authorization":"Bearer \#(key)"}}"#
       return MCPSetup(
         serverURL: url,
-        copyTitle: "Copy memory bank",
+        copyTitle: "Copy command",
         copyText: """
-          ## OMI memory (search FIRST)
-          - MCP: \(url)  (Authorization: Bearer \(key))
-          Before any task, search Omi memory for context; save durable new facts.
+          openclaw mcp set omi-memory \(Self.shellQuote(serverJSON))
+          openclaw mcp reload
           """,
         steps: [
-          "Paste the block below into your OpenClaw MEMORY.md (additive — don't replace it)",
-          "OpenClaw will search Omi memory first on every task",
+          "Run the command below to add the Omi MCP server to ~/.openclaw/openclaw.json",
+          "Reload OpenClaw MCP so open sessions rebuild their tool list",
+          "Add a SOUL.md note asking OpenClaw to search Omi memory first",
         ],
         openURL: nil,
         openTitle: nil
@@ -288,6 +346,45 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .notion, .obsidian, .gemini, .agents:
       return nil
     }
+  }
+
+  var mcpSetupCompletionSummary: MCPSetupCompletionSummary {
+    switch self {
+    case .codex:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Codex to load Omi Memory."
+      )
+    case .claudeCode:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Claude Code to load Omi Memory."
+      )
+    case .hermes:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Hermes to load Omi Memory."
+      )
+    case .openclaw:
+      return MCPSetupCompletionSummary(
+        title: "Connected",
+        subtitle: "OpenClaw is ready to read Omi Memory."
+      )
+    case .chatgpt, .claude:
+      return MCPSetupCompletionSummary(
+        title: "Connected",
+        subtitle: "\(title) can read Omi Memory."
+      )
+    case .notion, .obsidian, .gemini, .agents:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "\(title) is ready."
+      )
+    }
+  }
+
+  private static func shellQuote(_ value: String) -> String {
+    "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
   /// Title + body for an Omi task that asks Omi to perform this connection
@@ -305,8 +402,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         "Claude custom connector fields:",
         "Name: Omi Memory",
         "Remote MCP server URL: \(setup.serverURL)",
-        "OAuth Client ID: omi",
-        "OAuth Client Secret: \(key)",
+        "OAuth Client ID: \(cloudOAuthClientID ?? "")",
+        "Leave OAuth Client Secret blank.",
         "",
       ])
     } else {
@@ -338,9 +435,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         "Name: Omi Memory",
         "Remote MCP server URL: \(setup.serverURL)",
         "Authentication: OAuth",
-        "OAuth Client ID: omi",
-        "OAuth Client Secret: \(key)",
-        "Token auth method: client_secret_post",
+        "OAuth Client ID: \(cloudOAuthClientID ?? "")",
+        "Token auth method: \(cloudTokenAuthMethod ?? "")",
         "Auth URL: \(Self.mcpAuthorizeURL)",
         "Token URL: \(Self.mcpTokenURL)",
       ]
@@ -348,8 +444,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       values = [
         "Name: Omi Memory",
         "Remote MCP server URL: \(setup.serverURL)",
-        "OAuth Client ID: omi",
-        "OAuth Client Secret: \(key)",
+        "OAuth Client ID: \(cloudOAuthClientID ?? "")",
       ]
     default:
       return nil
@@ -372,14 +467,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       ("provider", rawValue),
       ("name", "Omi Memory"),
       ("server_url", setup.serverURL),
-      ("oauth_client_id", "omi"),
-      ("oauth_client_secret", key),
       ("submit", "true"),
     ]
+    if let clientID = cloudOAuthClientID {
+      nativeToolArgs.append(("oauth_client_id", clientID))
+    }
+    if let clientSecret = cloudOAuthClientSecret {
+      nativeToolArgs.append(("oauth_client_secret", clientSecret))
+    }
     if self == .chatgpt {
+      // Public PKCE client — no client secret; the token endpoint rejects one.
+      // oauth_client_secret is required by the tool schema — pass empty string.
       nativeToolArgs.append(contentsOf: [
         ("authentication", "OAuth"),
-        ("token_auth_method", "client_secret_post"),
+        ("token_auth_method", cloudTokenAuthMethod ?? "none"),
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
       ])
@@ -408,25 +509,123 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       "",
       "Start URL: \(openURL.absoluteString)",
       "Setup values JSON: \(valuesJSON)",
+      "Leave OAuth Client Secret blank if the form shows it.",
       "",
       "Values to enter:",
     ]
     lines.append(contentsOf: values.map { "- \($0)" })
     lines.append("")
     lines.append("Automation ladder:")
-    lines.append("1. Bring \(browserName) forward and use keyboard shortcuts/System Events to navigate if needed. Prefer Cmd-L, paste the Start URL, Enter, then wait for the page to load.")
-    lines.append("2. If \(browserName) has a Chrome-style AppleScript dictionary, use osascript to set the active tab URL and `execute javascript` to inspect labels, find inputs/buttons, and fill matching fields.")
-    lines.append("3. If JavaScript execution is unavailable, use screenshots plus Accessibility/System Events: click by visible labels, use Tab/Shift-Tab to move through fields, paste exact values from the setup JSON, and read visible text after each major step.")
-    lines.append("4. Keep using the browser that is already open/signed in. Do not launch a clean Playwright profile unless the user is already signed in there.")
-    lines.append("5. Do not install browser extensions. If the only blocker is lack of extension-based browser tools, continue with System Events instead.")
+    lines.append(
+      "1. Bring \(browserName) forward and use keyboard shortcuts/System Events to navigate if needed. Prefer Cmd-L, paste the Start URL, Enter, then wait for the page to load."
+    )
+    lines.append(
+      "2. If \(browserName) has a Chrome-style AppleScript dictionary, use osascript to set the active tab URL and `execute javascript` to inspect labels, find inputs/buttons, and fill matching fields."
+    )
+    lines.append(
+      "3. If JavaScript execution is unavailable, use screenshots plus Accessibility/System Events: click by visible labels, use Tab/Shift-Tab to move through fields, paste exact values from the setup JSON, and read visible text after each major step."
+    )
+    lines.append(
+      "4. Keep using the browser that is already open/signed in. Do not launch a clean Playwright profile unless the user is already signed in there."
+    )
+    lines.append(
+      "5. Do not install browser extensions. If the only blocker is lack of extension-based browser tools, continue with System Events instead."
+    )
     lines.append("")
     lines.append("Expected path:")
     for (index, step) in setup.steps.enumerated() {
       lines.append("\(index + 1). \(step)")
     }
     lines.append("")
-    lines.append("After setup, verify that \(title) shows Omi Memory as connected or available. If a final OAuth consent/connect button appears, click it only when it is clearly for Omi Memory.")
+    lines.append(
+      "After setup, verify that \(title) shows Omi Memory as connected or available. If a final OAuth consent/connect button appears, click it only when it is clearly for Omi Memory."
+    )
     return (taskTitle, lines.joined(separator: "\n"))
+  }
+
+  /// Field-by-field payload for assisted cloud setup — rendered as copy rows on
+  /// the on-screen guidance card so the user transfers one value at a time.
+  func assistedSetupFields(key: String) -> [CloudConnectorCopyField]? {
+    assistedSetupSections(key: key).map(CloudConnectorCopySection.flattenedFields)
+  }
+
+  /// Sectioned field payload for assisted cloud setup. Use sections when the
+  /// provider form hides some fields behind an advanced disclosure.
+  func assistedSetupSections(key: String) -> [CloudConnectorCopySection]? {
+    guard let setup = mcpSetup(key: key) else { return nil }
+    switch self {
+    case .claude:
+      // Public OAuth client: match the manual setup copy and native automation.
+      // Claude may render a secret field, but the backend expects it to stay blank.
+      return [
+        CloudConnectorCopySection(
+          id: "main_fields",
+          title: "Main fields",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Remote MCP server URL", value: setup.serverURL),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_settings",
+          title: "Advanced settings",
+          fields: [
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: cloudOAuthClientID ?? ""),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+          ]),
+      ]
+    case .chatgpt:
+      // Public PKCE client: the backend rejects token requests that carry a
+      // client secret, so the form's Client Secret field must stay empty.
+      return [
+        CloudConnectorCopySection(
+          id: "visible_fields",
+          title: "Main fields",
+          fields: [
+            CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory"),
+            CloudConnectorCopyField(
+              id: "server_url", label: "Connection / server URL", value: setup.serverURL),
+            CloudConnectorCopyField(id: "authentication", label: "Authentication", value: "OAuth"),
+          ]),
+        CloudConnectorCopySection(
+          id: "advanced_oauth_settings",
+          title: "Advanced OAuth settings",
+          fields: [
+            CloudConnectorCopyField(
+              id: "oauth_client_id", label: "OAuth Client ID", value: Self.chatgptOAuthClientID),
+            CloudConnectorCopyField(
+              id: "oauth_client_secret", label: "OAuth Client Secret", value: "", masksValue: false),
+            CloudConnectorCopyField(
+              id: "token_auth_method", label: "Token auth method", value: cloudTokenAuthMethod ?? "none",
+              masksValue: false),
+            CloudConnectorCopyField(id: "auth_url", label: "Auth URL", value: Self.mcpAuthorizeURL),
+            CloudConnectorCopyField(
+              id: "token_url", label: "Token URL", value: Self.mcpTokenURL, masksValue: false),
+          ]),
+      ]
+    default:
+      return nil
+    }
+  }
+
+  /// Short on-screen guidance card shown right after Omi opens the provider page.
+  var assistedOverlayHint: (title: String, subtitle: String)? {
+    switch self {
+    case .claude:
+      return (
+        "Finish in Claude",
+        "Copy each value into the Add custom connector form, then click Add and Connect."
+      )
+    case .chatgpt:
+      return (
+        "Finish in ChatGPT",
+        "In Settings → Apps → Advanced, enable Developer mode. Then click Create app and fill the fields below."
+      )
+    default:
+      return nil
+    }
   }
 
   private static func jsonEscaped(_ value: String) -> String {
@@ -443,6 +642,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   fileprivate var lastExportedAtKey: String { "memoryExportLastExportedAt.\(rawValue)" }
   fileprivate var detailKey: String { "memoryExportDetail.\(rawValue)" }
   fileprivate var lastExportPathKey: String { "memoryExportLastExportPath.\(rawValue)" }
+  fileprivate var connectedAtKey: String { "memoryExportConnectedAt.\(rawValue)" }
 }
 
 struct MemoryExportStatus: Sendable {
@@ -450,6 +650,47 @@ struct MemoryExportStatus: Sendable {
   let lastExportedAt: Date?
   let detailText: String?
   let isConfigured: Bool
+  let hasConnection: Bool
+}
+
+struct MCPSetupCompletionSummary: Equatable, Sendable {
+  let title: String
+  let subtitle: String
+}
+
+struct MemoryExportConnectionPresentation: Equatable {
+  let primaryActionTitle: String?
+  let completion: MCPSetupCompletionSummary?
+
+  static func make(
+    destination: MemoryExportDestination,
+    status: MemoryExportStatus?,
+    isRunning: Bool,
+    accessibilityPreflightMissing: Bool = false
+  ) -> MemoryExportConnectionPresentation {
+    if status?.hasConnection == true {
+      return MemoryExportConnectionPresentation(
+        primaryActionTitle: nil,
+        completion: destination.mcpSetupCompletionSummary
+      )
+    }
+
+    let title: String
+    if isRunning {
+      title = "Connecting…"
+    } else {
+      switch destination.mcpExecuteKind {
+      case .localAutonomous:
+        title = "Do it for me"
+      case .browserAutonomous:
+        title = accessibilityPreflightMissing ? "Grant Accessibility" : "Do it for me"
+      case .assisted:
+        title = destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
+      }
+    }
+
+    return MemoryExportConnectionPresentation(primaryActionTitle: title, completion: nil)
+  }
 }
 
 /// Rendered MCP connection instructions for a single client.
@@ -505,11 +746,28 @@ enum MemoryExportError: LocalizedError {
 actor MemoryExportService {
   static let shared = MemoryExportService()
 
+  private static let authUserIDDefaultsKey = "auth_userId"
+  private static let mcpKeyDefaultsKey = "memoryExportMCPApiKey"
+  private static let mcpKeyOwnerDefaultsKey = "memoryExportMCPApiKeyOwnerUserId"
+  private static let mcpKeyCreatedAtDefaultsKey = "memoryExportMCPApiKeyCreatedAt"
+
   private let defaults = UserDefaults.standard
   private let notionVersion = "2026-03-11"
   private let notionBaseURL = URL(string: "https://api.notion.com/v1")!
+  private var mcpKeyWarmTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
 
   func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
+    let currentMCPKey = storedMCPKey()
+    let localConnections: Set<MemoryExportDestination> = destination.supportsMCP
+      ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
+      : []
+    return status(for: destination, localMCPConnections: localConnections)
+  }
+
+  private func status(
+    for destination: MemoryExportDestination,
+    localMCPConnections: Set<MemoryExportDestination>
+  ) -> MemoryExportStatus {
     let exportedCount = max(defaults.integer(forKey: destination.exportedCountKey), 0)
 
     let lastExportedAt: Date?
@@ -521,15 +779,30 @@ actor MemoryExportService {
     }
 
     let detailText = defaults.string(forKey: destination.detailKey)
+    let hasLocalMCPConnection = localMCPConnections.contains(destination)
+    let hasConnectedTimestamp = defaults.double(forKey: destination.connectedAtKey) > 0
+    let hasConnection: Bool
+    switch destination {
+    case .claudeCode, .codex, .openclaw, .hermes:
+      hasConnection = hasLocalMCPConnection
+    case .claude:
+      hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    case .chatgpt, .notion, .obsidian, .gemini, .agents:
+      hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    }
     let isConfigured: Bool
     switch destination {
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
     case .agents:
-      isConfigured = hasStoredMCPKey && LocalAgentAPISettings.isEnabled && LocalAgentAPISettings.storedToken() != nil
+      isConfigured =
+        hasStoredMCPKey && LocalAgentAPISettings.isEnabled
+        && LocalAgentAPISettings.storedToken() != nil
     case .claudeCode, .codex, .openclaw, .hermes:
-      isConfigured = hasStoredMCPKey
-    case .notion, .chatgpt, .claude, .gemini:
+      isConfigured = hasConnection
+    case .chatgpt, .claude:
+      isConfigured = hasConnection
+    case .notion, .gemini:
       isConfigured = exportedCount > 0
     }
 
@@ -537,14 +810,16 @@ actor MemoryExportService {
       exportedCount: exportedCount,
       lastExportedAt: lastExportedAt,
       detailText: detailText,
-      isConfigured: isConfigured
+      isConfigured: isConfigured,
+      hasConnection: hasConnection
     )
   }
 
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
-    Dictionary(
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
+    return Dictionary(
       uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
-        (destination, status(for: destination))
+        (destination, status(for: destination, localMCPConnections: localConnections))
       })
   }
 
@@ -561,15 +836,27 @@ actor MemoryExportService {
 
   // MARK: - MCP key
 
-  private var mcpKeyDefaultsKey: String { "memoryExportMCPApiKey" }
-
   nonisolated var hasStoredMCPKey: Bool {
-    !(UserDefaults.standard.string(forKey: "memoryExportMCPApiKey") ?? "").isEmpty
+    let defaults = UserDefaults.standard
+    guard
+      let userId = Self.normalizedDefaultsString(defaults.string(forKey: Self.authUserIDDefaultsKey)),
+      let ownerUserId = Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyOwnerDefaultsKey)),
+      ownerUserId == userId
+    else {
+      return false
+    }
+    return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey)) != nil
   }
 
   func storedMCPKey() -> String? {
-    let value = defaults.string(forKey: mcpKeyDefaultsKey) ?? ""
-    return value.isEmpty ? nil : value
+    guard
+      let userId = currentAuthUserId(),
+      let ownerUserId = Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyOwnerDefaultsKey)),
+      ownerUserId == userId
+    else {
+      return nil
+    }
+    return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey))
   }
 
   /// Returns the cached MCP key, minting a fresh one via the backend on first use.
@@ -577,23 +864,117 @@ actor MemoryExportService {
     if let existing = storedMCPKey() {
       return existing
     }
-    return try await createNewMCPKey()
+    let ownerUserId = try requireCurrentAuthUserId()
+    if let inFlight = mcpKeyWarmTask {
+      if inFlight.ownerUserId == ownerUserId {
+        return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
+      }
+      inFlight.task.cancel()
+      mcpKeyWarmTask = nil
+    }
+
+    let task = Task<String, Error> {
+      try await APIClient.shared.createMCPKey(name: "Omi Desktop")
+    }
+    let id = UUID()
+    mcpKeyWarmTask = (ownerUserId, id, task)
+    return try await finishMCPKeyTask(task, id: id, ownerUserId: ownerUserId)
+  }
+
+  /// Returns the key for a user-triggered local connector setup. Uses an
+  /// existing cached key or in-flight warmup first, and mints only when warmup
+  /// did not prepare a key in time.
+  func mcpKeyForLocalConnectorSetup() async throws -> String {
+    if let existing = storedMCPKey() {
+      return existing
+    }
+    let ownerUserId = try requireCurrentAuthUserId()
+    if let inFlight = mcpKeyWarmTask, inFlight.ownerUserId == ownerUserId {
+      return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
+    }
+    return try await ensureMCPKey()
+  }
+
+  func warmMCPKeyForCurrentUser() async {
+    do {
+      _ = try await ensureMCPKey()
+      log("MemoryExportService: hosted MCP key ready for current user")
+    } catch {
+      log("MemoryExportService: hosted MCP key warmup failed: \(error.localizedDescription)")
+    }
   }
 
   /// Mint a fresh hosted MCP key and make future setup prompts use it.
   func createNewMCPKey() async throws -> String {
+    let ownerUserId = try requireCurrentAuthUserId()
+    mcpKeyWarmTask?.task.cancel()
+    mcpKeyWarmTask = nil
     let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
-    defaults.set(key, forKey: mcpKeyDefaultsKey)
+    storeMCPKey(key, ownerUserId: ownerUserId)
     return key
   }
 
-  func testAgentConnections(hostedKey: String, localToken: String) async throws -> AgentConnectionTestResult {
+  private func finishMCPKeyTask(
+    _ task: Task<String, Error>,
+    id: UUID,
+    ownerUserId: String
+  ) async throws -> String {
+    do {
+      let key = try await task.value
+      guard currentAuthUserId() == ownerUserId else {
+        throw MemoryExportError.requestFailed(
+          "Signed-in Omi account changed while preparing the connection key.")
+      }
+      storeMCPKey(key, ownerUserId: ownerUserId)
+      if mcpKeyWarmTask?.id == id {
+        mcpKeyWarmTask = nil
+      }
+      return key
+    } catch {
+      if mcpKeyWarmTask?.id == id {
+        mcpKeyWarmTask = nil
+      }
+      throw error
+    }
+  }
+
+  private func storeMCPKey(_ key: String, ownerUserId: String) {
+    defaults.set(key, forKey: Self.mcpKeyDefaultsKey)
+    defaults.set(ownerUserId, forKey: Self.mcpKeyOwnerDefaultsKey)
+    defaults.set(Date().timeIntervalSince1970, forKey: Self.mcpKeyCreatedAtDefaultsKey)
+  }
+
+  private func requireCurrentAuthUserId() throws -> String {
+    guard let userId = currentAuthUserId() else {
+      throw MemoryExportError.requestFailed("Sign in to Omi before creating a connection key.")
+    }
+    return userId
+  }
+
+  private func currentAuthUserId() -> String? {
+    Self.normalizedDefaultsString(defaults.string(forKey: Self.authUserIDDefaultsKey))
+  }
+
+  private nonisolated static func normalizedDefaultsString(_ value: String?) -> String? {
+    let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  func testAgentConnections(hostedKey: String, localToken: String) async throws
+    -> AgentConnectionTestResult
+  {
     async let hostedCount = testHostedMCPMemoryCount(key: hostedKey)
     async let localCount = testLocalAgentToolCount(token: localToken)
-    return try await AgentConnectionTestResult(
+    let result = try await AgentConnectionTestResult(
       hostedMemoryCount: hostedCount,
       localToolCount: localCount
     )
+    markConnected(.agents)
+    return result
+  }
+
+  func markConnected(_ destination: MemoryExportDestination) {
+    defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
   }
 
   private func testHostedMCPMemoryCount(key: String) async throws -> Int {
@@ -659,7 +1040,8 @@ actor MemoryExportService {
       throw MemoryExportError.requestFailed("Local Omi Desktop returned an invalid response.")
     }
     guard (200...299).contains(httpResponse.statusCode) else {
-      throw MemoryExportError.requestFailed("Local Omi Desktop returned HTTP \(httpResponse.statusCode).")
+      throw MemoryExportError.requestFailed(
+        "Local Omi Desktop returned HTTP \(httpResponse.statusCode).")
     }
 
     guard

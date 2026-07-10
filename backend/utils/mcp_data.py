@@ -7,10 +7,10 @@ exact same shapes without cross-importing each other (routers must never
 import from other routers).
 """
 
-from typing import List
+from typing import Any, Dict, List
 
 
-def clean_action_item(item: dict) -> dict:
+def clean_action_item(item: Dict[str, Any]) -> Dict[str, Any]:
     """Shape an action_item doc for MCP output (locked descriptions truncated)."""
     description = item.get("description", "") or ""
     if item.get("is_locked", False) and len(description) > 70:
@@ -26,7 +26,7 @@ def clean_action_item(item: dict) -> dict:
     }
 
 
-def clean_chat_message(message: dict) -> dict:
+def clean_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
     """Shape a chat message doc (drops file/conversation join noise)."""
     return {
         "id": message.get("id", ""),
@@ -37,7 +37,7 @@ def clean_chat_message(message: dict) -> dict:
     }
 
 
-def clean_person(person: dict) -> dict:
+def clean_person(person: Dict[str, Any]) -> Dict[str, Any]:
     """Shape a person/contact doc.
 
     Drops raw speech-sample audio URLs and speaker embeddings (not useful to an
@@ -69,7 +69,7 @@ def clean_folder(folder: dict) -> dict:
     }
 
 
-def clean_screen_activity_row(row: dict) -> dict:
+def clean_screen_activity_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Shape a screen_activity doc into snake_case fields."""
     return {
         "id": row.get("id"),

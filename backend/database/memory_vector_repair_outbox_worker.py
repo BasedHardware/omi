@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from google.cloud import firestore
 
@@ -22,14 +22,14 @@ VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS = "completed"
 VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS = "dead_letter"
 VECTOR_REPAIR_PURGE_EVENT_TYPE = "vector_repair_purge"
 
-_TERMINAL_OR_LEASED_STATUSES = {
-    VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
-    VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
-    VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS,
-}
 _DELETE_REASONS = {"missing_authoritative_item"}
 _TOMBSTONE_STATUSES = {"deleted", "tombstoned", "purged", MemoryItemStatus.tombstoned.value}
 _TOMBSTONE_SOURCE_STATES = {SourceState.missing.value, SourceState.tombstoned.value, SourceState.purged.value}
+
+
+def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Typed shim around firestore.transactional (SDK stub gap)."""
+    return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class VectorRepairOutboxWorkerTickConfig:
 
 def run_vector_repair_outbox_worker_tick(
     *,
-    db_client,
+    db_client: Any,
     uid: str,
     config: VectorRepairOutboxWorkerTickConfig,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
@@ -158,13 +158,13 @@ def _attach_vector_repair_outbox_worker_telemetry(
 
 
 def _validate_worker_tick_inputs(*, uid: str, config: VectorRepairOutboxWorkerTickConfig) -> None:
-    if not isinstance(uid, str) or not uid.strip():
+    if not isinstance(uid, str) or not uid.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("uid is required")
-    if not isinstance(config, VectorRepairOutboxWorkerTickConfig):
+    if not isinstance(config, VectorRepairOutboxWorkerTickConfig):  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("config is required")
-    if not isinstance(config.enabled, bool):
+    if not isinstance(config.enabled, bool):  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("config.enabled must be boolean")
-    if not isinstance(config.worker_id, str) or not config.worker_id.strip():
+    if not isinstance(config.worker_id, str) or not config.worker_id.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("config.worker_id is required")
     if config.limit < 1:
         raise ValueError("config.limit must be positive")
@@ -191,7 +191,7 @@ def _empty_worker_tick_summary(*, uid: str, config: VectorRepairOutboxWorkerTick
 
 def lease_vector_repair_purge_outbox_records(
     *,
-    db_client,
+    db_client: Any,
     uid: str,
     worker_id: str,
     limit: int = 25,
@@ -212,9 +212,9 @@ def lease_vector_repair_purge_outbox_records(
     to `process_vector_repair_purge_outbox_records(...)`; the stored document
     is marked `in_progress` with lease metadata to prevent duplicate leases.
     """
-    if not isinstance(uid, str) or not uid.strip():
+    if not isinstance(uid, str) or not uid.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("uid is required")
-    if not isinstance(worker_id, str) or not worker_id.strip():
+    if not isinstance(worker_id, str) or not worker_id.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("worker_id is required")
     if limit < 1:
         raise ValueError("limit must be positive")
@@ -225,32 +225,46 @@ def lease_vector_repair_purge_outbox_records(
     now_iso = observed_now.isoformat()
     lease_expires_at = (observed_now + timedelta(seconds=lease_seconds)).isoformat()
     collection_path = MemoryCollections(uid=uid).memory_outbox
-    query = (
+    pending_query = (
         db_client.collection(collection_path)
         .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
         .where("status", "==", VECTOR_REPAIR_OUTBOX_PENDING_STATUS)
         .where("available_at", "<=", now_iso)
         .limit(limit)
     )
+    expired_lease_query = (
+        db_client.collection(collection_path)
+        .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
+        .where("status", "==", VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS)
+        .where("lease_expires_at", "<=", now_iso)
+        .limit(limit)
+    )
 
     leased: List[Dict[str, Any]] = []
-    for snapshot in query.stream():
-        path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
-        claimed = _claim_vector_repair_purge_outbox_snapshot(
-            db_client=db_client,
-            path=path,
-            worker_id=worker_id,
-            now_iso=now_iso,
-            lease_expires_at=lease_expires_at,
-        )
-        if claimed is not None:
-            leased.append(claimed)
+    seen_paths: set[str] = set()
+    for query in (pending_query, expired_lease_query):
+        for snapshot in query.stream():
+            if len(leased) >= limit:
+                return leased
+            path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            claimed = _claim_vector_repair_purge_outbox_snapshot(
+                db_client=db_client,
+                path=path,
+                worker_id=worker_id,
+                now_iso=now_iso,
+                lease_expires_at=lease_expires_at,
+            )
+            if claimed is not None:
+                leased.append(claimed)
     return leased
 
 
 def ack_vector_repair_purge_outbox_record(
     *,
-    db_client,
+    db_client: Any,
     record: Dict[str, Any],
     patch: Dict[str, Any],
     now: Optional[datetime] = None,
@@ -263,7 +277,7 @@ def ack_vector_repair_purge_outbox_record(
     `attempt_count`, `last_error`, and `action`. Write failures deliberately
     propagate so callers can account for ambiguous acks instead of dropping them.
     """
-    if not isinstance(patch, dict) or not patch:
+    if not isinstance(patch, dict) or not patch:  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers
         raise ValueError("patch is required")
     path = record.get("outbox_path")
     if not isinstance(path, str) or not path.strip():
@@ -278,7 +292,7 @@ def ack_vector_repair_purge_outbox_record(
 
 def _claim_vector_repair_purge_outbox_snapshot(
     *,
-    db_client,
+    db_client: Any,
     path: str,
     worker_id: str,
     now_iso: str,
@@ -314,11 +328,11 @@ def _claim_vector_repair_purge_outbox_snapshot(
     )
 
 
-@firestore.transactional
+@_typed_transactional
 def _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
-    transaction,
+    transaction: Any,
     *,
-    db_client,
+    db_client: Any,
     path: str,
     worker_id: str,
     now_iso: str,
@@ -336,8 +350,8 @@ def _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
 
 def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
     *,
-    transaction,
-    db_client,
+    transaction: Any,
+    db_client: Any,
     path: str,
     worker_id: str,
     now_iso: str,
@@ -347,17 +361,18 @@ def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
     snapshot = doc_ref.get(transaction=transaction)
     if not getattr(snapshot, "exists", False):
         return None
-    record = snapshot.to_dict() or {}
+    record: Dict[str, Any] = cast(Dict[str, Any], snapshot.to_dict() or {})
     if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
+    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
     transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
 
 def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
     *,
-    db_client,
+    db_client: Any,
     path: str,
     worker_id: str,
     now_iso: str,
@@ -367,10 +382,11 @@ def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
     snapshot = doc_ref.get()
     if not getattr(snapshot, "exists", False):
         return None
-    record = snapshot.to_dict() or {}
+    record: Dict[str, Any] = cast(Dict[str, Any], snapshot.to_dict() or {})
     if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
+    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
     doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
@@ -378,10 +394,14 @@ def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
 def _is_claimable_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:
     if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
         return False
-    if record.get("status") != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
-        return False
-    available_at = record.get("available_at")
-    return isinstance(available_at, str) and available_at <= now_iso
+    status = record.get("status")
+    if status == VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
+        available_at = record.get("available_at")
+        return isinstance(available_at, str) and available_at <= now_iso
+    if status == VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS:
+        lease_expires_at = record.get("lease_expires_at")
+        return isinstance(lease_expires_at, str) and lease_expires_at <= now_iso
+    return False
 
 
 def _lease_patch(*, worker_id: str, now_iso: str, lease_expires_at: str) -> Dict[str, Any]:
@@ -416,7 +436,7 @@ def process_vector_repair_purge_outbox_records(
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
     observed_now = _iso_now(now)
-    seen_idempotency_keys = set()
+    seen_idempotency_keys: set[str] = set()
     actions: List[Dict[str, str]] = []
     processed_count = 0
     skipped_count = 0
@@ -521,7 +541,8 @@ def _has_tombstone_or_delete_precedence(item: Any) -> bool:
 
 def _get_item_value(item: Any, key: str) -> Any:
     if isinstance(item, dict):
-        return item.get(key)
+        typed_item: Dict[str, Any] = cast(Dict[str, Any], item)
+        return typed_item.get(key)
     return getattr(item, key, None)
 
 

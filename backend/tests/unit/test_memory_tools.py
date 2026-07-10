@@ -1,19 +1,4 @@
-import sys
-import types
-from unittest.mock import MagicMock
-
 import pytest
-
-google_stub = sys.modules.setdefault('google', types.ModuleType('google'))
-cloud_stub = sys.modules.setdefault('google.cloud', types.ModuleType('google.cloud'))
-firestore_v1_stub = sys.modules.setdefault('google.cloud.firestore_v1', types.ModuleType('google.cloud.firestore_v1'))
-firestore_v1_stub.transactional = lambda func: func
-google_stub.cloud = cloud_stub
-
-client_stub = types.ModuleType('database._client')
-client_stub.db = MagicMock()
-client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
-sys.modules['database._client'] = client_stub
 
 from database import memory_ledger
 from database.memory_ledger import HeadConflict

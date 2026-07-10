@@ -10,7 +10,9 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
+import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -37,6 +39,49 @@ class _FoundDevicesState extends State<FoundDevices> {
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
+  }
+
+  Future<void> _handleRayBanMetaOnboarding(BtDevice device, OnboardingProvider provider) async {
+    try {
+      final host = RayBanMetaHostAPI();
+      final mode = await host.getAvailabilityMode();
+
+      var needsSetup = device.id == RayBanMetaDiscoverer.setupPlaceholderId;
+      if (mode == 'full' && !needsSetup) {
+        final registration = await host.getRegistrationState();
+        final camera = await host.getCameraPermissionStatus();
+        needsSetup = registration != 'registered' || camera != 'granted';
+      } else if (mode != 'full') {
+        // Audio-only fallback: always explain the limitation before connecting.
+        needsSetup = true;
+      }
+
+      if (needsSetup) {
+        if (!mounted) return;
+        final ready = await RayBanMetaSetupSheet.show(context);
+        if (!ready || !mounted) return;
+      }
+
+      var target = device;
+      if (device.id == RayBanMetaDiscoverer.setupPlaceholderId) {
+        // Registration just completed — rescan so the real glasses replace the
+        // setup placeholder, then connect to them.
+        await ServiceManager.instance().device.discover(timeout: 5);
+        final real = provider.deviceList.firstWhereOrNull(
+          (d) => d.type == DeviceType.raybanMeta && d.id != RayBanMetaDiscoverer.setupPlaceholderId,
+        );
+        if (real == null) return;
+        target = real;
+      }
+
+      await provider.handleTap(device: target, isFromOnboarding: widget.isFromOnboarding, goNext: widget.goNext);
+    } catch (e) {
+      Logger.debug('Error handling Ray-Ban Meta onboarding: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _handleAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -281,6 +326,8 @@ class _FoundDevicesState extends State<FoundDevices> {
             ? () async {
                 if (device.type == DeviceType.appleWatch) {
                   await _handleAppleWatchOnboarding(device, provider);
+                } else if (device.type == DeviceType.raybanMeta) {
+                  await _handleRayBanMetaOnboarding(device, provider);
                 } else {
                   // Handle other devices
                   await provider.handleTap(

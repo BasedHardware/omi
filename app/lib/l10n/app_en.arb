@@ -1,5 +1,9 @@
 {
     "@@locale": "en",
+    "sessionExpiredSignInAgain": "Session expired — sign in again.",
+    "@sessionExpiredSignInAgain": {
+        "description": "Message shown after an expired authenticated session returns the user to sign-in"
+    },
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -11039,7 +11043,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11234,5 +11238,47 @@
     "latest": "Latest",
     "@latest": {
         "description": "Visible label for the jump-to-latest button in chat"
+    },
+    "flashFirmware": "Flash Firmware",
+    "@flashFirmware": {
+        "description": "Button on the manual firmware flash page (developer settings)"
+    },
+    "pendantRecordingTitle": "Recording on Pendant",
+    "pendantRecordingNote": "Your pendant is recording on its own. Recordings sync to your phone while the app is open.",
+    "pendantSyncingRecordings": "Syncing recordings from your pendant…",
+    "pendantMinutesStored": "~{minutes} min stored",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pendant storage is almost full — keep the app open to sync.",
+    "connectRayBanMeta": "Connect Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.",
+    "raybanMetaOpenMetaAI": "Connect through Meta AI",
+    "raybanMetaWaitingForMetaAI": "Finish connecting in the Meta AI app, then come back here.",
+    "raybanMetaCheckAgain": "Check Again",
+    "raybanMetaAllowCamera": "Allow Camera on Glasses",
+    "raybanMetaCameraExplanation": "Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.",
+    "raybanMetaSkipForNow": "Skip for Now",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta audio-only mode",
+    "raybanMetaAudioOnlyExplanation": "This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.",
+    "raybanMetaMusicPauseNote": "Music on your phone pauses while the glasses microphone is in use.",
+    "raybanMetaContinue": "Continue",
+    "raybanMetaCapturePhoto": "Capture Photo",
+    "raybanMetaPhotoRequested": "Photo requested — it will appear in your conversation.",
+    "raybanMetaMicrophoneReady": "Microphone ready",
+    "raybanMetaImageCaptureReady": "Image capture ready",
+    "raybanMetaImageCaptureUnavailable": "Unavailable in audio-only mode",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Error connecting to Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
     }
 }

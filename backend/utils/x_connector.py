@@ -36,10 +36,21 @@ from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vector
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.executors import db_executor, run_blocking
 from utils import social
+from utils.integration_telemetry import (
+    IntegrationTelemetryContext,
+    X,
+    emit_auth_refresh_attempted,
+    emit_auth_refresh_failed,
+    emit_auth_refresh_succeeded,
+    emit_sync_attempted,
+    emit_sync_failed,
+    emit_sync_succeeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +235,8 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
     refresh = integ.get('refresh_token')
     if not refresh:
         return integ['access_token']  # best effort; may be expired
+    telemetry_context = IntegrationTelemetryContext(integration_name=X, operation='refresh_token', uid=uid)
+    emit_auth_refresh_attempted(telemetry_context)
     try:
         token_resp = await _refresh(refresh)
         await run_blocking(
@@ -234,9 +247,11 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
             handle=integ.get('handle'),
             x_user_id=integ.get('x_user_id'),
         )
+        emit_auth_refresh_succeeded(telemetry_context)
         return token_resp['access_token']
     except Exception as e:
         logger.warning(f'x_connector: token refresh failed for uid={uid}: {e}')
+        emit_auth_refresh_failed(telemetry_context, e)
         return None
 
 
@@ -362,9 +377,9 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
         ):
             memory_service = MemoryService(db_client=db)
             for mdb in memory_dbs:
-                memory_service.write(uid, mdb.dict())
+                memory_service.write(uid, mdb.model_dump())
         else:
-            memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
+            memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
             upsert_memory_vectors_batch(
                 uid,
                 [
@@ -388,6 +403,8 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 
 async def sync_x_for_user(uid: str) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
+    sync_context = IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid)
+    emit_sync_attempted(sync_context)
     integ = await run_blocking(db_executor, users_db.get_integration, uid, INTEGRATION_KEY) or {}
     # Mark syncing so the desktop can show live progress while this runs in the
     # background (the OAuth callback kicks this off as a background task).
@@ -421,12 +438,22 @@ async def sync_x_for_user(uid: str) -> Dict:
                 source = 'oauth'
         except Exception as e:
             logger.warning(f'x_connector: official API sync failed for uid={uid}, falling back: {e}')
+            emit_sync_failed(
+                IntegrationTelemetryContext(
+                    integration_name=X,
+                    operation='fetch_oauth_posts',
+                    uid=uid,
+                    sync_source='oauth',
+                ),
+                e,
+            )
 
     # Fallback: RapidAPI public timeline by handle.
     if source is None:
         handle = integ.get('handle')
         if not handle:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            emit_sync_failed(sync_context, 'not_connected')
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
@@ -443,36 +470,65 @@ async def sync_x_for_user(uid: str) -> Dict:
         except Exception as e:
             logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            emit_sync_failed(
+                IntegrationTelemetryContext(
+                    integration_name=X,
+                    operation='fetch_tweets',
+                    uid=uid,
+                    sync_source='rapidapi',
+                ),
+                e,
+            )
+            emit_sync_failed(sync_context, e)
             return {'success': False, 'error': 'fetch_failed', 'new_posts': 0, 'memories_created': 0}
 
-    written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
-    # Only mine memories from posts we hadn't seen before (the raw store dedupes,
-    # but extraction is the expensive part — restrict it to genuinely new text).
-    fresh = new_posts if written == len(new_posts) else new_posts[:written]
-    # Vector-index the raw posts so agents can semantically search the actual
-    # tweets (not just the extracted memories) via the MCP search_x_posts tool.
-    # Chunk to stay within Pinecone's per-upsert vector limit (~100).
-    items_to_index = [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh]
-    for i in range(0, len(items_to_index), 100):
-        try:
-            await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
-        except Exception as e:
-            logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
-    memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
-    post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
+    try:
+        written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
+        # Only mine memories from posts we hadn't seen before (the raw store dedupes,
+        # but extraction is the expensive part — restrict it to genuinely new text).
+        fresh = new_posts if written == len(new_posts) else new_posts[:written]
+        # Vector-index the raw posts so agents can semantically search the actual
+        # tweets (not just the extracted memories) via the MCP search_x_posts tool.
+        # Chunk to stay within Pinecone's per-upsert vector limit (~100).
+        items_to_index = [
+            {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
+        ]
+        for i in range(0, len(items_to_index), 100):
+            try:
+                await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
+            except Exception as e:
+                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
+        memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
+        post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
 
-    await run_blocking(
-        db_executor,
-        users_db.set_integration,
-        uid,
-        INTEGRATION_KEY,
-        {
-            'last_synced_at': datetime.now(timezone.utc).isoformat(),
-            'last_sync_source': source,
-            'post_count': post_count,
-            'memory_count': int(integ.get('memory_count', 0)) + memories_created,
-            'syncing': False,
-        },
+        await run_blocking(
+            db_executor,
+            users_db.set_integration,
+            uid,
+            INTEGRATION_KEY,
+            {
+                'last_synced_at': datetime.now(timezone.utc).isoformat(),
+                'last_sync_source': source,
+                'post_count': post_count,
+                'memory_count': int(integ.get('memory_count', 0)) + memories_created,
+                'syncing': False,
+            },
+        )
+    except Exception as e:
+        try:
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+        except Exception as cleanup_error:
+            logger.warning(f'x_connector: failed to clear syncing after sync failure for uid={uid}: {cleanup_error}')
+        emit_sync_failed(
+            IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
+            e,
+        )
+        raise
+
+    emit_sync_succeeded(
+        IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
+        item_count=written,
+        memories_created=memories_created,
     )
     return {
         'success': True,

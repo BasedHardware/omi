@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from config.memory_rollout import PASSED, MemoryRolloutCapabilities, MemoryRolloutMode, MemoryRolloutStageGate
 from models.memory_search_gateway import SearchMode, SearchVectorHit
-from models.product_memory import MemoryTier
+from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
     VectorCandidateResult as _VectorCandidateResult,
@@ -387,6 +387,23 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     assert all((item['archive_default_visible'] is False for item in results))
     assert all((item['policy']['consumer'] == 'mcp' for item in results))
     assert all((item['policy']['archive_capability'] is False for item in results))
+
+
+def test_mcp_default_memory_adapter_excludes_pending_admission_text():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    pending = _memory_item(
+        'pending-explicit',
+        now=now,
+        content='coffee pending explicit memory',
+        processing_state=ProcessingState.pending,
+    )
+    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+
+    results = search_default_mcp_memories(
+        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
+    )
+
+    assert results == []
 
 
 def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_grant_disabled():

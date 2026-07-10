@@ -9,6 +9,9 @@ class AppLocalizationsPt extends AppLocalizations {
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'A sessão expirou — inicie sessão novamente.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9345,7 +9348,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.';
+      'Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9374,16 +9377,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Este dispositivo';
+
   @override
   String get memoryThisIphone => 'Este iPhone';
+
   @override
   String get memoryThisPhone => 'Este telefone';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Como usar o Omi';
 
   @override
@@ -9485,4 +9495,89 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get latest => 'Mais recente';
+
+  @override
+  String get flashFirmware => 'Gravar firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Gravando no pingente';
+
+  @override
+  String get pendantRecordingNote =>
+      'Seu pingente grava sozinho. As gravações são sincronizadas com o telefone enquanto o app está aberto.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizando gravações do seu pingente…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min armazenados';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar.';
+
+  @override
+  String get connectRayBanMeta => 'Conectar Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Use seus óculos Ray-Ban Meta como seu dispositivo de captura do Omi para conversas e contexto visual. O Omi abrirá o aplicativo Meta AI para vincular seus óculos.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Conectar pelo Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Conclua a conexão no aplicativo Meta AI e depois volte aqui.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Verificar novamente';
+
+  @override
+  String get raybanMetaAllowCamera => 'Permitir câmera nos óculos';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'O Omi usa a câmera dos seus óculos para adicionar fotos às suas conversas. Você pode pular esta etapa e usar apenas áudio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Pular por enquanto';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Modo somente áudio do Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Esta versão do Omi pode usar o microfone dos seus óculos via Bluetooth. A captura de fotos requer a versão de desenvolvedor Meta do Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'A música no seu telefone é pausada enquanto o microfone dos óculos está em uso.';
+
+  @override
+  String get raybanMetaContinue => 'Continuar';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Capturar foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto solicitada — ela aparecerá na sua conversa.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microfone pronto';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Captura de imagem pronta';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Indisponível no modo somente áudio';
+
+  @override
+  String get raybanMetaCamera => 'Câmera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Erro ao conectar ao Ray-Ban Meta: $error';
+  }
 }

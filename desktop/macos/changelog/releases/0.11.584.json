@@ -1,0 +1,8 @@
+{
+  "version": "0.11.584",
+  "date": "2026-07-01",
+  "changes": [
+    "Home: renamed the Connect your AI section to \"Use omi memory anywhere\" with a clearer subtitle",
+    "Fixed Free chat quota counting so internal desktop AI tool loops no longer consume multiple questions"
+  ]
+}

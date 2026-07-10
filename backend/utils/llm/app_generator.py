@@ -4,14 +4,23 @@ Generates app configuration from a natural language prompt using LLM
 """
 
 import json
+import re
 import base64
 import httpx
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 from pydantic import BaseModel
 from openai import OpenAI
 
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import generate_image_via_gateway, should_route_features_through_gateway
+
+
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
+
 
 # App categories available in the system
 APP_CATEGORIES = [
@@ -110,7 +119,7 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
     response = await get_llm('app_generator').ainvoke(messages)
 
     # Parse the JSON response
-    content = response.content.strip()
+    content = _content_str(response).strip()
 
     # Handle potential markdown code blocks
     if content.startswith("```"):
@@ -122,8 +131,6 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
         app_data = json.loads(content)
     except json.JSONDecodeError:
         # Try to extract JSON from the response
-        import re
-
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             app_data = json.loads(json_match.group())
@@ -153,8 +160,6 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
-    client = OpenAI()
-
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".
 
@@ -167,17 +172,40 @@ Design requirements:
 - Simple geometric shapes or abstract representation
 - Professional and polished look
 - Should work well at small sizes (app icon)
-- No text or letters in the icon
-- Vibrant but not overwhelming colors
-- Style: Similar to modern iOS/Android app icons"""
+    - No text or letters in the icon
+    - Vibrant but not overwhelming colors
+    - Style: Similar to modern iOS/Android app icons"""
 
-    response = client.images.generate(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    if not should_route_features_through_gateway():
+        return await run_blocking(
+            llm_executor,
+            _generate_app_icon_via_openai,
+            icon_prompt,
+        )
+
+    response = await run_blocking(
+        llm_executor,
+        generate_image_via_gateway,
+        model="dall-e-3",
+        prompt=icon_prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+        response_format="b64_json",
     )
 
     # Get the base64 image data and decode it
-    image_data = response.data[0].b64_json
-    return base64.b64decode(image_data)
+    image_data = cast("list[dict[str, Any]]", response["data"])[0]["b64_json"]
+    return base64.b64decode(cast(str, image_data))
+
+
+def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
+    client = OpenAI()
+    response = client.images.generate(
+        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    )
+    image_data = cast("list[Any]", response.data)[0].b64_json
+    return base64.b64decode(cast(str, image_data))
 
 
 async def download_image_from_url(url: str) -> bytes:
@@ -201,10 +229,10 @@ def generate_description(app_name: str, description: str) -> str:
     Description: {description}
     """
     prompt = prompt.replace('    ', '').strip()
-    return get_llm('app_integration').invoke(prompt).content
+    return _content_str(get_llm('app_integration').invoke(prompt))
 
 
-def generate_description_and_emoji(app_name: str, prompt: str) -> dict:
+def generate_description_and_emoji(app_name: str, prompt: str) -> Dict[str, str]:
     """
     Generate an app description and a representative emoji for the app.
     Used by the quick template creator feature.
@@ -224,7 +252,7 @@ What it does: {prompt}"""
         [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     )
 
-    content = response.content.strip()
+    content = _content_str(response).strip()
 
     # Parse JSON from response
     if content.startswith("```"):

@@ -33,9 +33,15 @@ Usage:
 
 import argparse
 from datetime import datetime, timezone
+from typing import Any, cast
 
 import firebase_admin
 from firebase_admin import firestore
+
+# firebase_admin ships partial/py.typed stubs that surface as partially-unknown
+# member types; the SDK boundary is treated as Any (mirrors database/_client.py).
+fa: Any = cast(Any, firebase_admin)
+fs: Any = cast(Any, firestore)
 
 _PLATFORM_FROM_TOKEN_PREFIX = {
     'macos': ('desktop', 'macos'),
@@ -50,6 +56,7 @@ _PLATFORM_FROM_CONVERSATION_SOURCE = {
     'friend': ('mobile', 'mobile'),
     'openglass': ('mobile', 'mobile'),
     'apple_watch': ('mobile', 'mobile'),
+    'rayban_meta': ('mobile', 'mobile'),
     'phone': ('mobile', 'mobile'),
     'phone_call': ('mobile', 'mobile'),
     'fieldy': ('mobile', 'mobile'),
@@ -59,19 +66,26 @@ _PLATFORM_FROM_CONVERSATION_SOURCE = {
     'friend_com': ('mobile', 'mobile'),
 }
 
+# (timestamp, coarse_platform, os) — earliest signal seen wins signup_platform.
+_Earliest = tuple[Any, str, str]
 
-def classify_token(doc_id: str):
+
+def classify_token(doc_id: str) -> tuple[str, str] | None:
     prefix = doc_id.split('_', 1)[0].lower() if doc_id else ''
     return _PLATFORM_FROM_TOKEN_PREFIX.get(prefix)
 
 
-def classify_source(source: str):
+def classify_source(source: str) -> tuple[str, str] | None:
     if not source:
         return None
     return _PLATFORM_FROM_CONVERSATION_SOURCE.get(str(source).lower())
 
 
-def consider(candidate, timestamp, earliest):
+def consider(
+    candidate: tuple[str, str],
+    timestamp: Any,
+    earliest: _Earliest | None,
+) -> _Earliest | None:
     """Merge a (coarse, os, ts) signal into a (ts, coarse, os) earliest tuple."""
     coarse, os_value = candidate
     if earliest is None:
@@ -84,7 +98,7 @@ def consider(candidate, timestamp, earliest):
     return earliest
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true', help='Only print what would change')
     parser.add_argument('--limit', type=int, default=0, help='Max users to process (0 = all)')
@@ -102,9 +116,9 @@ def main():
     )
     args = parser.parse_args()
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app()
-    db = firestore.client()
+    if not fa._apps:
+        fa.initialize_app()
+    db: Any = fs.client()
 
     # The users collection has 100K+ docs; a single `stream()` blows through
     # the gRPC deadline. Paginate via `order_by(__name__).limit().start_after`
@@ -114,7 +128,7 @@ def main():
     updated = 0
     skipped_no_signal = 0
     skipped_already_set = 0
-    last_doc = None
+    last_doc: Any = None
 
     while True:
         if args.limit and scanned >= args.limit:
@@ -122,7 +136,7 @@ def main():
         query = db.collection('users').order_by('__name__').limit(page_size)
         if last_doc is not None:
             query = query.start_after(last_doc)
-        batch = list(query.stream())
+        batch: list[Any] = list(query.stream())
         if not batch:
             break
 
@@ -131,23 +145,23 @@ def main():
                 break
             scanned += 1
 
-            uid = user_snapshot.id
-            existing = user_snapshot.to_dict() or {}
+            uid = str(user_snapshot.id)
+            existing = cast(dict[str, Any], user_snapshot.to_dict() or {})
 
             if existing.get('signup_platform') and not args.force:
                 skipped_already_set += 1
                 continue
 
-            earliest = None
-            platforms_used = set()
+            earliest: _Earliest | None = None
+            platforms_used: set[str] = set()
 
             try:
                 for token in user_snapshot.reference.collection('fcm_tokens').stream():
-                    klass = classify_token(token.id)
+                    klass = classify_token(str(token.id))
                     if not klass:
                         continue
                     platforms_used.add(klass[0])
-                    created = (token.to_dict() or {}).get('created_at')
+                    created = cast(dict[str, Any], token.to_dict() or {}).get('created_at')
                     earliest = consider(klass, created, earliest)
             except Exception as e:  # noqa: BLE001 — one user's subcollection shouldn't abort the run
                 print(f'WARN fcm_tokens scan failed for {uid}: {e}')
@@ -161,8 +175,8 @@ def main():
                         user_snapshot.reference.collection('conversations').order_by('created_at').limit(50).stream()
                     )
                     for conv in convs:
-                        data = conv.to_dict() or {}
-                        klass = classify_source(data.get('source'))
+                        data = cast(dict[str, Any], conv.to_dict() or {})
+                        klass = classify_source(str(data.get('source') or ''))
                         if not klass:
                             continue
                         platforms_used.add(klass[0])
@@ -176,11 +190,11 @@ def main():
                 continue
 
             signup_at, coarse, os_value = earliest
-            update = {
+            update: dict[str, Any] = {
                 'signup_platform': coarse,
                 'signup_os': os_value,
                 'signup_platform_at': signup_at or datetime.now(timezone.utc),
-                'platforms_used': firestore.ArrayUnion(sorted(platforms_used)),
+                'platforms_used': fs.ArrayUnion(sorted(platforms_used)),
             }
 
             if args.dry_run:

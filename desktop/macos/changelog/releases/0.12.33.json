@@ -1,0 +1,10 @@
+{
+  "version": "0.12.33",
+  "date": "2026-07-06",
+  "changes": [
+    "Fixed a startup notification-permission repair that could re-run on every launch, repeatedly restarting macOS Notification Center",
+    "Fixed recordings being lost when conversation finalization repeatedly failed with a network/backend error — the app now recovers the conversation from saved local transcript segments instead of dropping it",
+    "Local diagnostics export now also redacts bare OpenAI-style keys and Authorization Basic headers",
+    "Fixed Gmail and Calendar import failing for some browser profiles by reading cookie values correctly"
+  ]
+}

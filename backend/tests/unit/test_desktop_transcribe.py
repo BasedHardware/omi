@@ -84,306 +84,337 @@ def _restore_package_paths():
         redis_db.get_chat_share = MagicMock(return_value=None)
 
 
-_restore_package_paths()
-
-# Stub models package (required before importing utils.stt.pre_recorded)
-_models_pkg = sys.modules['models']
-
-for _msub in [
-    'other',
-    'transcript_segment',
-    'chat',
-    'conversation',
-    'notification_message',
-    'app',
-    'memory',
-    'action_item',
-]:
-    _mfull = f'models.{_msub}'
-    if _mfull not in sys.modules:
-        _mm = MagicMock()
-        sys.modules[_mfull] = _mm
-        setattr(_models_pkg, _msub, _mm)
-
-# Stub database package
-_database_pkg = sys.modules['database']
-
-for _sub in [
-    '_client',
-    'action_items',
-    'announcements',
-    'apps',
-    'auth',
-    'cache',
-    'cache_manager',
-    'calendar_meetings',
-    'chat',
-    'conversations',
-    'daily_summaries',
-    'dev_api_key',
-    'fair_use',
-    'folders',
-    'goals',
-    'helpers',
-    'import_jobs',
-    'knowledge_graph',
-    'llm_usage',
-    'mcp_api_key',
-    'mem_db',
-    'memories',
-    'notifications',
-    'phone_calls',
-    'redis_db',
-    'redis_pubsub',
-    'screen_activity',
-    'tasks',
-    'trends',
-    'user_usage',
-    'users',
-    'vector_db',
-    'wrapped',
-    'people',
-    'processing_memories',
-    'plugins',
-    'sync_jobs',
-]:
-    _full = f'database.{_sub}'
-    if _full not in sys.modules:
-        _m = MagicMock()
-        sys.modules[_full] = _m
-        setattr(_database_pkg, _sub, _m)
-
-_redis_db_stub = sys.modules['database.redis_db']
-_redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 99, 0))
-_redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
-_redis_db_stub.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
-_redis_db_stub.store_chat_share = MagicMock()
-_redis_db_stub.get_chat_share = MagicMock(return_value=None)
-
-_fb = MagicMock()
-_fb.__path__ = ['firebase_admin']
-sys.modules.setdefault('firebase_admin', _fb)
-sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
-sys.modules.setdefault('firebase_admin.auth', _fb.auth)
-if not hasattr(sys.modules['firebase_admin.auth'], 'InvalidIdTokenError'):
-    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
-
-_deepgram = ModuleType('deepgram')
-_deepgram.DeepgramClient = MagicMock
-_deepgram.DeepgramClientOptions = MagicMock
-_deepgram.LiveTranscriptionEvents = MagicMock()
-sys.modules.setdefault('deepgram', _deepgram)
-
-_fal_client = ModuleType('fal_client')
-_fal_client.submit = MagicMock()
-sys.modules.setdefault('fal_client', _fal_client)
+from testing.import_isolation import stub_modules
 
 
-def _parse_options_header(value):
-    if value is None:
-        return b'', {}
-    if isinstance(value, str):
-        value = value.encode('latin-1')
+@pytest.fixture(scope="module", autouse=True)
+def _desktop_transcribe_isolation():
+    """Original module-scope stubs (database/utils/models tree + models.chat real
+    load) moved into a fixture so they don't leak across test files. The stubs are
+    load-bearing for runtime (tests exercise utils.chat/transcribe_pcm_bytes which
+    call into database.* / deepgram at runtime). stub_modules-style teardown evicts
+    everything loaded here on exit."""
+    import sys as _sys
 
-    parts = value.split(b';')
-    disposition = parts[0].strip().lower()
-    options = {}
-    for part in parts[1:]:
-        if b'=' not in part:
-            continue
-        key, raw_value = part.split(b'=', 1)
-        raw_value = raw_value.strip()
-        if len(raw_value) >= 2 and raw_value[:1] == b'"' and raw_value[-1:] == b'"':
-            raw_value = raw_value[1:-1]
-        options[key.strip().lower()] = raw_value
-    return disposition, options
-
-
-class _QuerystringParser:
-    def __init__(self, callbacks):
-        self.callbacks = callbacks
-        self.data = bytearray()
-
-    def write(self, data):
-        self.data.extend(data)
-
-    def finalize(self):
-        for item in bytes(self.data).split(b'&'):
-            if not item:
-                continue
-            name, _, value = item.partition(b'=')
-            self.callbacks['on_field_start']()
-            self.callbacks['on_field_name'](name, 0, len(name))
-            self.callbacks['on_field_data'](value, 0, len(value))
-            self.callbacks['on_field_end']()
-        self.callbacks['on_end']()
-
-
-class _MultipartParser:
-    def __init__(self, boundary, callbacks):
-        self.boundary = boundary.encode('latin-1') if isinstance(boundary, str) else boundary
-        self.callbacks = callbacks
-        self.data = bytearray()
-
-    def write(self, data):
-        self.data.extend(data)
-
-    def finalize(self):
-        delimiter = b'--' + self.boundary
-        for part in bytes(self.data).split(delimiter):
-            part = part.strip(b'\r\n')
-            if not part or part == b'--':
-                continue
-            if part.endswith(b'--'):
-                part = part[:-2].strip(b'\r\n')
-            if b'\r\n\r\n' not in part:
-                continue
-
-            header_blob, body = part.split(b'\r\n\r\n', 1)
-            self.callbacks['on_part_begin']()
-            for header in header_blob.split(b'\r\n'):
-                name, _, value = header.partition(b':')
-                name = name.strip()
-                value = value.strip()
-                self.callbacks['on_header_field'](name, 0, len(name))
-                self.callbacks['on_header_value'](value, 0, len(value))
-                self.callbacks['on_header_end']()
-            self.callbacks['on_headers_finished']()
-            self.callbacks['on_part_data'](body, 0, len(body))
-            self.callbacks['on_part_end']()
-        self.callbacks['on_end']()
-
-
-def _install_multipart_stub_if_missing():
-    if importlib.util.find_spec('python_multipart') is None and 'python_multipart' not in sys.modules:
-        python_multipart = ModuleType('python_multipart')
-        python_multipart.__version__ = '0.0.20'
-        python_multipart.MultipartParser = _MultipartParser
-        python_multipart.QuerystringParser = _QuerystringParser
-
-        python_multipart_submodule = ModuleType('python_multipart.multipart')
-        python_multipart_submodule.parse_options_header = _parse_options_header
-
-        sys.modules['python_multipart'] = python_multipart
-        sys.modules['python_multipart.multipart'] = python_multipart_submodule
-
-    if importlib.util.find_spec('multipart') is None and 'multipart' not in sys.modules:
-        multipart = ModuleType('multipart')
-        multipart.__version__ = '0.0.20'
-        multipart.MultipartParser = _MultipartParser
-        multipart.QuerystringParser = _QuerystringParser
-
-        multipart_submodule = ModuleType('multipart.multipart')
-        multipart_submodule.parse_options_header = _parse_options_header
-        multipart_submodule.shutil = _shutil
-
-        sys.modules['multipart'] = multipart
-        sys.modules['multipart.multipart'] = multipart_submodule
-
+    # Full object snapshot, not just a key set: a prior test file may have
+    # imported the real ``utils.stt.speaker_embedding`` / ``utils.conversations.factory``
+    # which this fixture replaces with ModuleType stubs. Evicting only *new* keys
+    # (the original ``_saved_keys = set(_sys.modules)`` approach) leaves those stubs
+    # in place — the real module object is never restored and the hermeticity guard
+    # flags them as leaked stubs shadowing real source. Mirroring the sanctioned
+    # ``stub_modules`` teardown: evict new keys AND restore swapped values.
+    _saved_modules = dict(_sys.modules)
+    _saved_keys = set(_saved_modules)
     try:
-        import starlette.formparsers as formparsers
-    except ImportError:
-        return
-    formparsers.multipart = sys.modules.get('python_multipart') or sys.modules.get('multipart')
-    formparsers.parse_options_header = _parse_options_header
 
+        _restore_package_paths()
 
-_install_multipart_stub_if_missing()
+        # Stub models package (required before importing utils.stt.pre_recorded)
+        _models_pkg = sys.modules['models']
 
-_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
-_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
-_speaker_embedding.extract_embedding_from_bytes = MagicMock()
-_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
-sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
-_attach_existing_module('utils.stt.speaker_embedding')
+        for _msub in [
+            'other',
+            'transcript_segment',
+            'chat',
+            'conversation',
+            'notification_message',
+            'app',
+            'memory',
+            'action_item',
+        ]:
+            _mfull = f'models.{_msub}'
+            if _mfull not in sys.modules:
+                _mm = MagicMock()
+                sys.modules[_mfull] = _mm
+                setattr(_models_pkg, _msub, _mm)
 
-_ensure_package('google', BACKEND_DIR / 'tests')
-_ensure_package('google.cloud', BACKEND_DIR / 'tests')
-_ensure_package('google.auth', BACKEND_DIR / 'tests')
-_google_auth_exceptions = _install_module('google.auth.exceptions')
-_google_auth_exceptions.DefaultCredentialsError = type('DefaultCredentialsError', (Exception,), {})
-_google_auth_transport = _install_module('google.auth.transport')
-_google_auth_transport_requests = _install_module('google.auth.transport.requests')
-_google_auth_transport_requests.Request = MagicMock
-_ensure_package('google.api_core', BACKEND_DIR / 'tests')
-_api_core_exceptions = _install_module('google.api_core.exceptions')
-_api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
-_api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
-_api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
-_gcs = _install_module('google.cloud.storage')
-_gcs.Client = MagicMock
-_tasks_v2 = _install_module('google.cloud.tasks_v2')
-_tasks_v2.CloudTasksClient = MagicMock
-_ensure_package('google.oauth2', BACKEND_DIR / 'tests')
-_id_token = _install_module('google.oauth2.id_token')
-_id_token.verify_oauth2_token = MagicMock()
-_ensure_package('google.protobuf', BACKEND_DIR / 'tests')
-_duration_pb2 = _install_module('google.protobuf.duration_pb2')
-_duration_pb2.Duration = MagicMock
+        # Stub database package
+        _database_pkg = sys.modules['database']
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
-os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+        for _sub in [
+            '_client',
+            'action_items',
+            'announcements',
+            'apps',
+            'auth',
+            'cache',
+            'cache_manager',
+            'calendar_meetings',
+            'chat',
+            'conversations',
+            'daily_summaries',
+            'dev_api_key',
+            'fair_use',
+            'folders',
+            'goals',
+            'helpers',
+            'import_jobs',
+            'knowledge_graph',
+            'llm_usage',
+            'mcp_api_key',
+            'mem_db',
+            'memories',
+            'notifications',
+            'phone_calls',
+            'redis_db',
+            'redis_pubsub',
+            'screen_activity',
+            'tasks',
+            'trends',
+            'user_usage',
+            'users',
+            'vector_db',
+            'wrapped',
+            'people',
+            'processing_memories',
+            'plugins',
+            'sync_jobs',
+        ]:
+            _full = f'database.{_sub}'
+            if _full not in sys.modules:
+                _m = MagicMock()
+                sys.modules[_full] = _m
+                setattr(_database_pkg, _sub, _m)
 
+        _redis_db_stub = sys.modules['database.redis_db']
+        _redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+        _redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+        _redis_db_stub.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
+        _redis_db_stub.store_chat_share = MagicMock()
+        _redis_db_stub.get_chat_share = MagicMock(return_value=None)
 
-@pytest.fixture(autouse=True)
-def _ensure_tmp_dir():
-    _restore_package_paths()
-    os.makedirs('/tmp', exist_ok=True)
+        _fb = MagicMock()
+        _fb.__path__ = ['firebase_admin']
+        sys.modules.setdefault('firebase_admin', _fb)
+        sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
+        sys.modules.setdefault('firebase_admin.auth', _fb.auth)
+        if not hasattr(sys.modules['firebase_admin.auth'], 'InvalidIdTokenError'):
+            sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
 
+        _deepgram = ModuleType('deepgram')
+        _deepgram.DeepgramClient = MagicMock
+        _deepgram.DeepgramClientOptions = MagicMock
+        _deepgram.LiveTranscriptionEvents = MagicMock()
+        sys.modules.setdefault('deepgram', _deepgram)
 
-# Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
-# Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
-# be a real function (not MagicMock) or it corrupts decorated function signatures.
-for _ufull in [
-    'utils.llm',
-    'utils.llm.memories',
-    'utils.llm.persona',
-    'utils.llm.chat',
-    'utils.llm.goals',
-    'utils.llm.usage_tracker',
-    'utils.conversations.process_conversation',
-    'utils.notifications',
-    'utils.other.storage',
-    'utils.other.chat_file',
-    'utils.apps',
-    'utils.retrieval',
-    'utils.retrieval.graph',
-    'utils.fair_use',
-    'utils.cloud_tasks',
-    'utils.log_sanitizer',
-    'models.fair_use',
-    'models.sync',
-    'models.processing_memory',
-    'models.integrations',
-    'models.goal',
-]:
-    sys.modules.setdefault(_ufull, MagicMock())
+        _fal_client = ModuleType('fal_client')
+        _fal_client.submit = MagicMock()
+        sys.modules.setdefault('fal_client', _fal_client)
 
-_utils_conversations_pkg = ModuleType('utils.conversations')
-_utils_conversations_pkg.__path__ = []
-_utils_conversations_pkg.__package__ = 'utils.conversations'
-_utils_conversations_factory = ModuleType('utils.conversations.factory')
-_utils_conversations_factory.deserialize_conversation = MagicMock(side_effect=lambda conversation: conversation)
-sys.modules['utils.conversations'] = _utils_conversations_pkg
-sys.modules['utils.conversations.factory'] = _utils_conversations_factory
-setattr(_utils_conversations_pkg, 'factory', _utils_conversations_factory)
+        def _parse_options_header(value):
+            if value is None:
+                return b'', {}
+            if isinstance(value, str):
+                value = value.encode('latin-1')
 
-# Force-import real models.chat (has no project deps, needed for FastAPI response_model)
-import importlib.util as _ilu
+            parts = value.split(b';')
+            disposition = parts[0].strip().lower()
+            options = {}
+            for part in parts[1:]:
+                if b'=' not in part:
+                    continue
+                key, raw_value = part.split(b'=', 1)
+                raw_value = raw_value.strip()
+                if len(raw_value) >= 2 and raw_value[:1] == b'"' and raw_value[-1:] == b'"':
+                    raw_value = raw_value[1:-1]
+                options[key.strip().lower()] = raw_value
+            return disposition, options
 
-_chat_spec = _ilu.spec_from_file_location(
-    'models.chat', os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'chat.py')
-)
-_real_chat = _ilu.module_from_spec(_chat_spec)
-_chat_spec.loader.exec_module(_real_chat)
-sys.modules['models.chat'] = _real_chat
-setattr(_models_pkg, 'chat', _real_chat)
+        class _QuerystringParser:
+            def __init__(self, callbacks):
+                self.callbacks = callbacks
+                self.data = bytearray()
 
-# Now safe to import the modules under test
-from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+            def write(self, data):
+                self.data.extend(data)
+
+            def finalize(self):
+                for item in bytes(self.data).split(b'&'):
+                    if not item:
+                        continue
+                    name, _, value = item.partition(b'=')
+                    self.callbacks['on_field_start']()
+                    self.callbacks['on_field_name'](name, 0, len(name))
+                    self.callbacks['on_field_data'](value, 0, len(value))
+                    self.callbacks['on_field_end']()
+                self.callbacks['on_end']()
+
+        class _MultipartParser:
+            def __init__(self, boundary, callbacks):
+                self.boundary = boundary.encode('latin-1') if isinstance(boundary, str) else boundary
+                self.callbacks = callbacks
+                self.data = bytearray()
+
+            def write(self, data):
+                self.data.extend(data)
+
+            def finalize(self):
+                delimiter = b'--' + self.boundary
+                for part in bytes(self.data).split(delimiter):
+                    part = part.strip(b'\r\n')
+                    if not part or part == b'--':
+                        continue
+                    if part.endswith(b'--'):
+                        part = part[:-2].strip(b'\r\n')
+                    if b'\r\n\r\n' not in part:
+                        continue
+
+                    header_blob, body = part.split(b'\r\n\r\n', 1)
+                    self.callbacks['on_part_begin']()
+                    for header in header_blob.split(b'\r\n'):
+                        name, _, value = header.partition(b':')
+                        name = name.strip()
+                        value = value.strip()
+                        self.callbacks['on_header_field'](name, 0, len(name))
+                        self.callbacks['on_header_value'](value, 0, len(value))
+                        self.callbacks['on_header_end']()
+                    self.callbacks['on_headers_finished']()
+                    self.callbacks['on_part_data'](body, 0, len(body))
+                    self.callbacks['on_part_end']()
+                self.callbacks['on_end']()
+
+        def _install_multipart_stub_if_missing():
+            if importlib.util.find_spec('python_multipart') is None and 'python_multipart' not in sys.modules:
+                python_multipart = ModuleType('python_multipart')
+                python_multipart.__version__ = '0.0.20'
+                python_multipart.MultipartParser = _MultipartParser
+                python_multipart.QuerystringParser = _QuerystringParser
+
+                python_multipart_submodule = ModuleType('python_multipart.multipart')
+                python_multipart_submodule.parse_options_header = _parse_options_header
+
+                sys.modules['python_multipart'] = python_multipart
+                sys.modules['python_multipart.multipart'] = python_multipart_submodule
+
+            if importlib.util.find_spec('multipart') is None and 'multipart' not in sys.modules:
+                multipart = ModuleType('multipart')
+                multipart.__version__ = '0.0.20'
+                multipart.MultipartParser = _MultipartParser
+                multipart.QuerystringParser = _QuerystringParser
+
+                multipart_submodule = ModuleType('multipart.multipart')
+                multipart_submodule.parse_options_header = _parse_options_header
+                multipart_submodule.shutil = _shutil
+
+                sys.modules['multipart'] = multipart
+                sys.modules['multipart.multipart'] = multipart_submodule
+
+            try:
+                import starlette.formparsers as formparsers
+            except ImportError:
+                return
+            formparsers.multipart = sys.modules.get('python_multipart') or sys.modules.get('multipart')
+            formparsers.parse_options_header = _parse_options_header
+
+        _install_multipart_stub_if_missing()
+
+        _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+        _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+        _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+        _speaker_embedding.extract_embedding_from_bytes = MagicMock()
+        _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+        sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+        _attach_existing_module('utils.stt.speaker_embedding')
+
+        _ensure_package('google', BACKEND_DIR / 'tests')
+        _ensure_package('google.cloud', BACKEND_DIR / 'tests')
+        _ensure_package('google.auth', BACKEND_DIR / 'tests')
+        _google_auth_exceptions = _install_module('google.auth.exceptions')
+        _google_auth_exceptions.DefaultCredentialsError = type('DefaultCredentialsError', (Exception,), {})
+        _google_auth_transport = _install_module('google.auth.transport')
+        _google_auth_transport_requests = _install_module('google.auth.transport.requests')
+        _google_auth_transport_requests.Request = MagicMock
+        _ensure_package('google.api_core', BACKEND_DIR / 'tests')
+        _api_core_exceptions = _install_module('google.api_core.exceptions')
+        _api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
+        _api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
+        _api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
+        _gcs = _install_module('google.cloud.storage')
+        _gcs.Client = MagicMock
+        _tasks_v2 = _install_module('google.cloud.tasks_v2')
+        _tasks_v2.CloudTasksClient = MagicMock
+        _ensure_package('google.oauth2', BACKEND_DIR / 'tests')
+        _id_token = _install_module('google.oauth2.id_token')
+        _id_token.verify_oauth2_token = MagicMock()
+        _ensure_package('google.protobuf', BACKEND_DIR / 'tests')
+        _duration_pb2 = _install_module('google.protobuf.duration_pb2')
+        _duration_pb2.Duration = MagicMock
+
+        os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
+        os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+        os.environ.setdefault(
+            'ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv'
+        )
+        os.makedirs('/tmp', exist_ok=True)
+
+        # Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
+        # Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
+        # be a real function (not MagicMock) or it corrupts decorated function signatures.
+        for _ufull in [
+            'utils.llm',
+            'utils.llm.memories',
+            'utils.llm.persona',
+            'utils.llm.chat',
+            'utils.llm.goals',
+            'utils.llm.usage_tracker',
+            'utils.conversations.process_conversation',
+            'utils.notifications',
+            'utils.other.storage',
+            'utils.other.chat_file',
+            'utils.apps',
+            'utils.retrieval',
+            'utils.retrieval.graph',
+            'utils.fair_use',
+            'utils.cloud_tasks',
+            'utils.log_sanitizer',
+            'models.fair_use',
+            'models.sync',
+            'models.processing_memory',
+            'models.integrations',
+            'models.goal',
+        ]:
+            sys.modules.setdefault(_ufull, MagicMock())
+
+        _utils_conversations_pkg = ModuleType('utils.conversations')
+        _utils_conversations_pkg.__path__ = []
+        _utils_conversations_pkg.__package__ = 'utils.conversations'
+        _utils_conversations_factory = ModuleType('utils.conversations.factory')
+        _utils_conversations_factory.deserialize_conversation = MagicMock(side_effect=lambda conversation: conversation)
+        sys.modules['utils.conversations'] = _utils_conversations_pkg
+        sys.modules['utils.conversations.factory'] = _utils_conversations_factory
+        setattr(_utils_conversations_pkg, 'factory', _utils_conversations_factory)
+
+        # Force-import real models.chat (has no project deps, needed for FastAPI response_model)
+        import importlib.util as _ilu
+
+        _chat_spec = _ilu.spec_from_file_location(
+            'models.chat', os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'chat.py')
+        )
+        _real_chat = _ilu.module_from_spec(_chat_spec)
+        _chat_spec.loader.exec_module(_real_chat)
+        sys.modules['models.chat'] = _real_chat
+        setattr(_models_pkg, 'chat', _real_chat)
+
+        # Now safe to import the modules under test
+        from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+
+        globals()['deepgram_prerecorded_from_bytes'] = deepgram_prerecorded_from_bytes
+        yield
+    finally:
+        import sys as _sys2
+
+        # evict modules added during the block, restoring process state
+        for _k in list(_sys2.modules.keys() - _saved_keys):
+            _sys2.modules.pop(_k, None)
+
+        # restore existing keys whose object was swapped in place by this fixture
+        # (e.g. ``utils.stt.speaker_embedding`` replaced with a ModuleType stub)
+        for _k, _orig in _saved_modules.items():
+            _cur = _sys2.modules.get(_k)
+            if _cur is not None and _cur is not _orig:
+                _sys2.modules[_k] = _orig
+
 
 # ---------------------------------------------------------------------------
 # deepgram_prerecorded_from_bytes: encoding/language/model options
@@ -1455,6 +1486,7 @@ class TestNoPerSessionCap:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsIdleTimeout:
     """Test that WS idle timeout is based on audio frames, not all messages."""
 
@@ -1596,6 +1628,7 @@ class TestMultipartBudgetAggregation:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsMidSessionBudgetEnforcement:
     """Test that WS closes mid-session when cumulative audio exceeds remaining budget."""
 

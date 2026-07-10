@@ -5,9 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:path_provider/path_provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -104,6 +105,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (device == null) return [];
 
     if (device.type != DeviceType.limitless) return [];
+
+    // Transcribe Later owns the pendant's flash: the native drain engine writes it
+    // to recordings, so the Sync-page WAL surface stands down while batch is on.
+    if (SharedPreferencesUtil().batchModeEnabled) return [];
 
     String deviceId = device.id;
     List<Wal> wals = [];

@@ -99,6 +99,10 @@ _stubs = [
     'google.cloud.firestore_v1.FieldFilter',
     'google',
     'google.cloud',
+    # mcp_sse imports FailedPrecondition from google.api_core.exceptions; the
+    # bare 'google' AutoMock is not a package unless __path__ is set below.
+    'google.api_core',
+    'google.api_core.exceptions',
     'pinecone',
     'typesense',
     'opuslib',
@@ -125,6 +129,12 @@ for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+# Make stubbed google.* packages importable as packages (submodule imports).
+for _pkg_name in ('google', 'google.cloud', 'google.api_core'):
+    _pkg = sys.modules.get(_pkg_name)
+    if isinstance(_pkg, ModuleType) and not hasattr(_pkg, '__path__'):
+        _pkg.__path__ = []  # type: ignore[attr-defined]
+
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
     sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
@@ -134,6 +144,7 @@ sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
     side_effect=lambda dependency, _policy: dependency
 )
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
@@ -143,6 +154,12 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+# AutoMockModule invents MagicMocks for missing attrs; those cannot be caught.
+# Reuse an existing Exception subclass if another test already installed one.
+_api_core_exc = sys.modules['google.api_core.exceptions']
+_existing_fp = getattr(_api_core_exc, 'FailedPrecondition', None)
+if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseException)):
+    _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
@@ -328,6 +345,49 @@ def test_authorize_redirect_builder_preserves_existing_query():
     assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
 
 
+def test_authorize_request_accepts_chatgpt_public_client():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.normalize_scopes', return_value=['memories.read']),
+    ):
+        validated_client, scopes = sse._validate_authorize_request(
+            'code',
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            sse.MCP_RESOURCE_URL,
+            'memories.read',
+            'a' * 64,
+            'S256',
+        )
+
+    assert validated_client == client
+    assert scopes == ['memories.read']
+
+
+def test_authorize_request_rejects_legacy_omi_client_id():
+    with patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=None):
+        with pytest.raises(ValueError, match='Unknown OAuth client'):
+            sse._validate_authorize_request(
+                'code',
+                'omi',
+                'https://chatgpt.com/connector_platform_oauth_redirect',
+                sse.MCP_RESOURCE_URL,
+                'memories.read',
+                'a' * 64,
+                'S256',
+            )
+
+
 def test_legacy_api_key_helper_rejects_oauth_tokens():
     with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
         validate_access_token.return_value = {
@@ -492,6 +552,27 @@ class TestScreenActivity:
         mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
         result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
         assert result['total_screenshots'] == 0
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
+        # Regression for #9189: a missing Firestore index must surface as a typed,
+        # actionable ToolExecutionError, not an opaque 500.
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert exc_info.value.code == -32009
+        assert 'index' in exc_info.value.message.lower()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert exc_info.value.code == -32009
 
 
 class TestDailySummaries:

@@ -9,6 +9,9 @@ class AppLocalizationsSr extends AppLocalizations {
   AppLocalizationsSr([String locale = 'sr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесија је истекла — пријавите се поново.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -1713,7 +1716,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8463,7 +8471,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9342,7 +9355,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Za sada radi sa Omi uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
+      'Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9371,16 +9384,23 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'Овај уређај';
+
   @override
   String get memoryThisIphone => 'Овај iPhone';
+
   @override
   String get memoryThisPhone => 'Овај телефон';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Како да користите Omi';
 
   @override
@@ -9483,4 +9503,88 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get latest => 'Најновије';
+
+  @override
+  String get flashFirmware => 'Инсталирај фирмвер';
+
+  @override
+  String get pendantRecordingTitle => 'Snimanje na privesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Vaš privezak snima samostalno. Snimci se sinhronizuju sa telefonom dok je aplikacija otvorena.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinhronizacija snimaka sa vašeg priveska…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min sačuvano';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.';
+
+  @override
+  String get connectRayBanMeta => 'Повежи Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Користите Ray-Ban Meta наочаре као Omi уређај за снимање разговора и визуелног контекста. Omi ће отворити Meta AI апликацију да повеже ваше наочаре.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Повежи преко Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завршите повезивање у Meta AI апликацији, а затим се вратите овде.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Провери поново';
+
+  @override
+  String get raybanMetaAllowCamera => 'Дозволи камеру на наочарима';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi користи камеру ваших наочара да дода фотографије вашим разговорима. Ово можете прескочити и користити само звук.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Прескочи за сада';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta режим само за звук';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Ова верзија Omi може да користи микрофон ваших наочара преко Bluetooth. Снимање фотографија захтева Meta програмерску верзију Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Музика на вашем телефону се паузира док се микрофон наочара користи.';
+
+  @override
+  String get raybanMetaContinue => 'Настави';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Направи фотографију';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Фотографија је затражена — појавиће се у вашем разговору.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Микрофон спреман';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Снимање слике спремно';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Није доступно у режиму само за звук';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Грешка при повезивању са Ray-Ban Meta: $error';
+  }
 }

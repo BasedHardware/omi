@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CaptureModeChip extends StatelessWidget {
@@ -13,8 +14,7 @@ class CaptureModeChip extends StatelessWidget {
 
   const CaptureModeChip({super.key, required this.deviceType});
 
-  static bool supportsDevice(DeviceType? type) =>
-      type == DeviceType.omi || type == DeviceType.openglass || type == DeviceType.friendPendant;
+  static bool supportsDevice(DeviceType? type) => CaptureController.supportsTranscribeLater(type);
 
   @override
   Widget build(BuildContext context) {
@@ -145,10 +145,7 @@ class _ModeOption extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF2A2A33),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? Colors.white.withValues(alpha: 0.55) : Colors.transparent,
-            width: 1.5,
-          ),
+          border: Border.all(color: selected ? Colors.white.withValues(alpha: 0.55) : Colors.transparent, width: 1.5),
         ),
         child: Row(
           children: [

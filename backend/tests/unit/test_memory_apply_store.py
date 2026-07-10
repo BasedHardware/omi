@@ -1,27 +1,79 @@
 import copy
 import os
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from typing import Optional
+from unittest.mock import MagicMock
 
 import pytest
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+from testing.import_isolation import load_module_fresh, stub_modules
 
-from tests.unit.memory_import_isolation import install_database_client_stub, install_firestore_transactional_stub
-
-install_database_client_stub()
-install_firestore_transactional_stub()
-
-from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+
+backend = Path(__file__).resolve().parents[2]
+
+
+def _fake_transactional():
+    def transactional(func):
+        def wrapper(transaction, *args, **kwargs):
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                result = func(transaction, *args, **kwargs)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+                return result
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
+
+        return wrapper
+
+    return transactional
+
+
+@pytest.fixture(scope="module")
+def store():
+    """Load database.memory_apply_store fresh against a fake firestore_v1.transactional.
+
+    apply_long_term_patch_firestore decorates its transaction helpers with
+    google.cloud.firestore_v1.transactional at import time. The real decorator drives a
+    real Firestore transaction lifecycle and is incompatible with the test's
+    _FakeTransaction, so a fake-transaction-compatible wrapper must precede the import.
+    """
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+
+    firestore_v1_stub = ModuleType("google.cloud.firestore_v1")
+    firestore_v1_stub.transactional = _fake_transactional()
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+
+    fakes = {
+        "database._client": client_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore_v1": firestore_v1_stub,
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.memory_apply_store",
+            os.path.join(str(backend), "database", "memory_apply_store.py"),
+        )
+        yield module
 
 
 class _FakeSnapshot:
@@ -180,11 +232,11 @@ def _target_item(**overrides):
     return MemoryItem(**data)
 
 
-def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically():
+def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically(store):
     operation = _operation()
     db = _db_with(operation=operation)
 
-    result = apply_long_term_patch_firestore(
+    result = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=_patch(),
@@ -218,7 +270,9 @@ def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_o
     assert trusted.commit_sequence == result.control_state.commit_sequence
 
 
-def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_write_domain_rows_when_source_purged():
+def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_write_domain_rows_when_source_purged(
+    store,
+):
     operation = _operation()
     purged_evidence = _evidence(
         source_state=SourceState.purged,
@@ -228,7 +282,7 @@ def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_wr
     db = _db_with(operation=operation, evidence=purged_evidence)
     caller_claims_active = _patch(evidence=[_evidence()])
 
-    result = apply_long_term_patch_firestore(
+    result = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=caller_claims_active,
@@ -240,7 +294,7 @@ def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_wr
     assert written_paths == [f"users/u1/memory_operations/{operation.operation_id}"]
 
 
-def test_firestore_apply_reads_target_memory_and_fails_closed_when_target_is_missing():
+def test_firestore_apply_reads_target_memory_and_fails_closed_when_target_is_missing(store):
     operation = _operation(
         target_memory_id="mem1",
         logical_payload={
@@ -253,7 +307,7 @@ def test_firestore_apply_reads_target_memory_and_fails_closed_when_target_is_mis
     db = _db_with(operation=operation)
     patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
 
-    result = apply_long_term_patch_firestore(
+    result = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,
@@ -265,7 +319,7 @@ def test_firestore_apply_reads_target_memory_and_fails_closed_when_target_is_mis
     assert written_paths == [f"users/u1/memory_operations/{operation.operation_id}"]
 
 
-def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_generation():
+def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_generation(store):
     operation = _operation(
         target_memory_id="mem1",
         logical_payload={
@@ -278,7 +332,7 @@ def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_
     db = _db_with(operation=operation, target_items=[_target_item()])
     patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
 
-    result = apply_long_term_patch_firestore(
+    result = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,
@@ -288,7 +342,9 @@ def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_
     assert result.status == ApplyStatus.committed
 
 
-def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target():
+def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target(
+    store,
+):
     operation = _operation(
         target_memory_id="mem1",
         logical_payload={
@@ -312,7 +368,7 @@ def test_firestore_apply_retries_committed_operation_from_stored_result_without_
     db = _db_with(control=control, operation=operation, evidence=purged_evidence)
     patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
 
-    result = apply_long_term_patch_firestore(
+    result = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,
@@ -326,7 +382,7 @@ def test_firestore_apply_retries_committed_operation_from_stored_result_without_
     assert db.transaction_obj.sets == []
 
 
-def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_commits_same_ids():
+def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_commits_same_ids(store):
     operation = _operation()
     db = _db_with(operation=operation)
     patch = _patch()
@@ -334,7 +390,7 @@ def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_comm
 
     db.transaction_obj.fail_after_sets = 2
     with pytest.raises(RuntimeError, match="injected transaction set failure"):
-        apply_long_term_patch_firestore(
+        store.apply_long_term_patch_firestore(
             uid="u1",
             operation_id=operation.operation_id,
             patch_payload=patch,
@@ -344,7 +400,7 @@ def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_comm
     assert db.docs == original_docs
 
     db.transaction_obj.fail_after_sets = None
-    retry = apply_long_term_patch_firestore(
+    retry = store.apply_long_term_patch_firestore(
         uid="u1",
         operation_id=operation.operation_id,
         patch_payload=patch,

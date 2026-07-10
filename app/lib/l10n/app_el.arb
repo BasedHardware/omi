@@ -1,5 +1,6 @@
 {
     "@@locale": "el",
+    "sessionExpiredSignInAgain": "Η συνεδρία έληξε — συνδεθείτε ξανά.",
     "appTitle": "Omi",
     "conversationTab": "Συνομιλία",
     "transcriptTab": "Απομαγνητοφώνηση",
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.",
     "transcribeLaterTitle": "Μεταγραφή αργότερα",
     "transcribeLaterDescription": "Ηχογραφήστε τώρα και κάντε τη μεταγραφή αργότερα, όποτε θέλετε, αντί σε πραγματικό χρόνο. Οι ηχογραφήσεις αποθηκεύονται στο τηλέφωνό σας και τις ανεβάζετε για να δημιουργηθούν συνομιλίες.",
-    "transcribeLaterNote": "Προς το παρόν λειτουργεί με συσκευές Omi. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.",
+    "transcribeLaterNote": "Προς το παρόν λειτουργεί με συσκευές Omi και Limitless. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.",
     "transcribeLaterStorageFull": "Ο αποθηκευτικός χώρος του τηλεφώνου σας τελειώνει, γι' αυτό η ηχογράφηση είναι σε παύση. Ελευθερώστε χώρο ή ανεβάστε τις ηχογραφήσεις σας και θα συνεχιστεί αυτόματα.",
     "unmute": "Άρση σίγασης",
     "newRecording": "Νέα εγγραφή",
@@ -3103,5 +3104,44 @@
     "deviceOnboardingIntroSubtitle": "Μια γρήγορη, πρακτική περιήγηση σε όλα όσα μπορεί να κάνει το Omi σας.",
     "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό",
     "jumpToLatestMessage": "Μετάβαση στο πιο πρόσφατο μήνυμα",
-    "latest": "Πρόσφατο"
+    "latest": "Πρόσφατο",
+    "flashFirmware": "Εγκατάσταση firmware",
+    "pendantRecordingTitle": "Εγγραφή στο μενταγιόν",
+    "pendantRecordingNote": "Το μενταγιόν σας ηχογραφεί μόνο του. Οι εγγραφές συγχρονίζονται με το τηλέφωνό σας όσο η εφαρμογή είναι ανοιχτή.",
+    "pendantSyncingRecordings": "Συγχρονισμός εγγραφών από το μενταγιόν σας…",
+    "pendantMinutesStored": "~{minutes} λεπτά αποθηκευμένα",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό.",
+    "connectRayBanMeta": "Σύνδεση Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Χρησιμοποιήστε τα γυαλιά σας Ray-Ban Meta ως συσκευή καταγραφής Omi για συνομιλίες και οπτικό πλαίσιο. Το Omi θα ανοίξει την εφαρμογή Meta AI για να συνδέσει τα γυαλιά σας.",
+    "raybanMetaOpenMetaAI": "Σύνδεση μέσω Meta AI",
+    "raybanMetaWaitingForMetaAI": "Ολοκληρώστε τη σύνδεση στην εφαρμογή Meta AI και μετά επιστρέψτε εδώ.",
+    "raybanMetaCheckAgain": "Έλεγχος ξανά",
+    "raybanMetaAllowCamera": "Να επιτρέπεται η κάμερα στα γυαλιά",
+    "raybanMetaCameraExplanation": "Το Omi χρησιμοποιεί την κάμερα των γυαλιών σας για να προσθέτει φωτογραφίες στις συνομιλίες σας. Μπορείτε να το παραλείψετε και να χρησιμοποιήσετε μόνο ήχο.",
+    "raybanMetaSkipForNow": "Παράλειψη προς το παρόν",
+    "raybanMetaAudioOnlyTitle": "Λειτουργία μόνο ήχου Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Αυτή η έκδοση του Omi μπορεί να χρησιμοποιεί το μικρόφωνο των γυαλιών σας μέσω Bluetooth. Η λήψη φωτογραφιών απαιτεί την έκδοση προγραμματιστή Meta του Omi.",
+    "raybanMetaMusicPauseNote": "Η μουσική στο τηλέφωνό σας σταματά προσωρινά όσο χρησιμοποιείται το μικρόφωνο των γυαλιών.",
+    "raybanMetaContinue": "Συνέχεια",
+    "raybanMetaCapturePhoto": "Λήψη φωτογραφίας",
+    "raybanMetaPhotoRequested": "Ζητήθηκε φωτογραφία — θα εμφανιστεί στη συνομιλία σας.",
+    "raybanMetaMicrophoneReady": "Το μικρόφωνο είναι έτοιμο",
+    "raybanMetaImageCaptureReady": "Η λήψη εικόνας είναι έτοιμη",
+    "raybanMetaImageCaptureUnavailable": "Μη διαθέσιμο σε λειτουργία μόνο ήχου",
+    "raybanMetaCamera": "Κάμερα",
+    "errorConnectingRayBanMeta": "Σφάλμα σύνδεσης με Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

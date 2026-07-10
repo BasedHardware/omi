@@ -175,6 +175,7 @@ def resolve_profile(
     env = {
         "OMI_DESKTOP_LOCAL_PROFILE": "1",
         "OMI_HARNESS_INSTANCE": cfg.instance,
+        "OMI_SKIP_AUTH_SEED": "1",
         "OMI_SKIP_BACKEND": "1",
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,

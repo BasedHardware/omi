@@ -1,4 +1,6 @@
 import SwiftUI
+import UniformTypeIdentifiers
+import OmiTheme
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
@@ -6,7 +8,9 @@ struct AIResponseView: View {
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
-    @State private var followUpText: String = ""
+    @Binding var followUpText: String
+    @State private var attachments: [ChatAttachment] = []
+    @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
 
     let userInput: String
@@ -21,6 +25,8 @@ struct AIResponseView: View {
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -29,58 +35,30 @@ struct AIResponseView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Previous chat exchanges
-                        ForEach(chatHistory) { exchange in
-                            chatExchangeView(exchange)
-                        }
-
-                        if hasUserInput(userInput) {
-                            questionBar
-                        }
-
-                        // Current response
-                        currentContentView
-
-                        // Voice follow-up indicator (shown inline when PTT is active during conversation)
-                        if isVoiceFollowUp {
-                            voiceFollowUpView
-                                .id("voiceFollowUp")
-                        }
-
-                        // Anchor for auto-scroll
-                        Color.clear.frame(height: 1).id("bottom")
-                    }
-                    .padding(.trailing, 26)
-                    .background(
-                        GeometryReader { geo -> Color in
-                            let h = geo.size.height
-                            DispatchQueue.main.async {
-                                state.reportContentHeight(h, for: .mainResponse)
-                            }
-                            return Color.clear
-                        }
-                    )
+            ChatScrollContainer(
+                bottomAnchorId: "bottom",
+                contentChangeToken: scrollContentToken,
+                scrollPaddingTrailing: 26,
+                onContentHeightChange: { height in
+                    state.reportContentHeight(height, for: .mainResponse)
                 }
-                .onChange(of: currentMessage?.text) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+            ) {
+                // Previous chat exchanges
+                ForEach(chatHistory) { exchange in
+                    chatExchangeView(exchange)
                 }
-                .onChange(of: currentMessage?.contentBlocks.count) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+
+                if hasUserInput(userInput) {
+                    questionBar
                 }
-                .onChange(of: chatHistory.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: isVoiceFollowUp) {
-                    if isVoiceFollowUp {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("voiceFollowUp", anchor: .bottom)
-                        }
-                    }
+
+                // Current response
+                currentContentView
+
+                // Voice follow-up indicator (shown inline when PTT is active during conversation)
+                if isVoiceFollowUp {
+                    voiceFollowUpView
+                        .id("voiceFollowUp")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,6 +97,68 @@ struct AIResponseView: View {
                 }
             }
         }
+    }
+
+    private var scrollContentToken: AnyHashable {
+        AnyHashable(
+            [
+                String(chatHistory.count),
+                chatHistory.last?.aiMessage.id ?? "",
+                currentMessage?.id ?? "",
+                currentMessage?.text ?? "",
+                contentBlocksToken(currentMessage?.contentBlocks ?? []),
+                String(isVoiceFollowUp),
+                voiceFollowUpTranscript,
+            ].joined(separator: "\u{1F}")
+        )
+    }
+
+    private func contentBlocksToken(_ blocks: [ChatContentBlock]) -> String {
+        blocks.map { block in
+            switch block {
+            case .text(let id, let text):
+                return ["text", id, text].joined(separator: "\u{1E}")
+            case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
+                return [
+                    "tool",
+                    id,
+                    name,
+                    String(describing: status),
+                    toolUseId ?? "",
+                    input?.summary ?? "",
+                    input?.details ?? "",
+                    output ?? "",
+                ].joined(separator: "\u{1E}")
+            case .thinking(let id, let text):
+                return ["thinking", id, text].joined(separator: "\u{1E}")
+            case .discoveryCard(let id, let title, let summary, let fullText):
+                return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+                return [
+                    "agentSpawn",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId,
+                    runId,
+                    title,
+                    objective,
+                ].joined(separator: "\u{1E}")
+            case .agentCompletion(
+                let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+            ):
+                return [
+                    "agentCompletion",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId ?? "",
+                    runId ?? "",
+                    title,
+                    promptSnippet,
+                    output,
+                    status,
+                ].joined(separator: "\u{1E}")
+            }
+        }.joined(separator: "\u{1D}")
     }
 
     private var headerView: some View {
@@ -169,7 +209,11 @@ struct AIResponseView: View {
                         .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
-                    ToolCallsGroup(calls: calls)
+                    ToolCallsGroup(
+                        calls: calls,
+                        onOpenAgent: onOpenAgent,
+                        onOpenAgentRef: onOpenAgentRef
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
@@ -177,6 +221,28 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                    AgentSpawnCard(
+                        title: title,
+                        objective: objective,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentCompletion(
+                    _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+                ):
+                    // Keep the completion card + resources on the same message —
+                    // never EmptyView the card while leaving a standalone artifact strip.
+                    AgentCompletionCard(
+                        title: title,
+                        promptSnippet: promptSnippet,
+                        output: output,
+                        status: status,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else if !message.text.isEmpty {
@@ -185,6 +251,27 @@ struct AIResponseView: View {
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        if !message.displayResources.isEmpty {
+            ChatResourceStrip(
+                resources: message.displayResources,
+                density: .compact,
+                alignment: .leading
+            )
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func openAgentRef(_ ref: AgentTimelineRef, completion: @escaping (Bool) -> Void) {
+        if let onOpenAgentRef {
+            onOpenAgentRef(ref, completion)
+            return
+        }
+        if let pillId = ref.pillId, let onOpenAgent {
+            onOpenAgent(pillId, completion)
+            return
+        }
+        completion(false)
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
@@ -193,9 +280,11 @@ struct AIResponseView: View {
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
-            case .toolCalls, .thinking:
+            case .toolCalls(_, let calls):
+                return calls.contains { $0.spawnedAgentID != nil }
+            case .thinking:
                 return false
             }
         }
@@ -318,7 +407,12 @@ struct AIResponseView: View {
                         // While streaming, show content without hover actions
                         contentBlocksView(for: message)
 
-                        if message.text.isEmpty && message.contentBlocks.isEmpty {
+                        // Only show the typing dots when nothing has rendered yet.
+                        // A message can carry a delivered artifact card (resources)
+                        // with no text/blocks — that's already content, not "still
+                        // thinking", so the trailing "..." must not linger under it.
+                        if message.text.isEmpty && message.contentBlocks.isEmpty
+                            && message.displayResources.isEmpty {
                             TypingIndicator()
                         }
                     } else {
@@ -339,7 +433,7 @@ struct AIResponseView: View {
                         NSPasteboard.general.setString(combined, forType: .string)
                     }
                 }
-            } else {
+            } else if isLoading {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .padding(.horizontal, 4)
@@ -386,39 +480,51 @@ struct AIResponseView: View {
     @State private var isSharingLink = false
 
     private var followUpInputView: some View {
-        HStack(spacing: 6) {
-            Button(action: { shareLink() }) {
-                Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
-                    .scaledFont(size: 13)
-                    .foregroundColor(showShareFeedback ? .green : .secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            if !attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: attachments,
+                    onRemove: removeAttachment
+                )
+                .environment(\.colorScheme, .dark)
             }
-            .buttonStyle(.plain)
-            .help("Copy share link")
-            .disabled(isSharingLink)
 
-            TextField("Ask follow up...", text: $followUpText)
-                .textFieldStyle(.plain)
-                .scaledFont(size: 13)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(8)
-                .focused($isFollowUpFocused)
-                .onSubmit {
-                    sendFollowUp()
+            HStack(spacing: 6) {
+                Button(action: { shareLink() }) {
+                    Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
+                        .scaledFont(size: 13)
+                        .foregroundColor(showShareFeedback ? .green : .secondary)
                 }
+                .buttonStyle(.plain)
+                .help("Copy share link")
+                .disabled(isSharingLink)
 
-            Button(action: { sendFollowUp() }) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .scaledFont(size: 20)
-                    .foregroundColor(
-                        followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? .secondary : .white
-                    )
+                TextField("Ask follow up...", text: $followUpText)
+                    .textFieldStyle(.plain)
+                    .scaledFont(size: 13)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
+                    .cornerRadius(8)
+                    .focused($isFollowUpFocused)
+                    .onSubmit {
+                        sendFollowUp()
+                    }
+
+                Button(action: { sendFollowUp() }) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(size: 20)
+                        .foregroundColor(canSendFollowUp ? .white : .secondary)
+                }
+                .disabled(!canSendFollowUp)
+                .buttonStyle(.plain)
             }
-            .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .buttonStyle(.plain)
         }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
+    }
+
+    private var canSendFollowUp: Bool {
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
     private var shareFeedbackBanner: some View {
@@ -476,9 +582,32 @@ struct AIResponseView: View {
 
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        followUpText = ""
+        let staged = attachments
+        guard !trimmed.isEmpty || !staged.isEmpty else { return }
+        followUpText = trimmed
+        attachments = []
+        if !staged.isEmpty {
+            FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
+        }
         onSendFollowUp?(trimmed)
+    }
+
+    private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
+        ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
+            addAttachmentURLs(urls)
+        }
+    }
+
+    private func addAttachmentURLs(_ urls: [URL]) {
+        let remaining = max(0, kMaxChatAttachments - attachments.count)
+        guard remaining > 0 else { return }
+        let staged = urls.prefix(remaining).compactMap(ChatAttachment.from(url:))
+        guard !staged.isEmpty else { return }
+        attachments.append(contentsOf: staged)
+    }
+
+    private func removeAttachment(_ id: String) {
+        attachments.removeAll { $0.id == id }
     }
 }
 

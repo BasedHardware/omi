@@ -5,6 +5,14 @@ import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqli
 import type {
   AdapterBinding,
   AgentArtifact,
+  AgentGrant,
+  DesktopArtifactDelivery,
+  DesktopAttentionOverride,
+  DesktopContextAccessLog,
+  DesktopContextPacket,
+  DesktopCoordinatorDispatch,
+  DesktopMemoryCandidate,
+  DesktopTaskCandidate,
   AgentEvent,
   AgentIdKind,
   AgentRun,
@@ -13,8 +21,20 @@ import type {
   NewAdapterBinding,
   NewAgentEvent,
   NewAgentArtifact,
+  NewAgentGrant,
+  ConversationTurn,
   NewAgentRun,
   NewAgentSession,
+  NewConversationTurn,
+  NewSurfaceConversation,
+  SurfaceConversation,
+  NewDesktopArtifactDelivery,
+  NewDesktopAttentionOverride,
+  NewDesktopContextAccessLog,
+  NewDesktopContextPacket,
+  NewDesktopCoordinatorDispatch,
+  NewDesktopMemoryCandidate,
+  NewDesktopTaskCandidate,
   NewRunAttempt,
   RunAttempt,
   StartupReconciliationResult,
@@ -23,6 +43,16 @@ import type {
 const DATABASE_FILENAME = "omi-agentd.sqlite3";
 const PHASE_1_MIGRATION_VERSION = 1;
 const ARTIFACT_LIFECYCLE_MIGRATION_VERSION = 2;
+const DESKTOP_CONTEXT_PACKETS_MIGRATION_VERSION = 3;
+const DESKTOP_DISPATCHES_MIGRATION_VERSION = 4;
+const DESKTOP_ARTIFACT_DELIVERIES_MIGRATION_VERSION = 5;
+const DESKTOP_CANDIDATES_MIGRATION_VERSION = 6;
+const DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION = 7;
+const DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION = 8;
+const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
+const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
+const CONVERSATION_TURNS_MIGRATION_VERSION = 11;
+const BINDING_TURN_DELIVERY_MIGRATION_VERSION = 12;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -52,6 +82,7 @@ CREATE TABLE sessions (
   surface_kind TEXT NOT NULL,
   external_ref_kind TEXT,
   external_ref_id TEXT,
+  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_client_scope + legacy_session_key two desktop releases after platonic ships.
   legacy_client_scope TEXT,
   legacy_session_key TEXT,
   default_adapter_id TEXT NOT NULL,
@@ -186,6 +217,10 @@ CREATE INDEX run_attempts_run_idx
 CREATE INDEX run_attempts_active_idx
   ON run_attempts(status, created_at_ms);
 
+CREATE UNIQUE INDEX run_attempts_one_active_per_run_uq
+  ON run_attempts(run_id)
+  WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling');
+
 CREATE TABLE events (
   event_seq INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT NOT NULL UNIQUE,
@@ -257,6 +292,7 @@ CREATE TABLE grants (
   operation TEXT NOT NULL,
   resource_pattern TEXT NOT NULL,
   effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_default from CHECK after ship+2 releases post-platonic.
   source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
   constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
   created_at_ms INTEGER NOT NULL,
@@ -271,6 +307,7 @@ CREATE INDEX grants_lookup_idx
 export function generateAgentId(kind: AgentIdKind): string {
   const prefixByKind: Record<AgentIdKind, string> = {
     session: "ses",
+    conversation: "conv",
     run: "run",
     attempt: "att",
     event: "evt",
@@ -278,6 +315,13 @@ export function generateAgentId(kind: AgentIdKind): string {
     artifact: "art",
     delegation: "del",
     grant: "grant",
+    contextPacket: "ctx",
+    dispatch: "disp",
+    artifactDelivery: "delivery",
+    memoryCandidate: "memcand",
+    taskCandidate: "taskcand",
+    contextAccess: "access",
+    turn: "turn",
   };
   return `${prefixByKind[kind]}_${randomUUID().replaceAll("-", "")}`;
 }
@@ -295,6 +339,15 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     createSchemaMigrationsTable(db);
     runPhase1Migration(db, Date.now());
     runArtifactLifecycleMigration(db, Date.now());
+    runDesktopContextPacketsMigration(db, Date.now());
+    runDesktopDispatchesMigration(db, Date.now());
+    runDesktopArtifactDeliveriesMigration(db, Date.now());
+    runDesktopCandidatesMigration(db, Date.now());
+    runDesktopContextAccessLogMigration(db, Date.now());
+    runDesktopAttentionOverridesMigration(db, Date.now());
+    runActiveAttemptAuthorityMigration(db, Date.now());
+    runSurfaceConversationsMigration(db, Date.now());
+    runConversationTurnsMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -351,6 +404,36 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(ARTIFACT_LIFECYCLE_MIGRATION_VERSION)) {
       runArtifactLifecycleMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_CONTEXT_PACKETS_MIGRATION_VERSION)) {
+      runDesktopContextPacketsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_DISPATCHES_MIGRATION_VERSION)) {
+      runDesktopDispatchesMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_ARTIFACT_DELIVERIES_MIGRATION_VERSION)) {
+      runDesktopArtifactDeliveriesMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_CANDIDATES_MIGRATION_VERSION)) {
+      runDesktopCandidatesMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION)) {
+      runDesktopContextAccessLogMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION)) {
+      runDesktopAttentionOverridesMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION)) {
+      runActiveAttemptAuthorityMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(SURFACE_CONVERSATIONS_MIGRATION_VERSION)) {
+      runSurfaceConversationsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CONVERSATION_TURNS_MIGRATION_VERSION)) {
+      runConversationTurnsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(BINDING_TURN_DELIVERY_MIGRATION_VERSION)) {
+      runBindingTurnDeliveryMigration(this.db, this.nowMs());
     }
   }
 
@@ -468,15 +551,151 @@ export class SqliteAgentStore implements AgentStore {
         }));
       }
 
+      const expiredContextPacketIds = this.allRows(
+        "SELECT packet_id FROM desktop_context_packets WHERE expires_at_ms IS NOT NULL AND expires_at_ms <= ?",
+        [now],
+      ).map((row) => text(row.packet_id));
+      if (expiredContextPacketIds.length > 0) {
+        this.db.prepare(
+          "DELETE FROM desktop_context_packets WHERE expires_at_ms IS NOT NULL AND expires_at_ms <= ?",
+        ).run(now);
+      }
+
+      this.db.prepare(
+        `UPDATE desktop_dispatches
+         SET status = ?, resolved_at_ms = COALESCE(resolved_at_ms, ?), resolved_by = COALESCE(resolved_by, ?), resolution_json = COALESCE(resolution_json, ?)
+         WHERE status = ?
+           AND expires_at_ms IS NOT NULL
+           AND expires_at_ms <= ?`,
+      ).run("expired", now, "daemon_startup_reconciliation", JSON.stringify({ reason: "daemon_startup_reconciliation" }), "pending", now);
+
+      const failedArtifactDeliveryIds = this.allRows(
+        "SELECT delivery_id FROM desktop_artifact_deliveries WHERE delivery_status = ?",
+        ["retrying"],
+      ).map((row) => text(row.delivery_id));
+      if (failedArtifactDeliveryIds.length > 0) {
+        this.db.prepare(
+          `UPDATE desktop_artifact_deliveries
+           SET delivery_status = ?, updated_at_ms = ?, error_json = json_set(COALESCE(error_json, '{}'), '$.reason', ?)
+           WHERE delivery_status = ?`,
+        ).run("failed", now, "daemon_startup_reconciliation", "retrying");
+      }
+
+      const recoveryDispatchIds: string[] = [];
+      const orphanedDelegatedRuns = this.allRows(
+        `SELECT r.run_id, r.session_id, s.owner_id
+         FROM runs r
+         JOIN sessions s ON s.session_id = r.session_id
+         WHERE r.status = ?
+           AND r.parent_run_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM desktop_dispatches d
+             WHERE d.kind = 'failure_recovery'
+               AND d.status != 'expired'
+               AND d.source_run_id = r.run_id
+           )`,
+        ["orphaned"],
+      );
+      for (const run of orphanedDelegatedRuns) {
+        const dispatch = this.insertDesktopDispatch({
+          ownerId: text(run.owner_id),
+          kind: "failure_recovery",
+          priority: 80,
+          status: "pending",
+          title: "Agent run needs recovery",
+          decisionPrompt: "A delegated local agent run was interrupted by a daemon restart. Choose whether to inspect, retry, or dismiss it.",
+          recommendedDefault: "inspect",
+          sourceSessionId: text(run.session_id),
+          sourceRunId: text(run.run_id),
+          payloadJson: JSON.stringify({ reason: "daemon_startup_reconciliation" }),
+          createdAtMs: now,
+        });
+        recoveryDispatchIds.push(dispatch.dispatchId);
+        const delegations = this.allRows(
+          `SELECT delegation_id, parent_session_id, parent_run_id, status
+           FROM delegations
+           WHERE child_run_id = ? AND status IN ('pending', 'running')`,
+          [text(run.run_id)],
+        );
+        for (const delegation of delegations) {
+          this.db.prepare("UPDATE delegations SET status = ?, completed_at_ms = COALESCE(completed_at_ms, ?) WHERE delegation_id = ?").run(
+            "failed",
+            now,
+            text(delegation.delegation_id),
+          );
+          eventIds.push(this.appendReconciliationEvent({
+            sessionId: text(delegation.parent_session_id),
+            runId: text(delegation.parent_run_id),
+            attemptId: null,
+            type: "delegation.recovery_required",
+            payload: {
+              delegationId: text(delegation.delegation_id),
+              childRunId: text(run.run_id),
+              dispatchId: dispatch.dispatchId,
+              reason: "child_run_orphaned_after_restart",
+            },
+            createdAtMs: now,
+          }));
+        }
+      }
+
       return {
         orphanedAttemptIds: activeAttempts.map((row) => text(row.attempt_id)),
         orphanedRunIds,
         staleBindingIds: staleBindings.map((row) => text(row.binding_id)),
+        expiredContextPacketIds,
+        failedArtifactDeliveryIds,
+        recoveryDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
         eventIds,
       };
     });
+  }
+
+  insertSurfaceConversation(input: NewSurfaceConversation): SurfaceConversation {
+    this.db.prepare(
+      `INSERT INTO surface_conversations (
+        owner_id, surface_kind, external_ref_kind, external_ref_id,
+        conversation_id, agent_session_id, created_at_ms, last_active_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.ownerId,
+      input.surfaceKind,
+      input.externalRefKind,
+      input.externalRefId,
+      input.conversationId,
+      input.agentSessionId,
+      input.createdAtMs,
+      input.lastActiveAtMs,
+    );
+    return input;
+  }
+
+  insertConversationTurn(input: NewConversationTurn): ConversationTurn {
+    const turn: ConversationTurn = {
+      conversationId: input.conversationId,
+      turnId: input.turnId ?? generateAgentId("turn"),
+      role: input.role,
+      surfaceKind: input.surfaceKind,
+      content: input.content,
+      createdAtMs: input.createdAtMs,
+      metadataJson: input.metadataJson ?? "{}",
+    };
+    this.db.prepare(
+      `INSERT INTO conversation_turns (
+        conversation_id, turn_id, role, surface_kind, content, created_at_ms, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      turn.conversationId,
+      turn.turnId,
+      turn.role,
+      turn.surfaceKind,
+      turn.content,
+      turn.createdAtMs,
+      turn.metadataJson,
+    );
+    return turn;
   }
 
   insertSession(input: NewAgentSession): AgentSession {
@@ -490,8 +709,6 @@ export class SqliteAgentStore implements AgentStore {
       surfaceKind: input.surfaceKind,
       externalRefKind: input.externalRefKind ?? null,
       externalRefId: input.externalRefId ?? null,
-      legacyClientScope: input.legacyClientScope ?? null,
-      legacySessionKey: input.legacySessionKey ?? null,
       defaultAdapterId: input.defaultAdapterId,
       defaultCwd: input.defaultCwd ?? null,
       modelProfile: input.modelProfile ?? null,
@@ -611,6 +828,7 @@ export class SqliteAgentStore implements AgentStore {
       updatedAtMs: input.updatedAtMs ?? now,
       lastUsedAtMs: input.lastUsedAtMs ?? null,
       invalidatedAtMs: input.invalidatedAtMs ?? null,
+      lastDeliveredTurnCreatedAtMs: input.lastDeliveredTurnCreatedAtMs ?? 0,
     };
     this.withTransaction(() => {
       if (binding.adapterNativeSessionId) {
@@ -624,8 +842,9 @@ export class SqliteAgentStore implements AgentStore {
         `INSERT INTO adapter_bindings (
           binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
           adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
-          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms,
+          last_delivered_turn_created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(...bindingValues(binding));
     });
     return binding;
@@ -669,6 +888,400 @@ export class SqliteAgentStore implements AgentStore {
     ).run(...eventValues(event));
     const row = this.getRow("SELECT event_seq FROM events WHERE event_id = ?", [event.eventId]);
     return { ...event, eventSeq: Number(row.event_seq) };
+  }
+
+  insertGrant(input: NewAgentGrant): AgentGrant {
+    const grant: AgentGrant = {
+      grantId: input.grantId ?? generateAgentId("grant"),
+      sessionId: input.sessionId,
+      runId: input.runId ?? null,
+      capability: input.capability,
+      operation: input.operation,
+      resourcePattern: input.resourcePattern,
+      effect: input.effect,
+      source: input.source,
+      constraintsJson: input.constraintsJson ?? "{}",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+      expiresAtMs: input.expiresAtMs ?? null,
+      revokedAtMs: input.revokedAtMs ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO grants (
+        grant_id, session_id, run_id, capability, operation, resource_pattern,
+        effect, source, constraints_json, created_at_ms, expires_at_ms, revoked_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...grantValues(grant));
+    return grant;
+  }
+
+  insertDesktopContextPacket(input: NewDesktopContextPacket): DesktopContextPacket {
+    const now = this.nowMs();
+    const createdAtMs = input.createdAtMs ?? now;
+    if (
+      typeof input.expiresAtMs !== "number" ||
+      !Number.isFinite(input.expiresAtMs) ||
+      input.expiresAtMs <= now ||
+      input.expiresAtMs <= createdAtMs
+    ) {
+      throw new Error("Desktop context packet expiresAtMs must be in the future");
+    }
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      sessionId: input.sessionId ?? null,
+      runId: input.runId ?? null,
+    });
+    const packet: DesktopContextPacket = {
+      packetId: input.packetId ?? generateAgentId("contextPacket"),
+      ownerId: input.ownerId,
+      sessionId: input.sessionId ?? null,
+      runId: input.runId ?? null,
+      surfaceKind: input.surfaceKind,
+      objective: input.objective,
+      packetJson: input.packetJson,
+      redactedPreviewJson: input.redactedPreviewJson,
+      contextHash: input.contextHash,
+      tokenEstimate: input.tokenEstimate ?? null,
+      retentionClass: input.retentionClass,
+      expiresAtMs: input.expiresAtMs,
+      createdAtMs,
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_context_packets (
+        packet_id, owner_id, session_id, run_id, surface_kind, objective,
+        packet_json, redacted_preview_json, context_hash, token_estimate,
+        retention_class, expires_at_ms, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopContextPacketValues(packet));
+    return packet;
+  }
+
+  insertDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch {
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      sessionId: input.sourceSessionId ?? null,
+      runId: input.sourceRunId ?? null,
+      attemptId: input.sourceAttemptId ?? null,
+      artifactId: input.sourceArtifactId ?? null,
+    });
+    const createdAtMs = input.createdAtMs ?? this.nowMs();
+    if (
+      typeof input.expiresAtMs === "number" &&
+      Number.isFinite(input.expiresAtMs) &&
+      input.expiresAtMs <= createdAtMs
+    ) {
+      throw new Error("Desktop dispatch expiresAtMs must be a future timestamp");
+    }
+    const dispatch: DesktopCoordinatorDispatch = {
+      dispatchId: input.dispatchId ?? generateAgentId("dispatch"),
+      ownerId: input.ownerId,
+      kind: input.kind,
+      priority: input.priority,
+      status: input.status ?? "pending",
+      title: input.title,
+      decisionPrompt: input.decisionPrompt,
+      recommendedDefault: input.recommendedDefault ?? null,
+      sourceSessionId: input.sourceSessionId ?? null,
+      sourceRunId: input.sourceRunId ?? null,
+      sourceAttemptId: input.sourceAttemptId ?? null,
+      sourceArtifactId: input.sourceArtifactId ?? null,
+      capability: input.capability ?? null,
+      operation: input.operation ?? null,
+      resourceRef: input.resourceRef ?? null,
+      payloadJson: input.payloadJson ?? "{}",
+      createdAtMs,
+      expiresAtMs: input.expiresAtMs ?? null,
+      resolvedAtMs: input.resolvedAtMs ?? null,
+      resolvedBy: input.resolvedBy ?? null,
+      resolutionJson: input.resolutionJson ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_dispatches (
+        dispatch_id, owner_id, kind, priority, status, title, decision_prompt,
+        recommended_default, source_session_id, source_run_id, source_attempt_id,
+        source_artifact_id, capability, operation, resource_ref, payload_json,
+        created_at_ms, expires_at_ms, resolved_at_ms, resolved_by, resolution_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopDispatchValues(dispatch));
+    return dispatch;
+  }
+
+  resolveDesktopDispatch(dispatchId: string, input: { ownerId: string; status: "resolved" | "cancelled"; resolvedBy?: string | null; resolutionJson?: string | null; resolvedAtMs?: number }): DesktopCoordinatorDispatch {
+    const resolvedAtMs = input.resolvedAtMs ?? this.nowMs();
+    const result = this.db.prepare(
+      `UPDATE desktop_dispatches
+       SET status = ?, resolved_at_ms = ?, resolved_by = ?, resolution_json = ?
+       WHERE dispatch_id = ?
+         AND owner_id = ?
+         AND status = 'pending'
+         AND (expires_at_ms IS NULL OR expires_at_ms > ?)`,
+    ).run(input.status, resolvedAtMs, input.resolvedBy ?? null, input.resolutionJson ?? null, dispatchId, input.ownerId, resolvedAtMs);
+    if (Number(result.changes) === 0) {
+      throw new Error(`Desktop dispatch ${dispatchId} is not pending for owner or has expired`);
+    }
+    return desktopDispatchFromRow(this.getRow("SELECT * FROM desktop_dispatches WHERE dispatch_id = ?", [dispatchId]));
+  }
+
+  insertDesktopArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery {
+    const now = this.nowMs();
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      sessionId: input.sourceSessionId,
+      runId: input.sourceRunId ?? null,
+      attemptId: input.sourceAttemptId ?? null,
+      artifactId: input.artifactId,
+    });
+    const delivery: DesktopArtifactDelivery = {
+      deliveryId: input.deliveryId ?? generateAgentId("artifactDelivery"),
+      artifactId: input.artifactId,
+      ownerId: input.ownerId,
+      sourceSessionId: input.sourceSessionId,
+      sourceRunId: input.sourceRunId ?? null,
+      sourceAttemptId: input.sourceAttemptId ?? null,
+      intendedSurface: input.intendedSurface,
+      targetKind: input.targetKind,
+      targetRef: input.targetRef ?? null,
+      contentHash: input.contentHash ?? null,
+      reviewStatus: input.reviewStatus ?? "not_required",
+      deliveryStatus: input.deliveryStatus ?? "pending",
+      attemptCount: input.attemptCount ?? 0,
+      receiptJson: input.receiptJson ?? null,
+      errorJson: input.errorJson ?? null,
+      createdAtMs: input.createdAtMs ?? now,
+      updatedAtMs: input.updatedAtMs ?? now,
+      deliveredAtMs: input.deliveredAtMs ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_artifact_deliveries (
+        delivery_id, artifact_id, owner_id, source_session_id, source_run_id,
+        source_attempt_id, intended_surface, target_kind, target_ref, content_hash,
+        review_status, delivery_status, attempt_count, receipt_json, error_json,
+        created_at_ms, updated_at_ms, delivered_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopArtifactDeliveryValues(delivery));
+    return delivery;
+  }
+
+  updateDesktopArtifactDelivery(deliveryId: string, input: { ownerId: string } & Partial<Pick<DesktopArtifactDelivery, "reviewStatus" | "deliveryStatus" | "attemptCount" | "receiptJson" | "errorJson" | "deliveredAtMs">>): DesktopArtifactDelivery {
+    const current = desktopArtifactDeliveryFromRow(this.getRow("SELECT * FROM desktop_artifact_deliveries WHERE delivery_id = ? AND owner_id = ?", [deliveryId, input.ownerId]));
+    const updated: DesktopArtifactDelivery = {
+      ...current,
+      reviewStatus: input.reviewStatus ?? current.reviewStatus,
+      deliveryStatus: input.deliveryStatus ?? current.deliveryStatus,
+      attemptCount: input.attemptCount ?? current.attemptCount,
+      receiptJson: input.receiptJson ?? current.receiptJson,
+      errorJson: input.errorJson ?? current.errorJson,
+      deliveredAtMs: input.deliveredAtMs ?? current.deliveredAtMs,
+      updatedAtMs: this.nowMs(),
+    };
+    this.db.prepare(
+      `UPDATE desktop_artifact_deliveries
+       SET review_status = ?, delivery_status = ?, attempt_count = ?, receipt_json = ?,
+           error_json = ?, updated_at_ms = ?, delivered_at_ms = ?
+       WHERE delivery_id = ? AND owner_id = ?`,
+    ).run(updated.reviewStatus, updated.deliveryStatus, updated.attemptCount, updated.receiptJson, updated.errorJson, updated.updatedAtMs, updated.deliveredAtMs, deliveryId, input.ownerId);
+    return updated;
+  }
+
+  insertDesktopMemoryCandidate(input: NewDesktopMemoryCandidate): DesktopMemoryCandidate {
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      sessionId: input.sourceSessionId,
+      runId: input.sourceRunId ?? null,
+      artifactId: input.sourceArtifactId ?? null,
+    });
+    const candidate: DesktopMemoryCandidate = {
+      candidateId: input.candidateId ?? generateAgentId("memoryCandidate"),
+      ownerId: input.ownerId,
+      sourceSessionId: input.sourceSessionId,
+      sourceRunId: input.sourceRunId ?? null,
+      sourceArtifactId: input.sourceArtifactId ?? null,
+      proposedFact: input.proposedFact,
+      evidenceRefsJson: input.evidenceRefsJson,
+      confidence: input.confidence,
+      sensitivityTier: input.sensitivityTier,
+      status: input.status ?? "pending",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+      resolvedAtMs: input.resolvedAtMs ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_memory_candidates (
+        candidate_id, owner_id, source_session_id, source_run_id, source_artifact_id,
+        proposed_fact, evidence_refs_json, confidence, sensitivity_tier, status,
+        created_at_ms, resolved_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopMemoryCandidateValues(candidate));
+    return candidate;
+  }
+
+  insertDesktopTaskCandidate(input: NewDesktopTaskCandidate): DesktopTaskCandidate {
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      sessionId: input.sourceSessionId ?? null,
+      runId: input.sourceRunId ?? null,
+    });
+    const candidate: DesktopTaskCandidate = {
+      candidateId: input.candidateId ?? generateAgentId("taskCandidate"),
+      ownerId: input.ownerId,
+      sourceSessionId: input.sourceSessionId ?? null,
+      sourceRunId: input.sourceRunId ?? null,
+      action: input.action,
+      taskRef: input.taskRef ?? null,
+      proposedChangeJson: input.proposedChangeJson,
+      evidenceRefsJson: input.evidenceRefsJson,
+      confidence: input.confidence,
+      requiresApproval: input.requiresApproval,
+      status: input.status ?? "pending",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+      resolvedAtMs: input.resolvedAtMs ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_task_candidates (
+        candidate_id, owner_id, source_session_id, source_run_id, action,
+        task_ref, proposed_change_json, evidence_refs_json, confidence,
+        requires_approval, status, created_at_ms, resolved_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopTaskCandidateValues(candidate));
+    return candidate;
+  }
+
+  insertDesktopContextAccessLog(input: NewDesktopContextAccessLog): DesktopContextAccessLog {
+    this.assertCoordinatorScope({
+      ownerId: input.ownerId,
+      packetId: input.packetId ?? null,
+      runId: input.runId ?? null,
+      dispatchId: input.dispatchId ?? null,
+    });
+    const access: DesktopContextAccessLog = {
+      accessId: input.accessId ?? generateAgentId("contextAccess"),
+      ownerId: input.ownerId,
+      packetId: input.packetId ?? null,
+      runId: input.runId ?? null,
+      sourceKind: input.sourceKind,
+      operation: input.operation,
+      scopeJson: input.scopeJson,
+      sensitivityTier: input.sensitivityTier,
+      policyDecision: input.policyDecision,
+      dispatchId: input.dispatchId ?? null,
+      redactionSummaryJson: input.redactionSummaryJson ?? "{}",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_context_access_log (
+        access_id, owner_id, packet_id, run_id, source_kind, operation, scope_json,
+        sensitivity_tier, policy_decision, dispatch_id, redaction_summary_json,
+        created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...desktopContextAccessLogValues(access));
+    return access;
+  }
+
+  upsertDesktopAttentionOverride(input: NewDesktopAttentionOverride): DesktopAttentionOverride {
+    const override: DesktopAttentionOverride = {
+      ownerId: input.ownerId,
+      subjectKind: input.subjectKind,
+      subjectId: input.subjectId,
+      hiddenUntilMs: input.hiddenUntilMs ?? null,
+      dismissedAtMs: input.dismissedAtMs ?? null,
+      reason: input.reason ?? null,
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+    };
+    this.db.prepare(
+      `INSERT INTO desktop_attention_overrides (
+        owner_id, subject_kind, subject_id, hidden_until_ms, dismissed_at_ms, reason, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(owner_id, subject_kind, subject_id) DO UPDATE SET
+        hidden_until_ms = excluded.hidden_until_ms,
+        dismissed_at_ms = excluded.dismissed_at_ms,
+        reason = excluded.reason`,
+    ).run(...desktopAttentionOverrideValues(override));
+    return desktopAttentionOverrideFromRow(this.getRow(
+      "SELECT * FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?",
+      [override.ownerId, override.subjectKind, override.subjectId],
+    ));
+  }
+
+  private assertCoordinatorScope(input: {
+    ownerId: string;
+    sessionId?: string | null;
+    runId?: string | null;
+    attemptId?: string | null;
+    artifactId?: string | null;
+    packetId?: string | null;
+    dispatchId?: string | null;
+  }): void {
+    if (input.sessionId) {
+      const session = this.getOptionalRow("SELECT owner_id FROM sessions WHERE session_id = ?", [input.sessionId]);
+      if (!session || text(session.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator session reference is outside owner scope");
+      }
+    }
+    if (input.runId) {
+      const run = this.getOptionalRow(
+        `SELECT r.session_id, s.owner_id
+         FROM runs r
+         JOIN sessions s ON s.session_id = r.session_id
+         WHERE r.run_id = ?`,
+        [input.runId],
+      );
+      if (!run || text(run.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator run reference is outside owner scope");
+      }
+      if (input.sessionId && text(run.session_id) !== input.sessionId) {
+        throw new Error("Coordinator run reference does not belong to session");
+      }
+    }
+    if (input.attemptId) {
+      const attempt = this.getOptionalRow(
+        `SELECT a.run_id, r.session_id, s.owner_id
+         FROM run_attempts a
+         JOIN runs r ON r.run_id = a.run_id
+         JOIN sessions s ON s.session_id = r.session_id
+         WHERE a.attempt_id = ?`,
+        [input.attemptId],
+      );
+      if (!attempt || text(attempt.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator attempt reference is outside owner scope");
+      }
+      if (input.runId && text(attempt.run_id) !== input.runId) {
+        throw new Error("Coordinator attempt reference does not belong to run");
+      }
+      if (input.sessionId && text(attempt.session_id) !== input.sessionId) {
+        throw new Error("Coordinator attempt reference does not belong to session");
+      }
+    }
+    if (input.artifactId) {
+      const artifact = this.getOptionalRow(
+        `SELECT a.session_id, a.run_id, a.attempt_id, s.owner_id
+         FROM artifacts a
+         JOIN sessions s ON s.session_id = a.session_id
+         WHERE a.artifact_id = ?`,
+        [input.artifactId],
+      );
+      if (!artifact || text(artifact.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator artifact reference is outside owner scope");
+      }
+      if (input.sessionId && text(artifact.session_id) !== input.sessionId) {
+        throw new Error("Coordinator artifact reference does not belong to session");
+      }
+      if (input.runId && nullableText(artifact.run_id) !== input.runId) {
+        throw new Error("Coordinator artifact reference does not belong to run");
+      }
+      if (input.attemptId && nullableText(artifact.attempt_id) !== input.attemptId) {
+        throw new Error("Coordinator artifact reference does not belong to attempt");
+      }
+    }
+    if (input.packetId) {
+      const packet = this.getOptionalRow("SELECT owner_id FROM desktop_context_packets WHERE packet_id = ?", [input.packetId]);
+      if (!packet || text(packet.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator packet reference is outside owner scope");
+      }
+    }
+    if (input.dispatchId) {
+      const dispatch = this.getOptionalRow("SELECT owner_id FROM desktop_dispatches WHERE dispatch_id = ?", [input.dispatchId]);
+      if (!dispatch || text(dispatch.owner_id) !== input.ownerId) {
+        throw new Error("Coordinator dispatch reference is outside owner scope");
+      }
+    }
   }
 
   execute(sql: string, values: SQLInputValue[] = []): number {
@@ -780,15 +1393,416 @@ function runPhase1Migration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTrans
 
 function runArtifactLifecycleMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
   runTransaction(db, () => {
-    db.exec(`
-      ALTER TABLE artifacts
-        ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'retained' CHECK (lifecycle_state IN ('retained', 'dismissed', 'opened'));
-
-      ALTER TABLE artifacts
-        ADD COLUMN lifecycle_updated_at_ms INTEGER;
-    `);
+    if (!tableHasColumn(db, "artifacts", "lifecycle_state")) {
+      db.exec(`
+        ALTER TABLE artifacts
+          ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'retained' CHECK (lifecycle_state IN ('retained', 'dismissed', 'opened'));
+      `);
+    }
+    if (!tableHasColumn(db, "artifacts", "lifecycle_updated_at_ms")) {
+      db.exec(`
+        ALTER TABLE artifacts
+          ADD COLUMN lifecycle_updated_at_ms INTEGER;
+      `);
+    }
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       ARTIFACT_LIFECYCLE_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function tableHasColumn(db: Pick<DatabaseSync, "prepare">, tableName: string, columnName: string): boolean {
+  const statement = db.prepare(`PRAGMA table_info(${tableName})`) as unknown as {
+    all?: () => unknown[];
+    iterate?: () => Iterable<unknown>;
+  };
+  const rows = statement.iterate ? Array.from(statement.iterate()) : (statement.all?.() ?? []);
+  return rows
+    .some((row) => String((row as Row).name) === columnName);
+}
+
+function runDesktopContextPacketsMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_context_packets(
+        packet_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        session_id TEXT REFERENCES sessions(session_id) ON DELETE SET NULL,
+        run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        surface_kind TEXT NOT NULL,
+        objective TEXT NOT NULL,
+        packet_json TEXT NOT NULL CHECK (json_valid(packet_json)),
+        redacted_preview_json TEXT NOT NULL CHECK (json_valid(redacted_preview_json)),
+        context_hash TEXT NOT NULL,
+        token_estimate INTEGER,
+        retention_class TEXT NOT NULL CHECK (retention_class IN ('ephemeral','debug','core')),
+        expires_at_ms INTEGER,
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_context_packets_owner_created_idx
+        ON desktop_context_packets(owner_id, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_context_packets_session_created_idx
+        ON desktop_context_packets(session_id, created_at_ms DESC)
+        WHERE session_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS desktop_context_packets_expiry_idx
+        ON desktop_context_packets(expires_at_ms)
+        WHERE expires_at_ms IS NOT NULL;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_CONTEXT_PACKETS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runDesktopDispatchesMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_dispatches(
+        dispatch_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN (
+          'approval','routing_choice','failure_recovery','artifact_review',
+          'memory_candidate','task_candidate','external_draft','screen_context'
+        )),
+        priority INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','resolved','expired','cancelled')),
+        title TEXT NOT NULL,
+        decision_prompt TEXT NOT NULL,
+        recommended_default TEXT,
+        source_session_id TEXT REFERENCES sessions(session_id) ON DELETE SET NULL,
+        source_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        source_attempt_id TEXT REFERENCES run_attempts(attempt_id) ON DELETE SET NULL,
+        source_artifact_id TEXT REFERENCES artifacts(artifact_id) ON DELETE SET NULL,
+        capability TEXT,
+        operation TEXT,
+        resource_ref TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
+        created_at_ms INTEGER NOT NULL,
+        expires_at_ms INTEGER,
+        resolved_at_ms INTEGER,
+        resolved_by TEXT,
+        resolution_json TEXT CHECK (resolution_json IS NULL OR json_valid(resolution_json))
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_dispatches_owner_status_priority_idx
+        ON desktop_dispatches(owner_id, status, priority DESC, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_dispatches_source_run_idx
+        ON desktop_dispatches(source_run_id, status, created_at_ms DESC)
+        WHERE source_run_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS desktop_dispatches_expiry_idx
+        ON desktop_dispatches(status, expires_at_ms)
+        WHERE expires_at_ms IS NOT NULL;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_DISPATCHES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runDesktopArtifactDeliveriesMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_artifact_deliveries(
+        delivery_id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL REFERENCES artifacts(artifact_id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL,
+        source_session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        source_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        source_attempt_id TEXT REFERENCES run_attempts(attempt_id) ON DELETE SET NULL,
+        intended_surface TEXT NOT NULL,
+        target_kind TEXT NOT NULL CHECK (target_kind IN ('ask_omi','task_chat','local_file','external_draft')),
+        target_ref TEXT,
+        content_hash TEXT,
+        review_status TEXT NOT NULL CHECK (review_status IN ('not_required','pending','approved','rejected')),
+        delivery_status TEXT NOT NULL CHECK (delivery_status IN ('pending','delivered','failed','retrying','cancelled')),
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        receipt_json TEXT CHECK (receipt_json IS NULL OR json_valid(receipt_json)),
+        error_json TEXT CHECK (error_json IS NULL OR json_valid(error_json)),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        delivered_at_ms INTEGER
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_artifact_deliveries_owner_status_idx
+        ON desktop_artifact_deliveries(owner_id, delivery_status, updated_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_artifact_deliveries_artifact_idx
+        ON desktop_artifact_deliveries(artifact_id, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_artifact_deliveries_source_idx
+        ON desktop_artifact_deliveries(source_session_id, source_run_id, updated_at_ms DESC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_ARTIFACT_DELIVERIES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runDesktopCandidatesMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_memory_candidates(
+        candidate_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        source_session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        source_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        source_artifact_id TEXT REFERENCES artifacts(artifact_id) ON DELETE SET NULL,
+        proposed_fact TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL CHECK (json_valid(evidence_refs_json)),
+        confidence REAL NOT NULL,
+        sensitivity_tier TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','accepted','rejected','expired')),
+        created_at_ms INTEGER NOT NULL,
+        resolved_at_ms INTEGER
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_memory_candidates_owner_status_idx
+        ON desktop_memory_candidates(owner_id, status, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_memory_candidates_source_idx
+        ON desktop_memory_candidates(source_session_id, source_run_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS desktop_task_candidates(
+        candidate_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        source_session_id TEXT REFERENCES sessions(session_id) ON DELETE SET NULL,
+        source_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        action TEXT NOT NULL CHECK (action IN ('create','update','complete','delete')),
+        task_ref TEXT,
+        proposed_change_json TEXT NOT NULL CHECK (json_valid(proposed_change_json)),
+        evidence_refs_json TEXT NOT NULL CHECK (json_valid(evidence_refs_json)),
+        confidence REAL NOT NULL,
+        requires_approval INTEGER NOT NULL CHECK (requires_approval IN (0,1)),
+        status TEXT NOT NULL CHECK (status IN ('pending','accepted','rejected','expired')),
+        created_at_ms INTEGER NOT NULL,
+        resolved_at_ms INTEGER
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_task_candidates_owner_status_idx
+        ON desktop_task_candidates(owner_id, status, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_task_candidates_task_idx
+        ON desktop_task_candidates(task_ref, status, created_at_ms DESC)
+        WHERE task_ref IS NOT NULL;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_CANDIDATES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runDesktopContextAccessLogMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_context_access_log(
+        access_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        packet_id TEXT REFERENCES desktop_context_packets(packet_id) ON DELETE SET NULL,
+        run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        source_kind TEXT NOT NULL CHECK (source_kind IN (
+          'omi_db','rewind_timeline','screen_current','screenshot_image',
+          'local_agent_api','automation_bridge','chat_surface','task_chat'
+        )),
+        operation TEXT NOT NULL,
+        scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+        sensitivity_tier TEXT NOT NULL,
+        policy_decision TEXT NOT NULL CHECK (policy_decision IN ('allowed','denied','dispatch_created')),
+        dispatch_id TEXT REFERENCES desktop_dispatches(dispatch_id) ON DELETE SET NULL,
+        redaction_summary_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(redaction_summary_json)),
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_context_access_owner_created_idx
+        ON desktop_context_access_log(owner_id, created_at_ms DESC);
+
+      CREATE INDEX IF NOT EXISTS desktop_context_access_packet_idx
+        ON desktop_context_access_log(packet_id, created_at_ms DESC)
+        WHERE packet_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS desktop_context_access_run_idx
+        ON desktop_context_access_log(run_id, created_at_ms DESC)
+        WHERE run_id IS NOT NULL;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_CONTEXT_ACCESS_LOG_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runDesktopAttentionOverridesMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS desktop_attention_overrides(
+        owner_id TEXT NOT NULL,
+        subject_kind TEXT NOT NULL,
+        subject_id TEXT NOT NULL,
+        hidden_until_ms INTEGER,
+        dismissed_at_ms INTEGER,
+        reason TEXT,
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(owner_id, subject_kind, subject_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS desktop_attention_overrides_owner_hidden_idx
+        ON desktop_attention_overrides(owner_id, hidden_until_ms);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runSurfaceConversationsMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS surface_conversations(
+        owner_id TEXT NOT NULL,
+        surface_kind TEXT NOT NULL,
+        external_ref_kind TEXT NOT NULL,
+        external_ref_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        agent_session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        created_at_ms INTEGER NOT NULL,
+        last_active_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, surface_kind, external_ref_kind, external_ref_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS surface_conversations_session_idx
+        ON surface_conversations(agent_session_id, last_active_at_ms DESC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      SURFACE_CONVERSATIONS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runConversationTurnsMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_turns(
+        conversation_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        surface_kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (conversation_id, turn_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS conversation_turns_recent_idx
+        ON conversation_turns(conversation_id, created_at_ms DESC);
+
+      CREATE TABLE IF NOT EXISTS completion_delta_checkpoints(
+        owner_id TEXT NOT NULL,
+        surface_key TEXT NOT NULL,
+        seen_ids_json TEXT NOT NULL DEFAULT '[]',
+        high_water_ms INTEGER NOT NULL DEFAULT 0,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, surface_key)
+      ) STRICT;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CONVERSATION_TURNS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runBindingTurnDeliveryMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE adapter_bindings
+        ADD COLUMN last_delivered_turn_created_at_ms INTEGER NOT NULL DEFAULT 0;
+    `);
+    db.exec(`
+      UPDATE adapter_bindings
+      SET last_delivered_turn_created_at_ms = COALESCE((
+        SELECT MAX(ct.created_at_ms)
+        FROM conversation_turns ct
+        JOIN surface_conversations sc ON sc.conversation_id = ct.conversation_id
+        WHERE sc.agent_session_id = adapter_bindings.session_id
+      ), 0)
+      WHERE resume_fidelity = 'native' AND status = 'active';
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      BINDING_TURN_DELIVERY_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runActiveAttemptAuthorityMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    const repairedAttempts = db.prepare(`
+      SELECT a.attempt_id, a.run_id, r.session_id
+      FROM run_attempts a
+      JOIN runs r ON r.run_id = a.run_id
+      WHERE a.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+        AND EXISTS (
+          SELECT 1
+          FROM run_attempts newer
+          WHERE newer.run_id = a.run_id
+            AND newer.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+            AND newer.attempt_no > a.attempt_no
+        )
+      ORDER BY a.run_id ASC, a.attempt_no ASC
+    `).all() as Row[];
+    db.prepare(`
+      UPDATE run_attempts
+      SET status = ?,
+          completed_at_ms = COALESCE(completed_at_ms, ?),
+          updated_at_ms = ?
+      WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+        AND EXISTS (
+          SELECT 1
+          FROM run_attempts newer
+          WHERE newer.run_id = run_attempts.run_id
+            AND newer.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')
+            AND newer.attempt_no > run_attempts.attempt_no
+        );
+    `).run("orphaned", appliedAtMs, appliedAtMs);
+    for (const attempt of repairedAttempts) {
+      db.prepare(
+        `INSERT INTO events (
+          event_id, session_id, run_id, attempt_id, type, retention_class,
+          visibility, payload_json, created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        generateAgentId("event"),
+        text(attempt.session_id),
+        text(attempt.run_id),
+        text(attempt.attempt_id),
+        "attempt.orphaned",
+        "core",
+        "internal",
+        JSON.stringify({
+          attemptId: text(attempt.attempt_id),
+          reason: "active_attempt_authority_migration",
+        }),
+        appliedAtMs,
+      );
+    }
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS run_attempts_one_active_per_run_uq
+        ON run_attempts(run_id)
+        WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling');
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION,
       appliedAtMs,
     );
   });
@@ -842,8 +1856,8 @@ function sessionValues(session: AgentSession): SQLInputValue[] {
     session.surfaceKind,
     session.externalRefKind,
     session.externalRefId,
-    session.legacyClientScope,
-    session.legacySessionKey,
+    null,
+    null,
     session.defaultAdapterId,
     session.defaultCwd,
     session.modelProfile,
@@ -931,6 +1945,7 @@ function bindingValues(binding: AdapterBinding): SQLInputValue[] {
     binding.updatedAtMs,
     binding.lastUsedAtMs,
     binding.invalidatedAtMs,
+    binding.lastDeliveredTurnCreatedAtMs,
   ];
 }
 
@@ -966,4 +1981,226 @@ function artifactValues(artifact: AgentArtifact): SQLInputValue[] {
     artifact.metadataJson,
     artifact.createdAtMs,
   ];
+}
+
+function grantValues(grant: AgentGrant): SQLInputValue[] {
+  return [
+    grant.grantId,
+    grant.sessionId,
+    grant.runId,
+    grant.capability,
+    grant.operation,
+    grant.resourcePattern,
+    grant.effect,
+    grant.source,
+    grant.constraintsJson,
+    grant.createdAtMs,
+    grant.expiresAtMs,
+    grant.revokedAtMs,
+  ];
+}
+
+function desktopContextPacketValues(packet: DesktopContextPacket): SQLInputValue[] {
+  return [
+    packet.packetId,
+    packet.ownerId,
+    packet.sessionId,
+    packet.runId,
+    packet.surfaceKind,
+    packet.objective,
+    packet.packetJson,
+    packet.redactedPreviewJson,
+    packet.contextHash,
+    packet.tokenEstimate,
+    packet.retentionClass,
+    packet.expiresAtMs,
+    packet.createdAtMs,
+  ];
+}
+
+function desktopDispatchValues(dispatch: DesktopCoordinatorDispatch): SQLInputValue[] {
+  return [
+    dispatch.dispatchId,
+    dispatch.ownerId,
+    dispatch.kind,
+    dispatch.priority,
+    dispatch.status,
+    dispatch.title,
+    dispatch.decisionPrompt,
+    dispatch.recommendedDefault,
+    dispatch.sourceSessionId,
+    dispatch.sourceRunId,
+    dispatch.sourceAttemptId,
+    dispatch.sourceArtifactId,
+    dispatch.capability,
+    dispatch.operation,
+    dispatch.resourceRef,
+    dispatch.payloadJson,
+    dispatch.createdAtMs,
+    dispatch.expiresAtMs,
+    dispatch.resolvedAtMs,
+    dispatch.resolvedBy,
+    dispatch.resolutionJson,
+  ];
+}
+
+function desktopArtifactDeliveryValues(delivery: DesktopArtifactDelivery): SQLInputValue[] {
+  return [
+    delivery.deliveryId,
+    delivery.artifactId,
+    delivery.ownerId,
+    delivery.sourceSessionId,
+    delivery.sourceRunId,
+    delivery.sourceAttemptId,
+    delivery.intendedSurface,
+    delivery.targetKind,
+    delivery.targetRef,
+    delivery.contentHash,
+    delivery.reviewStatus,
+    delivery.deliveryStatus,
+    delivery.attemptCount,
+    delivery.receiptJson,
+    delivery.errorJson,
+    delivery.createdAtMs,
+    delivery.updatedAtMs,
+    delivery.deliveredAtMs,
+  ];
+}
+
+function desktopMemoryCandidateValues(candidate: DesktopMemoryCandidate): SQLInputValue[] {
+  return [
+    candidate.candidateId,
+    candidate.ownerId,
+    candidate.sourceSessionId,
+    candidate.sourceRunId,
+    candidate.sourceArtifactId,
+    candidate.proposedFact,
+    candidate.evidenceRefsJson,
+    candidate.confidence,
+    candidate.sensitivityTier,
+    candidate.status,
+    candidate.createdAtMs,
+    candidate.resolvedAtMs,
+  ];
+}
+
+function desktopTaskCandidateValues(candidate: DesktopTaskCandidate): SQLInputValue[] {
+  return [
+    candidate.candidateId,
+    candidate.ownerId,
+    candidate.sourceSessionId,
+    candidate.sourceRunId,
+    candidate.action,
+    candidate.taskRef,
+    candidate.proposedChangeJson,
+    candidate.evidenceRefsJson,
+    candidate.confidence,
+    candidate.requiresApproval,
+    candidate.status,
+    candidate.createdAtMs,
+    candidate.resolvedAtMs,
+  ];
+}
+
+function desktopContextAccessLogValues(access: DesktopContextAccessLog): SQLInputValue[] {
+  return [
+    access.accessId,
+    access.ownerId,
+    access.packetId,
+    access.runId,
+    access.sourceKind,
+    access.operation,
+    access.scopeJson,
+    access.sensitivityTier,
+    access.policyDecision,
+    access.dispatchId,
+    access.redactionSummaryJson,
+    access.createdAtMs,
+  ];
+}
+
+function desktopAttentionOverrideValues(override: DesktopAttentionOverride): SQLInputValue[] {
+  return [
+    override.ownerId,
+    override.subjectKind,
+    override.subjectId,
+    override.hiddenUntilMs,
+    override.dismissedAtMs,
+    override.reason,
+    override.createdAtMs,
+  ];
+}
+
+function desktopAttentionOverrideFromRow(row: Row): DesktopAttentionOverride {
+  return {
+    ownerId: text(row.owner_id),
+    subjectKind: text(row.subject_kind) as DesktopAttentionOverride["subjectKind"],
+    subjectId: text(row.subject_id),
+    hiddenUntilMs: nullableNumber(row.hidden_until_ms),
+    dismissedAtMs: nullableNumber(row.dismissed_at_ms),
+    reason: nullableText(row.reason),
+    createdAtMs: Number(row.created_at_ms),
+  };
+}
+
+function desktopDispatchFromRow(row: Row): DesktopCoordinatorDispatch {
+  return {
+    dispatchId: text(row.dispatch_id),
+    ownerId: text(row.owner_id),
+    kind: text(row.kind) as DesktopCoordinatorDispatch["kind"],
+    priority: Number(row.priority),
+    status: text(row.status) as DesktopCoordinatorDispatch["status"],
+    title: text(row.title),
+    decisionPrompt: text(row.decision_prompt),
+    recommendedDefault: nullableText(row.recommended_default),
+    sourceSessionId: nullableText(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    sourceAttemptId: nullableText(row.source_attempt_id),
+    sourceArtifactId: nullableText(row.source_artifact_id),
+    capability: nullableText(row.capability),
+    operation: nullableText(row.operation),
+    resourceRef: nullableText(row.resource_ref),
+    payloadJson: text(row.payload_json),
+    createdAtMs: Number(row.created_at_ms),
+    expiresAtMs: nullableNumber(row.expires_at_ms),
+    resolvedAtMs: nullableNumber(row.resolved_at_ms),
+    resolvedBy: nullableText(row.resolved_by),
+    resolutionJson: nullableText(row.resolution_json),
+  };
+}
+
+function desktopArtifactDeliveryFromRow(row: Row): DesktopArtifactDelivery {
+  return {
+    deliveryId: text(row.delivery_id),
+    artifactId: text(row.artifact_id),
+    ownerId: text(row.owner_id),
+    sourceSessionId: text(row.source_session_id),
+    sourceRunId: nullableText(row.source_run_id),
+    sourceAttemptId: nullableText(row.source_attempt_id),
+    intendedSurface: text(row.intended_surface),
+    targetKind: text(row.target_kind) as DesktopArtifactDelivery["targetKind"],
+    targetRef: nullableText(row.target_ref),
+    contentHash: nullableText(row.content_hash),
+    reviewStatus: text(row.review_status) as DesktopArtifactDelivery["reviewStatus"],
+    deliveryStatus: text(row.delivery_status) as DesktopArtifactDelivery["deliveryStatus"],
+    attemptCount: Number(row.attempt_count),
+    receiptJson: nullableText(row.receipt_json),
+    errorJson: nullableText(row.error_json),
+    createdAtMs: Number(row.created_at_ms),
+    updatedAtMs: Number(row.updated_at_ms),
+    deliveredAtMs: nullableNumber(row.delivered_at_ms),
+  };
+}
+
+function nullableText(value: SQLOutputValue): string | null {
+  if (value === null) return null;
+  return text(value);
+}
+
+function nullableNumber(value: SQLOutputValue): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number") {
+    throw new Error(`Expected SQLite number value, got ${typeof value}`);
+  }
+  return value;
 }

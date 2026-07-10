@@ -22,3 +22,14 @@ feature_bundles:
       overview_empty_regression: none
       p95_latency_ms: "<= LKG + 10%"
       cost_per_success: "<= LKG + 15%"
+  - feature: conversation_action_items.extract.shadow
+    lane_id: omi:auto:chat-structured
+    prompt_version: conversation_action_items.extract.v1
+    parser_version: ActionItemsExtraction.v1
+    eval_suite: conversation_action_items_extract.v1
+    promotion_gates:
+      schema_valid_rate: ">= 99.5%"
+      action_item_count_regression: none
+      due_at_parse_regression: none
+      p95_latency_ms: "<= LKG + 10%"
+      cost_per_success: "<= LKG + 15%"

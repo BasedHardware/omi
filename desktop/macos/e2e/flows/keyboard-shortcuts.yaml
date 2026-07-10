@@ -1,0 +1,44 @@
+version: 2
+name: keyboard-shortcuts
+tier: 2
+description: Sidebar navigation via Cmd+1..6 and Cmd+, shortcut bridge actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate Home via Cmd+1 equivalent
+    bridge.action:
+      name: navigate_via_shortcut
+      params:
+        shortcut: "1"
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Navigate Memories via Cmd+3 equivalent
+    bridge.action:
+      name: navigate_via_shortcut
+      params:
+        shortcut: "3"
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S3
+    name: Navigate Settings via Cmd+, equivalent
+    bridge.action:
+      name: navigate_via_shortcut
+      params:
+        shortcut: ","
+    wait:
+      state.selectedTabIndex: 9
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
