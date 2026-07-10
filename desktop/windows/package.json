@@ -75,6 +75,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "jsdom": "^29.1.1",
+    "playwright": "^1.61.1",
     "postcss": "^8.5.15",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
