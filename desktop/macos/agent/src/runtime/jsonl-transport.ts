@@ -46,8 +46,8 @@ export type McpServerBuilder = (
   context: McpServerBuildContext
 ) => Record<string, unknown>[];
 
-export type RecoverableErrorPredicate = (error: unknown) => boolean;
-export type RecoverableErrorHandler = (error: unknown) => Promise<void>;
+export type RecoverableErrorPredicate = (error: unknown, adapterId: string) => boolean;
+export type RecoverableErrorHandler = (error: unknown, adapterId: string) => Promise<void>;
 
 export interface JsonlTransportOptions {
   kernel: AgentRuntimeKernel;
@@ -476,7 +476,7 @@ export class JsonlTransport {
         adapterId: requestedAdapterId,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
-      recoverAfterError: this.recoverAfterError(),
+      recoverAfterError: this.recoverAfterError(requestedAdapterId),
       attachmentMetadataJson: message.attachmentMetadataJson ?? null,
       surfaceContextJson: message.surfaceContextJson ?? null,
       imagePresent: Boolean(message.imageBase64),
@@ -631,17 +631,17 @@ export class JsonlTransport {
     return undefined;
   }
 
-  private recoverAfterError(): ExecuteAgentRunInput["recoverAfterError"] | undefined {
+  private recoverAfterError(adapterId: string): ExecuteAgentRunInput["recoverAfterError"] | undefined {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
     let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error)) {
+      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
       recoveries += 1;
-      await this.onRecoverableError?.(error);
+      await this.onRecoverableError?.(error, adapterId);
       return true;
     };
   }
