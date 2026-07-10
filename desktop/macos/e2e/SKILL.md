@@ -228,6 +228,25 @@ cd desktop/macos
 Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
 Hermetic ratchet for the timeout itself: `xcrun swift test --package-path Desktop --filter AwaitWithTimeoutTests`.
 
+### 2i. Prove Quit & Reopen relaunches the same bundle, session intact (PERM-06)
+The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen Recording)
+calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
+`quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
+`reset_onboarding`), delayed so the action's HTTP response flushes before the process
+terminates. Because the relaunch is `open <bundle>`, the reopened app derives its own
+automation port — read it from the app log (`DesktopAutomationBridge: listening on …`).
+```bash
+cd desktop/macos
+# record before-state, trigger the restart, then verify the reopened bundle
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("before", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
+./scripts/omi-ctl action quit_and_reopen        # {restarting:true, bundle_id, relaunch_path}
+sleep 8                                          # terminate + relaunch + boot
+NEWPORT=$(grep -oE 'listening on http://127.0.0.1:[0-9]+' /private/tmp/omi-dev.log | tail -1 | grep -oE '[0-9]+$')
+OMI_AUTOMATION_PORT=$NEWPORT ./scripts/omi-ctl wait-ready | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
+#   assert: same bundleIdentifier, isSignedIn=true, hasCompletedOnboarding=true (session intact)
+```
+Hermetic ratchet: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`.
+
 ### The full loop
 ```bash
 cd desktop/macos

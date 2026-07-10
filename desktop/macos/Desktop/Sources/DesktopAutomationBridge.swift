@@ -2698,6 +2698,40 @@ final class DesktopAutomationActionRegistry {
       }
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
+
+    // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
+    // AppState.restartApp() path used after granting Accessibility / Screen
+    // Recording — so a harness can prove the SAME bundle relaunches with the
+    // session intact. Distinct from `reset_onboarding`, which mutates onboarding
+    // state. The restart is scheduled after a short delay so this action's HTTP
+    // response flushes before restartApp() terminates the process. Non-prod only.
+    register(
+      name: "quit_and_reopen",
+      summary: "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
+      params: ["delayMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "quit_and_reopen is disabled on production bundles"]
+      }
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      if UpdaterViewModel.isUpdateInProgress {
+        return ["error": "sparkle update in progress — restart is deferred to Sparkle"]
+      }
+      let bundleId = Bundle.main.bundleIdentifier ?? ""
+      let relaunchPath = Bundle.main.bundleURL.path
+      let delayMs = min(max(intParam(params["delayMs"], default: 400), 100), 5000)
+      DispatchQueue.main.asyncAfter(deadline: .now() + Double(delayMs) / 1000.0) {
+        appState.restartApp()
+      }
+      return [
+        "restarting": "true",
+        "bundle_id": bundleId,
+        "relaunch_path": relaunchPath,
+        "delay_ms": "\(delayMs)",
+      ]
+    }
   }
 }
 
