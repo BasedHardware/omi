@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import importlib
 import json
 import os
@@ -603,6 +604,40 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
     assert result.headers["x-omi-memory-device-scope-supported"] == "false"
     legacy_get.assert_called_once_with("uid-legacy", 10, 0)
     service_read.assert_not_called()
+
+
+def test_v3_memory_creates_forward_request_device_provenance(monkeypatch):
+    memories_router = _load_memories_router(monkeypatch)
+    device_context = SimpleNamespace(client_device_id="macos_a1b2c3d4")
+    forwarded_device_ids = []
+
+    class ProvenanceCaptured(Exception):
+        pass
+
+    async def skip_import_guard(*args, **kwargs):
+        return None
+
+    def capture_from_memory(*args, **kwargs):
+        forwarded_device_ids.append(kwargs["client_device_id"])
+        raise ProvenanceCaptured
+
+    monkeypatch.setattr(memories_router, "resolve_client_device_from_request", lambda request: device_context)
+    monkeypatch.setattr(memories_router, "_guard_import_memory_write", skip_import_guard)
+    monkeypatch.setattr(memories_router.MemoryDB, "from_memory", staticmethod(capture_from_memory))
+
+    memory = SimpleNamespace(category=MemoryCategory.manual, visibility="private", tags=[])
+    with pytest.raises(ProvenanceCaptured):
+        asyncio.run(memories_router.create_memory(MagicMock(), memory, "uid-device-provenance"))
+    with pytest.raises(ProvenanceCaptured):
+        asyncio.run(
+            memories_router.create_memories_batch(
+                MagicMock(),
+                SimpleNamespace(memories=[memory]),
+                "uid-device-provenance",
+            )
+        )
+
+    assert forwarded_device_ids == ["macos_a1b2c3d4", "macos_a1b2c3d4"]
 
 
 def test_legal_state_short_term_active_processed():

@@ -363,7 +363,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testSetConversationStarredRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.setConversationStarred(id: "c1", starred: true)
+        _ = try? await client.setConversationStarred(id: "c1", starred: true)
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c1/starred", method: "PATCH",
                      label: "setConversationStarred")
@@ -371,10 +371,51 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testUpdateConversationTitleRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.updateConversationTitle(id: "c2", title: "New")
+        _ = try? await client.updateConversationTitle(id: "c2", title: "New")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c2", method: "PATCH",
                      label: "updateConversationTitle")
+    }
+
+    func testConversationMutationDecodesCanonicalRevisionAndState() async throws {
+        URLCapture.setResponse(
+            statusCode: 200,
+            body: Data(
+                """
+                {
+                  "status": "Ok",
+                  "conversation": {
+                    "id": "c2",
+                    "created_at": "2026-07-09T12:00:00Z",
+                    "updated_at": "2026-07-09T12:00:01.123456Z",
+                    "started_at": "2026-07-09T12:00:00Z",
+                    "finished_at": "2026-07-09T12:01:00Z",
+                    "structured": {
+                      "title": "Canonical title",
+                      "overview": "Processing finished",
+                      "emoji": "",
+                      "category": "other",
+                      "action_items": [],
+                      "events": []
+                    },
+                    "status": "completed",
+                    "starred": true,
+                    "discarded": false,
+                    "is_locked": false
+                  }
+                }
+                """.utf8
+            )
+        )
+        let client = await makeTestClient()
+
+        let conversation = try await client.updateConversationTitle(id: "c2", title: "Canonical title")
+
+        XCTAssertEqual(conversation.structured.title, "Canonical title")
+        XCTAssertEqual(conversation.structured.overview, "Processing finished")
+        XCTAssertEqual(conversation.status, .completed)
+        XCTAssertTrue(conversation.starred)
+        XCTAssertNotNil(conversation.updatedAt)
     }
 
     // -- Folders (GET → Python) --
@@ -602,7 +643,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testMoveConversationToFolderRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
+        _ = try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c4/folder", method: "PATCH",
                      label: "moveConversationToFolder")

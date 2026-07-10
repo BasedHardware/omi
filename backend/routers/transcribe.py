@@ -82,6 +82,11 @@ from utils.conversations.process_conversation import retrieve_in_progress_conver
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
+from utils.client_device import (
+    ClientDeviceContext,
+    resolve_client_device_from_headers,
+    resolve_client_device_from_websocket_auth_message,
+)
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
@@ -328,6 +333,7 @@ async def _stream_handler(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    client_device_context: Optional[ClientDeviceContext] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -335,6 +341,7 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
     client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
+    client_device_context = client_device_context or resolve_client_device_from_headers(websocket.headers)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -826,16 +833,45 @@ async def _stream_handler(
     # Stream transcript
     # Callback for when pusher finishes processing a conversation
     def on_conversation_processed(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=[]))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_created",
+                    memory=conversation,
+                    messages=[],
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     def on_conversation_processing_started(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_processing_started",
+                    memory=conversation,
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
@@ -885,7 +921,12 @@ async def _stream_handler(
                 if existing_conversation.get('status') == ConversationStatus.in_progress:
                     session.current_conversation_id = client_conversation_id
                     redis_db.set_in_progress_conversation_id(uid, session.current_conversation_id)
-                    _send_message_event(ConversationSessionEvent(conversation_id=session.current_conversation_id))
+                    _send_message_event(
+                        ConversationSessionEvent(
+                            conversation_id=session.current_conversation_id,
+                            recording_session_id=client_conversation_id,
+                        )
+                    )
                     logger.info(
                         f"Resuming client-scoped conversation {session.current_conversation_id} {uid} {session_id}"
                     )
@@ -907,6 +948,8 @@ async def _stream_handler(
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
+            client_device_id=client_device_context.client_device_id,
+            client_platform=client_device_context.platform,
         )
         if client_conversation_id and new_conversation_id == client_conversation_id:
             conversations_db.create_conversation_if_absent(uid, stub_conversation.model_dump())
@@ -952,7 +995,12 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         session.current_conversation_id = new_conversation_id
-        _send_message_event(ConversationSessionEvent(conversation_id=new_conversation_id))
+        _send_message_event(
+            ConversationSessionEvent(
+                conversation_id=new_conversation_id,
+                recording_session_id=client_conversation_id,
+            )
+        )
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -980,6 +1028,12 @@ async def _stream_handler(
 
     # Process existing conversations
     async def _prepare_in_progess_conversations() -> Optional[str]:
+        # A client-provided UUID is the durable identity of this recording.  It
+        # must win over the legacy, user-global in-progress pointer; otherwise a
+        # stale Redis/Firestore row can rebind a fresh desktop recording.
+        if client_conversation_id:
+            await _create_new_in_progress_conversation()
+            return None
 
         if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
@@ -2749,6 +2803,8 @@ async def web_listen_handler(
         await websocket.close(code=1008, reason="Auth error")
         return
 
+    client_device_context = resolve_client_device_from_websocket_auth_message(first_message)
+
     # Send success response
     await websocket.send_json({"type": "auth_response", "success": True})
     logger.info(f"web_listen_handler authenticated {uid}")
@@ -2772,5 +2828,6 @@ async def web_listen_handler(
         onboarding_mode=onboarding_mode,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        client_device_context=client_device_context,
     )
     logger.info(f"web_listen_handler ended {uid}")

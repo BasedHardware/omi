@@ -176,19 +176,20 @@ final class FailLoudConfigTests: XCTestCase {
   func testAuthTokensUseKeychainStorageOnAllBuilds() throws {
     let src = try source(relativePath: "Sources/AuthService.swift")
 
-    // Security invariant: the live config stores auth tokens in the Keychain on EVERY build
-    // (dev, beta, and production) with the plaintext UserDefaults write fallback disabled.
+    // Security invariant: new auth tokens use Keychain on every build. The only
+    // UserDefaults continuity path updates an already-existing same-user legacy
+    // migration source until signed-app Keychain persistence succeeds.
     XCTAssertTrue(src.contains("usesKeychainTokenStorage: { true }"))
     XCTAssertFalse(src.contains("!AppBuild.isNonProduction"))
     XCTAssertTrue(src.contains("allowsUserDefaultsFallback: { false }"))
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
-    XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("persistKeychainTokensTransactionally"))
     XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
     XCTAssertTrue(src.contains("allowsUserDefaultsTokenFallback"))
-    XCTAssertTrue(src.contains("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity"))
-    XCTAssertTrue(src.contains("recordAuthTokenStorageFallback("))
-    XCTAssertTrue(src.contains("updateChannel: AppBuild.currentUpdateChannel"))
-    XCTAssertTrue(src.contains("failed to migrate production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("Keychain token persistence deferred; preserving legacy migration source"))
+    XCTAssertTrue(src.contains("\"update_channel\": AppBuild.currentUpdateChannel"))
+    XCTAssertTrue(src.contains("Keychain migration deferred; retaining legacy auth tokens"))
+    XCTAssertTrue(src.contains("DesktopDiagnosticsManager.shared.recordFallback"))
     XCTAssertTrue(src.contains("cachedStoredTokens"))
   }
 

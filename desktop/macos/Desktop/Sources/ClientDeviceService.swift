@@ -3,6 +3,12 @@ import Foundation
 import LocalAuthentication
 import Security
 
+enum ClientDeviceKeychainReadResult {
+  case found(String)
+  case missing
+  case unavailable(OSStatus)
+}
+
 /// Stable per-installation device identity for capture provenance (mirrors Flutter `deviceIdHash`).
 final class ClientDeviceService {
   static let shared = ClientDeviceService()
@@ -12,6 +18,8 @@ final class ClientDeviceService {
   private let installIdMirrorDefaultsKey = "client-device-install-uuid-mirror"
   private let bundleIdentifier: String?
   private let userDefaults: UserDefaults
+  private let keychainReader: (() -> ClientDeviceKeychainReadResult)?
+  private let keychainWriter: ((String) -> Void)?
   private let cacheLock = NSLock()
   private var cachedInstallId: String?
 
@@ -27,10 +35,14 @@ final class ClientDeviceService {
 
   init(
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
-    userDefaults: UserDefaults = .standard
+    userDefaults: UserDefaults = .standard,
+    keychainReader: (() -> ClientDeviceKeychainReadResult)? = nil,
+    keychainWriter: ((String) -> Void)? = nil
   ) {
     self.bundleIdentifier = bundleIdentifier
     self.userDefaults = userDefaults
+    self.keychainReader = keychainReader
+    self.keychainWriter = keychainWriter
   }
 
   var deviceIdHash: String {
@@ -87,11 +99,18 @@ final class ClientDeviceService {
     if usesUserDefaultsInstallId {
       return loadOrCreateDevInstallId()
     }
-    switch readKeychainInstallId() {
+    switch keychainReader?() ?? readKeychainInstallId() {
     case .found(let existing):
       userDefaults.set(existing, forKey: installIdMirrorDefaultsKey)
       return existing
     case .missing:
+      // v0.12.64 moved production builds to a team+bundle scoped Keychain
+      // service. Existing installs have their prior stable value in this
+      // mirror, so migrate it instead of changing the provenance identity.
+      if let mirror = userDefaults.string(forKey: installIdMirrorDefaultsKey), !mirror.isEmpty {
+        saveKeychainInstallId(mirror)
+        return mirror
+      }
       let fresh = UUID().uuidString
       saveKeychainInstallId(fresh)
       userDefaults.set(fresh, forKey: installIdMirrorDefaultsKey)
@@ -125,13 +144,7 @@ final class ClientDeviceService {
     return fresh
   }
 
-  private enum KeychainReadResult {
-    case found(String)
-    case missing
-    case unavailable(OSStatus)
-  }
-
-  private func readKeychainInstallId() -> KeychainReadResult {
+  private func readKeychainInstallId() -> ClientDeviceKeychainReadResult {
     let context = LAContext()
     context.interactionNotAllowed = true
     let query: [String: Any] = [
@@ -159,6 +172,10 @@ final class ClientDeviceService {
   }
 
   private func saveKeychainInstallId(_ value: String) {
+    if let keychainWriter {
+      keychainWriter(value)
+      return
+    }
     let data = Data(value.utf8)
     let context = LAContext()
     context.interactionNotAllowed = true

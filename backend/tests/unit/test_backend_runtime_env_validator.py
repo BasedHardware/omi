@@ -27,6 +27,8 @@ def write_yaml(path: Path, payload: dict) -> None:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
+        {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
@@ -664,6 +666,44 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     validator = load_validator()
     assert validator.validate_runtime_env(env='dev') == []
     assert validator.validate_runtime_env(env='prod') == []
+
+
+def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    notifications_job = manifest['environments']['dev']['cloud_run']['jobs']['notifications-job']
+    forbidden_env = {
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_TYPESENSE_COLLECTION',
+        'TYPESENSE_HOST',
+        'TYPESENSE_HOST_PORT',
+        'TYPESENSE_API_KEY',
+    }
+    forbidden_secrets = {'TYPESENSE_HOST', 'TYPESENSE_API_KEY'}
+    notifications_job['env'].update({name: {'value': 'true', 'category': 'memory_rollout'} for name in forbidden_env})
+    notifications_job['secrets'].update({name: {'secret': name, 'version': 'latest'} for name in forbidden_secrets})
+
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    actual = {(error.scope, error.message) for error in errors}
+    expected = {
+        ('dev/cloud_run/jobs/notifications-job', f'env {name} belongs only on memory-maintenance-job')
+        for name in forbidden_env
+    }
+    expected.update(
+        {
+            ('dev/cloud_run/jobs/notifications-job', f'secret {name} belongs only on memory-maintenance-job')
+            for name in forbidden_secrets
+        }
+    )
+    assert expected <= actual
 
 
 def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_path):

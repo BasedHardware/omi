@@ -77,6 +77,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   fi
 
   active_pids=()
+  failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
   test_index=0
@@ -161,9 +162,23 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     IFS=$'\t' read -r status test_path < "$status_file"
     if [[ "$status" -ne 0 ]]; then
       echo "Backend unit test file failed: $test_path (status $status)"
+      failed_test_paths+=("$test_path")
       failed=1
     fi
   done
+
+  if [[ "$failed" -ne 0 ]]; then
+    rerun_list="/tmp/omi-backend-unit-failures.txt"
+    echo
+    echo "Backend unit suite failed."
+    echo "Reproduce only the failed file(s) with the same test.sh runner and timing guard:"
+    printf '  : > %q\n' "$rerun_list"
+    for test_path in "${failed_test_paths[@]}"; do
+      printf '  echo %q >> %q\n' "$test_path" "$rerun_list"
+    done
+    printf '  BACKEND_UNIT_TEST_FILE_LIST=%q bash test.sh\n' "$rerun_list"
+    echo "Do not use bare pytest for fast-unit timing failures; it omits test.sh's guard settings."
+  fi
 
   rm -rf "$status_dir"
   exit "$failed"

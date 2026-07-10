@@ -18,6 +18,22 @@ EnvEntry = dict[str, Any]
 EnvEntryMap = dict[str, EnvEntry]
 StringMap = dict[str, str]
 
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
+    {
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_TYPESENSE_COLLECTION',
+        'TYPESENSE_HOST',
+        'TYPESENSE_HOST_PORT',
+        'TYPESENSE_API_KEY',
+    }
+)
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
+
 
 def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
@@ -246,6 +262,8 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     so Gate 3 cannot forget ST→LT hosting.
 
     Also rejects:
+    - canonical maintenance env/secrets on notifications-job (its workflow
+      removes only those retired live bindings);
     - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
       (ST→LT cron must run only on memory-maintenance-job);
     - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
@@ -255,6 +273,25 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+    notifications_job = _as_config_dict(jobs.get('notifications-job')) or {}
+    notifications_env = _as_config_dict(notifications_job.get('env')) or {}
+    notifications_secrets = _as_config_dict(notifications_job.get('secrets')) or {}
+    notifications_scope = f'{env}/cloud_run/jobs/notifications-job'
+    for forbidden_env in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV.intersection(notifications_env)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'env {forbidden_env} belongs only on memory-maintenance-job',
+            )
+        )
+    for forbidden_secret in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS.intersection(notifications_secrets)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'secret {forbidden_secret} belongs only on memory-maintenance-job',
+            )
+        )
+
     job = _as_config_dict(jobs.get('memory-maintenance-job'))
     if job is None:
         errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))

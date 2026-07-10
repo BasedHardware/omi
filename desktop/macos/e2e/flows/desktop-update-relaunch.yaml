@@ -1,0 +1,29 @@
+version: 2
+name: desktop-update-relaunch
+tier: manual
+description: Verify a signed desktop update is reported installed only after the target build relaunches
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/UpdateRelaunchWindowPolicy.swift
+  - desktop/macos/Desktop/Sources/UpdaterViewModel.swift
+preconditions:
+  - isolated_release_test_host
+  - signed_older_beta_installed
+  - signed_qualified_beta_update_available
+
+steps:
+  - id: S1
+    name: Record the source build
+    do: "On an isolated release test host, launch the older signed beta and record its version and build from About. Confirm no pending update-install attempt exists before starting."
+
+  - id: S2
+    name: Install the qualified beta
+    do: "Use Check for Updates, install the exact signed qualified beta offered by Sparkle, and allow the app to relaunch itself. Do not launch or modify the production bundle on a maintainer workstation."
+
+  - id: S3
+    name: Verify the relaunched target build
+    do: "After relaunch, confirm About reports the exact target build and the app is usable. Verify telemetry contains one correlated Update Install Started event followed by one Update Installed event with verified_after_relaunch=true and the same attempt ID."
+
+  - id: S4
+    name: Verify mismatch is fail-closed
+    do: "Repeat with an isolated test fixture whose pending target build intentionally differs from the relaunched build. Verify Update Install Verification Failed is emitted and Update Installed is not emitted for that attempt."

@@ -97,13 +97,19 @@ extension AppState {
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
 
-    // Update live @AppStorage state in the current app instance before touching
-    // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
-    DispatchQueue.main.async {
+    // Update live @AppStorage-backed state on the main thread *before* clearing
+    // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
+    // hasCompletedOnboarding = false; dispatch synchronously so that runs first.
+    let postResetNotification = {
       NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
     }
+    if Thread.isMainThread {
+      postResetNotification()
+    } else {
+      DispatchQueue.main.sync(execute: postResetNotification)
+    }
 
-    // Clear onboarding-related UserDefaults keys (thread-safe, do first)
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state)
     let onboardingKeys = [
       "hasCompletedOnboarding",
       "onboardingStep",

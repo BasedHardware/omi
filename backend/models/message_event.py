@@ -23,6 +23,10 @@ class MessageEvent(BaseModel):
 class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []
+    # The recording identity that caused this lifecycle event.  It is optional
+    # for older producers, but identified listen sessions must propagate it so
+    # clients never infer ownership from the WebSocket that delivered the event.
+    recording_session_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -94,6 +98,7 @@ class ConversationSessionEvent(MessageEvent):
     event_type: str = "conversation_session"
     conversation_id: str
     status: str = "in_progress"
+    recording_session_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")

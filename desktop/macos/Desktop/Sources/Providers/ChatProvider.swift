@@ -845,12 +845,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Published State
     @Published var chatMode: ChatMode = .act
-    @Published var draftText = ""
+    @Published var draftText = "" {
+        didSet {
+            guard !isRestoringDraft else { return }
+            draftRevision &+= 1
+            ChatDraftStore.shared.setText(draftText, for: activeDraftKey)
+        }
+    }
     /// Files staged for attachment to the next message. Cleared when the message is sent.
     @Published var pendingAttachments: [ChatAttachment] = []
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
-    @Published var currentSession: ChatSession?
+    @Published var currentSession: ChatSession? {
+        didSet { restoreDraftForCurrentContextIfNeeded() }
+    }
     @Published var isLoading = false
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
@@ -901,7 +909,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
     @Published var sessionsLoadError: String?
-    @Published var selectedAppId: String?
+    @Published var selectedAppId: String? {
+        didSet { restoreDraftForCurrentContextIfNeeded() }
+    }
     @Published var hasMoreMessages = false
     @Published var isLoadingMoreMessages = false
     @Published var showStarredOnly = false
@@ -934,6 +944,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// This lets a single pill run Hermes/OpenClaw without changing the user's
     /// global chat provider preference stored in `chatBridgeMode`.
     private let bridgeHarnessOverride: AgentHarnessMode?
+    private var activeDraftKey = ChatDraftKey.mainChat(contextID: "omi:default")
+    private var isRestoringDraft = false
+    private var draftRevision: UInt64 = 0
 
     var hasBridgeHarnessOverride: Bool {
         bridgeHarnessOverride != nil
@@ -1126,6 +1139,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
         self.bridgeHarnessOverride = bridgeHarnessOverride
+        isRestoringDraft = true
+        draftText = ChatDraftStore.shared.text(for: activeDraftKey)
+        isRestoringDraft = false
         log("ChatProvider initialized, will start Claude bridge on first use")
 
         // When the last in-flight save completes, re-run any poll cycle
@@ -1191,6 +1207,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self.agentBridgeStarted = false
                     }
                     self.resetSessionStateForAuthChange()
+                    self.resetDraftAfterSignOut()
                     AgentRuntimeStatusStore.shared.reset()
                 }
             }
@@ -1258,6 +1275,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
+            // The notification is delivered on the main queue, so force the
+            // latest coalesced draft writes to disk before this callback can
+            // return and the process exits (including Sparkle relaunches).
+            MainActor.assumeIsolated {
+                ChatDraftStore.shared.flush()
+            }
             guard let self else { return }
             Task { @MainActor in
                 await self.resolvedAgentClient().stop()
@@ -1266,6 +1289,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private var terminationObserver: NSObjectProtocol?
+
+    private var currentDraftKey: ChatDraftKey {
+        let appContext = selectedAppId?.isEmpty == false ? selectedAppId! : "omi"
+        let chatContext = currentSession?.id ?? "default"
+        return .mainChat(contextID: "\(appContext):\(chatContext)")
+    }
+
+    private func restoreDraftForCurrentContextIfNeeded() {
+        let nextKey = currentDraftKey
+        guard nextKey != activeDraftKey else { return }
+        activeDraftKey = nextKey
+        isRestoringDraft = true
+        draftText = ChatDraftStore.shared.text(for: nextKey)
+        isRestoringDraft = false
+    }
+
+    private func resetDraftAfterSignOut() {
+        activeDraftKey = .mainChat(contextID: "omi:default")
+        isRestoringDraft = true
+        draftText = ""
+        isRestoringDraft = false
+    }
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
@@ -3564,7 +3609,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         surfaceRef: AgentSurfaceReference? = nil,
         imageData: Data? = nil,
         turnOwner: ChatTurnOwner = .mainChat,
-        clientTurnId: String = UUID().uuidString
+        clientTurnId: String = UUID().uuidString,
+        onAccepted: (@MainActor () -> Void)? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3610,9 +3656,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard await ensureBridgeStarted() else {
             tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            if currentError == .authRequired {
-                draftText = trimmedText
-            } else if currentError == nil, errorMessage?.isEmpty ?? true {
+            if currentError == nil, errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
             releaseSendLock(sendGeneration: sendGen)
@@ -3768,6 +3812,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Signal to ChatMessagesView after the local user row exists so
         // it anchors the new turn, not the previous one.
         localSendToken = LocalSendToken(generation: sendGeneration)
+        onAccepted?()
 
         // Track onboarding user messages with full content
         if isOnboarding {
@@ -4438,9 +4483,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
                 lastFailedPrompt = trimmedText
-                if card == .authRequired {
-                    draftText = trimmedText
-                }
                 errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
@@ -4455,6 +4497,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         return completedResponseText
+    }
+
+    /// Sends the active main-chat composer and clears only the exact draft that
+    /// was accepted into the timeline. Preflight failures leave it untouched,
+    /// and typing a new draft while acceptance is pending is never overwritten.
+    @discardableResult
+    func sendMainDraft(_ text: String) async -> String? {
+        let submittedRevision = draftRevision
+        return await sendMessage(text, onAccepted: { [weak self] in
+            guard let self,
+                  self.draftRevision == submittedRevision,
+                  self.draftText == text else { return }
+            self.draftText = ""
+        })
     }
 
     @discardableResult

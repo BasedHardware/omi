@@ -23,6 +23,8 @@ from utils.memory.canonical_memory_adapter import read_canonical_memories, write
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils.memory.required_promotion import required_promotion_payload
+from utils.client_device import DeviceScopeRequest
 from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
 
 
@@ -116,6 +118,44 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["subject_entity_id"] == USER_ENTITY_ID
     assert stored["predicate"] == "resides_in"
     assert stored["arguments"] == {"location": "San Francisco"}
+
+
+def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account):
+    uid = "uid-manual-device-wire"
+    device_id = "macos_a1b2c3d4"
+    memory_db = MemoryDB.from_memory(
+        Memory(content="User explicitly prefers dark mode", category=MemoryCategory.manual),
+        uid,
+        None,
+        True,
+        client_device_id=device_id,
+    )
+    memory_db.id = "mem_manual_device_wire"
+    db = _FakeDb(_control_seed(uid))
+    service = MemoryService(db_client=db)
+
+    with (
+        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    ):
+        service.write(
+            uid,
+            required_promotion_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
+        )
+
+    current_device = read_canonical_memories(
+        uid,
+        db_client=db,
+        device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id=device_id),
+    )
+    another_device = read_canonical_memories(
+        uid,
+        db_client=db,
+        device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id="ios_deadbeef"),
+    )
+
+    assert [memory.id for memory in current_device] == [memory_db.id]
+    assert another_device == []
 
 
 def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkeypatch_trusted_account):

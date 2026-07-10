@@ -1,0 +1,32 @@
+version: 2
+name: privacy-settings
+tier: 2
+description: Hermetic Settings privacy toggle snapshot via bridge action
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Privacy section
+    bridge.navigate:
+      target: settings
+      settingsSection: Privacy
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Privacy
+
+  - id: S2
+    name: Privacy settings snapshot
+    bridge.action:
+      name: settings_privacy_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bless a macOS desktop beta release by rebuilding the tag and running T2 core E2E.
+# Bless a macOS desktop candidate by rebuilding the tag and running T2 core E2E.
 #
 # Usage:
 #   ./scripts/bless-release.sh v11.0.0+11000-macos
@@ -12,17 +12,19 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
 
 KEEP_STACK=0
+PROMOTE=1
 RELEASE_TAG=""
 
 usage() {
   cat <<'USAGE'
-Bless a macOS desktop beta release (rebuild tag + T2 core E2E + write blessed metadata).
+Bless a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
 
 Usage:
-  bless-release.sh [--keep-stack] <vX.Y.Z+BUILD-macos>
+  bless-release.sh [--keep-stack] [--no-promote] <vX.Y.Z+BUILD-macos>
 
 Options:
   --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
+  --no-promote   Write qualification evidence without dispatching beta promotion
 USAGE
 }
 
@@ -30,6 +32,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-stack)
       KEEP_STACK=1
+      shift
+      ;;
+    --no-promote)
+      PROMOTE=0
       shift
       ;;
     --help|-h)
@@ -250,5 +256,14 @@ python3 "$KEYVALUE_PY" update-blessed "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
+if [[ "$PROMOTE" -eq 1 ]]; then
+  gh workflow run desktop_promote_beta.yml \
+    --repo BasedHardware/omi \
+    -f release_tag="$RELEASE_TAG"
+fi
+
 BLESS_SUCCESS=1
 echo "Blessed $RELEASE_TAG at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
+if [[ "$PROMOTE" -eq 1 ]]; then
+  echo "Dispatched qualified beta promotion for $RELEASE_TAG"
+fi
