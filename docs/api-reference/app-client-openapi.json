@@ -33995,7 +33995,7 @@
         ]
       },
       "post": {
-        "description": "Create a durable goal. Metrics are optional and other goals are never changed implicitly.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)\n- **target_value**: Target value to achieve\n- **current_value**: Current progress (default: 0)\n- **min_value**: Minimum scale value (default: 0)\n- **max_value**: Maximum scale value (default: 10)\n- **unit**: Optional unit label (e.g., 'users', 'points')",
+        "description": "Create a durable goal. Metrics are optional and other goals are never changed implicitly.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Optional metric type: boolean, scale, or numeric\n- **target_value**: Optional target value\n- **current_value**: Optional current progress\n- **min_value**: Optional minimum scale value\n- **max_value**: Optional maximum scale value\n- **unit**: Optional unit label (e.g., 'users', 'points')\n\nOmit all metric fields to create a qualitative goal.",
         "operationId": "createGoal",
         "requestBody": {
           "content": {

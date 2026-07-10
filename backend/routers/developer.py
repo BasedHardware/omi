@@ -2116,12 +2116,14 @@ def create_goal(
     Create a durable goal. Metrics are optional and other goals are never changed implicitly.
 
     - **title**: The goal title/description (1-500 characters)
-    - **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)
-    - **target_value**: Target value to achieve
-    - **current_value**: Current progress (default: 0)
-    - **min_value**: Minimum scale value (default: 0)
-    - **max_value**: Maximum scale value (default: 10)
+    - **goal_type**: Optional metric type: boolean, scale, or numeric
+    - **target_value**: Optional target value
+    - **current_value**: Optional current progress
+    - **min_value**: Optional minimum scale value
+    - **max_value**: Optional maximum scale value
     - **unit**: Optional unit label (e.g., 'users', 'points')
+
+    Omit all metric fields to create a qualitative goal.
     """
     if not request.title or len(request.title.strip()) == 0:
         raise HTTPException(status_code=422, detail="title cannot be empty")
