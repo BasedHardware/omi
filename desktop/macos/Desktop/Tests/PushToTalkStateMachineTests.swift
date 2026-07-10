@@ -3,53 +3,48 @@ import XCTest
 @testable import Omi_Computer
 
 final class PushToTalkStateMachineTests: XCTestCase {
-  func testStartListeningIsIdempotentOutsideIdleOrPendingLock() throws {
-    let source = try pushToTalkManagerSource()
-
-    XCTAssertTrue(source.contains("guard state == .idle || state == .pendingLockDecision else"))
-    XCTAssertTrue(source.contains("PushToTalkManager: startListening ignored — state="))
+  func testLegacyPublishedStateIsDerivedFromAuthoritativeVoiceTurnPhase() {
+    XCTAssertEqual(PushToTalkManager.legacyState(for: nil), .idle)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .idle), .idle)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .recording), .listening)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .pendingLockDecision), .pendingLockDecision)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .lockedRecording), .lockedListening)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .finalizing), .finalizing)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .awaitingResponse), .idle)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .awaitingTools), .idle)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .playing(.nativeRealtime)), .idle)
+    XCTAssertEqual(PushToTalkManager.legacyState(for: .terminal(.success)), .idle)
   }
 
-  func testMicCaptureStartCannotDoubleAdvanceState() throws {
-    let source = try pushToTalkManagerSource()
+  func testCaptureStartAfterFinalizationProducesStopEffect() {
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    model = reducer.reduce(model, .finalize(turnID: turnID)).model
+    let captureID = VoiceCaptureID(42)
 
-    XCTAssertTrue(source.contains("private var micCaptureStartInFlight = false"))
-    XCTAssertTrue(source.contains("private var micCaptureGeneration: UInt64 = 0"))
-    XCTAssertTrue(source.contains("guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else"))
-    XCTAssertTrue(source.contains("PushToTalkManager: mic capture start ignored — already active"))
-    XCTAssertFalse(source.contains("private var micCaptureActive"))
+    let result = reducer.reduce(
+      model,
+      .captureStarted(turnID: turnID, captureID: captureID))
+
+    XCTAssertEqual(result.model.turn?.phase, .finalizing)
+    XCTAssertTrue(result.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
   }
 
-  func testSilentMicRecoveryPreservesBluetoothOutputRouting() throws {
-    let source = try pushToTalkManagerSource()
+  func testCancelFromRecordingStopsCaptureAndTerminatesOnce() {
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    let captureID = VoiceCaptureID(9)
+    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    model = reducer.reduce(model, .captureStarted(turnID: turnID, captureID: captureID)).model
 
-    XCTAssertTrue(source.contains("private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID?"))
-    XCTAssertTrue(source.contains("startMicCapture(batchMode: batchMode, overrideDeviceID: preferredPTTInputOverrideDeviceID())"))
-  }
+    let cancelled = reducer.reduce(model, .cancel(turnID: turnID, reason: .cancelled))
 
-  func testSilentMicRecoveryResetsCaptureWatchdogForNewPTTTurn() throws {
-    let source = try pushToTalkManagerSource()
-
-    XCTAssertTrue(source.contains("capture.resetSilentMicWatchdog()"))
-    XCTAssertTrue(source.contains("capture.detectSilentMicOnAnyTransport = true"))
-  }
-
-  func testLateMicCaptureStartStopsInsteadOfLeakingIntoIdlePTT() throws {
-    let source = try pushToTalkManagerSource()
-
-    XCTAssertTrue(source.contains("let generation = micCaptureGeneration"))
-    XCTAssertTrue(source.contains("guard self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }"))
-    XCTAssertTrue(source.contains("capture.stopCapture()"))
-    XCTAssertTrue(source.contains("self.audioCaptureService === capture"))
-    XCTAssertTrue(source.contains("PushToTalkManager: mic capture start completed after turn ended — stopped"))
-    XCTAssertTrue(source.contains("guard self.micCaptureGeneration == generation else {"))
-  }
-
-  private func pushToTalkManagerSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
+    XCTAssertEqual(cancelled.model.turn?.phase, .terminal(.cancelled))
+    XCTAssertTrue(cancelled.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
+    XCTAssertEqual(cancelled.effects.filter { effect in
+      if case .terminal = effect { return true }
+      return false
+    }.count, 1)
   }
 }

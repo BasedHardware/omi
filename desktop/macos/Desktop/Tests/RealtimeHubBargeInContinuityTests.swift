@@ -4,6 +4,243 @@ import XCTest
 
 @MainActor
 final class RealtimeHubBargeInContinuityTests: XCTestCase {
+  func testProviderEventIdentityCannotCrossTurnOrResponseBoundary() {
+    let turnA = VoiceTurnID()
+    let turnB = VoiceTurnID()
+    let responseA = VoiceResponseID("response-a")
+    let responseB = VoiceResponseID("response-b")
+    let eventA = RealtimeHubEventIdentity(turnID: turnA, responseID: responseA)
+
+    XCTAssertTrue(
+      RealtimeHubEventOwnership.accepts(
+        eventA, activeTurnID: turnA, activeResponseID: responseA))
+    XCTAssertFalse(
+      RealtimeHubEventOwnership.accepts(
+        eventA, activeTurnID: turnB, activeResponseID: responseA))
+    XCTAssertFalse(
+      RealtimeHubEventOwnership.accepts(
+        eventA, activeTurnID: turnA, activeResponseID: responseB))
+    XCTAssertFalse(
+      RealtimeHubEventOwnership.accepts(
+        nil, activeTurnID: turnA, activeResponseID: responseA))
+  }
+
+  func testAudioIngressClosesAtCommitAndCannotRebindToNextTurn() {
+    let turnA = VoiceTurnID()
+    let turnB = VoiceTurnID()
+
+    XCTAssertTrue(
+      VoiceAudioIngressOwnership.accepts(
+        turnID: turnA, activeTurnID: turnA, inputTurnInProgress: true))
+    XCTAssertFalse(
+      VoiceAudioIngressOwnership.accepts(
+        turnID: turnA, activeTurnID: turnA, inputTurnInProgress: false))
+    XCTAssertFalse(
+      VoiceAudioIngressOwnership.accepts(
+        turnID: turnA, activeTurnID: turnB, inputTurnInProgress: true))
+  }
+
+  func testWarmHubErrorCannotTerminateFallbackRoute() {
+    let sessionID = VoiceSessionID()
+
+    XCTAssertTrue(
+      RealtimeHubErrorOwnership.owns(
+        route: .hub(sessionID: sessionID), activeSessionID: sessionID))
+    XCTAssertFalse(
+      RealtimeHubErrorOwnership.owns(
+        route: .hub(sessionID: VoiceSessionID()), activeSessionID: sessionID))
+    XCTAssertFalse(
+      RealtimeHubErrorOwnership.owns(
+        route: .deepgramBatch, activeSessionID: sessionID))
+    XCTAssertFalse(
+      RealtimeHubErrorOwnership.owns(
+        route: .omniSTT, activeSessionID: sessionID))
+  }
+
+  func testProviderSpecificBargeInPlanIsDeterministic() {
+    XCTAssertEqual(
+      RealtimeHubBargeInAction.decide(
+        providerResponseInFlight: true,
+        playbackActive: true,
+        strategy: .inSessionCancel),
+      .cancelInSession)
+    XCTAssertEqual(
+      RealtimeHubBargeInAction.decide(
+        providerResponseInFlight: true,
+        playbackActive: true,
+        strategy: .freshSession),
+      .replaceSession)
+    XCTAssertEqual(
+      RealtimeHubBargeInAction.decide(
+        providerResponseInFlight: false,
+        playbackActive: true,
+        strategy: .inSessionCancel),
+      .stopPlaybackTail)
+    XCTAssertEqual(
+      RealtimeHubBargeInAction.decide(
+        providerResponseInFlight: false,
+        playbackActive: false,
+        strategy: .freshSession),
+      .none)
+  }
+
+  func testCommitFreezesPreparationBeforeClosingInput() throws {
+    let source = try realtimeHubControllerSource()
+    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
+    let tail = source[commit.lowerBound...]
+    let cancel = try XCTUnwrap(tail.range(of: "turnPreparationTask?.cancel()"))
+    let close = try XCTUnwrap(tail.range(of: "inputTurnInProgress = false"))
+
+    XCTAssertLessThan(cancel.lowerBound, close.lowerBound)
+    XCTAssertTrue(source.contains("self.inputTurnInProgress,"))
+    XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_seed_changed\""))
+    XCTAssertTrue(
+      source.contains("deferring voice-seed session refresh until the active turn terminates"))
+    XCTAssertTrue(source.contains("await persistence.value"))
+    XCTAssertTrue(source.contains("await self.refreshVoiceSeedContext()"))
+    XCTAssertTrue(source.contains("applying deferred voice seed refresh after turn persistence"))
+    XCTAssertTrue(source.contains("let observedTurnEpoch = turnEpoch"))
+    XCTAssertTrue(source.contains("let observedPersistenceGeneration = turnPersistenceGeneration"))
+    XCTAssertTrue(source.contains("observedTurnEpoch == turnEpoch"))
+    XCTAssertTrue(source.contains("observedPersistenceGeneration == turnPersistenceGeneration"))
+    XCTAssertTrue(source.contains("let previous = turnPersistenceTask"))
+    XCTAssertTrue(source.contains("if let previous { await previous.value }"))
+    XCTAssertTrue(source.contains("enqueueTurnPersistence { [weak self] in"))
+    XCTAssertTrue(source.contains("let interruptedContinuityTask = bargeInContinuityTask"))
+    XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
+    XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_seed_changed\""))
+    XCTAssertTrue(source.contains("cancelContinuityFenceActive = true"))
+    XCTAssertTrue(source.contains("self.cancelContinuityFenceActive = false"))
+    XCTAssertTrue(source.contains("general warm deferred behind canceled-turn continuity fence"))
+    XCTAssertTrue(source.contains("session start rejected behind canceled-turn continuity fence"))
+  }
+
+  func testCancelKeepsReconnectFenceThroughEveryPersistencePathAndSeedRefresh() throws {
+    let source = try realtimeHubControllerSource()
+    let cancel = try XCTUnwrap(
+      source.range(of: "func cancelTurn(turnID requestedTurnID: VoiceTurnID) -> Bool"))
+    let cancelTail = source[cancel.lowerBound...]
+    let preparationWait = try XCTUnwrap(
+      cancelTail.range(of: "await canceledPreparationTask.value"))
+    let continuityWait = try XCTUnwrap(
+      cancelTail.range(of: "await interruptedContinuityTask.value"))
+    let persistenceFence = try XCTUnwrap(
+      cancelTail.range(of: "await self.refreshVoiceSeedAfterPersistenceFence("))
+    let fenceRelease = try XCTUnwrap(
+      cancelTail.range(of: "self.cancelContinuityFenceActive = false"))
+
+    XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
+    XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
+    XCTAssertLessThan(persistenceFence.lowerBound, fenceRelease.lowerBound)
+
+    let helper = try XCTUnwrap(
+      source.range(
+        of: "private func refreshVoiceSeedAfterPersistenceFence(reason: String) async -> Bool"))
+    let helperTail = source[helper.lowerBound...]
+    let ordinaryPersistenceWait = try XCTUnwrap(helperTail.range(of: "await persistence.value"))
+    let seedRefresh = try XCTUnwrap(helperTail.range(of: "await refreshVoiceSeedContext()"))
+    XCTAssertLessThan(ordinaryPersistenceWait.lowerBound, seedRefresh.lowerBound)
+
+    XCTAssertTrue(source.contains("private var voiceSeedRefreshGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("voiceSeedRefreshGeneration == refreshGeneration"))
+    XCTAssertTrue(source.contains("let resolvedSeed = await seed"))
+    XCTAssertTrue(source.contains("let resolvedFloatingStatus = await floatingStatus"))
+    XCTAssertTrue(source.contains("prefetchedVoiceSeedContext = resolvedSeed"))
+    XCTAssertTrue(source.contains("prefetchedFloatingAgentStatus = resolvedFloatingStatus"))
+  }
+
+  func testManagedReplacementFailoverPreservesBufferedTurnAndIdentity() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("let pendingTurn = pendingBargeInReplacement"))
+    XCTAssertTrue(source.contains("let responseID = voiceResponseID"))
+    XCTAssertTrue(source.contains("pendingBargeInReplacement = pendingTurn"))
+    XCTAssertTrue(source.contains("voiceResponseID = responseID"))
+    XCTAssertTrue(source.contains("startReplacementSessionForBargeIn(provider: alternate"))
+    XCTAssertTrue(source.contains("remintReplacementSessionForBargeIn(provider: alternate)"))
+    XCTAssertTrue(
+      source.contains(
+        "if pendingBargeInReplacement != nil {\n      finishBargeInReplacementAfterSessionReady()"))
+    XCTAssertTrue(
+      source.contains(
+        "if pendingBargeInReplacement != nil {\n      pendingBargeInReplacement?.audioBuffer.append"
+      ))
+    XCTAssertTrue(source.contains("if var pending = pendingBargeInReplacement"))
+    XCTAssertTrue(source.contains("responding = true\n      session?.commitInputTurn()"))
+  }
+
+  func testProviderResponseAndInputItemIDsOwnCallbackIdentity() throws {
+    let session = try realtimeHubSessionSource()
+
+    XCTAssertTrue(session.contains("openAIPendingResponseIdentities.removeFirst()"))
+    XCTAssertTrue(session.contains("openAIPendingInputIdentities.removeFirst()"))
+    XCTAssertTrue(session.contains("openAIResponseIdentities[id] = pending.identity"))
+    XCTAssertTrue(session.contains("openAIInputItemIdentities[itemID] = identity"))
+    XCTAssertTrue(session.contains("openAIResponseIdentity(for: e)"))
+    XCTAssertTrue(session.contains("openAIInputIdentity(for: e)"))
+    XCTAssertTrue(session.contains("emitAudio(d, identity: identity)"))
+    XCTAssertTrue(session.contains("finishTurn(identity: responseIdentity)"))
+    XCTAssertTrue(
+      session.contains("PendingOpenAIResponseIdentity(identity: identity, canceled: false)"))
+    XCTAssertTrue(session.contains("openAIPendingResponseIdentities[pendingIndex].canceled = true"))
+    XCTAssertTrue(session.contains("guard !pending.canceled else"))
+  }
+
+  func testFastCommitQueuesBeginBeforeProviderCommit() throws {
+    let source = try realtimeHubControllerSource()
+    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
+    let tail = source[commit.lowerBound...]
+    let begin = try XCTUnwrap(tail.range(of: "s.beginInputTurn("))
+    let providerCommit = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
+
+    XCTAssertLessThan(begin.lowerBound, providerCommit.lowerBound)
+  }
+
+  func testIdleSessionCanBeReplaced() {
+    XCTAssertTrue(
+      RealtimeHubLifecyclePolicy.canReplaceSession(
+        .init(
+          inputTurnInProgress: false,
+          responding: false,
+          playbackActive: false,
+          pendingToolCount: 0,
+          coordinatorTurnActive: false,
+          minting: false)))
+  }
+
+  func testSessionReplacementIsBlockedByEveryActiveTurnDimension() {
+    let blocked: [RealtimeHubLifecycleSnapshot] = [
+      .init(
+        inputTurnInProgress: true, responding: false, playbackActive: false,
+        pendingToolCount: 0, coordinatorTurnActive: false, minting: false),
+      .init(
+        inputTurnInProgress: false, responding: true, playbackActive: false,
+        pendingToolCount: 0, coordinatorTurnActive: false, minting: false),
+      .init(
+        inputTurnInProgress: false, responding: false, playbackActive: true,
+        pendingToolCount: 0, coordinatorTurnActive: false, minting: false),
+      .init(
+        inputTurnInProgress: false, responding: false, playbackActive: false,
+        pendingToolCount: 1, coordinatorTurnActive: false, minting: false),
+      .init(
+        inputTurnInProgress: false, responding: false, playbackActive: false,
+        pendingToolCount: 0, coordinatorTurnActive: true, minting: false),
+      .init(
+        inputTurnInProgress: false, responding: false, playbackActive: false,
+        pendingToolCount: 0, coordinatorTurnActive: false, minting: true),
+    ]
+
+    for snapshot in blocked {
+      XCTAssertFalse(RealtimeHubLifecyclePolicy.canReplaceSession(snapshot), "\(snapshot)")
+    }
+  }
+
+  func testGeneralWarmSessionCannotRacePendingBargeInReplacement() {
+    XCTAssertTrue(
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: false))
+    XCTAssertFalse(
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: true))
+  }
 
   func testPrepareReplacementSessionPersistsInterruptedTurnBeforeSeedAndSession() async {
     var steps: [String] = []
@@ -20,6 +257,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       },
       refreshVoiceSeed: {
         steps.append("seed")
+        return true
       },
       startReplacementSession: {
         steps.append("session")
@@ -39,6 +277,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       },
       refreshVoiceSeed: {
         steps.append("seed")
+        return true
       },
       startReplacementSession: {
         steps.append("session")
@@ -46,6 +285,27 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     )
 
     XCTAssertEqual(steps, ["seed", "session"])
+  }
+
+  func testPrepareReplacementSessionRetriesSupersededSeedBeforeStartingSession() async {
+    var steps: [String] = []
+    var refreshAttempts = 0
+
+    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      interruptedTurn: nil,
+      recordInterruptedTurn: { _ in
+        XCTFail("no interrupted turn should be recorded")
+      },
+      refreshVoiceSeed: {
+        refreshAttempts += 1
+        steps.append("seed:\(refreshAttempts)")
+        return refreshAttempts == 3
+      },
+      startReplacementSession: {
+        steps.append("session")
+      })
+
+    XCTAssertEqual(steps, ["seed:1", "seed:2", "seed:3", "session"])
   }
 
   func testInterruptedTurnVisibleAssistantTextKeepsPartialReplyOnly() {
@@ -68,7 +328,9 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     XCTAssertTrue(source.contains("deferredFreshSessionSeedPrefetch"))
     XCTAssertTrue(source.contains("completeBargeInReplacementAfterContinuity("))
-    XCTAssertTrue(source.contains("await self.refreshVoiceSeedContext()") || source.contains("await refreshVoiceSeedContext()"))
+    XCTAssertTrue(
+      source.contains("await self.refreshVoiceSeedContext()")
+        || source.contains("await refreshVoiceSeedContext()"))
     XCTAssertTrue(source.contains("reconnectWarmSessionIfSeedStale()"))
     XCTAssertTrue(source.contains("sessionVoiceSeedContextSnapshot"))
     XCTAssertTrue(source.contains("recordTurnToKernelAwaiting("))
@@ -90,13 +352,15 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("if inputTurnInProgress"))
     XCTAssertTrue(
       source.contains("inputTurnActivityStartPending || sessionProvider == .gemini"))
-    XCTAssertTrue(source.contains("live.beginInputTurn(interrupting: pendingInputTurnInterrupting)"))
+    XCTAssertTrue(source.contains("responseID: voiceResponseID"))
+    XCTAssertTrue(source.contains("interrupting: pendingInputTurnInterrupting"))
   }
 
   func testPTTArmsVoiceSeedPrefetchBeforeMicCapture() throws {
     let pttSource = try pushToTalkManagerSource()
     let prefetchRange = try XCTUnwrap(pttSource.range(of: "prefetchVoiceSeedContextIfNeeded()"))
-    let captureRange = try XCTUnwrap(pttSource.range(of: "captureContextAndStartAudio(preOverlayImage: preOverlayImage)"))
+    let captureRange = try XCTUnwrap(
+      pttSource.range(of: "captureContextAndStartAudio(preOverlayImage: preOverlayImage)"))
     XCTAssertLessThan(prefetchRange.lowerBound, captureRange.lowerBound)
   }
 
@@ -113,6 +377,14 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubSessionSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSession.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

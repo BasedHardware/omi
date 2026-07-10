@@ -1,0 +1,3 @@
+{
+  "change": "Made push-to-talk and realtime voice more reliable during barge-in, provider delays, playback fallbacks, and rapid repeated turns."
+}

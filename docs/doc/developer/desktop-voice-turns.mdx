@@ -1,0 +1,56 @@
+---
+title: "Desktop voice-turn architecture"
+description: "Ownership, lifecycle, deadlines, and testing for macOS push-to-talk turns"
+---
+
+The macOS push-to-talk path has one semantic lifecycle owner: `VoiceTurnCoordinator` and its pure `VoiceTurnReducer`. Capture, provider, tool, and playback components remain I/O adapters. They report typed events and execute reducer effects; they do not independently decide whether a turn is listening, waiting, playing, or finished.
+
+## Turn lifecycle
+
+Every turn has a stable `VoiceTurnID`. Async boundaries add the narrowest identity needed to reject late work: `VoiceCaptureID`, `VoiceSessionID`, `VoiceResponseID`, `VoiceToolCallID`, and `VoiceLeaseID`.
+
+Realtime provider callbacks are delivered in transport order inside a `RealtimeHubEventIdentity` envelope. The controller rejects the envelope before mutating transcript, playback, tools, persistence, or terminal state unless both its turn and response identities still own the active reducer turn.
+
+```text
+recording / locked recording
+  -> finalizing
+  -> awaiting response / awaiting tools
+  -> playing
+  -> terminal(reason)
+```
+
+Hub warm wait, transcription, provider response, pending tools, deferred commit, barge-in replacement, playback drain, capture start, lock decision, and transient hints all have reducer-owned deadlines. Timer callbacks carry both the turn ID and deadline kind, so a timer from an older turn cannot mutate the current one.
+
+Terminal transitions are idempotent and use a typed reason. The coordinator emits cleanup effects once, cancels all turn deadlines, records low-cardinality diagnostics, and retains a bounded event timeline for reconstructing failures without logging user text.
+
+## Ownership boundaries
+
+| Component | Owns | Must not own |
+| --- | --- | --- |
+| `VoiceTurnReducer` | Legal transitions, route, deadlines, terminal reason, semantic UI projection | I/O, singletons, network, audio buffers |
+| `VoiceTurnCoordinator` | Reducer execution, timers, effects, diagnostics, bounded timeline | Provider protocol parsing or audio processing |
+| `PushToTalkManager` | Shortcut and capture adapters, bounded audio sidecar, existing STT dispatch | A second route or phase state machine |
+| `RealtimeHubController` | Warm session transport, normalized provider callbacks, tool adapter | Floating-bar presentation or terminal policy |
+| `VoiceOutputCoordinator` | One turn-scoped audible lease across every PTT lane | Audio synthesis or playback |
+| `FloatingBarVoicePlaybackService` | Synthesis and playback | PTT ownership or direct bar mutation |
+| `PTTBarPresenter` | Applying the reducer projection to floating-bar state | Turn policy |
+
+The hot CoreAudio path does not send every PCM chunk through the reducer. Capture callbacks cross a serialized, turn-tokened ingress boundary before touching turn state or provider input; finalization closes that token before commit, so an admitted tail chunk cannot leak into the next turn. Audio remains in bounded sidecar storage and transport adapters; only lifecycle milestones cross the reducer boundary.
+
+## Audible output invariant
+
+Native realtime audio, selected-voice fallback, deterministic agent acknowledgement, filler, and system-voice fallback use one `VoiceOutputLease`. A stale turn cannot acquire a lease, a competing real lane is denied, and only the exact lease identity can release playback. Filler is provisional: the playback engine stops it before releasing its lease, then the real answer acquires the lane. Provider completion and local playback drain are separate events: a turn remains active until both the provider is done and queued audio has drained.
+
+Gemini audio is also gated by its manual activity window. Audio and commit requests that arrive before `activityStart` remain buffered inside `RealtimeHubSession`; they flush in order only after the input window opens. Abandoning a turn clears that buffer so pre-window audio cannot leak into the next turn.
+
+Provider-specific barge-in is an atomic handoff. Reducer terminalization preserves an active hub runtime long enough for OpenAI to cancel its in-session response or Gemini to create a fresh replacement session. Preparation, seed refresh, permission, authentication, transcription, and persistence work capture immutable turn ownership and revalidate it after every suspension.
+
+## UI and error signals
+
+`VoiceTurnUIProjection` is the semantic source for listening, lock, transcript, thinking, response-waiting, response-active, and terminal hints. `PTTBarPresenter` is the only writer for those floating-bar fields. User-facing failures stay visible briefly as actionable hints; developer signals remain available through typed terminal diagnostics, stale-event and invalid-transition counts, and the bounded event timeline.
+
+## Testing contract
+
+Reducer tests use deterministic events and fake-clock deadlines. Cover the happy path plus races that can change ownership: late capture completion, old session or response callbacks, warm-wait fallback, deferred and replacement commits, pending tools, provider-finish versus playback-drain ordering, competing leases, barge-in, cleanup from every phase, duplicate terminal events, and randomized stale-event sequences.
+
+Integration tests verify the coordinator's real effects and presentation adapter. Provider and playback tests verify normalized callbacks and lease enforcement. Keep tests hermetic: no live provider, network, sleep, or ordering dependency in CI.

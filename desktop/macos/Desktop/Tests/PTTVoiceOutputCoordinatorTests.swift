@@ -2,101 +2,153 @@ import XCTest
 
 @testable import Omi_Computer
 
+@MainActor
 final class PTTVoiceOutputCoordinatorTests: XCTestCase {
+  func testAudioPlayerMustActuallyStartBeforePlaybackOwnsLease() {
+    XCTAssertTrue(VoicePlaybackStartPolicy.accepts(started: true))
+    XCTAssertFalse(VoicePlaybackStartPolicy.accepts(started: false))
+  }
+
+  func testFillerCarriesTextIntoSystemVoiceFallback() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("startPlayback(audioData, fallbackText: phrase)"))
+    XCTAssertTrue(source.contains("no fallback speech available"))
+  }
   func testFallbackCannotStartAfterNativeRealtimeLease() {
-    var coordinator = PTTVoiceOutputCoordinator()
+    let coordinator = VoiceOutputCoordinator()
     let turnID = coordinator.beginTurn()
+    let native = tryLease(coordinator.acquire(.nativeRealtime, turnID: turnID))
 
-    guard case .acquired(let native) = coordinator.acquire(.nativeRealtime, turnID: turnID) else {
-      return XCTFail("native realtime lease should acquire")
-    }
-    XCTAssertEqual(native.lane, .nativeRealtime)
-
+    XCTAssertEqual(native?.lane, .nativeRealtime)
     XCTAssertEqual(
       coordinator.acquire(.selectedVoiceFallback, turnID: turnID),
-      .denied(active: native))
+      native.map { .denied(active: $0) })
   }
 
   func testLateNativeAudioIsDeniedAfterFallbackLease() {
-    var coordinator = PTTVoiceOutputCoordinator()
+    let coordinator = VoiceOutputCoordinator()
     let turnID = coordinator.beginTurn()
-
-    guard case .acquired(let fallback) = coordinator.acquire(.selectedVoiceFallback, turnID: turnID) else {
-      return XCTFail("fallback lease should acquire")
-    }
+    let fallback = tryLease(coordinator.acquire(.selectedVoiceFallback, turnID: turnID))
 
     XCTAssertEqual(
       coordinator.acquire(.nativeRealtime, turnID: turnID),
-      .denied(active: fallback))
+      fallback.map { .denied(active: $0) })
+  }
+
+  func testEveryPTTAudibleLaneCompetesForTheSameLease() {
+    for firstLane in VoiceOutputLane.allCases {
+      for competingLane in VoiceOutputLane.allCases where competingLane != firstLane {
+        let coordinator = VoiceOutputCoordinator()
+        let turnID = coordinator.beginTurn()
+        let first = tryLease(coordinator.acquire(firstLane, turnID: turnID))
+
+        XCTAssertEqual(
+          coordinator.acquire(competingLane, turnID: turnID),
+          first.map { .denied(active: $0) },
+          "\(competingLane) should not overlap \(firstLane)")
+      }
+    }
+  }
+
+  func testFillerIsTheOnlyLaneThatYieldsToRealOutputOnTheSameTurn() throws {
+    let turnID = VoiceTurnID()
+    let filler = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .filler)
+
+    for lane in VoiceOutputLane.allCases where lane != .filler {
+      XCTAssertTrue(
+        VoiceOutputHandoffPolicy.fillerCanYield(
+          active: filler,
+          to: lane,
+          turnID: turnID))
+    }
+    XCTAssertFalse(
+      VoiceOutputHandoffPolicy.fillerCanYield(
+        active: filler,
+        to: .filler,
+        turnID: turnID))
+
+    let native = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    XCTAssertFalse(
+      VoiceOutputHandoffPolicy.fillerCanYield(
+        active: native,
+        to: .selectedVoiceFallback,
+        turnID: turnID))
+    XCTAssertFalse(
+      VoiceOutputHandoffPolicy.fillerCanYield(
+        active: filler,
+        to: .nativeRealtime,
+        turnID: VoiceTurnID()))
+  }
+
+  func testSameLaneAcquireIsIdempotent() throws {
+    let coordinator = VoiceOutputCoordinator()
+    let turnID = coordinator.beginTurn()
+    let first = try XCTUnwrap(tryLease(coordinator.acquire(.nativeRealtime, turnID: turnID)))
+    let second = try XCTUnwrap(tryLease(coordinator.acquire(.nativeRealtime, turnID: turnID)))
+
+    XCTAssertEqual(first, second)
   }
 
   func testDeterministicAckSuppressesProviderOutputForTurn() {
-    var coordinator = PTTVoiceOutputCoordinator()
+    let coordinator = VoiceOutputCoordinator()
     let turnID = coordinator.beginTurn()
 
-    guard case .acquired(let ack) = coordinator.acquire(.deterministicAgentAck, turnID: turnID) else {
-      return XCTFail("deterministic ack lease should acquire")
-    }
-
+    XCTAssertNotNil(tryLease(coordinator.acquire(.deterministicAgentAck, turnID: turnID)))
     XCTAssertTrue(coordinator.snapshot().providerOutputSuppressed)
-    XCTAssertEqual(
-      coordinator.acquire(.nativeRealtime, turnID: turnID),
-      .denied(active: ack))
-  }
-
-  func testDeterministicAckDeniedIfNativeAudioAlreadyStarted() {
-    var coordinator = PTTVoiceOutputCoordinator()
-    let turnID = coordinator.beginTurn()
-
-    guard case .acquired(let native) = coordinator.acquire(.nativeRealtime, turnID: turnID) else {
-      return XCTFail("native realtime lease should acquire")
-    }
-
-    XCTAssertEqual(
-      coordinator.acquire(.deterministicAgentAck, turnID: turnID),
-      .denied(active: native))
-    XCTAssertFalse(coordinator.snapshot().providerOutputSuppressed)
-  }
-
-  func testBargeInRevokesCurrentLease() {
-    var coordinator = PTTVoiceOutputCoordinator()
-    let oldTurnID = coordinator.beginTurn()
-    XCTAssertNotNil(tryLease(coordinator.acquire(.selectedVoiceFallback, turnID: oldTurnID)))
-
-    coordinator.interruptCurrentOutput()
-    let newTurnID = coordinator.beginTurn()
-
-    guard case .acquired(let native) = coordinator.acquire(.nativeRealtime, turnID: newTurnID) else {
-      return XCTFail("new turn should acquire native lease after interruption")
-    }
-    XCTAssertEqual(native.turnID, newTurnID)
-    XCTAssertNotEqual(native.turnID, oldTurnID)
   }
 
   func testStaleReleaseCannotClearCurrentLease() throws {
-    var coordinator = PTTVoiceOutputCoordinator()
+    let coordinator = VoiceOutputCoordinator()
     let firstTurnID = coordinator.beginTurn()
-    let staleLease = tryLease(coordinator.acquire(.nativeRealtime, turnID: firstTurnID))
-    _ = coordinator.beginTurn()
-    let secondTurnID = try XCTUnwrap(coordinator.snapshot().turnID)
-    let currentLease = tryLease(coordinator.acquire(.selectedVoiceFallback, turnID: secondTurnID))
+    let staleLease = try XCTUnwrap(
+      tryLease(coordinator.acquire(.nativeRealtime, turnID: firstTurnID)))
+    let secondTurnID = coordinator.beginTurn()
+    let currentLease = try XCTUnwrap(
+      tryLease(coordinator.acquire(.selectedVoiceFallback, turnID: secondTurnID)))
 
-    if let staleLease {
-      coordinator.release(staleLease)
-    }
-
+    XCTAssertFalse(coordinator.release(staleLease))
     XCTAssertEqual(coordinator.snapshot().activeLease, currentLease)
   }
 
-  func testStaleTurnCannotAcquireLease() {
-    var coordinator = PTTVoiceOutputCoordinator()
-    let oldTurnID = coordinator.beginTurn()
-    _ = coordinator.beginTurn()
+  func testStaleTurnCannotAcquireOrEndCurrentTurn() {
+    let coordinator = VoiceOutputCoordinator()
+    let staleTurnID = coordinator.beginTurn()
+    let currentTurnID = coordinator.beginTurn()
 
-    XCTAssertEqual(coordinator.acquire(.nativeRealtime, turnID: oldTurnID), .staleTurn)
+    XCTAssertEqual(coordinator.acquire(.nativeRealtime, turnID: staleTurnID), .staleTurn)
+    XCTAssertFalse(coordinator.endTurn(staleTurnID))
+    XCTAssertEqual(coordinator.snapshot().turnID, currentTurnID)
   }
 
-  private func tryLease(_ decision: PTTVoiceOutputDecision) -> PTTVoiceLease? {
+  func testReleaseRequiresExactLeaseIdentity() throws {
+    let coordinator = VoiceOutputCoordinator()
+    let turnID = coordinator.beginTurn()
+    let lease = try XCTUnwrap(tryLease(coordinator.acquire(.nativeRealtime, turnID: turnID)))
+    let impostor = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+
+    XCTAssertFalse(coordinator.release(impostor))
+    XCTAssertEqual(coordinator.snapshot().activeLease, lease)
+    XCTAssertTrue(coordinator.release(lease))
+    XCTAssertNil(coordinator.snapshot().activeLease)
+  }
+
+  func testInterruptRequiresCurrentTurnAndRevokesLease() {
+    let coordinator = VoiceOutputCoordinator()
+    let turnID = coordinator.beginTurn()
+    XCTAssertNotNil(tryLease(coordinator.acquire(.systemVoiceFallback, turnID: turnID)))
+
+    XCTAssertFalse(coordinator.interrupt(turnID: VoiceTurnID()))
+    XCTAssertNotNil(coordinator.snapshot().activeLease)
+    XCTAssertTrue(coordinator.interrupt(turnID: turnID))
+    XCTAssertNil(coordinator.snapshot().activeLease)
+  }
+
+  private func tryLease(_ decision: VoiceOutputDecision) -> VoiceOutputLease? {
     guard case .acquired(let lease) = decision else { return nil }
     return lease
   }

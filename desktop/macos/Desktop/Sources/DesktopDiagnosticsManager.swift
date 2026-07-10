@@ -125,6 +125,34 @@ final class DesktopDiagnosticsManager {
       trackRemotely: false)
   }
 
+  func recordVoiceTurnTerminal(
+    reason: String,
+    route: String,
+    staleEventCount: Int,
+    invalidTransitionCount: Int
+  ) {
+    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
+    breadcrumb.message = "Voice turn reached terminal state"
+    breadcrumb.data = [
+      "terminal_reason": reason,
+      "route": route,
+      "stale_event_count": staleEventCount,
+      "invalid_transition_count": invalidTransitionCount,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
+  func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
+    let breadcrumb = Breadcrumb(level: .warning, category: "voice.turn.anomaly")
+    breadcrumb.message = "Voice turn rejected an anomalous event"
+    breadcrumb.data = [
+      "kind": kind,
+      "phase": phase,
+      "route": route,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
   func recordPTTDeviceRouteChanged(recoveryAction: String, recoveryResult: String) {
     record(
       .pttAudioCaptureDeviceRouteChanged,
