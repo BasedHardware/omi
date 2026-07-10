@@ -108,6 +108,68 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(diagnostics.underlyingCode, NSURLErrorTimedOut)
   }
 
+  func testClassifiesDeeplyWrappedSparkleDownloadFailureAsNetwork() {
+    let url = URL(string: "https://api.omi.me/v2/desktop/appcast.xml")!
+    let network = NSError(
+      domain: NSURLErrorDomain,
+      code: NSURLErrorTimedOut,
+      userInfo: [
+        NSURLErrorFailingURLErrorKey: url
+      ]
+    )
+    let innerSparkle = NSError(
+      domain: "SUSparkleErrorDomain",
+      code: 2001,
+      userInfo: [
+        NSLocalizedDescriptionKey: "An error occurred in retrieving update information.",
+        NSUnderlyingErrorKey: network,
+      ]
+    )
+    let outerSparkle = NSError(
+      domain: "SUSparkleErrorDomain",
+      code: 2001,
+      userInfo: [
+        NSLocalizedDescriptionKey: "An error occurred in retrieving update information.",
+        NSUnderlyingErrorKey: innerSparkle,
+      ]
+    )
+
+    let diagnostics = UpdateFailureDiagnostics.classify(
+      error: outerSparkle,
+      updateChannel: "stable",
+      bundlePath: "/Applications/Omi.app",
+      sourceAppVersion: "0.12.0",
+      sourceAppBuild: "12000",
+      appcastURL: url
+    )
+
+    XCTAssertEqual(diagnostics.reason, .network)
+    XCTAssertEqual(diagnostics.nsurlErrorCode, NSURLErrorTimedOut)
+    XCTAssertEqual(
+      diagnostics.errorChainDomains,
+      ["SUSparkleErrorDomain", "SUSparkleErrorDomain", NSURLErrorDomain]
+    )
+    XCTAssertEqual(diagnostics.errorChainCodes, [2001, 2001, NSURLErrorTimedOut])
+
+    let properties = diagnostics.analyticsProperties
+    XCTAssertEqual(properties["phase"] as? String, "network")
+    XCTAssertEqual(properties["update_failure_phase"] as? String, "network")
+    XCTAssertEqual(properties["update_failure_reason"] as? String, "network")
+    XCTAssertEqual(properties["nsurl_error_code"] as? Int, NSURLErrorTimedOut)
+    XCTAssertEqual(properties["failing_url_host"] as? String, "api.omi.me")
+    XCTAssertEqual(properties["failing_url_path"] as? String, "/v2/desktop/appcast.xml")
+    XCTAssertEqual(properties["source_app_version"] as? String, "0.12.0")
+    XCTAssertEqual(properties["source_app_build"] as? String, "12000")
+    XCTAssertEqual(properties["appcast_url_host"] as? String, "api.omi.me")
+    // Regression: Update Check Failed must carry a non-empty error message so the
+    // daily report's error_or_message column is populated (was blank on 0.12.0).
+    XCTAssertEqual(
+      properties["error"] as? String, "An error occurred in retrieving update information.")
+    XCTAssertEqual(
+      properties["update_failure_message"] as? String,
+      "An error occurred in retrieving update information.")
+  }
+
   func testAnalyticsPropertiesOmitRawPath() {
     let error = NSError(
       domain: "SUSparkleErrorDomain",
@@ -128,5 +190,33 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(properties["update_failure_reason"] as? String, "downloads_location")
     XCTAssertEqual(properties["launch_location_bucket"] as? String, "downloads_folder")
     XCTAssertNil(properties["bundle_path"])
+  }
+
+  func testAnalyticsPropertiesFallbackMessageIsNonEmpty() {
+    let diagnostics = UpdateFailureDiagnostics(
+      reason: .unknown,
+      message: "",
+      domain: "SUSparkleErrorDomain",
+      code: 2001,
+      underlyingDomain: nil,
+      underlyingCode: nil,
+      errorChainDomains: ["SUSparkleErrorDomain"],
+      errorChainCodes: [2001],
+      nsurlErrorCode: nil,
+      failingURLHost: nil,
+      failingURLPath: nil,
+      updateChannel: "stable",
+      launchLocationBucket: "applications_system",
+      sourceAppVersion: "0.12.0",
+      sourceAppBuild: "12000",
+      appcastURLHost: "api.omi.me",
+      appcastURLPath: "/v2/desktop/appcast.xml"
+    )
+
+    let properties = diagnostics.analyticsProperties
+    XCTAssertEqual(properties["error"] as? String, "SUSparkleErrorDomain 2001")
+    XCTAssertEqual(properties["phase"] as? String, "unknown")
+    XCTAssertEqual(properties["update_failure_message"] as? String, "SUSparkleErrorDomain 2001")
+    XCTAssertEqual(properties["update_failure_phase"] as? String, "unknown")
   }
 }

@@ -986,8 +986,8 @@ function normalizeProjectedSchema(schema: any): Record<string, unknown> {
   return normalized;
 }
 
-test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 27);
+test("OMI_TOOLS: exact tool count matches canonical pi-mono projection", () => {
+  assert.equal(OMI_TOOLS.length, toolNamesForAdapter("pi-mono").length);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -1077,18 +1077,24 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     execute_sql: ["query"],
     semantic_search: ["query"],
     get_daily_recap: [],
-    get_task_agent_status: [],
-    fill_cloud_connector_form: ["provider", "server_url", "oauth_client_secret"],
+    fill_cloud_connector_form: ["provider", "server_url"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
+    build_desktop_awareness_snapshot: [],
+    list_desktop_action_queue: [],
+    get_desktop_open_loops: [],
+    build_desktop_context_packet: ["objective", "packetJson", "retentionClass", "surfaceKind", "ttlMs"],
+    route_desktop_intent: ["surfaceKind", "utterance"],
+    evaluate_desktop_tool_policy: ["selectedBundles"],
+    create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
-    delegate_agent: ["mode", "parentRunId", "objective"],
-    spawn_agent: ["brief"],
-    manage_agent_pills: ["action"],
+    spawn_agent: ["objective"],
+    run_agent_and_wait: ["objective", "parentRunId"],
+    set_desktop_attention_override: ["subjectKind", "subjectId"],
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],
@@ -1101,6 +1107,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     create_action_item: ["description"],
     update_action_item: ["action_item_id"],
     capture_screen: [],
+    check_permission_status: [],
+    request_permission: ["type"],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];
@@ -1130,44 +1138,46 @@ test("OMI_TOOLS: agent control schemas keep runtime precondition guidance withou
     ),
   );
 
-  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
-  assert.ok(
-    delegateAgent?.promptGuidelines?.some((guideline) =>
-      guideline.includes("Use call for a structured child result")
-    ),
-  );
+  const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
+  assert.equal((runAgentAndWait?.parameters as any).allOf, undefined);
+  assert.doesNotMatch(runAgentAndWait?.promptGuidelines?.join("\n") ?? "", /send_agent_message|instead of/i);
 });
 
-test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfaces", () => {
-  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.match(delegateAgent?.description ?? "", /canonical child handles/);
-  assert.match(delegateAgent?.description ?? "", /does not create or manage floating pill UI/);
-  assert.ok(
-    delegateAgent?.promptGuidelines?.includes(
-      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
-    ),
-  );
+test("OMI_TOOLS: run_agent_and_wait requires parentRunId without sibling arbitration", () => {
+  const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
+  assert.match(runAgentAndWait?.description ?? "", /synchronously/);
+  assert.doesNotMatch(runAgentAndWait?.description ?? "", /send_agent_message|instead of/i);
+  assert.doesNotMatch(runAgentAndWait?.promptGuidelines?.join("\n") ?? "", /send_agent_message|instead of/i);
+});
+
+test("OMI_TOOLS: spawn_agent and run_agent_and_wait describe separate session surfaces", () => {
+  const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
+  assert.match(runAgentAndWait?.description ?? "", /synchronously/);
 
   const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
-  assert.match(spawnAgent?.description ?? "", /legacy floating-bar UI workflow/);
+  assert.match(spawnAgent?.description ?? "", /floating-bar pills/);
   assert.ok(
     spawnAgent?.promptGuidelines?.includes(
-      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "Use visible=false for parent-linked background work that should not appear as a pill.",
     ),
   );
+  assert.doesNotMatch(spawnAgent?.description ?? "", /run_agent_and_wait/);
 });
 
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
+  const advertisedControlManifest = agentControlCapabilityManifest.filter((manifestTool) =>
+    OMI_TOOLS.some((tool) => tool.name === manifestTool.name)
+  );
   const controlTools = OMI_TOOLS.filter((tool) =>
     agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
   );
   assert.deepEqual(
     controlTools.map((tool) => tool.name),
-    agentControlCapabilityManifest.map((tool) => tool.name),
+    advertisedControlManifest.map((tool) => tool.name),
   );
+  assert.ok(!OMI_TOOLS.some((tool) => tool.name === "resolve_desktop_dispatch"));
 
-  for (const manifestTool of agentControlCapabilityManifest) {
+  for (const manifestTool of advertisedControlManifest) {
     const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
     assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
@@ -1290,7 +1300,8 @@ test("registerOmiTools: snapshot write failure logs and still registers tools", 
 
 test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
   for (const manifestTool of agentControlCapabilityManifest) {
-    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
+    if (!tool) continue;
     const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
     assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
   }
@@ -1343,7 +1354,7 @@ test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", 
 
   const props = (tool.parameters as any).properties;
   const required = (tool.parameters as any).required ?? [];
-  assert.deepEqual(required.sort(), ["provider", "server_url", "oauth_client_secret"].sort());
+  assert.deepEqual(required.sort(), ["provider", "server_url"].sort());
   assert.deepEqual(props.provider.enum, ["claude", "chatgpt"]);
   assert.equal(props.server_url.type, "string");
   assert.equal(props.oauth_client_secret.type, "string");
@@ -1524,7 +1535,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     OMI_RUN_ID: process.env.OMI_RUN_ID,
     OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
     OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
-    OMI_LEGACY_ADAPTER_SESSION_ID: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
   };
   delete process.env.OMI_CONTEXT_FILE;
   Object.assign(process.env, {
@@ -1536,7 +1546,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     OMI_RUN_ID: "run_relay",
     OMI_ATTEMPT_ID: "att_relay",
     OMI_ADAPTER_SESSION_ID: "native_relay",
-    OMI_LEGACY_ADAPTER_SESSION_ID: "legacy_relay",
   });
 
   try {
@@ -1567,7 +1576,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
       runId: "run_relay",
       attemptId: "att_relay",
       adapterSessionId: "native_relay",
-      legacyAdapterSessionId: "legacy_relay",
       protocolVersion: 2,
     });
     const msg = await received;
@@ -1585,7 +1593,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
       runId: "run_relay",
       attemptId: "att_relay",
       adapterSessionId: "native_relay",
-      legacyAdapterSessionId: "legacy_relay",
     });
   } finally {
     __resetOmiPipeForTest();

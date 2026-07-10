@@ -6,7 +6,7 @@ import logging
 from typing import Callable, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, MemoryItem
+from models.product_memory import MemoryItemStatus, ProcessingState, MemoryItem
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,12 @@ def sync_canonical_memory_vector(
     on_hard_failure: Optional[Callable[[], None]] = None,
 ) -> bool:
     """Upsert one live canonical memory item vector. Returns True when an upsert was attempted."""
-    if item.status != MemoryItemStatus.active or item.source_state != SourceState.active:
+    if (
+        item.status != MemoryItemStatus.active
+        or item.processing_state != ProcessingState.processed
+        or item.source_state != SourceState.active
+        or (item.promotion or {}).get("user_review") is False
+    ):
         return False
     content = (item.content or "").strip()
     if not content:

@@ -46,19 +46,23 @@ class MessageActionMenu extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildActionButton(title: context.l10n.copy, icon: Icons.copy, onTap: onCopy),
-            _buildActionButton(title: context.l10n.selectText, icon: Icons.description_outlined, onTap: onSelectText),
-            _buildActionButton(title: context.l10n.share, icon: FontAwesomeIcons.share, onTap: onShare),
+            _buildActionButton(title: context.l10n.copy, icon: const Icon(Icons.copy), onTap: onCopy),
+            _buildActionButton(
+              title: context.l10n.selectText,
+              icon: const Icon(Icons.description_outlined),
+              onTap: onSelectText,
+            ),
+            _buildActionButton(title: context.l10n.share, icon: const FaIcon(FontAwesomeIcons.share), onTap: onShare),
             if (onThumbsDown != null) ...[
               _buildActionButton(
                 title: context.l10n.notHelpful,
-                icon: Icons.thumb_down_alt_outlined,
+                icon: const Icon(Icons.thumb_down_alt_outlined),
                 onTap: onThumbsDown,
               ),
             ],
             _buildActionButton(
               title: context.l10n.report,
-              icon: Icons.report_gmailerrorred,
+              icon: const Icon(Icons.report_gmailerrorred),
               onTap: onReport,
               isDestructive: true,
             ),
@@ -71,19 +75,23 @@ class MessageActionMenu extends StatelessWidget {
 
   Widget _buildActionButton({
     required String title,
-    required IconData icon,
+    required Widget icon,
     required Function()? onTap,
     bool isDestructive = false,
   }) {
+    final color = isDestructive ? Colors.red : Colors.white;
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0),
         child: Row(
           children: [
-            Text(title, style: TextStyle(fontSize: 16, color: isDestructive ? Colors.red : Colors.white)),
+            Text(title, style: TextStyle(fontSize: 16, color: color)),
             const Spacer(),
-            Icon(icon, size: 20, color: isDestructive ? Colors.red : Colors.white),
+            IconTheme(
+              data: IconThemeData(color: color, size: 20),
+              child: icon,
+            ),
           ],
         ),
       ),

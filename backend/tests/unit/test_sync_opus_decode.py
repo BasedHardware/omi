@@ -217,7 +217,7 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from routers.sync import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
+    from utils.sync.pipeline import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
     from utils.sync.files import (  # noqa: E402
         MAX_SYNC_FRAME_BYTES,
         decode_files_to_wav,

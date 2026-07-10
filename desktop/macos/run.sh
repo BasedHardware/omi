@@ -104,25 +104,6 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-# Serialize bundle builds — parallel ./run.sh invocations corrupt the same build/Omi Dev.app tree.
-RUN_SH_LOCK_DIR="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-_release_run_sh_lock() {
-    rmdir "$RUN_SH_LOCK_DIR" 2>/dev/null || true
-}
-_run_sh_lock_waited=0
-while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
-    if [ "$_run_sh_lock_waited" -eq 0 ]; then
-        printf "[%6.1fs]   ├─ Waiting for another ./run.sh to finish...\n" "$(echo "$(date +%s.%N) - $SCRIPT_START_TIME" | bc)"
-    fi
-    sleep 2
-    _run_sh_lock_waited=$((_run_sh_lock_waited + 2))
-    if [ "$_run_sh_lock_waited" -ge 600 ]; then
-        echo "ERROR: timed out after 10 minutes waiting for ./run.sh lock ($RUN_SH_LOCK_DIR)"
-        exit 1
-    fi
-done
-trap '_release_run_sh_lock' EXIT INT TERM
-
 macos_copy_tree() {
     local src="$1"
     local dest="$2"
@@ -142,6 +123,16 @@ source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
 BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
 
+# Serialize same-worktree builds only (shared Desktop/.build + build/$APP_NAME.app).
+# Cross-worktree ./run.sh must not block each other. Hold through install/seed/open,
+# then release before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported
+# (/Applications/$APP_NAME.app is machine-global and not cross-locked).
+source "$SCRIPT_DIR/scripts/run-sh-build-lock.sh"
+omi_run_sh_acquire_build_lock "another ./run.sh in this worktree" 600 || exit 1
+# Temporary until `trap cleanup EXIT` below chains release into cleanup().
+trap 'omi_run_sh_release_build_lock' EXIT INT TERM
+
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 source "$SCRIPT_DIR/scripts/app-config.sh"
@@ -156,6 +147,8 @@ APP_PATH="/Applications/$APP_NAME.app"
 # Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
 # copy is silently skipped → app shows "AI components missing".
 AGENT_DIR="$SCRIPT_DIR/agent"
+AGENT_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/agent-node_modules"
+PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extension-node_modules"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
@@ -207,11 +200,10 @@ AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
-    # Release the serialization lock acquired above. This must be chained
-    # into cleanup rather than set via a separate `trap` because the
-    # `trap cleanup EXIT` below overwrites any earlier trap, so a standalone
-    # `trap _release_run_sh_lock EXIT` would never fire on normal exit.
-    _release_run_sh_lock
+    # Release the build lock if still held (early exit before install, or if
+    # the post-install release was skipped). Chained here because
+    # `trap cleanup EXIT` overwrites the earlier lock-only trap.
+    omi_run_sh_release_build_lock
     if [ -n "$AUTH_CACHE" ]; then
         rm -f "$AUTH_CACHE"
     fi
@@ -441,18 +433,53 @@ else
     substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
 fi
 
-# Check if another SwiftPM instance is running (will block our build)
+# Wait only for SwiftPM instances building THIS checkout. Parallel worktrees
+# have their own .build scratch dirs and SwiftPM locks its shared caches, so
+# other worktrees' builds (including SourceKit-LSP indexing builds, which
+# respawn continuously and would starve a global wait forever) don't block us.
 while true; do
-    SWIFTPM_PIDS=$(pgrep -f "swift-build|swift-package" 2>/dev/null || true)
-    if [ -z "$SWIFTPM_PIDS" ]; then
+    SWIFTPM_BLOCKING=""
+    for _pid in $(pgrep -f "swift-build|swift-package" 2>/dev/null); do
+        # SourceKit-LSP indexing builds use their own scratch dir
+        # (.build/index-build) and respawn continuously — never wait on them.
+        if ps -p "$_pid" -o command= 2>/dev/null | grep -q "prepare-for-indexing\|index-build"; then
+            continue
+        fi
+        _pcwd=$(lsof -a -p "$_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        case "$_pcwd" in
+            "$SCRIPT_DIR"*) SWIFTPM_BLOCKING="$_pid"; break ;;
+        esac
+    done
+    if [ -z "$SWIFTPM_BLOCKING" ]; then
         break
     fi
-    step "Waiting for other SwiftPM instance(s) to finish..."
+    step "Waiting for this checkout's SwiftPM instance (pid $SWIFTPM_BLOCKING) to finish..."
     sleep 2
 done
 
 step "Preparing agent runtime..."
-"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --local-node
+"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
+
+step "Generating tool surfaces..."
+(
+  cd agent
+  NODE_BIN=""
+  for candidate in \
+    "../Desktop/Sources/Resources/node" \
+    "/opt/homebrew/opt/node@22/bin/node" \
+    "/usr/local/opt/node@22/bin/node" \
+    "$(command -v node 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$NODE_BIN" ]]; then
+    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
+    exit 1
+  fi
+  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
+)
 
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
@@ -551,9 +578,13 @@ if [ -d "$AGENT_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
     macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -570,7 +601,12 @@ if [ -d "$PI_MONO_EXT_DIR" ]; then
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
@@ -670,6 +706,9 @@ fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
+step "Preparing bundled native dependencies..."
+"$(dirname "$0")/scripts/prepare-desktop-bundle-native-deps.sh" "$APP_BUNDLE"
+
 step "Removing extended attributes (xattr -cr)..."
 # SwiftPM copies some dylibs (libsharpyuv, libwebp) with read-only perms,
 # which makes `xattr -cr` fail with EACCES. Make the bundle writable first.
@@ -686,6 +725,10 @@ if [ -z "$SIGN_IDENTITY" ]; then
     SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
     if [ -z "$SIGN_IDENTITY" ]; then
         SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+        SIGN_IDENTITY="-"
+        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
 fi
 
@@ -763,12 +806,18 @@ else
     echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
     echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
     echo ""
+    echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+    echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
+    echo ""
     exit 1
 fi
 
 step "Removing quarantine attributes..."
 chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
+
+step "Auditing app bundle dependencies..."
+"$(dirname "$0")/scripts/audit-desktop-bundle-deps.sh" "$APP_BUNDLE"
 
 step "Installing to /Applications/..."
 # Install to /Applications/ so "Quit & Reopen" (after granting screen recording
@@ -797,7 +846,11 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
         if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+            # Pass the just-installed app path so seed can resolve Team ID and
+            # clear any prior CLI-written Keychain item (apple-tool: partition).
+            # Tokens are seeded into UserDefaults; the app migrates them into
+            # Keychain on launch with the correct teamid: partition (no prompt).
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
                 auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
             else
                 echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
@@ -854,6 +907,12 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
+
+# Launch finished — free this worktree's lock so other checkouts (and a later
+# rebuild here) are not blocked by the long-running wait below. Kept through
+# open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
+omi_run_sh_release_build_lock
+substep "Released per-worktree build lock"
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

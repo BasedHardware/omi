@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Data Models
 
@@ -328,7 +329,7 @@ class ChatLabViewModel: ObservableObject {
             let response = await runThroughBridge(
                 question: q.text,
                 systemPrompt: systemPrompt,
-                sessionKey: "chat-lab-\(vIdx)-\(i)"
+                labSessionId: "chat-lab-\(vIdx)-\(i)"
             )
 
             versions[vIdx].evaluations[i].response = response
@@ -355,12 +356,12 @@ class ChatLabViewModel: ObservableObject {
 
     /// Send a question through the real agent bridge (same path as floating bar / main chat).
     /// Falls back to direct API if bridge isn't available.
-    private func runThroughBridge(question: String, systemPrompt: String, sessionKey: String) async -> String {
+    private func runThroughBridge(question: String, systemPrompt: String, labSessionId: String) async -> String {
         let chatProvider = chatProvider
         let result = await chatProvider.labRunQuestion(
             question: question,
             systemPrompt: systemPrompt,
-            sessionKey: sessionKey
+            labSessionId: labSessionId
         )
         return result
     }

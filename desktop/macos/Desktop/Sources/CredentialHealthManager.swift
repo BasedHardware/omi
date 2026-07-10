@@ -40,6 +40,15 @@ enum CredentialFailureClass: Equatable {
     case .unknown: return "unknown"
     }
   }
+
+  var httpStatusCode: Int? {
+    switch self {
+    case .backendTransient(let statusCode):
+      return statusCode
+    default:
+      return nil
+    }
+  }
 }
 
 struct CredentialRecoveryIssue: Equatable {
@@ -266,6 +275,10 @@ struct APIErrorPayload: Decodable, Equatable {
   let message: String?
   let detail: String?
   let provider: String?
+  let reason: String?
+  let backendRoute: String?
+  let upstreamStatusCode: Int?
+  let retryable: Bool?
   let retryAfterSeconds: Int?
 
   enum CodingKeys: String, CodingKey {
@@ -274,6 +287,10 @@ struct APIErrorPayload: Decodable, Equatable {
     case message
     case detail
     case provider
+    case reason
+    case backendRoute = "backend_route"
+    case upstreamStatusCode = "upstream_status_code"
+    case retryable
     case retryAfterSeconds = "retry_after_seconds"
   }
 

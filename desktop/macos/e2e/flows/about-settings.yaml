@@ -1,0 +1,32 @@
+version: 2
+name: about-settings
+tier: 2
+description: Settings About section navigation and version snapshot
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings About section
+    bridge.navigate:
+      target: settings
+      settingsSection: About
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: About
+
+  - id: S2
+    name: About snapshot
+    bridge.action:
+      name: about_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

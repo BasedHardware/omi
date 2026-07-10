@@ -66,6 +66,22 @@ async function assertClientDeniedForV3MemoryStateHead(db) {
   await assertFails(deleteDoc(stateHeadDoc));
 }
 
+async function assertClientDeniedForV3MemoryApplyControl(db) {
+  const applyControlDoc = doc(db, 'users/memory-emulator-user/memory_state/apply_control');
+  const applyControl = {
+    uid: 'memory-emulator-user',
+    head_commit_id: 'head0',
+    account_generation: 50,
+    source_generation: 1,
+    commit_sequence: 0,
+  };
+
+  await assertFails(getDoc(applyControlDoc));
+  await assertFails(setDoc(applyControlDoc, applyControl));
+  await assertFails(updateDoc(applyControlDoc, { source_generation: 2 }));
+  await assertFails(deleteDoc(applyControlDoc));
+}
+
 async function assertClientCannotSelfGrantAppKeyMemoryAccess(db) {
   const grantDoc = doc(db, 'users/memory-emulator-user/memory_control/app_key_memory_grants');
   const selfGrant = {
@@ -141,13 +157,14 @@ try {
   }
   await assertClientDeniedForV3ControlReaderState(db);
   await assertClientDeniedForV3MemoryStateHead(db);
+  await assertClientDeniedForV3MemoryApplyControl(db);
   await assertClientCannotSelfGrantAppKeyMemoryAccess(db);
   await assertClientDeniedForV3CanaryApprovalSource(db);
   await assertAdminCanReadV3CanaryApprovalSource(testEnv);
 
   assert.equal(MEMORY_PROTECTED_COLLECTIONS.length, 10);
   console.log(
-    `PASS: signed-in client read/write denial asserted for ${MEMORY_PROTECTED_COLLECTIONS.length} memory collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, memory app/key memory grant self-grant path, and system/v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
+    `PASS: signed-in client read/write denial asserted for ${MEMORY_PROTECTED_COLLECTIONS.length} memory collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, users/{uid}/memory_state/apply_control, memory app/key memory grant self-grant path, and system/v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
   );
 } finally {
   await testEnv.cleanup();

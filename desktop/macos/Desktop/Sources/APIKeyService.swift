@@ -64,11 +64,14 @@ final class APIKeyService: ObservableObject {
 
     /// Start fetching keys in the background. Callers can await via waitForKeys().
     func startFetchingKeys() {
+        guard !isLoaded else { return }
+        guard fetchTask == nil else { return }
         fetchTask = Task { await self.fetchKeys() }
     }
 
     /// Wait for keys to be loaded. Returns immediately if already loaded.
     /// If no fetch is in-flight, starts one (handles app-restart-while-signed-in case).
+    /// A previously failed fetch clears fetchTask, so Calendar/Chat callers can retry without restarting.
     func waitForKeys() async {
         if isLoaded { return }
         if fetchTask == nil {
@@ -76,6 +79,12 @@ final class APIKeyService: ObservableObject {
             fetchTask = Task { await fetchKeys() }
         }
         await fetchTask?.value
+        if isLoaded { return }
+        if fetchTask == nil {
+            log("APIKeyService: key fetch completed without loaded keys, retrying once")
+            fetchTask = Task { await fetchKeys() }
+            await fetchTask?.value
+        }
     }
 
     var effectiveGeminiKey: String? {
@@ -119,6 +128,7 @@ final class APIKeyService: ObservableObject {
 
         loadError = "Failed to fetch API keys from backend"
         log("APIKeyService: All fetch attempts failed — features requiring API keys will be unavailable")
+        fetchTask = nil
 
         // Still apply env vars from developer overrides if set
         applyToEnvironment()

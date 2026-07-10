@@ -13,11 +13,11 @@ import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/services/asana_service.dart';
-import 'package:omi/services/clickup_service.dart';
-import 'package:omi/services/google_tasks_service.dart';
-import 'package:omi/services/todoist_service.dart';
+import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
+import 'package:omi/services/integrations/clickup_service.dart';
+import 'package:omi/services/integrations/google_tasks_service.dart';
+import 'package:omi/services/integrations/todoist_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -273,7 +273,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       borderRadius: BorderRadius.circular(6),
                       color: displayApp.iconColor.withValues(alpha: 0.2),
                     ),
-                    child: Icon(displayApp.icon, color: displayApp.iconColor, size: 16),
+                    child: FaIcon(displayApp.icon, color: displayApp.iconColor, size: 16),
                   ),
             // Status indicator at bottom right
             Positioned(

@@ -63,7 +63,7 @@ def test_memory_firestore_transaction_emulator_harness_is_wired() -> None:
     assert "MAX_CONTENTION_ROUNDS" in script
     assert "assertNoAttemptDocsWerePartiallyCommitted" in script
     assert "exactly one concurrent apply transaction commits after bounded retry" in script
-    assert "memory_control/state" in script
+    assert "memory_state/apply_control" in script
     assert "memory_operations" in script
     assert "memory_items" in script
     assert "memory_outbox" in script

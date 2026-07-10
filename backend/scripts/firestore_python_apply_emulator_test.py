@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -23,11 +24,11 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
 
-def _stored_model(model):
+def _stored_model(model: Any) -> dict[str, Any]:
     return model.model_dump(mode="json")
 
 
-def _required_doc(db_client, path):
+def _required_doc(db_client: Any, path: str) -> dict[str, Any]:
     snapshot = db_client.document(path).get()
     if not snapshot.exists:
         raise AssertionError(f"missing expected Firestore document: {path}")
@@ -41,7 +42,7 @@ def main() -> int:
 
     uid = "memory-python-apply-emulator-user"
     collections = MemoryCollections(uid=uid)
-    db_client = firestore.Client(project=PROJECT_ID)
+    db_client: Any = firestore.Client(project=PROJECT_ID)
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=3, source_generation=5)
     evidence = MemoryEvidence(
@@ -84,7 +85,7 @@ def main() -> int:
         "aboutness": "primary_user",
     }
 
-    db_client.document(collections.memory_control_state).set(_stored_model(control))
+    db_client.document(collections.memory_apply_control_state).set(_stored_model(control))
     db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}").set(_stored_model(evidence))
     db_client.document(f"{collections.memory_operations}/{operation.operation_id}").set(_stored_model(operation))
 
@@ -101,7 +102,7 @@ def main() -> int:
     if len(result.outbox_events) != 2:
         raise AssertionError(f"expected two outbox events, got {len(result.outbox_events)}")
 
-    stored_control = _required_doc(db_client, collections.memory_control_state)
+    stored_control = _required_doc(db_client, collections.memory_apply_control_state)
     stored_operation = _required_doc(db_client, f"{collections.memory_operations}/{operation.operation_id}")
     stored_memory = _required_doc(db_client, f"{collections.memory_items}/{result.memory_items[0].memory_id}")
     stored_commit = _required_doc(db_client, f"{collections.memory_commits}/{result.control_state.head_commit_id}")

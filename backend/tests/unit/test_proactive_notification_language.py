@@ -3,30 +3,14 @@
 Proactive notifications were always generated in English even when the user's language was set (the
 daily summary already respected it). The generator and critic prompts now carry a language
 instruction derived from get_user_language_preference(uid), threaded in by the orchestrator.
-
-proactive_notification.py only imports utils.llm.clients heavily, so we stub just that and import
-the real module to exercise the real prompt building.
 """
 
-import os
-import sys
-import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from utils.llm import proactive_notification as pn
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(BACKEND_DIR))
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-
-# Stub the only heavy import so the real module loads (utils/ and utils/llm/ __init__ are empty).
-_clients = sys.modules.get("utils.llm.clients")
-if _clients is None:
-    _clients = types.ModuleType("utils.llm.clients")
-    sys.modules["utils.llm.clients"] = _clients
-if not hasattr(_clients, "get_llm"):
-    _clients.get_llm = MagicMock()
-
-from utils.llm import proactive_notification as pn  # noqa: E402
 
 
 def _prompt_from(fn, **kwargs):

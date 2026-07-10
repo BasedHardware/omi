@@ -224,6 +224,7 @@ class TestWebSocketTaskSupervisor:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasks:
     def test_drain_empty_list(self):
         async def _run():
@@ -291,6 +292,7 @@ class TestDrainTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestSuperviseTasks:
     def test_disconnect_exit(self):
         async def _run():
@@ -410,6 +412,7 @@ class TestSuperviseTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestGatherWithLogging:
     def test_all_succeed(self):
         async def _run():
@@ -609,6 +612,7 @@ class TestGatherChunked:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasksEdgeCases:
     def test_drain_force_cancel_reports_count(self):
         """After timeout, force-cancelled tasks are counted correctly."""

@@ -17,8 +17,15 @@ import argparse
 import getpass
 import json
 import sys
+from pathlib import Path
 
-from utils.memory.legacy_backfill import backfill_user
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from utils.memory.legacy_backfill import LegacyBackfillBucket, backfill_user, backfill_user_bucketed
+
+BUCKET_CHOICES = [bucket.value for bucket in LegacyBackfillBucket]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -27,6 +34,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Report intended writes without persisting")
     parser.add_argument("--batch-size", type=int, default=50, help="Checkpoint interval (default: 50)")
     parser.add_argument("--no-resume", action="store_true", help="Ignore prior checkpoint and start from 0")
+    parser.add_argument(
+        "--strategy",
+        choices=["stage-all-for-admission", "bucketed"],
+        default="stage-all-for-admission",
+        help="Migration strategy (default: all rows enter canonical admission staging)",
+    )
+    parser.add_argument(
+        "--bucket",
+        choices=BUCKET_CHOICES,
+        default=None,
+        help="Bucket to dry-run/apply when --strategy bucketed. Omit for inventory-only dry-run.",
+    )
     parser.add_argument(
         "--allow-admin-override",
         action="store_true",
@@ -48,15 +67,34 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     operator_context = args.operator_context or getpass.getuser()
-    report = backfill_user(
-        args.uid,
-        dry_run=args.dry_run,
-        batch_size=args.batch_size,
-        resume=not args.no_resume,
-        allow_admin_override=args.allow_admin_override,
-        acknowledge_non_canonical_uid=args.i_understand_uid_not_whitelisted,
-        operator_context=operator_context,
-    )
+    if args.strategy == "bucketed":
+        if args.bucket is None and not args.dry_run:
+            print(
+                "--strategy bucketed without --bucket is inventory-only; pass --dry-run or choose a bucket",
+                file=sys.stderr,
+            )
+            return 2
+        report = backfill_user_bucketed(
+            args.uid,
+            bucket=args.bucket,
+            dry_run=args.dry_run,
+            allow_admin_override=args.allow_admin_override,
+            acknowledge_non_canonical_uid=args.i_understand_uid_not_whitelisted,
+            operator_context=operator_context,
+        )
+    else:
+        if args.bucket is not None:
+            print("--bucket requires --strategy bucketed", file=sys.stderr)
+            return 2
+        report = backfill_user(
+            args.uid,
+            dry_run=args.dry_run,
+            batch_size=args.batch_size,
+            resume=not args.no_resume,
+            allow_admin_override=args.allow_admin_override,
+            acknowledge_non_canonical_uid=args.i_understand_uid_not_whitelisted,
+            operator_context=operator_context,
+        )
     print(json.dumps(report.__dict__, default=str, indent=2))
     if report.cohort_gated:
         return 2

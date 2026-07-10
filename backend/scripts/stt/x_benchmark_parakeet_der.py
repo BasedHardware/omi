@@ -15,13 +15,12 @@ Usage:
 from io import BytesIO
 import json
 import os
-import re
 import sys
 import time
 import wave as _wave
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Set, cast
 
 from dotenv import load_dotenv
 
@@ -29,9 +28,9 @@ load_dotenv(Path(__file__).resolve().parents[2] / '.env')
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tabulate import tabulate
+from tabulate import tabulate  # noqa: E402
 
-from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes, parakeet_prerecorded_from_bytes
+from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes, parakeet_prerecorded_from_bytes  # noqa: E402
 
 L2_AUDIO_DIR = Path(os.path.expanduser('~/.claude/skills/omi-listen-behavior-test/test_audio_l2'))
 RESULTS_DIR = Path('/tmp/stt_benchmark_results')
@@ -39,22 +38,22 @@ RESULTS_DIR = Path('/tmp/stt_benchmark_results')
 MAX_AUDIO_SECONDS = 120
 
 
-def load_l2_manifest():
+def load_l2_manifest() -> Dict[str, Any]:
     manifest_path = L2_AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print(f'ERROR: L2 audio not found at {L2_AUDIO_DIR}')
         sys.exit(1)
     with open(manifest_path) as f:
-        return json.load(f)
+        return cast(Dict[str, Any], json.load(f))
 
 
-def build_ground_truth(sample_info: dict) -> List[dict]:
-    speakers = sample_info['speaker_ids']
-    segment_dur = sample_info['segment_duration_s']
+def build_ground_truth(sample_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    speakers: List[str] = sample_info['speaker_ids']
+    segment_dur: float = sample_info['segment_duration_s']
     total_dur = min(sample_info['duration_s'], MAX_AUDIO_SECONDS)
-    num_speakers = sample_info['speakers']
+    num_speakers: int = sample_info['speakers']
 
-    turns = []
+    turns: List[Dict[str, Any]] = []
     t = 0.0
     spk_idx = 0
     while t < total_dur:
@@ -65,14 +64,14 @@ def build_ground_truth(sample_info: dict) -> List[dict]:
     return turns
 
 
-def extract_speaker_turns(words: List[dict]) -> List[dict]:
+def extract_speaker_turns(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not words:
         return []
 
-    turns = []
-    current_speaker = None
-    current_start = None
-    current_end = None
+    turns: List[Dict[str, Any]] = []
+    current_speaker: Any = None
+    current_start: Any = None
+    current_end: Any = None
 
     for w in words:
         spk = w.get('speaker', 'SPEAKER_00')
@@ -94,12 +93,14 @@ def extract_speaker_turns(words: List[dict]) -> List[dict]:
     return turns
 
 
-def compute_der(ref_turns: List[dict], hyp_turns: List[dict], total_duration: float, collar: float = 0.25) -> dict:
+def compute_der(
+    ref_turns: List[Dict[str, Any]], hyp_turns: List[Dict[str, Any]], total_duration: float, collar: float = 0.25
+) -> Dict[str, Any]:
     resolution = 0.01
     num_frames = int(total_duration / resolution) + 1
 
-    ref_labels = [''] * num_frames
-    hyp_labels = [''] * num_frames
+    ref_labels: List[str] = [''] * num_frames
+    hyp_labels: List[str] = [''] * num_frames
 
     for turn in ref_turns:
         start_frame = int(turn['start'] / resolution)
@@ -113,15 +114,15 @@ def compute_der(ref_turns: List[dict], hyp_turns: List[dict], total_duration: fl
         for i in range(max(0, start_frame), min(num_frames, end_frame)):
             hyp_labels[i] = turn['speaker']
 
-    scored_frames = set()
+    scored_frames: Set[int] = set()
     for turn in ref_turns:
         start_frame = int((turn['start'] + collar) / resolution)
         end_frame = int((turn['end'] - collar) / resolution)
         for i in range(max(0, start_frame), min(num_frames, end_frame)):
             scored_frames.add(i)
 
-    ref_speakers = set(t['speaker'] for t in ref_turns)
-    hyp_speakers = set(t['speaker'] for t in hyp_turns)
+    ref_speakers: Set[str] = {t['speaker'] for t in ref_turns}
+    hyp_speakers: Set[str] = {t['speaker'] for t in hyp_turns}
 
     best_mapping = _find_best_speaker_mapping(ref_labels, hyp_labels, ref_speakers, hyp_speakers, scored_frames)
 
@@ -158,18 +159,24 @@ def compute_der(ref_turns: List[dict], hyp_turns: List[dict], total_duration: fl
     }
 
 
-def _find_best_speaker_mapping(ref_labels, hyp_labels, ref_speakers, hyp_speakers, scored_frames):
-    overlap = defaultdict(lambda: defaultdict(int))
+def _find_best_speaker_mapping(
+    ref_labels: List[str],
+    hyp_labels: List[str],
+    ref_speakers: Set[str],
+    hyp_speakers: Set[str],
+    scored_frames: Set[int],
+) -> Dict[str, str]:
+    overlap: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
     for i in scored_frames:
         r, h = ref_labels[i], hyp_labels[i]
         if r and h:
             overlap[h][r] += 1
 
-    mapping = {}
-    used_ref = set()
+    mapping: Dict[str, str] = {}
+    used_ref: Set[str] = set()
     sorted_hyp = sorted(overlap.keys(), key=lambda h: -max(overlap[h].values()) if overlap[h] else 0)
     for h in sorted_hyp:
-        best_ref = max(overlap[h], key=overlap[h].get)
+        best_ref = max(overlap[h], key=lambda k: overlap[h][k])
         if best_ref not in used_ref:
             mapping[h] = best_ref
             used_ref.add(best_ref)
@@ -193,7 +200,7 @@ def trim_wav(wav_path: Path, max_seconds: float) -> bytes:
     return buf.getvalue()
 
 
-def main():
+def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     dg_key = os.getenv('DEEPGRAM_API_KEY')
@@ -206,7 +213,7 @@ def main():
         sys.exit(1)
 
     manifest = load_l2_manifest()
-    samples = manifest.get('samples', {})
+    samples: Dict[str, Any] = manifest.get('samples', {})
 
     print(f'\n{"=" * 90}')
     print(f'DER Benchmark: Deepgram nova-3 vs Parakeet')
@@ -215,7 +222,7 @@ def main():
     print(f'  Collar: 0.25s (standard forgiveness around speaker boundaries)')
     print(f'{"=" * 90}\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for wav_name, info in samples.items():
         wav_path = L2_AUDIO_DIR / wav_name
         if not wav_path.exists():
@@ -230,7 +237,7 @@ def main():
 
         audio_bytes = trim_wav(wav_path, MAX_AUDIO_SECONDS)
 
-        row = {
+        row: Dict[str, Any] = {
             'id': wav_name,
             'speakers': info['speakers'],
             'segment_duration_s': info['segment_duration_s'],
@@ -243,7 +250,7 @@ def main():
         ]:
             try:
                 t0 = time.monotonic()
-                words = fn(audio_bytes, sample_rate=16000, diarize=True)
+                words = cast(List[Dict[str, Any]], fn(audio_bytes, sample_rate=16000, diarize=True))
                 elapsed = time.monotonic() - t0
 
                 hyp_turns = extract_speaker_turns(words)
@@ -270,7 +277,7 @@ def main():
     print('RESULTS SUMMARY')
     print(f'{"=" * 90}\n')
 
-    table = []
+    table: List[List[Any]] = []
     for r in results:
         table.append(
             [
@@ -287,12 +294,12 @@ def main():
 
     print(tabulate(table, headers=['Sample', 'Ref Spk', 'DG DER', 'PK DER', 'DG Spk', 'PK Spk', 'DG Lat', 'PK Lat']))
 
-    dg_ders = [r['deepgram_der'] for r in results if r.get('deepgram_der') is not None]
-    pk_ders = [r['parakeet_der'] for r in results if r.get('parakeet_der') is not None]
+    dg_ders: List[float] = [r['deepgram_der'] for r in results if r.get('deepgram_der') is not None]
+    pk_ders: List[float] = [r['parakeet_der'] for r in results if r.get('parakeet_der') is not None]
     if dg_ders:
-        print(f'\n  Deepgram avg DER: {sum(dg_ders)/len(dg_ders):.1f}%')
+        print(f'\n  Deepgram avg DER: {sum(dg_ders) / len(dg_ders):.1f}%')
     if pk_ders:
-        print(f'  Parakeet avg DER: {sum(pk_ders)/len(pk_ders):.1f}%')
+        print(f'  Parakeet avg DER: {sum(pk_ders) / len(pk_ders):.1f}%')
 
     output_path = RESULTS_DIR / 'parakeet_der_benchmark.json'
     with open(output_path, 'w') as f:

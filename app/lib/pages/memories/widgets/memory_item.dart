@@ -29,12 +29,17 @@ class MemoryItem extends StatelessWidget {
   final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
 
+  /// Invoked after a swipe-to-delete so the host page can show an undo
+  /// notification. Optional — hosts without one (e.g. category page) omit it.
+  final void Function(String content, Memory memory)? onDeleteNotification;
+
   const MemoryItem({
     super.key,
     required this.memory,
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
+    this.onDeleteNotification,
   });
 
   @override
@@ -138,9 +143,7 @@ class MemoryItem extends StatelessWidget {
         provider.deleteMemory(memory);
         PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
-        if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
-          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
-        }
+        onDeleteNotification?.call(memoryContent, memory);
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -185,7 +188,7 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
+        child: Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
       ),
     );
   }
@@ -300,7 +303,7 @@ class MemoryItem extends StatelessWidget {
   // PopupMenuItem<MemoryVisibility> _buildVisibilityItem(
   //   BuildContext context,
   //   MemoryVisibility visibility,
-  //   IconData icon,
+  //   FaIconData icon,
   //   String description,
   // ) {
   //   final isSelected = memory.visibility == visibility;

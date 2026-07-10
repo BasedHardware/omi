@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Search bar component for Rewind with app filter and date picker
 struct RewindSearchBar: View {
@@ -195,6 +196,7 @@ struct RewindSearchBar: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     VStack {
         RewindSearchBar(
@@ -220,3 +222,4 @@ struct RewindSearchBar: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
+#endif

@@ -39,3 +39,38 @@ def test_firestore_config_declares_v3_compatibility_projection_index():
         and _fields(index) == required_fields
         for index in _index_specs()
     )
+
+
+def test_firestore_config_declares_mcp_conversation_category_filter_index():
+    required_fields = [
+        ('discarded', 'ASCENDING'),
+        ('status', 'ASCENDING'),
+        ('structured.category', 'ASCENDING'),
+        ('created_at', 'DESCENDING'),
+        ('__name__', 'DESCENDING'),
+    ]
+
+    assert any(
+        index.get('collectionGroup') == 'conversations'
+        and index.get('queryScope') == 'COLLECTION'
+        and _fields(index) == required_fields
+        for index in _index_specs()
+    )
+
+
+def test_firestore_config_declares_screen_activity_app_filter_index():
+    # Regression for #9189: the MCP get_screen_activity tool filters by appName
+    # and orders/ranges on timestamp, which needs this composite index — without
+    # it Firestore raises FailedPrecondition and the tool returned an opaque 500.
+    required_fields = [
+        ('appName', 'ASCENDING'),
+        ('timestamp', 'ASCENDING'),
+        ('__name__', 'ASCENDING'),
+    ]
+
+    assert any(
+        index.get('collectionGroup') == 'screen_activity'
+        and index.get('queryScope') == 'COLLECTION'
+        and _fields(index) == required_fields
+        for index in _index_specs()
+    )

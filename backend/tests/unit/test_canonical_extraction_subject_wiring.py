@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -22,17 +23,54 @@ from utils.memory.canonical_memory_adapter import read_canonical_memories, write
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils.memory.required_promotion import required_promotion_payload
+from utils.client_device import DeviceScopeRequest
 from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
+
+
+def _refresh_canonical_runtime() -> None:
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    kg_promotion = importlib.import_module("utils.memory.canonical_kg_promotion")
+    globals().update(
+        {
+            "read_canonical_memories": canonical_adapter.read_canonical_memories,
+            "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+            "extract_kg_for_promoted_memory": kg_promotion.extract_kg_for_promoted_memory,
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _refresh_canonical_runtime_fixture():
+    _refresh_canonical_runtime()
 
 
 def _control_seed(uid: str) -> dict:
     return {
-        f"users/{uid}/memory_control/state": MemoryControlState(
+        f"users/{uid}/memory_state/apply_control": MemoryControlState(
             uid=uid,
             head_commit_id="head0",
             account_generation=1,
             source_generation=1,
         ).model_dump(mode="json"),
+    }
+
+
+def _rollout_control_doc(uid: str) -> dict:
+    return {
+        "uid": uid,
+        "schema_version": 1,
+        "mode": "write",
+        "mode_epoch": 1,
+        "cutover_epoch": 0,
+        "account_generation": 1,
+        "fallback_projection_ready": False,
+        "persistent_memory_writes_started": True,
+        "decommission_reconciled": False,
+        "writes_blocked": False,
+        "stage_gates": {"shadow": "passed", "write": "passed", "read": "blocked"},
+        "grants": {"omi_chat": {"default_memory": False, "archive": False}},
+        "vector_repair_outbox_enabled": False,
     }
 
 
@@ -82,6 +120,75 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["arguments"] == {"location": "San Francisco"}
 
 
+def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account):
+    uid = "uid-manual-device-wire"
+    device_id = "macos_a1b2c3d4"
+    memory_db = MemoryDB.from_memory(
+        Memory(content="User explicitly prefers dark mode", category=MemoryCategory.manual),
+        uid,
+        None,
+        True,
+        client_device_id=device_id,
+    )
+    memory_db.id = "mem_manual_device_wire"
+    db = _FakeDb(_control_seed(uid))
+    service = MemoryService(db_client=db)
+
+    with (
+        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    ):
+        service.write(
+            uid,
+            required_promotion_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
+        )
+
+    current_device = read_canonical_memories(
+        uid,
+        db_client=db,
+        device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id=device_id),
+        include_pending_processing=True,
+    )
+    another_device = read_canonical_memories(
+        uid,
+        db_client=db,
+        device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id="ios_deadbeef"),
+        include_pending_processing=True,
+    )
+
+    assert [memory.id for memory in current_device] == [memory_db.id]
+    assert another_device == []
+
+
+def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkeypatch_trusted_account):
+    uid = "uid-rollout-doc-present"
+    payload = {
+        "id": "mem_rollout_collision",
+        "uid": uid,
+        "content": "Canonical write works with rollout state present",
+        "conversation_id": "conv-rollout-collision",
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
+    }
+    db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
+    service = MemoryService(db_client=db)
+
+    with (
+        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    ):
+        service.write(uid, payload)
+
+    apply_control = db.docs[f"users/{uid}/memory_state/apply_control"]
+    rollout_control = db.docs[f"users/{uid}/memory_control/state"]
+    assert apply_control["head_commit_id"] != "head0"
+    assert apply_control["source_generation"] == 1
+    assert rollout_control["mode"] == "write"
+    assert rollout_control["stage_gates"]["read"] == "blocked"
+    assert f"users/{uid}/memory_items/mem_rollout_collision" in db.docs
+
+
 def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account):
     from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
     from models.product_memory import MemoryItem, ProcessingState
@@ -129,7 +236,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
     ):
-        assert extract_kg_for_promoted_memory("uid-kg", item) is True
+        assert extract_kg_for_promoted_memory("uid-kg", item).success is True
         mock_extract.assert_called_once()
         kg_content = mock_extract.call_args[0][1]
         assert kg_content == f"[{USER_ENTITY_ID}] resides_in (location=San Francisco): lives in San Francisco"

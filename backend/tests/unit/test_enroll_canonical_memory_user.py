@@ -120,3 +120,26 @@ def test_v3_read_prereq_inspection_reports_missing_and_present_docs():
         'users/uid-a/memory_state/head': True,
         'users/uid-a/v3_compatibility_projection/state': False,
     }
+
+
+def test_read_stage_apply_requires_prerequisite_docs():
+    script = load_script()
+
+    with pytest.raises(RuntimeError, match='requires existing v3 read prerequisite docs'):
+        script.assert_v3_read_prerequisites_ready(
+            {
+                'users/uid-a/memory_state/head': True,
+                'users/uid-a/v3_compatibility_projection/state': False,
+            }
+        )
+
+
+def test_read_stage_apply_accepts_present_prerequisite_docs():
+    script = load_script()
+
+    script.assert_v3_read_prerequisites_ready(
+        {
+            'users/uid-a/memory_state/head': True,
+            'users/uid-a/v3_compatibility_projection/state': True,
+        }
+    )

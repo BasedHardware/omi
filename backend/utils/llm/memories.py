@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
@@ -55,8 +55,8 @@ class ExtractedMemory(BaseModel):
 
 class Memories(BaseModel):
     facts: List[ExtractedMemory] = Field(
-        min_items=0,
-        max_items=2,
+        min_length=0,
+        max_length=2,
         description="List of **new** memories. Maximum 2 per conversation.",
         default=[],
     )
@@ -67,7 +67,7 @@ class Memories(BaseModel):
 
 class HighRecallMemories(BaseModel):
     facts: List[Memory] = Field(
-        min_items=0,
+        min_length=0,
         description="List of **new** memories. Include all memory-worthy facts from the conversation.",
         default=[],
     )
@@ -139,9 +139,9 @@ def new_memories_extractor(
         )
 
         # Ensure all new memories use the new category format
-        memories = response.to_memories()
+        memories = response.facts if isinstance(response, HighRecallMemories) else response.to_memories()
         for memory in memories:
-            if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
+            if memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
         return memories
@@ -186,7 +186,7 @@ def extract_memories_from_text(
         # Ensure all new memories use the new category format
         memories = response.to_memories()
         for memory in memories:
-            if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
+            if memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
         return memories
@@ -197,8 +197,8 @@ def extract_memories_from_text(
 
 class Learnings(BaseModel):
     result: List[str] = Field(
-        min_items=0,
-        max_items=2,
+        min_length=0,
+        max_length=2,
         description="List of **new** learnings. If any",
         default=[],
     )
@@ -212,7 +212,7 @@ def new_learnings_extractor(
     language: Optional[str] = None,
 ) -> List[Memory]:
     if user_name is None or learnings_str is None:
-        user_name, memories_str = get_prompt_memories(uid)
+        user_name, learnings_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
     people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
@@ -271,7 +271,7 @@ Respond with ONLY "system" or "interesting" - nothing else."""
 
     try:
         response = get_llm('memory_category').invoke(prompt)
-        category_str = response.content.strip().lower()
+        category_str = cast(str, cast(Any, response).content).strip().lower()
         if category_str == 'interesting':
             return MemoryCategory.interesting
         return MemoryCategory.system
@@ -348,7 +348,7 @@ class TypedMemoryResolution(BaseModel):
 
 def resolve_memory_conflict(
     new_memory: str,
-    similar_memories: List[dict],
+    similar_memories: List[Dict[str, Any]],
     language: Optional[str] = None,
 ) -> MemoryResolution:
     """

@@ -65,12 +65,19 @@ export async function generateMetadata(
     }
 
     // If not in Firestore, try Twitter API
+    const rapidApiKey = process.env.RAPIDAPI_KEY;
+    const rapidApiHost = process.env.RAPIDAPI_HOST;
+
+    if (!rapidApiKey || !rapidApiHost) {
+      throw new Error('RapidAPI server env is missing');
+    }
+
     const profileResponse = await fetch(
-      `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${username}`,
+      `https://${rapidApiHost}/screenname.php?screenname=${encodeURIComponent(username)}`,
       {
         headers: {
-          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+          'x-rapidapi-key': rapidApiKey,
+          'x-rapidapi-host': rapidApiHost,
         },
       },
     );

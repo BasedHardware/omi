@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
+from typing import Any
 
 from config.memory_rollout import MemoryRolloutConfig, MemoryRolloutMode
-from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
 from utils.memory.memory_system_pin import pin_memory_system
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3_control_reader_contract import (
@@ -19,34 +21,83 @@ from utils.memory.v3_control_state_adapter import read_v3_control
 logger = logging.getLogger(__name__)
 
 
-def canonical_write_enabled(uid: str, *, db_client) -> bool:
-    """Return true only when the user is in cohort and write gates are ready."""
+@dataclass(frozen=True)
+class CanonicalWriteDecision:
+    enabled: bool
+    memory_system: MemorySystem
+    fail_closed: bool = False
+    reason: str = "ok"
+
+
+def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecision:
+    """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
 
     if db_client is None:
-        return False
-
-    if pin_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
-        return False
+        return CanonicalWriteDecision(
+            enabled=False,
+            memory_system=MemorySystem.LEGACY,
+            fail_closed=False,
+            reason="missing_db_client",
+        )
 
     try:
         rollout_config = MemoryRolloutConfig.from_env()
     except ValueError:
-        return False
+        if uid in set(list_canonical_cohort_uids()):
+            return CanonicalWriteDecision(
+                enabled=False,
+                memory_system=MemorySystem.CANONICAL,
+                fail_closed=True,
+                reason="invalid_rollout_config",
+            )
+        return CanonicalWriteDecision(
+            enabled=False,
+            memory_system=MemorySystem.LEGACY,
+            fail_closed=False,
+            reason="invalid_rollout_config",
+        )
+
+    memory_system = pin_memory_system(uid, db_client=db_client)
+    if memory_system != MemorySystem.CANONICAL:
+        return CanonicalWriteDecision(enabled=False, memory_system=memory_system, reason="not_canonical")
     if rollout_config.mode not in {MemoryRolloutMode.write, MemoryRolloutMode.read}:
-        return False
+        return CanonicalWriteDecision(
+            enabled=False,
+            memory_system=memory_system,
+            fail_closed=True,
+            reason=f"mode_{rollout_config.mode.value}_not_writable",
+        )
 
     control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
     if not control.cohort_enrolled or control.state is None:
-        logger.info("canonical_write disabled uid=%s reason=%s", uid, control.read_error_reason or "missing_state")
-        return False
+        reason = control.read_error_reason or "missing_state"
+        logger.info("canonical_write disabled uid=%s reason=%s", uid, reason)
+        return CanonicalWriteDecision(
+            enabled=False,
+            memory_system=memory_system,
+            fail_closed=True,
+            reason=reason,
+        )
+    if not control.state.rollout_write_ready:
+        return CanonicalWriteDecision(
+            enabled=False,
+            memory_system=memory_system,
+            fail_closed=True,
+            reason="rollout_write_not_ready",
+        )
 
-    return control.state.rollout_write_ready
+    return CanonicalWriteDecision(enabled=True, memory_system=memory_system)
+
+
+def canonical_write_enabled(uid: str, *, db_client: Any) -> bool:
+    """Return true only when the user is in cohort and write gates are ready."""
+    return canonical_write_decision(uid, db_client=db_client).enabled
 
 
 def canonical_read_enabled(
     uid: str,
     *,
-    db_client,
+    db_client: Any,
     source_decision: str | None = None,
     cursor_memory_read_requested: bool = False,
     archive_requested: bool = False,

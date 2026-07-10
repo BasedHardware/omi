@@ -19,6 +19,8 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ws_g_import_isolation():
@@ -37,6 +39,7 @@ def test_memory_contracts_l1_l2_symbol_aliases_are_identity():
     assert memory_contracts.PromotionRoute is memory_contracts.L2MemoryRoute
 
 
+@pytest.mark.slow
 def test_working_memory_batch_alias_is_identity():
     from utils.llm.working_observations import L1MemoryArchiveItems, WorkingObservationBatch
 
@@ -177,6 +180,7 @@ def test_memory_collections_frozen_path_strings_unchanged():
     assert paths.memory_operations == "users/uid-test/memory_operations"
     assert paths.memory_outbox == "users/uid-test/memory_outbox"
     assert paths.memory_control_state == "users/uid-test/memory_control/state"
+    assert paths.memory_apply_control_state == "users/uid-test/memory_state/apply_control"
     assert paths.memory_lineage == "users/uid-test/memory_lineage"
     assert paths.memory_evidence == "users/uid-test/memory_evidence"
     assert paths.memory_runs == "users/uid-test/memory_runs"
@@ -184,6 +188,7 @@ def test_memory_collections_frozen_path_strings_unchanged():
     assert paths.short_term_lifecycle_transitions == "users/uid-test/short_term_lifecycle_transitions"
     assert paths.legacy_fallback == "users/uid-test/memory_legacy_fallback"
     assert paths.memory_commits == "users/uid-test/memory_commits"
+    assert paths.memory_state == "users/uid-test/memory_state"
     assert paths.memory_state_head == "users/uid-test/memory_state/head"
     assert paths.v3_compatibility_projection_state == "users/uid-test/v3_compatibility_projection/state"
     assert paths.v3_compatibility_projection_items == "users/uid-test/v3_compatibility_projection_items"

@@ -4,6 +4,7 @@
  */
 
 import { getIdToken, auth } from './firebase';
+import { getWebDeviceIdHash } from './clientDevice';
 
 export interface TranscriptSegment {
   id: string;
@@ -125,6 +126,10 @@ export class TranscriptionSocket {
       if (!token) {
         throw new Error('Not authenticated');
       }
+      const deviceIdHash = await getWebDeviceIdHash();
+      if (!deviceIdHash) {
+        throw new Error('Browser device identity is unavailable');
+      }
 
       const uid = auth.currentUser?.uid;
       if (!uid) {
@@ -168,9 +173,18 @@ export class TranscriptionSocket {
         // Send first-message authentication
         if (this.ws && this.pendingToken) {
           try {
-            this.ws.send(JSON.stringify({ type: 'auth', token: this.pendingToken }));
+            this.ws.send(
+              JSON.stringify({
+                type: 'auth',
+                token: this.pendingToken,
+                device_id_hash: deviceIdHash,
+              }),
+            );
           } catch (err) {
-            console.error('TranscriptionSocket: Failed to send auth message, closing socket.', err);
+            console.error(
+              'TranscriptionSocket: Failed to send auth message, closing socket.',
+              err,
+            );
             this.ws?.close();
           }
         }
@@ -197,7 +211,11 @@ export class TranscriptionSocket {
         }
 
         // Auto-reconnect on unexpected close (but not during token refresh)
-        if (!this.isRefreshing && event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (
+          !this.isRefreshing &&
+          event.code !== 1000 &&
+          this.reconnectAttempts < this.maxReconnectAttempts
+        ) {
           this.reconnectAttempts++;
           this.isBuffering = true;
           setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
@@ -241,7 +259,9 @@ export class TranscriptionSocket {
             const segment: TranscriptSegment = {
               id: segmentData.id || `seg-${Date.now()}-${Math.random()}`,
               text: segmentData.text || '',
-              speaker: parseSpeakerId(segmentData.speakerId ?? segmentData.speaker_id ?? segmentData.speaker),
+              speaker: parseSpeakerId(
+                segmentData.speakerId ?? segmentData.speaker_id ?? segmentData.speaker,
+              ),
               isUser: segmentData.isUser ?? segmentData.is_user ?? false,
               timestamp: Date.now(),
             };
@@ -298,7 +318,12 @@ export class TranscriptionSocket {
 
   sendAudio(pcmData: Int16Array): void {
     // Buffer if not connected or not authenticated yet
-    if (this.isBuffering || this.state !== 'connected' || !this.ws || !this.isAuthenticated) {
+    if (
+      this.isBuffering ||
+      this.state !== 'connected' ||
+      !this.ws ||
+      !this.isAuthenticated
+    ) {
       this.audioBuffer.push(pcmData);
       // Limit buffer size to prevent memory issues
       if (this.audioBuffer.length > 100) {
@@ -341,7 +366,7 @@ export class TranscriptionSocket {
  * Create a new transcription socket instance
  */
 export function createTranscriptionSocket(
-  options: TranscriptionSocketOptions
+  options: TranscriptionSocketOptions,
 ): TranscriptionSocket {
   return new TranscriptionSocket(options);
 }

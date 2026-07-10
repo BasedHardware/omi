@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -90,7 +91,6 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       ...baseRunInput,
       requestId: "request-2",
       clientId: "client-b",
-      legacyAdapterSessionId: "legacy-native-2",
       mcpServers: [
         {
           command: "node",
@@ -123,7 +123,6 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       clientId: "client-b",
       runId: adapter.executed[1].runId,
       attemptId: adapter.executed[1].attemptId,
-      legacyAdapterSessionId: "legacy-native-2",
     });
     store.close();
   });
@@ -263,7 +262,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
-  it("does not fall back to a legacy alias when an explicit external ref is new", async () => {
+  it("creates separate sessions for distinct external refs", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
 
     const first = await kernel.executeRun({
@@ -271,16 +270,12 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       requestId: "chat-1",
       externalRefKind: "chat",
       externalRefId: "backend-chat-1",
-      legacyClientScope: "main-chat",
-      legacySessionKey: "main",
     });
     const second = await kernel.executeRun({
       ...baseRunInput,
       requestId: "chat-2",
       externalRefKind: "chat",
       externalRefId: "backend-chat-2",
-      legacyClientScope: "main-chat",
-      legacySessionKey: "main",
     });
 
     expect(second.session.sessionId).not.toBe(first.session.sessionId);
@@ -315,6 +310,37 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     ]);
     expect(JSON.parse(artifacts[0].metadataJson)).toEqual({ adapterArtifactId: "native-report" });
     expect(store.allRows("SELECT type FROM events WHERE type = 'artifact.created'")).toHaveLength(1);
+    store.close();
+  });
+
+  it("uses a managed run directory and discovers files written there as artifacts", async () => {
+    const artifactRoot = mkdtempTracked("omi-agent-artifacts-");
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 4, artifactStorage);
+    adapter.writeFileOnExecute = { name: "omi-artifact-smoke.txt", contents: "hello from smoke test" };
+
+    const result = await kernel.executeRun({ ...baseRunInput, cwd: artifactRoot });
+    const artifacts = kernel.inspectArtifacts({ runId: result.run.runId });
+
+    expect(adapter.opened[0].cwd).toContain(result.run.runId);
+    expect(adapter.executed[0].binding.cwd).toBe(adapter.opened[0].cwd);
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        sessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        uri: expect.stringContaining("omi-artifact-smoke.txt"),
+        displayName: "omi-artifact-smoke.txt",
+        role: "result",
+        mimeType: "text/plain",
+        sizeBytes: 21,
+      }),
+    ]);
+    expect(readFileSync(new URL(artifacts[0].uri), "utf8")).toBe("hello from smoke test");
+    expect(JSON.parse(artifacts[0].metadataJson)).toMatchObject({
+      omiManaged: true,
+      discoveredFromRunDirectory: true,
+    });
     store.close();
   });
 

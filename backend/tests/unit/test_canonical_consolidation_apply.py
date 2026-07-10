@@ -201,7 +201,7 @@ def _db_for_apply(
 ) -> _FakeDb:
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     docs = {
-        f"users/{UID}/memory_control/state": _stored(control),
+        f"users/{UID}/memory_state/apply_control": _stored(control),
         f"users/{UID}/memory_items/{survivor.memory_id}": _stored(survivor),
     }
     for item in extra_items or []:
@@ -236,7 +236,7 @@ def test_merge_and_add_evidence_update_survivor_in_place(agent_decision: str):
     survivor = _item("mem_survivor", "Enjoys hiking in Seattle")
     duplicate_ev = _evidence("ev_pending", source_id="conv-2")
     db = _db_for_apply(survivor=survivor, extra_evidence=[duplicate_ev])
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     pending = _item("mem_pending", "Enjoys hiking in Seattle", evidence_ids=["ev_pending"])
 
     decision = ConsolidationAgentDecision(
@@ -271,7 +271,7 @@ def test_merge_and_add_evidence_update_survivor_in_place(agent_decision: str):
 def test_skip_duplicate_with_corroboration_increments_survivor():
     survivor = _item("mem_existing", "Likes coffee", corroboration_count=2)
     db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
 
     decision = ConsolidationAgentDecision(
         decision="skip_duplicate",
@@ -300,7 +300,7 @@ def test_skip_duplicate_with_corroboration_increments_survivor():
 def test_consolidation_apply_is_idempotent_on_operation_retry():
     survivor = _item("mem_survivor", "Enjoys hiking")
     db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     decision = ConsolidationAgentDecision(
         decision="merge",
         survivor_memory_id="mem_survivor",
@@ -355,7 +355,7 @@ def test_update_with_supersede_real_apply_excludes_superseded_from_reads():
     old = _item("mem_old", "Loves ice cream")
     new = _item("mem_new", "Hates ice cream")
     db = _db_for_apply(survivor=new, extra_items=[old])
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
 
     apply_consolidation_decision(
         UID,
@@ -398,7 +398,7 @@ def test_partial_supersede_after_survivor_blocks_watermark():
         last_consolidation_run_at=NOW - timedelta(days=2),
     )
     db = _db_for_apply(survivor=survivor, extra_items=[old])
-    db.docs[f"users/{uid}/memory_control/state"] = _stored(control)
+    db.docs[f"users/{uid}/memory_state/apply_control"] = _stored(control)
     pending = [old, survivor]
 
     agent_response = ConsolidationAgentBatch(
@@ -443,7 +443,7 @@ def test_watermark_not_advanced_on_parse_failure():
         source_generation=1,
         last_consolidation_run_at=NOW - timedelta(days=2),
     )
-    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
 
     with (
@@ -469,7 +469,7 @@ def test_watermark_advanced_on_clean_empty_run():
         source_generation=1,
         last_consolidation_run_at=NOW - timedelta(days=2),
     )
-    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
 
     with (
@@ -484,14 +484,54 @@ def test_watermark_advanced_on_clean_empty_run():
 
     assert report.decisions_applied == 0
     assert report.last_consolidation_run_at == NOW
-    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_control/state"])
+    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
+    assert stored_control.last_consolidation_run_at == NOW
+
+
+def test_consolidation_watermark_persist_preserves_apply_head_fields():
+    uid = UID
+    control = MemoryControlState(
+        uid=uid,
+        head_commit_id="head0",
+        commit_sequence=0,
+        account_generation=1,
+        source_generation=1,
+        last_consolidation_run_at=NOW - timedelta(days=2),
+    )
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
+    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
+
+    original_set = _FakeDocumentRef.set
+
+    def concurrent_apply_before_watermark(self, data, merge=False):
+        if merge:
+            current = dict(self._db.docs[self.path])
+            current.update({"head_commit_id": "head-concurrent", "commit_sequence": 42})
+            self._db.docs[self.path] = current
+        return original_set(self, data, merge=merge)
+
+    with (
+        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
+        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
+        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
+        patch.object(_FakeDocumentRef, "set", concurrent_apply_before_watermark),
+    ):
+        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
+        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
+        report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
+
+    assert report.last_consolidation_run_at == NOW
+    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
+    assert stored_control.head_commit_id == "head-concurrent"
+    assert stored_control.commit_sequence == 42
     assert stored_control.last_consolidation_run_at == NOW
 
 
 def test_batch_cap_limits_pending_items_per_llm_call_and_loops_all_pending():
     uid = UID
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(15)]
 
     with (
@@ -515,7 +555,7 @@ def test_batch_cap_limits_pending_items_per_llm_call_and_loops_all_pending():
 def test_missing_survivor_skips_decision_without_corruption():
     survivor = _item("mem_survivor", "Enjoys hiking")
     db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
 
     decision = ConsolidationAgentDecision(
@@ -545,7 +585,7 @@ def test_superseded_survivor_skips_decision():
     survivor = _item("mem_survivor", "Old fact")
     survivor.status = MemoryItemStatus.superseded
     db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
 
     decision = ConsolidationAgentDecision(
@@ -573,7 +613,7 @@ def test_merged_survivor_stays_short_term_and_reappears_in_pending():
     survivor = _item("mem_survivor", "Enjoys hiking in Seattle", tier=MemoryTier.short_term)
     duplicate_ev = _evidence("ev_pending", source_id="conv-2")
     db = _db_for_apply(survivor=survivor, extra_evidence=[duplicate_ev])
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     pending = _item("mem_pending", "Enjoys hiking in Seattle", evidence_ids=["ev_pending"])
 
     apply_consolidation_decision(
@@ -612,7 +652,7 @@ def test_batch_skips_hallucinated_evidence_and_applies_valid_decision():
     )
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": _stored(control),
+            f"users/{uid}/memory_state/apply_control": _stored(control),
             f"users/{uid}/memory_items/mem_valid": _stored(survivor),
             f"users/{uid}/memory_evidence/ev_mem_valid": _stored(survivor.evidence[0]),
         }
@@ -662,7 +702,7 @@ def test_partial_apply_halts_subsequent_batches():
     """After partial apply, no further LLM batches run in the same pass."""
     uid = UID
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(15)]
 
     first_batch_response = ConsolidationAgentBatch(
@@ -709,7 +749,7 @@ def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
         source_generation=1,
         last_consolidation_run_at=NOW - timedelta(days=2),
     )
-    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
 
     def _raise_invoke(_prompt: str) -> str:
@@ -755,13 +795,13 @@ def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
 
 
 def _read_control_state_from_db(db: _FakeDb) -> MemoryControlState:
-    return MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    return MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
 
 
 def test_corroboration_increment_idempotent_across_runs():
     survivor = _item("mem_survivor", "Enjoys hiking", corroboration_count=0)
     db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     decision = ConsolidationAgentDecision(
         decision="skip_duplicate",
         survivor_memory_id="mem_survivor",

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from config.memory_rollout import PASSED, MemoryRolloutCapabilities, MemoryRolloutMode, MemoryRolloutStageGate
 from models.memory_search_gateway import SearchMode, SearchVectorHit
-from models.product_memory import MemoryTier
+from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
     VectorCandidateResult as _VectorCandidateResult,
@@ -232,38 +232,37 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
 
 def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
-    assert 'guard_legacy_memory_write' in contents
-    guard = "guard_legacy_memory_write("
-    create_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    service_contents = memory_service_py.read_text(encoding='utf-8')
+    assert '_canonical_external_write_enabled_or_fail_closed' in service_contents
+    assert 'guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)' in service_contents
+    create_tool = contents[
+        contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
+    ]
+    assert 'create_external_memory(' in create_tool
     assert 'operation="mcp_tool_memory_create"' in create_tool
-    assert create_tool.index(guard) < create_tool.index('identify_category_for_memory(content)')
-    assert create_tool.index(guard) < create_tool.index('memories_db.create_memory(user_id, memory_db.model_dump())')
-    delete_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
+    assert 'resolve_external_memory_write_context(' in create_tool
+    assert 'raise_if_legacy_write_blocked(write_context)' in create_tool
+    assert create_tool.index('resolve_external_memory_write_context(') < create_tool.index(
+        'identify_category_for_memory'
     )
+    assert create_tool.index('raise_if_legacy_write_blocked(write_context)') < create_tool.index(
+        'identify_category_for_memory'
+    )
+    assert 'memories_db.create_memory(user_id, memory_db.model_dump())' not in create_tool
+    delete_tool = contents[
+        contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
+    ]
+    assert 'delete_external_memory(' in delete_tool
     assert 'operation="mcp_tool_memory_delete"' in delete_tool
-    assert delete_tool.index(guard) < delete_tool.index('memories_db.get_memory(user_id, memory_id)')
-    assert delete_tool.index(guard) < delete_tool.index('memories_db.delete_memory(user_id, memory_id)')
-    edit_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "edit_memory":') : contents.index(
-                'elif tool_name == "get_conversations":'
-            )
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    assert 'memories_db.delete_memory(user_id, memory_id)' not in delete_tool
+    edit_tool = contents[
+        contents.index('elif tool_name == "edit_memory":') : contents.index('elif tool_name == "get_conversations":')
+    ]
+    assert 'update_external_memory_content(' in edit_tool
     assert 'operation="mcp_tool_memory_edit"' in edit_tool
-    assert edit_tool.index(guard) < edit_tool.index('memories_db.get_memory(user_id, memory_id)')
-    assert edit_tool.index(guard) < edit_tool.index('memories_db.edit_memory(user_id, memory_id, content)')
+    assert 'memories_db.edit_memory(user_id, memory_id, content)' not in edit_tool
 
 
 _MCP_QUOTE_TEXT = 'User prefers deterministic MCP memory reads.'
@@ -388,6 +387,23 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     assert all((item['archive_default_visible'] is False for item in results))
     assert all((item['policy']['consumer'] == 'mcp' for item in results))
     assert all((item['policy']['archive_capability'] is False for item in results))
+
+
+def test_mcp_default_memory_adapter_excludes_pending_admission_text():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    pending = _memory_item(
+        'pending-explicit',
+        now=now,
+        content='coffee pending explicit memory',
+        processing_state=ProcessingState.pending,
+    )
+    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+
+    results = search_default_mcp_memories(
+        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
+    )
+
+    assert results == []
 
 
 def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_grant_disabled():

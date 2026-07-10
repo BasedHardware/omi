@@ -4,10 +4,9 @@ Wrapped 2025 API endpoints.
 Provides generation and retrieval of yearly recap data.
 """
 
-from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from utils.executors import llm_executor
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -27,9 +26,9 @@ router = APIRouter()
 class WrappedStatusResponse(BaseModel):
     status: str
     year: int = 2025
-    result: Optional[dict] = None
+    result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    progress: Optional[dict] = None
+    progress: Optional[Dict[str, Any]] = None
 
 
 class GenerateWrappedResponse(BaseModel):

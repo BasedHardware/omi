@@ -1,27 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
-from datetime import datetime, timezone, timedelta
-from collections import Counter, defaultdict
-import matplotlib.pyplot as plt
-from tabulate import tabulate
+from typing import Any, Dict, List, cast
 
 from database._client import get_users_uid, db
-from database.chat import get_messages
 
 
 import json
 
 
-def get_user_messages_with_bot_name():
-    user_messages_with_bot_name = {}
+def get_user_messages_with_bot_name() -> List[str]:
+    user_messages_with_bot_name: Dict[str, List[Dict[str, Any]]] = {}
     uids = get_users_uid()[:20]
     users_ref = db.collection("users")
     print(len(uids))
 
-    def process_user(uid):
+    def process_user(uid: str) -> None:
         messages_ref = users_ref.document(uid).collection("messages")
         messages = messages_ref.stream()
-        filtered_messages = [message.to_dict() for message in messages if 'botName' in message.to_dict()]
+        filtered_messages: List[Dict[str, Any]] = []
+        for message in messages:
+            raw: object = message.to_dict()
+            data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            if 'botName' in data:
+                filtered_messages.append(data)
         print(uid, "has personas messages", len(filtered_messages))
         if filtered_messages:
             user_messages_with_bot_name[uid] = filtered_messages
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     get_user_messages_with_bot_name()
     # TODO: map all plugin_data by persona_name so that we can map, local json
     # TODO: questions
-    # -- % of people who provided their x vs someone else’s, and most popular questions
+    # -- % of people who provided their x vs someone else's, and most popular questions
     # -- If someone else, who were the top 3 most popular questions and to whom
     # - how many users have personas messages?
     # - how many conversations are just automatic messages? (no user messages)

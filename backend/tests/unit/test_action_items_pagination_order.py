@@ -7,27 +7,17 @@ every page, even page 0 with a limit, returned the wrong items. A user paging th
 soon-due items that were created earlier. Pagination now runs after the sort, so it matches the
 returned order.
 
-database.action_items constructs a Firestore client at module load, so database._client is stubbed
-before import and the query chain is replaced with a stand-in whose stream() mimics Firestore
-slicing -- the pre-fix code (which calls offset()/limit() on the query) therefore fails these tests.
+``database.action_items`` is import-pure (``database._client.db`` is a lazy proxy that does not
+construct a client at import time), so no ``sys.modules`` stubbing is required. The query chain is
+replaced per-test via ``monkeypatch.setattr(action_items, 'db', ...)`` -- the sanctioned Tier-2 seam.
 """
 
-import os
-import sys
-import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    'ENCRYPTION_SECRET',
-    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
-)
+import pytest
 
-_client_stub = types.ModuleType('database._client')
-_client_stub.db = MagicMock(name='db')
-sys.modules['database._client'] = _client_stub
-
-import database.action_items as action_items  # noqa: E402
+import database.action_items as action_items
 
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -83,28 +73,35 @@ DOCS = [
 # Firestore order: A, B, C, D, E ; final sorted order: C, D, B, A, E
 
 
-def _ids(**kwargs):
+@pytest.fixture
+def fake_db(monkeypatch):
+    db = MagicMock(name='db')
+    monkeypatch.setattr(action_items, 'db', db)
+    return db
+
+
+def _ids(fake_db, **kwargs):
     query = _Query(list(DOCS))
-    action_items.db.collection.return_value.document.return_value.collection.return_value = query
+    fake_db.collection.return_value.document.return_value.collection.return_value = query
     return [item['id'] for item in action_items.get_action_items('uid1', **kwargs)]
 
 
-def test_full_order_no_pagination():
-    assert _ids() == ['C', 'D', 'B', 'A', 'E']
+def test_full_order_no_pagination(fake_db):
+    assert _ids(fake_db) == ['C', 'D', 'B', 'A', 'E']
 
 
-def test_first_page_returns_soonest_due_not_newest_created():
+def test_first_page_returns_soonest_due_not_newest_created(fake_db):
     # offset=0, limit=2 -> first two of the final order (soonest due), not the two newest-created.
-    assert _ids(limit=2, offset=0) == ['C', 'D']
+    assert _ids(fake_db, limit=2, offset=0) == ['C', 'D']
 
 
-def test_second_page_continues_final_order():
+def test_second_page_continues_final_order(fake_db):
     # offset=2, limit=2 -> the next two of the final order.
-    assert _ids(limit=2, offset=2) == ['B', 'A']
+    assert _ids(fake_db, limit=2, offset=2) == ['B', 'A']
 
 
-def test_non_positive_limit_does_not_truncate():
+def test_non_positive_limit_does_not_truncate(fake_db):
     # A defensive guard: limit <= 0 must not silently return an empty/garbage slice (e.g. [:0] or a
     # negative slice). Such a limit means "no page cap", so the full sorted order is returned.
-    assert _ids(limit=0) == ['C', 'D', 'B', 'A', 'E']
-    assert _ids(limit=-5) == ['C', 'D', 'B', 'A', 'E']
+    assert _ids(fake_db, limit=0) == ['C', 'D', 'B', 'A', 'E']
+    assert _ids(fake_db, limit=-5) == ['C', 'D', 'B', 'A', 'E']

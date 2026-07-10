@@ -39,6 +39,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         onboarding_mode=False,
         call_id=None,
         client_conversation_id=None,
+        client_device_context=None,
     ):
         captured.update(
             {
@@ -55,6 +56,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "onboarding_mode": onboarding_mode,
                 "call_id": call_id,
                 "client_conversation_id": client_conversation_id,
+                "client_device_id": getattr(client_device_context, "client_device_id", None),
+                "client_platform": getattr(client_device_context, "platform", None),
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -66,7 +69,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e"
     ) as websocket:
-        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token", "device_id_hash": "a1b2c3d4"}))
         auth_response = websocket.receive_json()
         assert auth_response == {"type": "auth_response", "success": True}
         ready = websocket.receive_json()
@@ -82,6 +85,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     assert captured["conversation_timeout"] == 1
     assert captured["source"] == "e2e"
     assert captured["custom_stt_mode"] == "enabled"
+    assert captured["client_device_id"] == "web_a1b2c3d4"
+    assert captured["client_platform"] == "web"
 
 
 def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(client, auth_headers, test_uid):
@@ -188,11 +193,43 @@ def test_listen_client_conversation_id_creates_requested_conversation(client, te
         receive_until(websocket, is_ready_event)
 
     assert session_event["conversation_id"] == client_conversation_id
+    assert session_event["recording_session_id"] == client_conversation_id
     conversation = read_conversation(test_uid, client_conversation_id)
     assert conversation is not None
     assert conversation["id"] == client_conversation_id
     assert getattr(conversation["source"], "value", conversation["source"]) == "desktop"
     assert getattr(conversation["status"], "value", conversation["status"]) == "in_progress"
+
+
+def test_listen_client_conversation_id_never_resumes_global_conversation(client, test_uid, monkeypatch):
+    """An identified desktop recording must not inherit a stale user-global pointer."""
+    seed_listen_user(test_uid)
+    client_conversation_id = str(uuid.uuid4())
+    stale_conversation = {
+        "id": str(uuid.uuid4()),
+        "finished_at": None,
+        "status": "in_progress",
+    }
+
+    import routers.transcribe as transcribe_router
+
+    def stale_global_lookup(_uid):
+        raise AssertionError(f"identified listen must not resume stale global conversation {stale_conversation['id']}")
+
+    monkeypatch.setattr(transcribe_router, "retrieve_in_progress_conversation", stale_global_lookup)
+
+    with client.websocket_connect(
+        "/v4/web/listen?"
+        f"custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120"
+        f"&source=desktop&client_conversation_id={client_conversation_id}"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        session_event = receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+    assert session_event["conversation_id"] == client_conversation_id
+    assert session_event["recording_session_id"] == client_conversation_id
 
 
 def test_listen_client_conversation_id_reconnects_same_session(client, test_uid):

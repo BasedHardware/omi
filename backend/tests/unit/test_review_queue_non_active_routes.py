@@ -1,23 +1,41 @@
+"""review_queue.resolve_review_conflict persists non-active-route outcomes and skip-route drops.
+
+``database.review_queue`` binds its sibling submodule imports (``memories``, ``memory_ledger``,
+``short_term_memories``) at import time, and ``resolve_review_conflict`` calls into them at
+runtime (e.g. ``short_term_db.mark_consolidated``). The tests exercise only ``review_queue``'s
+own logic and must not touch Firestore, so those sibling refs are replaced with no-op fakes for
+the duration of the module. This is the sanctioned Tier-2 "fake must precede import" case: see
+backend/docs/test_isolation.md and testing.import_isolation.load_module_fresh.
+"""
+
 import os
-import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
 
-sys.modules["database._client"] = MagicMock()
-sys.modules["database.memories"] = MagicMock()
-sys.modules["database.memory_ledger"] = MagicMock()
-sys.modules["database.short_term_memories"] = MagicMock()
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 from database.memory_non_active_routes import NonActiveRoute
-from database import review_queue
 
-sys.modules.pop("database.memories", None)
-sys.modules.pop("database.memory_ledger", None)
-sys.modules.pop("database.short_term_memories", None)
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module")
+def review_queue():
+    """Load a fresh database.review_queue against no-op sibling submodule fakes."""
+    fakes = {
+        "database._client": AutoMockModule("database._client"),
+        "database.memories": AutoMockModule("database.memories"),
+        "database.memory_ledger": AutoMockModule("database.memory_ledger"),
+        "database.short_term_memories": AutoMockModule("database.short_term_memories"),
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.review_queue",
+            os.path.join(str(_BACKEND), "database", "review_queue.py"),
+        )
+        yield module
 
 
 class _Doc:
@@ -67,7 +85,7 @@ def _item(**overrides):
     return item
 
 
-def test_review_queue_reject_persists_non_active_route_store_outcome(monkeypatch):
+def test_review_queue_reject_persists_non_active_route_store_outcome(review_queue, monkeypatch):
     captured = []
     doc = _Doc()
 
@@ -103,7 +121,7 @@ def test_review_queue_reject_persists_non_active_route_store_outcome(monkeypatch
     assert outcome.audit_metadata["resolution_commit_id"] == "commit_reject"
 
 
-def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(monkeypatch):
+def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(review_queue, monkeypatch):
     captured = []
     doc = _Doc()
     append_mock = MagicMock(return_value=None)

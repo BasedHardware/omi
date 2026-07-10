@@ -50,8 +50,9 @@ from database.memory_vector_metadata import (
 from database.memory_vector_metadata import build_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
-from models.memory_search_gateway import SearchDecision, SearchMode
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
 
 def _item(
@@ -250,6 +251,76 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
     assert fake_index.upserts[0]["namespace"] == "ns2"
 
 
+def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+
+    item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term).model_copy(
+        update={"source_commit_id": None, "content_hash": None}
+    )
+    vector_db.upsert_canonical_memory_vector(item)
+
+    metadata = fake_index.upserts[0]["vectors"][0]["metadata"]
+    assert "source_commit_id" not in metadata
+    assert "content_hash" not in metadata
+    assert metadata["projection_commit_id"] == "commit-ledger"
+
+
+def test_hydration_allows_missing_vector_source_freshness_when_authoritative_item_is_null():
+    item = _item(memory_id="mem_null_freshness", tier=MemoryTier.short_term).model_copy(
+        update={"source_commit_id": None, "content_hash": None}
+    )
+    hit = SearchVectorHit(
+        vector_id="mem_null_freshness",
+        memory_id=item.memory_id,
+        score=0.9,
+        projection_commit_id="commit-ledger",
+        vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+    )
+
+    result = hydrate_and_filter_vector_hits(
+        hits=[hit],
+        authoritative_items={item.memory_id: item},
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        mode=SearchMode.default,
+        required_projection_commit_id="commit-ledger",
+        required_account_generation=item.account_generation,
+    )
+
+    assert result.decisions[item.memory_id] == SearchDecision.allowed
+    assert [search_result.item.memory_id for search_result in result.results] == [item.memory_id]
+    assert result.repair_purge_candidates == []
+
+
+def test_hydration_rejects_missing_vector_source_freshness_when_authoritative_item_has_values():
+    item = _item(memory_id="mem_required_freshness", tier=MemoryTier.short_term)
+    hit = SearchVectorHit(
+        vector_id="mem_required_freshness",
+        memory_id=item.memory_id,
+        score=0.9,
+        projection_commit_id="commit-ledger",
+        vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+    )
+
+    result = hydrate_and_filter_vector_hits(
+        hits=[hit],
+        authoritative_items={item.memory_id: item},
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        mode=SearchMode.default,
+        required_projection_commit_id="commit-ledger",
+        required_account_generation=item.account_generation,
+    )
+
+    assert result.decisions[item.memory_id] == SearchDecision.stale_vector
+    assert result.results == []
+    assert result.repair_purge_candidates[0]["reason"] == "missing_vector_freshness_metadata"
+
+
 def test_query_memory_vector_candidates_matches_neutral_metadata(monkeypatch):
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
@@ -357,7 +428,7 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
     )
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
             f"users/{uid}/memory_evidence/ev_ws_i_1": MemoryEvidence(
@@ -464,9 +535,9 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
         return_value=canonical_memory_id,
     ), patch(
         "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ):
-        _, written, skip_reason, vector_sync_failed = _apply_one_legacy_row(
+        row_result = _apply_one_legacy_row(
             uid=uid,
             legacy_row={"id": legacy_id, "content": content},
             index=0,
@@ -475,9 +546,10 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
             db_client=_BackfillDb(),
         )
 
-    assert written is False
-    assert skip_reason == "idempotent_skip"
-    assert vector_sync_failed is False
+    assert row_result.written is False
+    assert row_result.skip_reason == "idempotent_skip"
+    assert row_result.vector_sync_failed is False
+    assert row_result.keyword_sync_succeeded is True
     assert len(fake_index.upserts) == 1
     assert fake_index.upserts[0]["vectors"][0]["id"] == canonical_memory_id
     assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
@@ -518,12 +590,12 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         return_value=SimpleNamespace(operation_id="op-promo"),
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ), patch(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=None,
+        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
     ):
-        promoted, _ = promote_short_term_item_via_apply(
+        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -532,6 +604,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             now=now,
             db_client=_PromotionDb(),
         )
+    assert keyword_sync_succeeded is True
 
     idempotent_apply = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
@@ -558,12 +631,12 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         return_value=SimpleNamespace(operation_id="op-promo-2"),
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=True,
     ), patch(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=None,
+        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
     ):
-        promoted, _ = promote_short_term_item_via_apply(
+        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -572,6 +645,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             now=now,
             db_client=_PromotionDbWithItem(),
         )
+    assert keyword_sync_succeeded is True
 
     vector_ids = [upsert["vectors"][0]["id"] for upsert in fake_index.upserts]
     assert vector_ids == [memory_id, memory_id, memory_id]
@@ -603,15 +677,15 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
     _set_canonical_cohort(monkeypatch, uid)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: CanonicalKgPromotionResult(attempted=True, success=True),
     )
     db = _canonical_db_with_control(uid)
     threshold = 25

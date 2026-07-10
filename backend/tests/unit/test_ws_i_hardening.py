@@ -89,7 +89,7 @@ def test_atomic_bump_uses_firestore_transaction_primitive():
 
 def test_sequential_source_generation_bumps_are_monotonic():
     uid = "uid-canonical"
-    control_path = f"users/{uid}/memory_control/state"
+    control_path = f"users/{uid}/memory_state/apply_control"
     db = _FakeDb(
         {
             control_path: MemoryControlState(
@@ -116,7 +116,7 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
     content = "User enjoys hiking"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
     memory_id = payload["id"]
-    control_path = f"users/{uid}/memory_control/state"
+    control_path = f"users/{uid}/memory_state/apply_control"
     db = _FakeDb(
         {
             control_path: MemoryControlState(
@@ -169,7 +169,7 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
     memory_id = payload["id"]
     evidence_path = f"users/{uid}/memory_evidence/ev_ws_i_1"
-    control_path = f"users/{uid}/memory_control/state"
+    control_path = f"users/{uid}/memory_state/apply_control"
     db = _FakeDb(
         {
             control_path: MemoryControlState(
@@ -229,7 +229,7 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
     memory_id = payload["id"]
     evidence_path = f"users/{uid}/memory_evidence/ev_ws_i_1"
-    control_path = f"users/{uid}/memory_control/state"
+    control_path = f"users/{uid}/memory_state/apply_control"
     db = _FakeDb(
         {
             control_path: MemoryControlState(

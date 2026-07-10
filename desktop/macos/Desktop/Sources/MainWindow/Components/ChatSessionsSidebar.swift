@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Sidebar showing chat sessions grouped by date
 struct ChatSessionsSidebar: View {
@@ -419,7 +420,9 @@ struct SessionRow: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     ChatSessionsSidebar(chatProvider: ChatProvider())
         .frame(height: 500)
 }
+#endif

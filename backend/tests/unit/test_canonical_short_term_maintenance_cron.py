@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+import importlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -45,6 +46,7 @@ def _cron_import_isolation():
     install_database_client_stub()
     install_canonical_write_runtime_stubs()
     yield
+    _clear_ws_b_runtime_modules()
     restore_sys_modules(saved)
 
 
@@ -63,6 +65,7 @@ from utils.memory.short_term_promotion import (
 )
 from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from tests.unit.test_ws_b_short_term_lifecycle import (
+    _clear_ws_b_runtime_modules,
     _canonical_db_with_control,
     _seed_canonical_short_term,
     _set_canonical_cohort,
@@ -74,10 +77,29 @@ CANONICAL_B = "uid-canonical-b"
 LEGACY_UID = "uid-legacy-only"
 
 
+def _refresh_cron_runtime() -> None:
+    cron = importlib.import_module("utils.memory.canonical_short_term_maintenance_cron")
+    memory_system = importlib.import_module("utils.memory.memory_system")
+    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
+    cron.list_canonical_cohort_uids = memory_system.list_canonical_cohort_uids
+    cron.run_canonical_short_term_maintenance = short_term_promotion.run_canonical_short_term_maintenance
+    globals().update(
+        {
+            "run_canonical_short_term_maintenance_for_cohort": cron.run_canonical_short_term_maintenance_for_cohort,
+            "should_run_canonical_short_term_maintenance_cron": cron.should_run_canonical_short_term_maintenance_cron,
+            "list_canonical_cohort_uids": memory_system.list_canonical_cohort_uids,
+            "CanonicalShortTermMaintenanceReport": short_term_promotion.CanonicalShortTermMaintenanceReport,
+            "ShortTermPromotionReport": short_term_promotion.ShortTermPromotionReport,
+            "promotion_batch_threshold": short_term_promotion.promotion_batch_threshold,
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_canonical_cohort(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_cron_runtime()
     clear_canonical_cohort(monkeypatch)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", raising=False)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", raising=False)
@@ -114,8 +136,36 @@ def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatc
     )
 
 
+def test_cohort_runner_noops_when_cron_disabled(monkeypatch):
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
+    db = _canonical_db_with_control(CANONICAL_A)
+
+    invoked: list[str] = []
+
+    def _recording_maintenance(uid, **kwargs):
+        invoked.append(uid)
+        return CanonicalShortTermMaintenanceReport(
+            uid=uid,
+            promotion=ShortTermPromotionReport(uid=uid, skipped_reason="promotion_not_due"),
+        )
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_short_term_maintenance_cron.run_canonical_short_term_maintenance",
+        _recording_maintenance,
+    )
+
+    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-disabled")
+
+    assert invoked == []
+    assert summary.user_count == 0
+    assert summary.promoted_total == 0
+    assert summary.errors == []
+
+
 def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A, CANONICAL_B)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
 
     invoked: list[str] = []
@@ -145,6 +195,7 @@ def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypat
 
 def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
 
     summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
@@ -157,6 +208,7 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
 
 def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     memory_id = _seed_canonical_short_term(
@@ -178,10 +230,15 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
 def _consolidation_disabled_for_promotion_cron(monkeypatch):
     """Promotion cron tests target batch-or-daily promotion, not the consolidation LLM path."""
     monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_ENABLED", "false")
+    monkeypatch.setattr(
+        "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
+        lambda *args, **kwargs: {"nodes": [], "edges": []},
+    )
 
 
 def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
@@ -202,6 +259,7 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation
 
 def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()

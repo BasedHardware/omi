@@ -19,13 +19,78 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      mode:
+        description: 'Workflow mode'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - repair-traffic-only
+      deploy_targets:
+        description: 'Deploy all backend surfaces or Cloud Run only'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - cloud-run-only
 
 env:
   SERVICE: backend
   REGION: us-central1
 
 jobs:
+  repair-traffic:
+    if: ${{ github.event.inputs.mode == 'repair-traffic-only' }}
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Validate Environment Input
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Restore Cloud Run traffic spec to currently serving revisions
+        run: |
+          python3 backend/scripts/repair_cloud_run_traffic.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --repair
+
+      - name: Cloud Run deploy status report
+        if: always()
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service backend \
+            --cloud-run-service backend-sync \
+            --cloud-run-service backend-integration || true
+
   deploy:
+    if: ${{ github.event.inputs.mode == 'deploy' }}
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
@@ -37,6 +102,10 @@ jobs:
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.deploy_targets }}" != "all" && "${{ github.event.inputs.deploy_targets }}" != "cloud-run-only" ]]; then
+            echo "Invalid deploy_targets: ${{ github.event.inputs.deploy_targets }}. Must be 'all' or 'cloud-run-only'."
             exit 1
           fi
 
@@ -70,6 +139,36 @@ jobs:
           echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Render backend runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+
+      - name: Preflight Cloud Run deploy
+        run: |
+          PREFLIGHT_ARGS=(
+            --env ${{ vars.ENV }}
+            --project ${{ vars.GCP_PROJECT_ID }}
+            --region ${{ env.REGION }}
+            --check-secrets
+            --check-traffic
+          )
+          if [[ "${{ github.event.inputs.environment }}" == "prod" || "${{ github.event.inputs.environment }}" == "development" ]]; then
+            PREFLIGHT_ARGS+=(--repair-traffic)
+          fi
+          python3 backend/scripts/preflight-cloud-run-deploy.py "${PREFLIGHT_ARGS[@]}"
+
+      - name: Validate backend runtime env before deploy
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -81,16 +180,6 @@ jobs:
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Render backend runtime env
-        id: runtime-env
-        env:
-          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
-          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
-          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
-        run: |
-          python3 -m pip install -q pyyaml
-          python3 backend/scripts/render-backend-runtime-env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
@@ -133,33 +222,29 @@ jobs:
           echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Install Helm
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
+        uses: azure/setup-helm@v3
+
       - name: Deploy backend-secrets to GKE using Helm
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
-        run: |
-          if [[ -n "${BACKEND_SECRETS_GSA}" ]]; then
-            gsa_name="${BACKEND_SECRETS_GSA}"
-          else
-            gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-          fi
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
-            --set gke.projectID=${{ vars.GCP_PROJECT_ID }} \
-            --set gke.clusterLocation=${{ env.REGION }} \
-            --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
-            --set gsa.name="${gsa_name}"
-          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
-            ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="$(date +%s)" --overwrite
-          sleep 10
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: backend/scripts/deploy-backend-secrets.sh
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
@@ -167,7 +252,11 @@ jobs:
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set image.tag=${{ steps.image-tag.outputs.short_sha }}
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -189,9 +278,18 @@ jobs:
         run: |
           echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate backend runtime env
+      - name: Wait for Cloud Run revisions to become ready
         run: |
-          python3 -m pip install -q pyyaml
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+
+      - name: Validate backend runtime env after deploy
+        run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
       - name: Verify validated revisions are still current
@@ -202,9 +300,36 @@ jobs:
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |
-          gcloud run services update-traffic backend --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-sync --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-integration --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+
+      - name: Cloud Run deploy status report
+        if: always()
+        run: |
+          set -o pipefail
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service backend \
+            --cloud-run-service backend-sync \
+            --cloud-run-service backend-integration \
+            --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            | tee /tmp/cloud-run-deploy-status.txt
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            {
+              echo ""
+              echo "### Cloud Run rollout status"
+              echo ""
+              echo '```text'
+              cat /tmp/cloud-run-deploy-status.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

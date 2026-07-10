@@ -69,7 +69,13 @@ def _load_module_from_file(module_name, file_path):
 
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies
+#
+# Snapshot sys.modules first so the stubs installed below do not leak into other
+# test files during bulk ``pytest tests/unit/`` collection (issue #8661). They are
+# restored right after the module under test is imported.
 # ---------------------------------------------------------------------------
+_SYS_MODULES_SNAPSHOT = dict(sys.modules)
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -164,6 +170,18 @@ action_item_tools = _load_module_from_file(
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
 )
 get_action_items_tool = action_item_tools.get_action_items_tool
+
+# Restore sys.modules now that the module under test is imported and bound to its
+# (stubbed) dependencies. This stops the empty-package stubs above from leaking into
+# other test files during bulk collection (issue #8661). The tests below patch
+# ``action_item_tools.action_items_db`` directly, so the restore does not affect them.
+for _name in list(sys.modules):
+    if _name in _SYS_MODULES_SNAPSHOT:
+        if sys.modules[_name] is not _SYS_MODULES_SNAPSHOT[_name]:
+            sys.modules[_name] = _SYS_MODULES_SNAPSHOT[_name]
+    else:
+        del sys.modules[_name]
+del _SYS_MODULES_SNAPSHOT
 
 
 def _make_config(uid="test-user-123"):

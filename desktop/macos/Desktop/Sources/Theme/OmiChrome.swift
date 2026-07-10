@@ -1,11 +1,11 @@
 import SwiftUI
 
-enum OmiChrome {
-    static let windowRadius: CGFloat = 26
-    static let cardRadius: CGFloat = 24
-    static let sectionRadius: CGFloat = 20
-    static let controlRadius: CGFloat = 16
-    static let chipRadius: CGFloat = 14
+package enum OmiChrome {
+    package static let windowRadius: CGFloat = 26
+    package static let cardRadius: CGFloat = 24
+    package static let sectionRadius: CGFloat = 20
+    package static let controlRadius: CGFloat = 16
+    package static let chipRadius: CGFloat = 14
 }
 
 private struct OmiPanelModifier: ViewModifier {
@@ -32,8 +32,8 @@ private struct OmiPanelModifier: ViewModifier {
     }
 }
 
-extension View {
-    func omiPanel(
+package extension View {
+package func omiPanel(
         fill: Color = OmiColors.backgroundSecondary,
         radius: CGFloat = OmiChrome.cardRadius,
         stroke: Color? = OmiColors.border.opacity(0.28),
@@ -53,7 +53,7 @@ extension View {
         )
     }
 
-    func omiControlSurface(
+package func omiControlSurface(
         fill: Color = OmiColors.backgroundTertiary,
         radius: CGFloat = OmiChrome.controlRadius,
         stroke: Color? = nil

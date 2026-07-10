@@ -20,7 +20,9 @@ from utils.transcribe_decisions import (
     should_include_speech_profile,
     should_initialize_vad_gate,
     should_load_speech_profile,
+    should_process_on_disconnect,
     should_queue_speaker_embedding,
+    should_remove_in_progress_pointer,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size,
@@ -185,6 +187,126 @@ def test_conversation_lifecycle_actions():
         )
         == ConversationLifecycleAction.process_and_create_new
     )
+
+
+def test_disconnect_processing_only_targets_single_channel_in_progress_with_content():
+    content_conversation = {
+        'status': 'in_progress',
+        'source': 'desktop',
+        'transcript_segments': [{'text': 'synthetic transcript'}],
+        'photos': [],
+    }
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is True
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=True,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1001,
+            conversation_id='conversation-1',
+            conversation=content_conversation,
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation={**content_conversation, 'status': 'processing'},
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation={'status': 'in_progress', 'transcript_segments': [], 'photos': []},
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+
+def test_disconnect_processing_rejects_non_desktop_clean_close_with_content():
+    phone_conversation = {
+        'status': 'in_progress',
+        'source': 'phone',
+        'transcript_segments': [{'text': 'synthetic transcript'}],
+        'photos': [],
+    }
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=phone_conversation,
+            in_progress_status='in_progress',
+        )
+        is False
+    )
+
+
+def test_disconnect_processing_accepts_enum_like_desktop_source():
+    class Source:
+        value = 'desktop'
+
+    desktop_conversation = {
+        'status': 'in_progress',
+        'source': Source(),
+        'transcript_segments': [{'text': 'synthetic transcript'}],
+        'photos': [],
+    }
+
+    assert (
+        should_process_on_disconnect(
+            is_multi_channel=False,
+            close_code=1000,
+            conversation_id='conversation-1',
+            conversation=desktop_conversation,
+            in_progress_status='in_progress',
+        )
+        is True
+    )
+
+
+def test_in_progress_pointer_removal_requires_matching_conversation_id():
+    assert (
+        should_remove_in_progress_pointer(current_in_progress_id='conversation-1', conversation_id='conversation-1')
+        is True
+    )
+    assert (
+        should_remove_in_progress_pointer(current_in_progress_id='newer-conversation', conversation_id='conversation-1')
+        is False
+    )
+    assert should_remove_in_progress_pointer(current_in_progress_id='conversation-1', conversation_id=None) is False
+    assert should_remove_in_progress_pointer(current_in_progress_id='', conversation_id='conversation-1') is False
 
 
 def test_vad_gate_override_decisions():

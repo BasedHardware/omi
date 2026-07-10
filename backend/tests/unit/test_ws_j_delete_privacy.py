@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib
 import os
 import re
 import sys
@@ -64,7 +65,7 @@ def _install_heavy_import_stubs():
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
-from models.product_memory import MemoryItemStatus
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
 from utils.memory.canonical_memory_adapter import (
     delete_all_canonical_memories,
     delete_canonical_memory,
@@ -72,15 +73,35 @@ from utils.memory.canonical_memory_adapter import (
     neutral_vector_id_for_memory,
     purge_canonical_derived_user_data,
     retract_conversation_sourced_memories,
+    update_canonical_memory_content,
+    update_canonical_memory_visibility,
     write_canonical_extraction_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+
+
+def _refresh_canonical_memory_adapter_runtime() -> None:
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    globals().update(
+        {
+            "delete_all_canonical_memories": canonical_adapter.delete_all_canonical_memories,
+            "delete_canonical_memory": canonical_adapter.delete_canonical_memory,
+            "extraction_memory_id": canonical_adapter.extraction_memory_id,
+            "neutral_vector_id_for_memory": canonical_adapter.neutral_vector_id_for_memory,
+            "purge_canonical_derived_user_data": canonical_adapter.purge_canonical_derived_user_data,
+            "retract_conversation_sourced_memories": canonical_adapter.retract_conversation_sourced_memories,
+            "update_canonical_memory_content": canonical_adapter.update_canonical_memory_content,
+            "update_canonical_memory_visibility": canonical_adapter.update_canonical_memory_visibility,
+            "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+        }
+    )
 
 
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_canonical_memory_adapter_runtime()
     clear_canonical_cohort(monkeypatch)
 
 
@@ -97,7 +118,7 @@ def _legacy_db_with_control(uid: str = LEGACY_UID) -> "_FakeDb":
     """Default memory_control/state with no ``memory_system=canonical`` — real resolver → LEGACY."""
     return _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
                 head_commit_id="head0",
                 account_generation=1,
@@ -163,6 +184,9 @@ class _DocRef:
         return _Snapshot(self._db.docs[self.path], exists=True)
 
     def set(self, data, merge=False):
+        if merge and isinstance(self._db.docs.get(self.path), dict):
+            self._db.docs[self.path].update(data)
+            return
         self._db.docs[self.path] = data
 
 
@@ -240,7 +264,7 @@ def canonical_db():
     uid = "uid-canonical-ws-j"
     return _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
                 head_commit_id="head0",
                 account_generation=1,
@@ -316,7 +340,7 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     expected_vector_id = neutral_vector_id_for_memory(memory_id)
     assert expected_vector_id in result["vector_ids"]
     assert expected_vector_id in deleted_vector_ids
-    delete_graph.assert_called_once_with(uid)
+    delete_graph.assert_called_once_with(uid, db_client=canonical_db)
 
     outbox_paths = [path for path in canonical_db.docs if f"users/{uid}/memory_outbox/" in path]
     assert outbox_paths, "account delete should enqueue durable vector purge outbox records"
@@ -326,6 +350,32 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
         if canonical_db.docs[path].get("reason") == "account_delete_canonical_purge"
     )
     assert purge_record["vector_id"] == expected_vector_id
+
+
+def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-acct-partial"
+    content = "Canonical fact for partial account delete"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.resolve_memory_system",
+        lambda uid, **_: MemorySystem.CANONICAL,
+    )
+    monkeypatch.setattr(
+        "database.vector_db.delete_pinecone_memory_vectors_by_id",
+        lambda vector_ids: 0,
+        raising=False,
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+
+    with pytest.raises(RuntimeError, match="canonical vector purge only deleted 0/1 vectors"):
+        purge_canonical_derived_user_data(uid, db_client=canonical_db)
 
 
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
@@ -421,6 +471,29 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_vector_purge
     assert purge_record["vector_id"] == neutral_vector_id_for_memory(memory_id)
 
 
+def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-cascade-vector"
+    content = "Fact sourced from conversation with vector"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    deleted_vectors = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda u, mid: deleted_vectors.append((u, mid)),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+
+    assert deleted_vectors == [(uid, memory_id)]
+
+
 def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-kg"
@@ -433,7 +506,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     kg_calls = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
-        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids), kwargs.get("db_client"))),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -441,6 +514,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     assert kg_calls
     assert kg_calls[0][0] == uid
     assert payload["id"] in kg_calls[0][1]
+    assert kg_calls[0][2] is canonical_db
 
 
 def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonical_db):
@@ -454,17 +528,139 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
         lambda **_: _trusted_account_generation(),
     )
     kg_calls = []
+    deleted_vectors = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
         lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda u, mid: deleted_vectors.append((u, mid)),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
     delete_canonical_memory(uid, memory_id, db_client=canonical_db)
 
     assert kg_calls == [(uid, [memory_id])]
+    assert deleted_vectors == [(uid, memory_id)]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def test_update_canonical_visibility_validates_before_persisting(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-invalid-visibility", content="Visibility invariant")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    before = dict(canonical_db.docs[item_path])
+
+    with pytest.raises(ValueError, match="visibility"):
+        update_canonical_memory_visibility(uid, memory_id, "friends", db_client=canonical_db)
+
+    assert canonical_db.docs[item_path] == before
+
+
+def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-visibility"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content="Visibility side effect")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+
+    keyword_syncs = []
+    vector_syncs = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
+        lambda item, **kwargs: keyword_syncs.append((item.memory_id, item.visibility)) or True,
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.sync_canonical_memory_vector",
+        lambda item, **kwargs: vector_syncs.append((item.memory_id, item.visibility)) or True,
+    )
+
+    updated = update_canonical_memory_visibility(uid, memory_id, "public", db_client=canonical_db)
+
+    assert updated.visibility == "public"
+    assert canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]["visibility"] == "public"
+    assert keyword_syncs == [(memory_id, "public")]
+    assert vector_syncs == [(memory_id, "public")]
+
+
+def test_update_canonical_content_fails_on_document_memory_id_mismatch(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-id-mismatch", content="Original fact")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    canonical_db.docs[item_path] = {**canonical_db.docs[item_path], "memory_id": "different-memory-id"}
+
+    with pytest.raises(ValueError, match="memory id mismatch"):
+        update_canonical_memory_content(uid, memory_id, "Updated fact", db_client=canonical_db)
+
+    assert canonical_db.docs[item_path]["content"] == "Original fact"
+
+
+def test_update_canonical_content_invalidates_kg_and_returns_to_pending(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-kg-merge", content="Original KG fact")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.resolve_memory_system", lambda *_, **__: MemorySystem.CANONICAL
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction", lambda *_, **__: None
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory",
+        lambda *_, **__: SimpleNamespace(success=False),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    canonical_db.docs[item_path].update(
+        {
+            "tier": "long_term",
+            "processing_state": "processed",
+            "expires_at": None,
+            "ledger_commit_id": "commit1",
+            "ledger_sequence": 1,
+            "kg_extracted": True,
+            "promotion": {"reviewed": False},
+        }
+    )
+
+    updated = update_canonical_memory_content(uid, memory_id, "Updated KG fact", db_client=canonical_db)
+
+    assert updated.kg_extracted is False
+    assert updated.tier == MemoryTier.short_term
+    assert updated.processing_state == ProcessingState.pending
+    assert updated.promotion["processing_status"] == "pending_processing"
+    assert canonical_db.docs[item_path]["content"] == "Updated KG fact"
+    assert canonical_db.docs[item_path]["kg_extracted"] is False
 
 
 def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):

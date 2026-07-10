@@ -1,15 +1,21 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import cast
+
+CalendarEvent = dict[str, object]
 
 
 @dataclass
 class CalendarMutationResult:
-    succeeded: list[dict] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
+    succeeded: list[CalendarEvent] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
 
-def event_title(event: dict) -> str:
-    return event.get('summary', 'Untitled')
+def event_title(event: CalendarEvent) -> str:
+    summary = event.get('summary', 'Untitled')
+    if isinstance(summary, str):
+        return summary
+    return str(summary)
 
 
 def format_deleted_calendar_events(result: CalendarMutationResult) -> str:
@@ -18,9 +24,14 @@ def format_deleted_calendar_events(result: CalendarMutationResult) -> str:
         for event in result.succeeded:
             summary = event_title(event)
             start = event.get('start', {})
-            if 'dateTime' in start:
+            if isinstance(start, dict) and 'dateTime' in start:
+                start_data = cast(dict[object, object], start)
+                date_time = start_data['dateTime']
+                if not isinstance(date_time, str):
+                    message += f"   - {summary}\n"
+                    continue
                 try:
-                    start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
+                    start_dt = datetime.fromisoformat(date_time.replace('Z', '+00:00'))
                     message += f"   - {summary} ({start_dt.strftime('%Y-%m-%d %H:%M')})\n"
                 except ValueError:
                     message += f"   - {summary}\n"

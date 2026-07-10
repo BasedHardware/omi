@@ -717,6 +717,47 @@ class TestTokenEdgeCases:
             assert result['provider'] == 'google'
             assert result['id_token'] == 'dict-tok'
 
+    def test_token_fails_when_custom_token_generation_fails(self):
+        """Custom-token flows must fail clearly instead of returning 200 without custom_token."""
+        import asyncio
+
+        code_data = json.dumps(
+            {
+                'credentials': json.dumps(
+                    {
+                        'provider': 'apple',
+                        'id_token': 'fake-id-token',
+                        'access_token': 'fake-access-token',
+                        'provider_id': 'apple.com',
+                    }
+                ),
+                'redirect_uri': 'omi://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
+                'provider': 'apple',
+                'auth_flow_id': 'flow-123',
+                'created_at': 1000,
+            }
+        )
+        request = MagicMock()
+
+        with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'), patch(
+            'routers.auth._generate_custom_token', new_callable=AsyncMock, side_effect=RuntimeError("firebase down")
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    auth_token(
+                        request=request,
+                        grant_type='authorization_code',
+                        code='c',
+                        redirect_uri='omi://auth/callback',
+                        use_custom_token=True,
+                        code_verifier=_PKCE_VERIFIER,
+                    )
+                )
+            assert exc_info.value.status_code == 502
+            assert 'authentication token' in exc_info.value.detail
+
     def test_token_rejects_unsupported_grant_type(self):
         """Non-authorization_code grant type returns 400."""
         import asyncio

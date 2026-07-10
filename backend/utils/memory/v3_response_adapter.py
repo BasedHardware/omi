@@ -6,7 +6,7 @@ Neutral ``v3_response_adapter`` is the source of truth. Legacy ``v3_response_ada
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from utils.memory.v3_compatibility import V3CompatibilityReadPath
 from utils.memory.v3_memory_read_service import V3MemoryReadServiceResult
@@ -43,7 +43,7 @@ class V3MemoryResponse:
     legacy_fallback_marker_present: bool = False
     archive_default_available: bool = False
     stale_short_term_default_visible: bool = False
-    proof_fields: dict[str, bool] = field(default_factory=dict)
+    proof_fields: dict[str, bool] = field(default_factory=dict[str, bool])
 
 
 class V3ResponseShapeError(ValueError):
@@ -69,7 +69,8 @@ def _assert_memorydb_body_shape(items: list[Any]) -> None:
     for index, item in enumerate(items):
         if not isinstance(item, Mapping):
             continue
-        leaked_fields = _FORBIDDEN_BODY_FIELDS.intersection(item)
+        typed_item = cast(Mapping[str, object], item)
+        leaked_fields = _FORBIDDEN_BODY_FIELDS.intersection(typed_item)
         if leaked_fields:
             raise V3ResponseShapeError(
                 'memory_only_body_field_forbidden',

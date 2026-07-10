@@ -63,6 +63,7 @@ dist/
 **/ios/**/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/RayBanMetaCredentials.xcconfig
 **/ios/.generated/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
@@ -189,6 +190,11 @@ app/lib/env/prod_env.g.dart
 
 /omi/firmware/firmware/v2.7.0/
 
+# nRF Connect SDK west workspaces (downloaded on demand, ~1.5GB) + build outputs
+/omi/firmware/v2.7.0/
+/omi/firmware/v2.9.0/
+/omi/firmware/build/
+
 
 # Additional Expo/React Native specific ignores
 .expo/*
@@ -234,4 +240,9 @@ builds-snapshot.md
 .dev/
 
 # Agent planning artifacts (ephemeral; do not commit)
-.cursor/plans/
+.cursor/plans/*
+!.cursor/plans/.gitkeep
+
+.hermes/
+backend/.venv
+backend/.harness/

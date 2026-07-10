@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
 from models.product_memory import MemoryTier, MemoryItem
@@ -84,7 +84,7 @@ def _shared_memory_vector_metadata_fields(
         device_ids = [item.primary_capture_device]
     if device_ids:
         shared["capture_device_ids"] = device_ids
-    return shared
+    return strip_null_metadata_values(shared)
 
 
 def build_memory_vector_metadata(
@@ -104,6 +104,11 @@ def build_memory_vector_metadata(
     }
 
 
+def strip_null_metadata_values(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Return Pinecone-safe metadata without null values."""
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
 def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_memory_vector_filter(
         uid, {"memory_layer": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}}
@@ -115,7 +120,8 @@ def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
 
 
 def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
-    metadata = match.get("metadata") or {}
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
@@ -143,7 +149,8 @@ def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorH
 
 
 def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
-    metadata = match.get("metadata") or {}
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
@@ -243,4 +250,5 @@ __all__ = [
     "deterministic_memory_vector_id",
     "parse_memory_search_vector_hit",
     "parse_search_vector_hit",
+    "strip_null_metadata_values",
 ]

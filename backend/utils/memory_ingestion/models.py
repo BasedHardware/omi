@@ -121,7 +121,7 @@ class SourceTypeConfig(StrictBaseModel):
     default_empty_on_noise: bool = False
     guidance_notes: str = ""
 
-    _REGISTRY: ClassVar[dict[str, "SourceTypeConfig"]] = {}
+    REGISTRY: ClassVar[dict[str, "SourceTypeConfig"]] = {}
 
 
 # Build registry after class definition
@@ -283,7 +283,7 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
     }
 
 
-SourceTypeConfig._REGISTRY = _build_source_type_registry()
+SourceTypeConfig.REGISTRY = _build_source_type_registry()
 
 
 class SourceDescriptor(StrictBaseModel):
@@ -346,7 +346,21 @@ class EventQuality(StrictBaseModel):
             "out_of_order",
             "unknown",
         ]
-    ] = Field(default_factory=list)
+    ] = Field(
+        default_factory=list[
+            Literal[
+                "low_audio_quality",
+                "overlapping_speech",
+                "speaker_uncertain",
+                "ocr_noisy",
+                "truncated",
+                "translated",
+                "provider_duplicate",
+                "out_of_order",
+                "unknown",
+            ]
+        ]
+    )
 
 
 class RawContextEvent(StrictBaseModel):
@@ -502,7 +516,27 @@ class SensitivityClassification(StrictBaseModel):
             "ordinary_work_fact",
             "none",
         ]
-    ] = Field(default_factory=list)
+    ] = Field(
+        default_factory=list[
+            Literal[
+                "credential",
+                "api_key",
+                "password",
+                "financial_account",
+                "government_id",
+                "health",
+                "mental_health",
+                "biometric",
+                "precise_location",
+                "third_party_private_fact",
+                "work_confidential",
+                "minor",
+                "ordinary_personal_fact",
+                "ordinary_work_fact",
+                "none",
+            ]
+        ]
+    )
     auto_store_allowed: bool = True
     review_required: bool = False
 
@@ -660,7 +694,7 @@ class WorkingMemoryCandidate(StrictBaseModel):
     evidence: list[WorkingMemoryEvidence]
     source_refs: list[str] = Field(default_factory=list)
     evidence_quotes: list[str] = Field(default_factory=list)
-    evidence_spans: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_spans: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
     capture_confidence: ConfidenceLabel = "medium"
     candidate_kind_hint: WorkingMemoryKindHint
     risk_flags: list[str] = Field(default_factory=list)
