@@ -23,6 +23,8 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "test": "vitest run",
     "test:watch": "vitest",
+    "fixtures:audio": "node scripts/gen-audio-fixtures.mjs",
+    "test:e2e:ptt": "node scripts/gen-audio-fixtures.mjs && vitest run src/main/ipc/pttTranscribe.e2e.test.ts",
     "bench": "node scripts/bench/run.mjs",
     "bench:anim": "node scripts/bench/anim.mjs"
   },
