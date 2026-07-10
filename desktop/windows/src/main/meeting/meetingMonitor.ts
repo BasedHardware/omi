@@ -29,7 +29,7 @@ import {
 import { listProcessNames } from './processSnapshot'
 import { readMicCaptureEntries, watchMicConsentStore, type MicConsentWatcher } from './micConsentStore'
 import { getForegroundExePath, getForegroundWindowTitle, subscribeForegroundChange } from '../usage/nativeForeground'
-import { showMeetingToast, hideMeetingToast } from '../insight/toastWindow'
+import { showMeetingToast, hideMeetingToast, getCurrentMeetingToast } from '../insight/toastWindow'
 import { onCaptureEventInMain } from '../ipc/captureBridge'
 import { getAppSettings, setAppSettings } from '../appSettings'
 import type { CaptureCommand, MeetingToastAction } from '../../shared/types'
@@ -110,31 +110,41 @@ function computeSignals(): DetectorSignals {
   }
 }
 
-function sendCaptureCommand(cmd: CaptureCommand): void {
+function sendCaptureCommand(cmd: CaptureCommand): boolean {
   const wc = deps?.getCaptureWc()
   if (!wc || wc.isDestroyed()) {
     console.warn('[meeting] no capture window — cannot send', cmd.type)
-    return
+    return false
   }
   // Main-originated command: tag with the capture window's own id (same pattern
   // as the E2E VAD hook) — meeting events are broadcast, not owner-routed.
   wc.send('omi-capture:cmd', { cmd, ownerId: wc.id })
+  return true
 }
 
 function startCapture(): void {
   if (!currentMeeting || currentMeeting.capturing) return
-  currentMeeting.capturing = true
-  sendCaptureCommand({
+  // Only mark capturing once the command actually reached a live capture
+  // window — otherwise `capturing` would latch true (toast lying "Omi is
+  // capturing") with nothing recording when the capture window is absent.
+  const sent = sendCaptureCommand({
     type: 'meeting-capture-start',
     meetingId: currentMeeting.id,
     appName: currentMeeting.appName
   })
+  if (sent) currentMeeting.capturing = true
 }
 
 function stopCapture(): void {
   if (!currentMeeting?.capturing) return
   currentMeeting.capturing = false
   sendCaptureCommand({ type: 'meeting-capture-stop', meetingId: currentMeeting.id })
+}
+
+/** Hide the shared toast window ONLY if the meeting card currently on it belongs
+ *  to this meeting — never clobber a proactive insight toast that replaced it. */
+function hideOwnMeetingToast(): void {
+  if (currentMeeting && getCurrentMeetingToast()?.meetingId === currentMeeting.id) hideMeetingToast()
 }
 
 /** Consume the one-time first-run flag (true exactly once). */
@@ -164,10 +174,11 @@ function handleEffect(effect: DetectorEffect): void {
     })
   } else {
     // meeting-ended: finalize the session (same stop path as the toast's Stop)
-    // and drop the toast if it's still up.
+    // and drop the toast if it's still OUR meeting card (not an insight that
+    // replaced it).
     console.log(`[meeting] ended: ${effect.match.name}`)
     stopCapture()
-    hideMeetingToast()
+    hideOwnMeetingToast()
     currentMeeting = null
   }
 }
@@ -238,16 +249,27 @@ export function startMeetingMonitor(d: Deps): void {
   if (!watcher) console.warn('[meeting] ConsentStore watcher unavailable — Tier 2 is event-blind')
   // Tier 1 title changes: switching to/away from a meeting tab.
   unsubForeground = subscribeForegroundChange(scheduleEvaluate)
-  // Keep the toast honest: if the capture window reports an error, drop the
-  // "Omi is capturing" notice instead of lying.
   unsubCaptureEvents = onCaptureEventInMain((ev) => {
+    // The capture window was recreated (crash/reload): a meeting we were
+    // capturing lost its session there. Re-issue meeting-capture-start so the
+    // new window resumes recording, instead of silently stopping while the
+    // toast keeps claiming capture.
+    if (ev.type === 'capture-window-restarted') {
+      if (currentMeeting?.capturing) {
+        currentMeeting.capturing = false // startCapture re-sets it on a live send
+        startCapture()
+      }
+      return
+    }
+    // Keep the toast honest: if the capture window reports an error, drop the
+    // "Omi is capturing" notice instead of lying.
     if (ev.type !== 'meeting-capture-status') return
     if (process.env.OMI_E2E === '1') statusLog.push(`${ev.meetingId}:${ev.status}`)
     if (!currentMeeting || ev.meetingId !== currentMeeting.id) return
     if (ev.status === 'error') {
       console.warn('[meeting] capture failed:', ev.message)
       currentMeeting.capturing = false
-      hideMeetingToast()
+      hideOwnMeetingToast()
     }
   })
   // Pick up a meeting already in progress at app start — coalesced, so the

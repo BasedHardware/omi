@@ -11,6 +11,15 @@
 // lands, swap THIS FUNCTION's body for the screen-session from-segments sync
 // flow — the meeting monitor, command protocol, and MeetingSessionHost do not
 // change. One function, one call site.
+//
+// LOCAL-SAVE POLICY (matches useRecorder's screen path exactly): the mic lane is
+// backend-owned — the cloud creates its own titled conversation from that
+// stream — so the local "Meeting" row saves ONLY the system-audio (remote-side)
+// transcript. Saving mic lines too would duplicate the mic transcript (once
+// server-side, once local). Note for Phase 3: if the continuous-mic session is
+// already running, this mic lane opens a SECOND concurrent /v4/listen mic
+// session for the same audio (same overlap the manual screen recorder already
+// has); the from-segments sync flow that replaces this body resolves it.
 // ───────────────────────────────────────────────────────────────────────────
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import type { TranscriptLine } from '../../../shared/types'
@@ -20,22 +29,14 @@ export type MeetingSessionHandle = {
   stop: () => Promise<void>
 }
 
-function linesToString(lines: TranscriptLine[]): string {
-  return lines
+/** The local "Meeting" conversation carries the system-audio (remote-side)
+ *  transcript only; the mic lane is backend-owned (its own cloud conversation),
+ *  so including mic lines here would duplicate them. */
+export function formatMeetingTranscript(system: TranscriptLine[]): string {
+  return system
     .map((l) => (l.speaker ? `${l.speaker}: ${l.text}` : l.text))
     .join('\n')
     .trim()
-}
-
-/** Same two-block shape as useRecorder's screen-mode transcript, so meeting
- *  conversations look identical to manually recorded ones. */
-export function formatMeetingTranscript(mic: TranscriptLine[], system: TranscriptLine[]): string {
-  const blocks: string[] = []
-  const m = linesToString(mic)
-  const s = linesToString(system)
-  if (m) blocks.push(`Microphone:\n${m}`)
-  if (s) blocks.push(`System audio:\n${s}`)
-  return blocks.join('\n\n')
 }
 
 export async function startMeetingSession(args: {
@@ -43,7 +44,6 @@ export async function startMeetingSession(args: {
   onError: (message: string) => void
 }): Promise<MeetingSessionHandle> {
   const startedAt = Date.now()
-  const micLines: TranscriptLine[] = []
   const systemLines: TranscriptLine[] = []
   let stopped = false
 
@@ -51,16 +51,11 @@ export async function startMeetingSession(args: {
   // main-process /v4/listen WS and issues the audio-start command that
   // AudioSessionHost (this window) services with a VAD-gated stream — the mic
   // lane feeds the backend's own conversation pipeline, the system lane
-  // carries the meeting's remote side.
-  let micHandle: TranscriptionHandle | null = null
-  let systemHandle: TranscriptionHandle | null = null
-  const startLane = (
-    source: 'mic' | 'system',
-    sink: TranscriptLine[]
-  ): Promise<TranscriptionHandle> =>
+  // carries the meeting's remote side (the only one we save locally).
+  const startLane = (source: 'mic' | 'system'): Promise<TranscriptionHandle> =>
     startTranscription(source, {
       onLine: (line) => {
-        if (!stopped) sink.push(line)
+        if (!stopped && source === 'system') systemLines.push(line)
       },
       onInterim: () => {},
       onBackend: () => {},
@@ -70,34 +65,41 @@ export async function startMeetingSession(args: {
       }
     })
 
-  try {
-    ;[micHandle, systemHandle] = await Promise.all([
-      startLane('mic', micLines),
-      startLane('system', systemLines)
-    ])
-  } catch (e) {
-    micHandle?.stop()
-    systemHandle?.stop()
-    throw e
+  // allSettled (not all): if one lane fails to start, the sibling lane has
+  // ALREADY opened its WS + acquired its stream — Promise.all's reject would
+  // strand that resolved handle with no reference (a hot mic with no way to
+  // stop it). Collect every fulfilled handle so a failure can tear them ALL
+  // down before rethrowing.
+  const results = await Promise.allSettled([startLane('mic'), startLane('system')])
+  const handles = results
+    .filter((r): r is PromiseFulfilledResult<TranscriptionHandle> => r.status === 'fulfilled')
+    .map((r) => r.value)
+  const failed = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
+  if (failed) {
+    for (const h of handles) {
+      try {
+        h.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+    throw failed.reason
   }
 
   return {
     stop: async (): Promise<void> => {
       if (stopped) return
       stopped = true
-      try {
-        micHandle?.stop()
-      } catch {
-        /* ignore */
+      for (const h of handles) {
+        try {
+          h.stop()
+        } catch {
+          /* ignore */
+        }
       }
-      try {
-        systemHandle?.stop()
-      } catch {
-        /* ignore */
-      }
-      const transcript = formatMeetingTranscript(micLines, systemLines)
-      // Nothing worth saving (mic-only chatter already went to the backend's
-      // own conversation pipeline via the mic lane) — skip the empty row.
+      const transcript = formatMeetingTranscript(systemLines)
+      // Nothing on the system lane worth saving (mic already went to the
+      // backend's own conversation pipeline) — skip the empty row.
       if (!transcript) return
       await window.omi.insertLocalConversation({
         id: `local-${crypto.randomUUID()}`,

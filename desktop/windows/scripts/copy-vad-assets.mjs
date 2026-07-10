@@ -60,7 +60,10 @@ function sha256(file) {
 }
 
 /** Download yamnet.tflite (pinned URL) unless a hash-valid copy is present.
- *  A hash mismatch (upstream swap or truncated download) hard-fails. */
+ *  A hash mismatch (upstream swap or truncated download) hard-fails. An
+ *  unreachable URL on a fresh checkout DEGRADES to a warning (offline/CI
+ *  without the cached asset): the loopback classifier already fails open to
+ *  passthrough when the model is absent, so the build must not hard-fail on it. */
 async function ensureYamnet() {
   const dest = path.join(OUT_DIR, YAMNET_FILE)
   if (!FORCE && fs.existsSync(dest) && sha256(dest) === YAMNET_SHA256) {
@@ -68,11 +71,21 @@ async function ensureYamnet() {
     return
   }
   log(`downloading ${YAMNET_FILE} …`)
-  const res = await fetch(YAMNET_URL)
-  if (!res.ok) throw new Error(`[vad-assets] yamnet download failed: HTTP ${res.status}`)
+  let res
+  try {
+    res = await fetch(YAMNET_URL)
+  } catch (e) {
+    log(`WARN yamnet download unreachable (${e.message}) — skipping; loopback classifier will pass through`)
+    return
+  }
+  if (!res.ok) {
+    log(`WARN yamnet download failed: HTTP ${res.status} — skipping; loopback classifier will pass through`)
+    return
+  }
   const buf = Buffer.from(await res.arrayBuffer())
   const got = crypto.createHash('sha256').update(buf).digest('hex')
   if (got !== YAMNET_SHA256) {
+    // A mismatch (not just absence) is a supply-chain signal — still hard-fail.
     throw new Error(
       `[vad-assets] yamnet.tflite sha256 mismatch:\n  expected ${YAMNET_SHA256}\n  got      ${got}\n` +
         `  The pinned upstream file changed — verify the new model before updating the pin.`

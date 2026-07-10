@@ -29,10 +29,14 @@ function sanitizeMeeting(raw: Partial<MeetingSettings> | null | undefined): Meet
     typeof r.endGraceMinutes === 'number' && Number.isFinite(r.endGraceMinutes)
       ? Math.min(30, Math.max(1, Math.round(r.endGraceMinutes)))
       : 2
+  // Bound the map: per-app overrides are keyed by pattern id (a handful of known
+  // apps). Cap the count so a malformed/hostile patch can't bloat the settings
+  // file. Keys longer than a reasonable pattern id are also dropped.
   const perApp: Record<string, MeetingMode> = {}
   if (r.perApp && typeof r.perApp === 'object') {
     for (const [k, v] of Object.entries(r.perApp)) {
-      if (typeof k === 'string' && MEETING_MODES.includes(v as MeetingMode))
+      if (Object.keys(perApp).length >= 64) break
+      if (typeof k === 'string' && k.length <= 64 && MEETING_MODES.includes(v as MeetingMode))
         perApp[k] = v as MeetingMode
     }
   }

@@ -115,6 +115,10 @@ function position(win: BrowserWindow): void {
 export function showInsightToast(payload: InsightPayload): void {
   const win = ensureWindow()
   position(win)
+  // An insight replaces whatever is on the shared toast — clear any meeting
+  // payload so a later toast-window reload can't resurface a stale meeting card
+  // via meeting:getToast.
+  currentMeetingToast = null
   // showInactive: appear on top without taking focus from the user's current app.
   win.showInactive()
   const send = (): void => {
