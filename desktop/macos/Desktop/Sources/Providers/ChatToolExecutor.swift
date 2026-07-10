@@ -82,12 +82,42 @@ class ChatToolExecutor {
   }
 
   /// Execute a tool call and return the result as a string
+  /// Controls which tools may run for a given agent surface.
+  /// `.draftReadOnly` is used for WhatsApp draft generation so send/write tools
+  /// cannot execute even if the model requests them.
+  nonisolated enum ToolExecutionMode: Equatable, Sendable {
+    case full
+    case draftReadOnly
+  }
+
+  /// Read-only tools permitted while drafting a WhatsApp reply.
+  /// Intentionally an allowlist — anything not listed is denied by construction.
+  nonisolated static let draftReadOnlyAllowedTools: Set<String> = [
+    "wa_list_chats",
+    "wa_read_thread",
+    "wa_search_messages",
+    "get_conversations",
+    "search_conversations",
+    "get_memories",
+    "search_memories",
+    "get_action_items",
+    "search_tasks",
+    "check_calendar_availability",
+    "semantic_search",
+    "get_daily_recap",
+    "get_local_status",
+    "get_email_insights",
+    "get_work_context",
+    "execute_sql",
+  ]
+
   static func execute(
     _ toolCall: ToolCall,
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil,
     originatingSurfaceRef: AgentSurfaceReference? = nil,
-    originatingRunId: String? = nil
+    originatingRunId: String? = nil,
+    mode: ToolExecutionMode = .full
   ) async -> String {
     if toolCall.name.hasPrefix("wa_") {
       log("Executing tool: \(toolCall.name) with redacted WhatsApp args keys=\(toolCall.arguments.keys.sorted())")
@@ -98,6 +128,11 @@ class ChatToolExecutor {
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
     )
+
+    if case .deny(let message) = draftReadOnlyPolicyDecision(toolName: toolCall.name, mode: mode) {
+      log("Tool \(toolCall.name) denied by draft read-only policy")
+      return message
+    }
 
     if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
       log("Tool \(toolCall.name) denied by local policy")
@@ -257,6 +292,26 @@ class ChatToolExecutor {
   nonisolated enum LocalToolPolicyDecision: Equatable {
     case allow
     case deny(String)
+  }
+
+  /// Hard gate for WhatsApp draft generation: only allowlisted read tools may run.
+  nonisolated static func draftReadOnlyPolicyDecision(
+    toolName: String,
+    mode: ToolExecutionMode
+  ) -> LocalToolPolicyDecision {
+    guard mode == .draftReadOnly else { return .allow }
+    if draftReadOnlyAllowedTools.contains(toolName) {
+      return .allow
+    }
+    return .deny(
+      policyDeniedMessage(
+        toolName: toolName,
+        code: "draft_read_only",
+        capability: "whatsapp.draft.read_only",
+        message:
+          "WhatsApp draft generation is read-only. '\(toolName)' cannot run while drafting a reply. Sending requires an explicit approve/auto-send path."
+      )
+    )
   }
 
   nonisolated static func localPolicyDecision(toolName: String, arguments: [String: Any]) -> LocalToolPolicyDecision {

@@ -94,4 +94,77 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
         "deny message should point the user at the setting; returned: \(message)")
     }
   }
+
+  // MARK: - WhatsApp draft read-only policy
+
+  func testDraftReadOnlyAllowsReadTools() {
+    for toolName in [
+      "wa_list_chats",
+      "wa_read_thread",
+      "wa_search_messages",
+      "get_memories",
+      "search_memories",
+      "get_conversations",
+      "search_conversations",
+      "check_calendar_availability",
+      "search_tasks",
+      "get_action_items",
+    ] {
+      XCTAssertEqual(
+        ChatToolExecutor.draftReadOnlyPolicyDecision(toolName: toolName, mode: .draftReadOnly),
+        .allow,
+        "\(toolName) should be allowed while drafting")
+    }
+  }
+
+  func testDraftReadOnlyDeniesSendAndMutations() {
+    for toolName in [
+      "wa_send_message",
+      "create_action_item",
+      "update_action_item",
+      "create_calendar_event",
+      "complete_task",
+      "delete_task",
+      "spawn_agent",
+      "capture_screen",
+      "set_user_preferences",
+    ] {
+      guard
+        case .deny(let message) = ChatToolExecutor.draftReadOnlyPolicyDecision(
+          toolName: toolName, mode: .draftReadOnly)
+      else {
+        return XCTFail("\(toolName) should be denied in draft read-only mode")
+      }
+      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"code\":\"draft_read_only\""),
+        "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"capability\":\"whatsapp.draft.read_only\""),
+        "\(toolName) returned: \(message)")
+    }
+  }
+
+  func testFullModeDoesNotApplyDraftReadOnlyGate() {
+    XCTAssertEqual(
+      ChatToolExecutor.draftReadOnlyPolicyDecision(toolName: "wa_send_message", mode: .full),
+      .allow)
+  }
+
+  @MainActor
+  func testDraftReadOnlyExecuteBlocksWaSendMessage() async {
+    let result = await ChatToolExecutor.execute(
+      ToolCall(
+        name: "wa_send_message",
+        arguments: [
+          "to": "123@s.whatsapp.net",
+          "message": "should not send",
+        ],
+        thoughtSignature: nil
+      ),
+      mode: .draftReadOnly
+    )
+    XCTAssertTrue(result.hasPrefix("POLICY_DENIED:"), "returned: \(result)")
+    XCTAssertTrue(result.contains("draft_read_only"), "returned: \(result)")
+  }
 }

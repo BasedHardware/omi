@@ -210,9 +210,8 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     - Use WhatsApp thread/search tools for chat-specific history.
     - Use Omi memory and conversation tools for personal facts, prior events, relationships, and commitments.
     - Use check_calendar_availability before answering whether the user is free at a specific time.
-    - Create or update tasks only when the message clearly asks for a follow-up or the user has made a commitment.
     - If you are unsure, draft a reply that says the user will check and get back.
-    - Do not send messages yourself unless explicitly asked through wa_send_message.
+    - This draft path is read-only: you cannot send WhatsApp messages or mutate tasks/memories/calendar. Only draft the reply text.
     - For this autonomous inbound flow, return only the reply text. No explanations.
     """
 
@@ -485,7 +484,9 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       onTextDelta: { _ in },
       onToolCall: { _, name, input in
         let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-        return await ChatToolExecutor.execute(toolCall)
+        // Draft generation is read-only by construction — wa_send_message and
+        // other write tools are denied even if the model requests them.
+        return await ChatToolExecutor.execute(toolCall, mode: .draftReadOnly)
       },
       onToolActivity: { name, status, _, _ in
         log("WhatsAppReplyCoordinator: tool \(name) \(status)")
@@ -527,8 +528,9 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
     Use the recent thread context above first.
     Only call wa_read_thread if the reply needs older messages, more context, or exact prior details not visible above.
-    Use Omi memory/conversation/task tools if the message asks about personal facts, plans, availability, or commitments.
+    Use Omi memory/conversation/task search tools if the message asks about personal facts, plans, availability, or commitments.
     Check calendar availability before answering scheduling questions like whether the user is free at a specific time.
+    Do not send messages or mutate tasks/memories/calendar while drafting.
     Draft the best reply as the user. Return exactly the WhatsApp message body and nothing else.
     Do not include reasoning, context summaries, labels, or explanations.
     """

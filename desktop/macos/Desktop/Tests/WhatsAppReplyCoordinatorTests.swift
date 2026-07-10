@@ -54,4 +54,13 @@ final class WhatsAppReplyCoordinatorTests: XCTestCase {
         """
         XCTAssertEqual(WhatsAppReplyCoordinator.visibleReplyText(from: raw), "Perfect, see you at 6 👍")
     }
+
+    @MainActor
+    func testDraftSystemPromptIsReadOnly() {
+        let prompt = WhatsAppReplyCoordinator.systemPrompt
+        XCTAssertTrue(prompt.contains("read-only"), "prompt should state draft path is read-only")
+        XCTAssertFalse(
+            prompt.contains("wa_send_message"),
+            "draft prompt must not invite sending via wa_send_message")
+    }
 }

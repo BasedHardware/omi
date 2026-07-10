@@ -1120,7 +1120,9 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
