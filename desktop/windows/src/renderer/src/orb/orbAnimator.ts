@@ -43,6 +43,9 @@ export class OrbAnimator {
     this.renderer = new OrbRenderer(canvas, { powerPreference: 'low-power' })
     this.params = params
     this.stateChangedAt = this.now()
+    // Start the loop immediately (found by the throttle harness: without this
+    // an animator constructed in its default state never rendered a frame).
+    this.kick()
   }
 
   private now(): number {
