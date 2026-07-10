@@ -1,6 +1,7 @@
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import { isConversationBoundary, onFinalizeRequest } from '../lib/liveConversation'
 import { transcriptWordCount } from '../lib/retentionRules'
+import { isInjectedLineId } from '../lib/voice/injectedTranscript'
 import { captureLiveStore } from './liveStore'
 
 // After this much silence (no new finalized speech) the current conversation is
@@ -50,11 +51,14 @@ export function startLiveMicSession(): LiveMicController {
   }
 
   // Words in the current live transcript (using the same counter the retention
-  // rules use) — trivial blips below this aren't worth finalizing.
+  // rules use) — trivial blips below this aren't worth finalizing. Injected
+  // assistant lines (Omi's own words, Phase 6) are EXCLUDED so they can't push
+  // an otherwise-trivial human blip over the finalize threshold.
   const liveWordCount = (): number =>
     transcriptWordCount(
       captureLiveStore
         .getSegments()
+        .filter((s) => !isInjectedLineId(s.id))
         .map((s) => (s.speaker ? `${s.speaker}: ${s.text}` : s.text))
         .join('\n')
     )

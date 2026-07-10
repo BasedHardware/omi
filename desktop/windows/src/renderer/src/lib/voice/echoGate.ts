@@ -19,6 +19,13 @@
 
 export const GATE_RELEASE_MS = 300
 
+/** Watchdog ceiling: if a terminal "speaking ended" edge is ever missed (a
+ *  dropped provider event / worklet message), the gate must not stay active
+ *  forever — that would silently deafen continuous transcription for the rest
+ *  of the session. A playing burst older than this is treated as drained.
+ *  Sized above any plausible single spoken turn. */
+export const GATE_MAX_HOLD_MS = 120_000
+
 export type OutputDeviceKind = 'headset' | 'speaker'
 
 // Head-worn output devices: no air path back to the microphone. Matches common
@@ -50,29 +57,60 @@ export function isHeadsetOutput(
  * feed cares about: should the transcription feed be paused right now?
  */
 export class EchoGate {
-  private playing = false
+  // REFCOUNTED: realtime playback and a TTS element are independent audio
+  // sources that can overlap — the gate must stay active until the LAST one
+  // drains, not release when the first does.
+  private sources = 0
+  private startedAt = 0 // most recent burst start (watchdog anchor)
   private releaseAt: number | null = null
   private headset = false
 
-  constructor(private readonly releaseMs: number = GATE_RELEASE_MS) {}
+  constructor(
+    private readonly releaseMs: number = GATE_RELEASE_MS,
+    private readonly maxHoldMs: number = GATE_MAX_HOLD_MS
+  ) {}
 
-  /** Assistant audio started (first sample queued/playing). */
-  playbackStarted(): void {
-    this.playing = true
+  private get playing(): boolean {
+    return this.sources > 0
+  }
+
+  /** An assistant audio source started (first sample queued/playing). Every
+   *  playbackStarted must be paired with exactly one playbackDrained. */
+  playbackStarted(now: number): void {
+    this.sources++
+    this.startedAt = now
     this.releaseAt = null
   }
 
-  /** The playback buffer fully drained (or the media element ended). */
+  /** One source's playback fully drained (buffer empty / media element ended).
+   *  The release tail starts only when the LAST source drains, and never
+   *  extends past the watchdog window — a drain landing after the ceiling must
+   *  not re-activate an already force-released gate. */
   playbackDrained(now: number): void {
     if (!this.playing && this.releaseAt === null) return // spurious
-    this.playing = false
-    this.releaseAt = now + this.releaseMs
+    this.sources = Math.max(0, this.sources - 1)
+    if (this.playing) return // another source is still audible
+    this.releaseAt = Math.min(now, this.startedAt + this.maxHoldMs) + this.releaseMs
+  }
+
+  /** True when the watchdog force-released a still-"playing" burst (a missed
+   *  end edge). The driver reports this as a fallback — silent ops is not ok. */
+  watchdogExpired(now: number): boolean {
+    return this.playing && now >= this.startedAt + this.maxHoldMs
   }
 
   /** Barge-in: the buffer was cleared instantly. Same release tail — the sound
    *  already in the air still needs the hangover. */
   interrupted(now: number): void {
     this.playbackDrained(now)
+  }
+
+  /** Session teardown: drop every source and any pending tail immediately.
+   *  The caller is responsible for silencing the sources themselves. */
+  reset(): void {
+    this.sources = 0
+    this.releaseAt = null
+    this.headset = false
   }
 
   setHeadset(headset: boolean): void {
@@ -82,14 +120,22 @@ export class EchoGate {
   /** Should the always-on transcription feed be paused at `now`? */
   isActive(now: number): boolean {
     if (this.headset) return false
-    if (this.playing) return true
+    // Watchdog: a "playing" burst older than maxHold means an end edge was
+    // missed — release (with the tail) instead of deafening transcription.
+    if (this.playing) return now < this.startedAt + this.maxHoldMs + this.releaseMs
     return this.releaseAt !== null && now < this.releaseAt
   }
 
-  /** When the answer of isActive() will change on its own (release elapsing),
-   *  or null if it only changes via events. The driver arms one timer off this. */
+  /** When the answer of isActive() will change on its own (release elapsing or
+   *  the watchdog ceiling), or null if it only changes via events. The driver
+   *  arms one timer off this. */
   nextTransitionAt(now: number): number | null {
-    if (this.headset || this.playing || this.releaseAt === null) return null
+    if (this.headset) return null
+    if (this.playing) {
+      const edge = this.startedAt + this.maxHoldMs + this.releaseMs
+      return now < edge ? edge : null
+    }
+    if (this.releaseAt === null) return null
     return now < this.releaseAt ? this.releaseAt : null
   }
 }

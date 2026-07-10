@@ -317,13 +317,16 @@ async function main() {
     log('continuous transcription is live')
 
     // Helper: transcript lines split into injected-Omi vs transcribed speech.
+    // Ids are kept so later checks can diff by IDENTITY (a store clear/save
+    // between reads shifts array offsets — count-based slicing would lie).
     const readTranscript = () =>
       page.evaluate(() => {
         const t = globalThis.__omiVoice.getLiveTranscript()
-        return t.segments.map((s) => ({
+        return t.segments.map((s, i) => ({
+          id: s.id ?? `noid-${i}-${s.text.slice(0, 20)}`,
           speaker: s.speaker ?? '',
           text: s.text,
-          injected: (s.id ?? '').startsWith('omi-voice-') || (s.id ?? '').startsWith('tts-')
+          injected: (s.id ?? '').startsWith('omi-voice-')
         }))
       })
     const leakedLines = (segments) =>
@@ -353,6 +356,9 @@ async function main() {
 
     // ── CHECK 1: echo gate holds while Omi speaks the marker ─────────────────
     log(`[${timestamp()}] asking Omi to speak the marker phrase…`)
+    // Timestamp baseline (NOT an index into the capped event ring — indices
+    // shift once the ring rolls past 200 entries).
+    const markerMark = Date.now()
     await page.evaluate(
       (phrase) =>
         globalThis.__omiVoice.say(
@@ -360,17 +366,19 @@ async function main() {
         ),
       MARKER_PHRASE
     )
-    // Wait for Omi to finish speaking (speaking-end after a speaking-start).
+    // Wait for Omi to finish speaking (a speaking-start AFTER our ask, then a
+    // speaking-end after that start).
     try {
       await waitFor(
         page,
-        () => {
-          const ev = globalThis.__omiVoice.getEvents()
+        (mark) => {
+          const ev = globalThis.__omiVoice.getEvents().filter((e) => e.at >= mark)
           const started = ev.findIndex((e) => e.type === 'speaking-start')
           return started >= 0 && ev.slice(started).some((e) => e.type === 'speaking-end')
         },
         45_000,
-        'Omi spoke (speaking-start → speaking-end)'
+        'Omi spoke (speaking-start → speaking-end)',
+        markerMark
       )
     } catch (e) {
       check('echo gate: Omi audibly spoke', false, e.message)
@@ -410,7 +418,7 @@ async function main() {
 
     // ── CHECK 2: barge-in — user speech interrupts Omi mid-passage ──────────
     log(`[${timestamp()}] barge-in: asking Omi for a long passage, then interrupting…`)
-    const preEvents = (await page.evaluate(() => globalThis.__omiVoice.getEvents())).length
+    const bargeMark = Date.now()
     await page.evaluate(() =>
       globalThis.__omiVoice.say(
         'Please count slowly and steadily out loud from one to sixty, one number at a time. Do not stop until you reach sixty.'
@@ -419,50 +427,53 @@ async function main() {
     try {
       await waitFor(
         page,
-        (n) =>
+        (mark) =>
           globalThis.__omiVoice
             .getEvents()
-            .slice(n)
-            .some((e) => e.type === 'speaking-start'),
+            .some((e) => e.at >= mark && e.type === 'speaking-start'),
         30_000,
         'long passage started',
-        preEvents
+        bargeMark
       )
     } catch {
       check('barge-in: long passage started', false, 'Omi never started speaking')
       exitCode = 1
       return
     }
-    const longStartAt = Date.now()
     // Let it get going, then play "user speech" into the cable (mixes with
     // Omi's own output on the same playback device — true talk-over).
     await new Promise((r) => setTimeout(r, 2500))
+    const playStartAt = Date.now()
     playWav(speechWav) // blocks ~2s while the user speech plays
-    // Omi must stop well before ~60 slow counts (>60s) could finish.
-    let stoppedAt = null
+    // The stop must CORRELATE with the interruption: a speaking-end shortly
+    // AFTER the user speech started (not merely "sometime during the passage" —
+    // a model that ignored the counting instruction would otherwise pass).
+    let endEvent = null
     try {
       await waitFor(
         page,
-        (n) => {
-          const ev = globalThis.__omiVoice.getEvents().slice(n)
-          const started = ev.findIndex((e) => e.type === 'speaking-start')
-          return started >= 0 && ev.slice(started).some((e) => e.type === 'speaking-end')
-        },
-        25_000,
+        (t) =>
+          globalThis.__omiVoice
+            .getEvents()
+            .some((e) => e.type === 'speaking-end' && e.at >= t - 500),
+        15_000,
         'barge-in speaking-end',
-        preEvents
+        playStartAt
       )
-      stoppedAt = Date.now()
+      const ev = await page.evaluate(() => globalThis.__omiVoice.getEvents())
+      endEvent = ev.find((e) => e.type === 'speaking-end' && e.at >= playStartAt - 500) ?? null
     } catch {
       /* handled below */
     }
-    const stopDelay = stoppedAt ? (stoppedAt - longStartAt) / 1000 : null
+    const stopDelay = endEvent ? (endEvent.at - playStartAt) / 1000 : null
     check(
       'barge-in: Omi stopped when interrupted',
-      stopDelay !== null && stopDelay < 30,
-      stopDelay !== null ? `stopped ${stopDelay.toFixed(1)}s into a >60s passage` : 'never stopped'
+      stopDelay !== null && stopDelay < 10,
+      stopDelay !== null
+        ? `speaking-end ${stopDelay.toFixed(1)}s after user speech began (>60s passage)`
+        : 'no speaking-end correlated with the interruption'
     )
-    if (!(stopDelay !== null && stopDelay < 30)) exitCode = 1
+    if (!(stopDelay !== null && stopDelay < 10)) exitCode = 1
 
     // ── CHECK 3: device switch mid-conversation ──────────────────────────────
     const outputs = await page.evaluate(() => globalThis.__omiVoice.listOutputs())
@@ -487,7 +498,7 @@ async function main() {
 
     // ── CHECK 4: TTS through the same gated path ─────────────────────────────
     log(`[${timestamp()}] TTS gated-path check…`)
-    const preSegs = (await readTranscript()).length
+    const preIds = new Set((await readTranscript()).map((s) => s.id))
     const ttsOk = await page.evaluate(async () => {
       try {
         await globalThis.__omiVoice.speakTts(
@@ -504,7 +515,9 @@ async function main() {
     } else {
       await new Promise((r) => setTimeout(r, 12_000))
       segments = await readTranscript()
-      const ttsLeaks = leakedLines(segments.slice(preSegs))
+      // Diff by segment IDENTITY, not array offset (the store may have
+      // cleared/saved between reads).
+      const ttsLeaks = leakedLines(segments.filter((s) => !preIds.has(s.id)))
       check(
         'TTS: words NOT transcribed from the speaker loop',
         ttsLeaks.length === 0,
@@ -526,12 +539,14 @@ async function main() {
     }
     restoreAudioDefaults()
     fs.rmSync(tmp, { recursive: true, force: true })
+    // Summary + exit INSIDE finally: early `return`s in the try (failed
+    // checks) must still honor the exit-code contract — a plain return would
+    // fall out of main() and exit 0 (false success).
+    log('──────── summary ────────')
+    for (const r of results) log(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.name}`)
+    log(exitCode === 0 ? 'ALL CHECKS PASSED' : 'CHECKS FAILED — see above')
+    process.exit(exitCode)
   }
-
-  log('──────── summary ────────')
-  for (const r of results) log(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.name}`)
-  log(exitCode === 0 ? 'ALL CHECKS PASSED' : 'CHECKS FAILED — see above')
-  process.exit(exitCode)
 }
 
 main().catch((e) => {

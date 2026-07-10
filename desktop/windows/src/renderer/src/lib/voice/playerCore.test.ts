@@ -75,6 +75,22 @@ describe('PlayerCore jitter buffer', () => {
     expect(r.drained).toBe(true)
   })
 
+  it('flush() plays a sub-cushion end-of-turn tail instead of withholding it', () => {
+    const p = new PlayerCore(CUSHION)
+    p.enqueue(samples(30, 0.25)) // below cushion — would never start on its own
+    expect(p.playing).toBe(false)
+    p.flush() // turnComplete: no more audio is coming
+    expect(p.playing).toBe(true)
+    const out = new Float32Array(30)
+    const r = p.pull(out)
+    expect(r.wroteAudio).toBe(true)
+    expect(r.drained).toBe(true)
+    expect(out[0]).toBeCloseTo(0.25)
+    // flush with nothing queued is a no-op (must not start a silent burst).
+    p.flush()
+    expect(p.playing).toBe(false)
+  })
+
   it('clear() drops everything instantly (barge-in) and reports whether it was active', () => {
     const p = new PlayerCore(4)
     p.enqueue(samples(50))

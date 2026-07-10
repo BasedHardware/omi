@@ -7,9 +7,9 @@ import {
   startVoiceSession,
   stopVoiceSession,
   setVoiceMuted,
-  setVoiceOutputDevice
+  setVoiceOutputDevice,
+  getVoiceOutputDevice
 } from '../../lib/voice/voiceController'
-import { attachVoiceE2eHook } from '../../lib/voice/e2eHook'
 import type { VoiceSessionState } from '../../lib/voice/sessionMachine'
 
 // The realtime voice-session surface (Phase 6). A self-contained component with
@@ -51,11 +51,14 @@ const PROVIDER_LABEL = { openai: 'OpenAI', gemini: 'Gemini' } as const
 export function VoiceSessionSurface(props: { onClose?: () => void }): React.JSX.Element {
   const state = useVoiceSession()
   const devices = useOutputDevices(state.status === 'live')
-  const [sink, setSink] = useState('')
+  // Initialized from the controller so a remounted surface shows the routing
+  // actually in effect (the controller's sinkId persists across mounts).
+  const [sink, setSink] = useState(getVoiceOutputDevice)
 
-  useEffect(() => {
-    attachVoiceE2eHook()
-  }, [])
+  // A hidden surface must never leave a live mic / audible session running
+  // with zero UI indicator — unmounting (chat-bar toggle off, page teardown)
+  // stops the session, same as the explicit End button.
+  useEffect(() => () => stopVoiceSession(), [])
 
   const close = (): void => {
     stopVoiceSession()

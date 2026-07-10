@@ -31,6 +31,9 @@ class OmiVoicePlayerProcessor extends AudioWorkletProcessor {
       const msg = e.data
       if (msg.type === 'pcm' && msg.buffer) {
         this.core.enqueue(new Float32Array(msg.buffer))
+      } else if (msg.type === 'flush') {
+        // End of turn: play any sub-cushion tail instead of withholding it.
+        this.core.flush()
       } else if (msg.type === 'clear') {
         if (this.core.clear()) {
           this.wasPlaying = false

@@ -14,7 +14,7 @@ import { makePipelineHandle } from '../capture/pipelineHandle'
 import { createPcmPipeline as createWorkletPipeline } from '../capture/pcmPipeline'
 import { createVoicePlayer, int16ToBase64, base64ToBytes, type VoicePlayer } from './pcmPlayer'
 import { GEMINI_LIVE_MODEL } from './tokenMint'
-import { mapGeminiUsage } from './usageReport'
+import { mapGeminiUsage, usageDelta, usageTotal, type RealtimeUsageBody } from './usageReport'
 import {
   OMI_VOICE_INSTRUCTIONS,
   type ProviderSessionCallbacks,
@@ -38,6 +38,10 @@ export async function startGeminiSession(args: {
   let mic: { stop: () => void } | null = null
   let turnText = ''
   let turnSeq = 0
+  // Gemini's usageMetadata is a RUNNING total re-sent across messages — report
+  // only the field-wise DELTA since the last snapshot so the ledger isn't
+  // over-counted (the OpenAI lane reports once, at stop, instead).
+  let lastUsage: RealtimeUsageBody | null = null
 
   const stop = (): void => {
     if (stopped) return
@@ -100,12 +104,17 @@ export async function startGeminiSession(args: {
           }
           if (sc?.outputTranscription?.text) turnText += sc.outputTranscription.text
           if (sc?.turnComplete) {
+            // No more audio for this turn — play any sub-cushion tail now.
+            player?.flush()
             const text = turnText
             turnText = ''
             if (text.trim()) cb.onUtterance(`gemini-turn-${turnSeq++}`, text)
           }
           if (msg.usageMetadata) {
-            cb.onUsage(mapGeminiUsage(msg.usageMetadata, GEMINI_LIVE_MODEL))
+            const cumulative = mapGeminiUsage(msg.usageMetadata, GEMINI_LIVE_MODEL)
+            const delta = usageDelta(cumulative, lastUsage)
+            lastUsage = cumulative
+            if (usageTotal(delta) > 0) cb.onUsage(delta)
           }
         },
         onerror: (e: ErrorEvent) => fail(`Gemini live error: ${e.message || 'socket error'}`, true),

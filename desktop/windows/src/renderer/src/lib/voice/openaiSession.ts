@@ -72,15 +72,23 @@ export async function startOpenAiSession(args: {
     }
   })
 
-  session.on('audio_start', () => {
-    if (!stopped) cb.onSpeakingStart()
-  })
-  session.on('audio_stopped', () => {
-    if (!stopped) cb.onSpeakingEnd()
-  })
-  session.on('audio_interrupted', () => {
-    if (!stopped) cb.onSpeakingEnd()
-  })
+  // Dedupe speaking edges: the SDK can emit BOTH audio_interrupted and
+  // audio_stopped for one turn. The echo gate refcounts start/end pairs, so an
+  // unpaired extra end would release another source's (e.g. TTS) hold early.
+  let audible = false
+  const speakingStart = (): void => {
+    if (stopped || audible) return
+    audible = true
+    cb.onSpeakingStart()
+  }
+  const speakingEnd = (): void => {
+    if (stopped || !audible) return
+    audible = false
+    cb.onSpeakingEnd()
+  }
+  session.on('audio_start', speakingStart)
+  session.on('audio_stopped', speakingEnd)
+  session.on('audio_interrupted', speakingEnd)
   session.on('history_updated', (history: RealtimeItem[]) => {
     if (stopped) return
     for (const item of history) {

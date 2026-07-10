@@ -8,6 +8,17 @@ import type { TranscriptLine } from '../../../../shared/types'
 
 export const ASSISTANT_SPEAKER = 'Omi'
 
+/** Line-id prefix for every injected assistant line (realtime AND TTS — TTS
+ *  utterance ids arrive as 'tts-N' and become 'omi-voice-tts-N'). */
+export const INJECTED_LINE_ID_PREFIX = 'omi-voice-'
+
+/** True for transcript lines that were INJECTED from assistant source text
+ *  (vs transcribed speech). Consumers whose heuristics reason about what the
+ *  USER said (e.g. the finalize word-count) must exclude these. */
+export function isInjectedLineId(id: string | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(INJECTED_LINE_ID_PREFIX)
+}
+
 /** Live-store statuses into which injecting a line is meaningful (a session is
  *  running, so the line lands in a real conversation record). When idle or
  *  errored there is no record to join — injecting would strand the line in a
@@ -27,5 +38,9 @@ export function shouldInjectIntoLive(status: 'idle' | 'connecting' | 'live' | 'e
 export function formatAssistantLine(text: string, utteranceId: string): TranscriptLine | null {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   if (!cleaned) return null
-  return { id: `omi-voice-${utteranceId}`, speaker: ASSISTANT_SPEAKER, text: cleaned }
+  return {
+    id: `${INJECTED_LINE_ID_PREFIX}${utteranceId}`,
+    speaker: ASSISTANT_SPEAKER,
+    text: cleaned
+  }
 }

@@ -18,6 +18,7 @@ import {
   type VoiceSessionEvent
 } from './sessionMachine'
 import { EchoGate, isHeadsetOutput } from './echoGate'
+import { GATE_REASSERT_MS } from '../../capture/assistantGate'
 import { mintRealtimeToken, MintError } from './tokenMint'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
@@ -37,8 +38,15 @@ let startSeq = 0 // invalidates in-flight async starts after stop()
 
 const gate = new EchoGate()
 let gateTimer: ReturnType<typeof setTimeout> | null = null
+// Periodic re-assert while the gate is held: the capture side treats an ON
+// older than its TTL as released (resilience against this window dying while
+// Omi speaks), so a held gate must be refreshed faster than that TTL.
+let gateReassertTimer: ReturnType<typeof setInterval> | null = null
 let lastSentGate = false
 let sinkId = '' // '' = system default
+// In-flight TTS element teardown hook — stopVoiceSession must silence TTS too,
+// otherwise the gate is force-released while Omi is still audible on speakers.
+let stopCurrentTts: (() => void) | null = null
 
 const events: VoiceEventRecord[] = []
 function record(type: string, detail?: string): void {
@@ -58,13 +66,39 @@ function dispatch(event: VoiceSessionEvent): void {
 // sends the capture command on change, and arms exactly one timer for the
 // release edge (the only transition that happens without an event).
 
+// The watchdog (EchoGate.maxHoldMs) force-releasing means a terminal
+// speaking-end edge was MISSED — a correctness fail-open worth telemetry, once
+// per stuck burst (silent ops is not ok; see AGENTS.md fallback rules).
+let watchdogReported = false
+
 function syncGate(): void {
   const now = Date.now()
+  if (gate.watchdogExpired(now) && !watchdogReported) {
+    watchdogReported = true
+    record('gate-watchdog')
+    trackEvent('fallback_triggered', {
+      component: 'voice_echo_gate',
+      from: 'gated',
+      to: 'released',
+      reason: 'watchdog_max_hold',
+      outcome: 'degraded'
+    })
+  }
   const active = gate.isActive(now)
   if (active !== lastSentGate) {
     lastSentGate = active
     window.omi?.captureCommand({ type: 'assistant-speaking', active })
     record(active ? 'gate-on' : 'gate-off')
+  }
+  // While held, keep re-asserting so the capture side's TTL never lapses
+  // mid-speech; stop as soon as the gate drops.
+  if (active && gateReassertTimer === null) {
+    gateReassertTimer = setInterval(() => {
+      window.omi?.captureCommand({ type: 'assistant-speaking', active: true })
+    }, GATE_REASSERT_MS)
+  } else if (!active && gateReassertTimer !== null) {
+    clearInterval(gateReassertTimer)
+    gateReassertTimer = null
   }
   if (gateTimer) {
     clearTimeout(gateTimer)
@@ -77,16 +111,16 @@ function syncGate(): void {
 }
 
 async function refreshHeadsetState(): Promise<boolean> {
+  let headset = false
   try {
     const devices = await navigator.mediaDevices.enumerateDevices()
-    const headset = isHeadsetOutput(devices, sinkId)
-    gate.setHeadset(headset)
-    syncGate()
-    return headset
+    headset = isHeadsetOutput(devices, sinkId)
   } catch {
-    gate.setHeadset(false) // fail closed: assume speakers, keep the gate hard
-    return false
+    headset = false // fail closed: assume speakers, keep the gate hard
   }
+  gate.setHeadset(headset)
+  syncGate()
+  return headset
 }
 
 function onDeviceChange(): void {
@@ -109,16 +143,20 @@ function makeCallbacks(mySeq: number): ProviderSessionCallbacks {
       dispatch({ type: 'fail', message, retryable })
     },
     onSpeakingStart: () => {
+      if (mySeq !== startSeq) return // late event from a stopped session
       record('speaking-start')
-      gate.playbackStarted()
+      watchdogReported = false
+      gate.playbackStarted(Date.now())
       syncGate()
     },
     onSpeakingEnd: () => {
+      if (mySeq !== startSeq) return
       record('speaking-end')
       gate.playbackDrained(Date.now())
       syncGate()
     },
     onUtterance: (utteranceId, text) => {
+      if (mySeq !== startSeq) return
       record('utterance', text)
       window.omi?.captureCommand({ type: 'assistant-utterance', utteranceId, text })
     },
@@ -131,14 +169,20 @@ function makeCallbacks(mySeq: number): ProviderSessionCallbacks {
 function teardown(): void {
   handle?.stop()
   handle = null
+  // Silence any in-flight TTS — releasing the gate while a TTS element keeps
+  // playing on speakers would leak Omi's voice into transcription.
+  stopCurrentTts?.()
   navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange)
   // Release the gate NOW — with the session gone there is no more assistant
   // audio; a stuck gate would silently deafen continuous transcription.
-  gate.interrupted(0) // any pending tail collapses…
-  gate.setHeadset(false)
+  gate.reset()
   if (gateTimer) {
     clearTimeout(gateTimer)
     gateTimer = null
+  }
+  if (gateReassertTimer) {
+    clearInterval(gateReassertTimer)
+    gateReassertTimer = null
   }
   if (lastSentGate) {
     lastSentGate = false
@@ -205,8 +249,12 @@ export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Pr
   if (mySeq !== startSeq) return
 
   const cb = makeCallbacks(mySeq)
+  // Await into a LOCAL first — publishing to the module `handle` before the
+  // staleness check would let a stale start overwrite (and then stop+null) a
+  // newer session's handle, orphaning its live mic/socket.
+  let session: ProviderSessionHandle
   try {
-    handle =
+    session =
       provider === 'openai'
         ? await startOpenAiSession({
             clientSecret: token,
@@ -221,11 +269,12 @@ export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Pr
     return
   }
   if (mySeq !== startSeq) {
-    // Stopped while the provider handshake was in flight.
-    handle?.stop()
-    handle = null
+    // Stopped (or superseded) while the provider handshake was in flight —
+    // tear down THIS session only; never touch the module handle.
+    session.stop()
     return
   }
+  handle = session
   navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange)
 }
 
@@ -255,6 +304,12 @@ export async function setVoiceOutputDevice(deviceId: string): Promise<void> {
   await refreshHeadsetState()
 }
 
+/** The currently selected output device ('' = system default) — so a
+ *  remounting UI surface can show the persisted routing. */
+export function getVoiceOutputDevice(): string {
+  return sinkId
+}
+
 /**
  * Speak a non-realtime reply via backend TTS, through the SAME gated output
  * path: gate on while audible, source text injected into the record, gate
@@ -277,18 +332,36 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
     utteranceId: `tts-${ttsSeq++}`,
     text
   })
-  gate.playbackStarted()
+  watchdogReported = false
+  gate.playbackStarted(Date.now())
   syncGate()
   try {
-    await el.play()
-    await new Promise<void>((resolve) => {
-      el.onended = () => resolve()
-      el.onerror = () => resolve()
+    let finish: () => void = () => {}
+    const done = new Promise<void>((resolve) => {
+      finish = resolve
     })
+    el.onended = () => finish()
+    el.onerror = () => finish()
+    // teardown() silences an in-flight TTS: pause the element AND resolve the
+    // waiter so the finally below drains the gate immediately.
+    stopCurrentTts = () => {
+      try {
+        el.pause()
+      } catch {
+        /* ignore */
+      }
+      finish()
+    }
+    await el.play()
+    await done
   } finally {
+    stopCurrentTts = null
     record('tts-end')
     gate.playbackDrained(Date.now())
     syncGate()
+    el.onended = null
+    el.onerror = null
+    el.src = ''
     URL.revokeObjectURL(url)
   }
 }

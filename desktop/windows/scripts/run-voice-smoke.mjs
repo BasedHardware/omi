@@ -138,8 +138,11 @@ async function main() {
       /* already closed */
     }
     fs.rmSync(userDataDir, { recursive: true, force: true })
+    // Exit INSIDE finally: the early `return`s above (assertion failures) must
+    // still honor the exit-code contract — a plain return would fall out of
+    // main() and exit 0 (false success).
+    process.exit(exitCode)
   }
-  process.exit(exitCode)
 }
 
 main().catch((e) => {

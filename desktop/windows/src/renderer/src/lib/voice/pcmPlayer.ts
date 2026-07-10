@@ -19,6 +19,8 @@ export const JITTER_CUSHION_MS = 150
 export type VoicePlayer = {
   /** Enqueue raw 16-bit little-endian PCM bytes (the Gemini wire format). */
   enqueuePcm16(bytes: Uint8Array): void
+  /** End of turn: play any queued sub-cushion tail instead of withholding it. */
+  flush(): void
   /** Barge-in: drop everything buffered, immediately. */
   clear(): void
   /** Route playback to a specific output device ('' = system default). */
@@ -68,6 +70,9 @@ export async function createVoicePlayer(opts: {
       if (closed || bytes.byteLength < 2) return
       const f32 = pcm16BytesToFloat32(bytes)
       node.port.postMessage({ type: 'pcm', buffer: f32.buffer }, [f32.buffer])
+    },
+    flush(): void {
+      if (!closed) node.port.postMessage({ type: 'flush' })
     },
     clear(): void {
       if (!closed) node.port.postMessage({ type: 'clear' })

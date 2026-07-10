@@ -298,10 +298,7 @@ export function Home(): React.JSX.Element {
       if (scrollModeRef.current !== 'followingBottom') {
         setScrollMode('followingBottom')
       }
-    } else if (
-      scrollModeRef.current === 'followingBottom' &&
-      !isProgrammaticScrollRef.current
-    ) {
+    } else if (scrollModeRef.current === 'followingBottom' && !isProgrammaticScrollRef.current) {
       // Release following when the viewport moves away from the live edge via
       // a non-programmatic scroll (scrollbar thumb drag, keyboard arrows, etc).
       // onWheel/onTouchMove already cover wheel/touch; this covers the rest.

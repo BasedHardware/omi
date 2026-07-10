@@ -44,6 +44,14 @@ export class PlayerCore {
     if (!this.started && this.queued >= this.cushionSamples) this.started = true
   }
 
+  /** End-of-turn flush: the producer says no more audio is coming for this
+   *  burst, so play whatever is queued even if it never reached the cushion —
+   *  otherwise a sub-cushion tail would be withheld until the NEXT turn tops
+   *  the buffer (stale audio at the start of the next reply) or lost. */
+  flush(): void {
+    if (!this.started && this.queued > 0) this.started = true
+  }
+
   /** Drop all buffered audio and stop the current burst (barge-in). Returns
    *  true if audio was actually playing/buffered (callers may emit 'drained'). */
   clear(): boolean {
