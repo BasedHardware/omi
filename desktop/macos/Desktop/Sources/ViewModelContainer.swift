@@ -12,6 +12,9 @@ class ViewModelContainer: ObservableObject {
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
+    /// Brain-map graph — persistent so the SceneKit scene, force layout, and
+    /// camera survive page navigation instead of rebuilding every visit.
+    let memoryGraphViewModel = MemoryGraphViewModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
@@ -133,6 +136,7 @@ class ViewModelContainer: ObservableObject {
         dashboardViewModel.resetSessionState()
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
+        memoryGraphViewModel.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false
