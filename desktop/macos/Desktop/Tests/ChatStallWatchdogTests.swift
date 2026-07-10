@@ -30,31 +30,38 @@ final class ChatStallWatchdogTests: XCTestCase {
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch
 
   func testWatchdogMarksGenerationBeforeInterrupting() throws {
+    // Anchored on the fix's own code tokens (not comment prose) and fails loudly
+    // (never skips) if they drift. Whitespace-tolerant regex so auto-format churn
+    // can't break the invariant.
     let source = try chatProviderSource()
-    guard let watchdog = slice(
-      source, from: "send watchdog fired at 180s", to: "// Fallback for the")
+    guard let mark = source.range(
+      of: #"sendWatchdogFiredGeneration\s*=\s*sendGen"#, options: .regularExpression)
     else {
-      throw XCTSkip("send watchdog block not found")
+      return XCTFail("watchdog must mark the generation (sendWatchdogFiredGeneration = sendGen)")
     }
-    guard let markIdx = watchdog.range(of: "self.sendWatchdogFiredGeneration = sendGen"),
-      let interruptIdx = watchdog.range(of: ".interrupt()")
+    // The interrupt that must come AFTER the mark is the watchdog's own call.
+    // Searching from just past the mark proves the mark precedes it.
+    guard source[mark.upperBound...].range(
+      of: #"resolvedAgentClient\(\)\s*\.\s*interrupt\(\)"#, options: .regularExpression) != nil
     else {
-      return XCTFail("watchdog must mark sendWatchdogFiredGeneration and call interrupt()")
+      return XCTFail("watchdog must call interrupt() AFTER marking the generation")
     }
-    XCTAssertTrue(
-      markIdx.lowerBound < interruptIdx.lowerBound,
-      "the watchdog must mark the generation BEFORE interrupt() resumes the request with .stopped")
   }
 
   func testStoppedCatchConsultsTheWatchdogMarker() throws {
     let source = try chatProviderSource()
     // The `.stopped` catch must gate on the marker and route through the shared
-    // helper — so a future refactor can't silently re-treat a timeout as a user stop.
-    XCTAssertTrue(
-      source.contains("let watchdogFired = (sendWatchdogFiredGeneration == sendGen)"),
+    // helper — so a future refactor can't silently re-treat a timeout as a user
+    // stop. Whitespace-tolerant regex so formatting changes don't false-fail.
+    XCTAssertNotNil(
+      source.range(
+        of: #"watchdogFired\s*=\s*\(\s*sendWatchdogFiredGeneration\s*==\s*sendGen\s*\)"#,
+        options: .regularExpression),
       "the .stopped catch must check the watchdog marker")
-    XCTAssertTrue(
-      source.contains("ChatProvider.stoppedTurnErrorMessage(watchdogFired: watchdogFired)"),
+    XCTAssertNotNil(
+      source.range(
+        of: #"stoppedTurnErrorMessage\(\s*watchdogFired:\s*watchdogFired\s*\)"#,
+        options: .regularExpression),
       "the .stopped catch must derive its message from the shared helper")
   }
 
@@ -66,12 +73,5 @@ final class ChatStallWatchdogTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
     return try String(contentsOf: url, encoding: .utf8)
-  }
-
-  private func slice(_ source: String, from: String, to: String) -> String? {
-    guard let start = source.range(of: from),
-      let end = source[start.upperBound...].range(of: to)
-    else { return nil }
-    return String(source[start.lowerBound..<end.lowerBound])
   }
 }
