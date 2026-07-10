@@ -14,8 +14,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNotNil(result["error"])
   }
 
-  func testResumeStreamNoOpsWithoutProcess() async {
-    let result = await AgentRuntimeProcess.shared.debugResumeStream()
+  func testResumeStreamNoOpsWithoutProcess() {
+    // debugResumeStream is nonisolated now (off-actor SIGCONT) — no await needed.
+    let result = AgentRuntimeProcess.shared.debugResumeStream()
     XCTAssertNotEqual(result["resumed"], "true")
     XCTAssertNotNil(result["error"])
   }
@@ -33,9 +34,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       "guard AppBuild.isNonProduction else",
       "process.isRunning, process.processIdentifier > 0",
       "kill(pid, SIGSTOP)",
-      "kill(pid, SIGCONT)",
+      "kill($0, SIGCONT)",
       "min(durationMs, 300_000)",
-      "generation == debugSuspendGeneration",
+      "generation == self.generation",
     ] {
       XCTAssertTrue(processSource.contains(needle), "AgentRuntimeProcess missing stall-hook invariant: \(needle)")
     }
