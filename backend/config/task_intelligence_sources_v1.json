@@ -136,13 +136,17 @@
     {
       "id": "goal_manual_api",
       "policy_class": "direct_command",
-      "owner_paths": ["backend/routers/goals.py"],
+      "owner_paths": [
+        "backend/routers/goals.py",
+        "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+      ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {"path": "backend/routers/goals.py", "symbol": "goals_db.create_goal", "discover": true},
         {"path": "backend/routers/goals.py", "symbol": "goals_db.delete_goal", "discover": true},
         {"path": "backend/routers/goals.py", "symbol": "goals_db.update_goal", "discover": true},
-        {"path": "backend/routers/goals.py", "symbol": "goals_db.update_goal_progress", "discover": true}
+        {"path": "backend/routers/goals.py", "symbol": "goals_db.update_goal_progress", "discover": true},
+        {"path": "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", "symbol": "client.createGoal", "discover": true}
       ]
     },
     {
