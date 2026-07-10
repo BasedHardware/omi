@@ -58,3 +58,10 @@ export const ERROR_STRIP_MS = 3000
  *  (macOS thinkingWatchdogDelay). Every inner wait is far shorter — this catches
  *  bugs, not flows; a stuck "Transcribing…" is impossible. */
 export const WATCHDOG_MS = 25000
+
+/** The mic graph is acquired at Space KEY-DOWN (macOS starts capture at key-down
+ *  too — its PTT key is the bare Option modifier, so it has no tap ambiguity) and
+ *  released after this much Space inactivity, so consecutive holds don't re-pay
+ *  the 150-400ms spin-up but the mic never idles open while you're just reading.
+ *  Also released immediately when the overlay hides or loses focus. */
+export const MIC_IDLE_RELEASE_MS = 15000

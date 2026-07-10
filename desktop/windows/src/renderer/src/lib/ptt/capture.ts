@@ -3,18 +3,21 @@
 // Cold mic startup (getUserMedia + AudioContext init) costs 150-400ms on Windows,
 // and the Space gesture already needs a 350ms hold threshold before recording may
 // begin (a tap must still type a space) — together that swallowed the first
-// ~0.5-0.75s of speech. So while the overlay is focused we keep ONE warm mic
-// graph open (see warmPttMic/releasePttMic, driven by OverlayApp):
+// ~0.5-0.75s of speech. So the graph is acquired AT SPACE KEY-DOWN (the hook
+// calls warmPttMic then; macOS likewise starts capture at key-down) and kept
+// briefly warm between presses (MIC_IDLE_RELEASE_MS), then released — the mic
+// never idles open while the user is just reading:
 //
-//   - audio flows continuously into a small ROLLING pre-roll ring (~2s) that is
-//     otherwise discarded — nothing is stored or sent while idle;
+//   - audio flows into a small ROLLING pre-roll ring (~2s) that is otherwise
+//     discarded — nothing is stored or sent while no hold is attached;
 //   - a hold ATTACHES to the running graph instantly and BACKFILLS from the ring
-//     exactly back to the key-down moment, so the 350ms threshold costs zero
-//     speech (the key is still the source of truth for where the capture starts);
-//   - release/drain only detaches the hold; the graph stays warm for the next one.
+//     back to the key-down moment (bounded by when the mic actually went live),
+//     so the 350ms threshold costs zero speech;
+//   - release/drain only detaches the hold; the graph stays warm for the idle
+//     window so consecutive holds don't re-pay spin-up.
 //
-// Without a warm graph (overlay just opened, or it was released), startPttCapture
-// falls back to a cold ephemeral graph — same behavior as before, minus backfill.
+// Without a warm graph (first press still spinning up, or released), a capture
+// falls back to a cold ephemeral graph — same behavior, minus backfill.
 //
 // A capture feeds three consumers: the bounded local PCM buffer (the foundation
 // every transcription lane reads from), the waveform AnalyserNode, and an onChunk
@@ -197,7 +200,17 @@ function maybeReleaseWarm(): void {
 // --- Captures ------------------------------------------------------------------
 
 export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<PttCapture> {
-  const warm = warmGraph
+  // The key-down acquisition may still be spinning up when the hold threshold
+  // fires — wait for it rather than opening a second mic stream.
+  let warm = warmGraph
+  if (!warm && warmPromise) {
+    try {
+      await warmPromise
+    } catch {
+      /* fall through to the cold path (which will surface mic failures) */
+    }
+    warm = warmGraph
+  }
   const graph = warm ?? (await createGraph())
   const ephemeral = !warm
   if (!ephemeral) attachedCaptures++

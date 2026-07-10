@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
 import { voicedStats } from '../lib/ptt/gate'
-import { startPttCapture, type PttCapture } from '../lib/ptt/capture'
+import { startPttCapture, warmPttMic, releasePttMic, type PttCapture } from '../lib/ptt/capture'
 import { startPttStream, batchTranscribe, batchErrorMessage, type PttStream } from '../lib/ptt/transport'
 import {
   HOLD_THRESHOLD_MS,
@@ -9,7 +9,8 @@ import {
   HINT_MS,
   TOO_LONG_HINT_MS,
   ERROR_STRIP_MS,
-  WATCHDOG_MS
+  WATCHDOG_MS,
+  MIC_IDLE_RELEASE_MS
 } from '../lib/ptt/constants'
 
 // Hold-Space push-to-talk, buffer-first (macOS architecture): one mic capture per
@@ -102,12 +103,24 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const snapshotRef = useRef('')
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Warm-mic idle linger: the graph opens at Space key-down and closes after
+  // MIC_IDLE_RELEASE_MS without Space activity (or on overlay blur/hide).
+  const micIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const optsRef = useRef(opts)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
   optsRef.current = opts
 
   const isForeground = (job: Job): boolean => jobRef.current === job
+
+  // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
+  // hold threshold) and re-arm the idle release. If the timer fires mid-capture,
+  // releasePttMic defers internally until the capture detaches.
+  const touchMic = (): void => {
+    void warmPttMic()
+    if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
+    micIdleTimerRef.current = setTimeout(() => releasePttMic(), MIC_IDLE_RELEASE_MS)
+  }
 
   const showHint = (text: string, ms: number): void => {
     setHint(text)
@@ -322,6 +335,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
     }
     if (!e.repeat && holdTimerRef.current === null) {
       keyDownAtRef.current = Date.now()
+      touchMic()
       snapshotRef.current = (e.currentTarget as HTMLTextAreaElement).value ?? ''
       holdTimerRef.current = setTimeout(() => {
         holdTimerRef.current = null
@@ -365,6 +379,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       if (!e.repeat && holdTimerRef.current === null) {
         e.preventDefault() // don't let Space scroll or activate a focused control
         keyDownAtRef.current = Date.now()
+        touchMic()
         snapshotRef.current = optsRef.current.getDraft()
         holdTimerRef.current = setTimeout(() => {
           holdTimerRef.current = null
@@ -393,14 +408,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startHold/release are stable via refs
   }, [])
 
-  // Tear down on unmount: cancel the active capture and clear UI timers.
+  // Tear down on unmount: cancel the active capture, clear timers, drop the mic.
   useEffect(() => {
     return () => {
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current)
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+      if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
       const job = jobRef.current
       if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
+      releasePttMic()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
