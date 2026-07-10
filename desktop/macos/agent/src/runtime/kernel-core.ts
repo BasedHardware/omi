@@ -134,6 +134,7 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { StaleAdapterBindingError } from "./kernel-types.js";
+import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
 import type { BuiltDesktopContextPacket } from "./desktop-context-packet.js";
 
@@ -174,6 +175,11 @@ export class KernelCore {
   protected createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
     return this.withTransaction(() => {
       const session = this.resolveSession(input);
+      resolveAdapterWithinBoundary({
+        providerBoundary: session.providerBoundary,
+        defaultAdapterId: session.defaultAdapterId,
+        requestedAdapterId: input.adapterId ?? session.defaultAdapterId,
+      });
       const run = this.store.insertRun({
         sessionId: session.sessionId,
         parentRunId: input.parentRunId ?? null,
@@ -346,6 +352,7 @@ export class KernelCore {
           sessionId: accepted.session.sessionId,
           conversationId,
           surfaceRef,
+          executionRole: accepted.session.executionRole,
           userText: input.prompt,
           attachmentMetadataJson: input.attachmentMetadataJson,
           surfaceContextJson: input.surfaceContextJson,
@@ -742,6 +749,8 @@ export class KernelCore {
             externalRefId: input.externalRefId,
           },
           defaultAdapterId: input.defaultAdapterId,
+          executionRole: input.executionRole,
+          providerBoundary: input.providerBoundary,
           title: input.title ?? null,
         },
         () => Date.now(),
@@ -769,6 +778,9 @@ export class KernelCore {
       externalRefId: input.externalRefId ?? null,
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
+      executionRole: input.executionRole ?? "coordinator",
+      providerBoundary:
+        input.providerBoundary ?? providerBoundaryForAdapter(input.defaultAdapterId ?? "acp"),
     });
     this.appendEvent({
       sessionId: session.sessionId,
@@ -960,6 +972,11 @@ export class KernelCore {
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
         mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
+        metadata: {
+          ...(input.input.metadata ?? {}),
+          executionRole: input.session.executionRole,
+          providerBoundary: input.session.providerBoundary,
+        },
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -1012,7 +1029,11 @@ export class KernelCore {
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
       mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-      metadata: input.input.metadata,
+      metadata: {
+        ...(input.input.metadata ?? {}),
+        executionRole: input.session.executionRole,
+        providerBoundary: input.session.providerBoundary,
+      },
     });
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(

@@ -396,6 +396,8 @@ export function sessionFromRow(row: Record<string, unknown>): AgentSession {
     title: nullableText(row.title),
     status: text(row.status) as AgentSession["status"],
     surfaceKind: text(row.surface_kind),
+    executionRole: text(row.execution_role) as AgentSession["executionRole"],
+    providerBoundary: text(row.provider_boundary) as AgentSession["providerBoundary"],
     externalRefKind: nullableText(row.external_ref_kind),
     externalRefId: nullableText(row.external_ref_id),
     defaultAdapterId: text(row.default_adapter_id),

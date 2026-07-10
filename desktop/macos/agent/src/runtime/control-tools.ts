@@ -14,6 +14,12 @@ import type {
   WorkstreamContinuationCheckpoint,
   WorkstreamProductContext,
 } from "./workstream-continuity.js";
+import {
+  providerBoundaryForAdapter,
+  resolveAdapterWithinBoundary,
+  type AgentExecutionRole,
+  type ProviderBoundary,
+} from "./execution-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const agentSurfaceKindSchema = z.enum([
@@ -421,7 +427,10 @@ export interface AgentControlToolContext {
    * must inherit this route rather than silently selecting a local provider.
    */
   defaultAdapterId?: string;
-  /** Leaf/background workers may complete assigned work, but cannot fan out more agents. */
+  /** Kernel-owned provider and role policy for the active control caller. */
+  providerBoundary?: ProviderBoundary;
+  executionRole?: AgentExecutionRole;
+  /** @deprecated Compatibility for older direct callers; use executionRole. */
   canSpawnAgents?: boolean;
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
@@ -448,25 +457,19 @@ function defaultControlAdapterId(context: AgentControlToolContext): string {
 }
 
 function assertAdapterAllowedForControlRun(context: AgentControlToolContext, adapterId: string): void {
+  if (!context.defaultAdapterId && !context.providerBoundary) {
+    return;
+  }
   const owningAdapterId = defaultControlAdapterId(context);
-  // A managed desktop surface must never let a control-tool argument switch
-  // execution to any locally credentialed adapter.  Keep this allowlist
-  // explicit: adding a new cloud-managed adapter requires adding it here,
-  // while unknown (and therefore potentially local) adapters fail closed.
-  const managedCloudAdapters = new Set(["pi-mono"]);
-  // ACP is the user's locally authenticated Claude Code process. It remains
-  // available only when the owning desktop surface explicitly selected User
-  // Claude mode; the same rule preserves explicit local Hermes/OpenClaw modes.
-  if (adapterId === "acp" && owningAdapterId !== "acp") {
-    throw new Error("Local Claude is available only when the User Claude mode is selected.");
-  }
-  if (managedCloudAdapters.has(owningAdapterId) && !managedCloudAdapters.has(adapterId)) {
-    throw new Error("Managed Omi agents can only use Omi cloud routing.");
-  }
+  resolveAdapterWithinBoundary({
+    providerBoundary: context.providerBoundary ?? providerBoundaryForAdapter(owningAdapterId),
+    defaultAdapterId: owningAdapterId,
+    requestedAdapterId: adapterId,
+  });
 }
 
 function assertAgentSpawningAllowed(context: AgentControlToolContext): void {
-  if (context.canSpawnAgents === false) {
+  if (context.executionRole === "leaf" || context.canSpawnAgents === false) {
     throw new Error("Background agents are leaf workers and cannot start additional agents.");
   }
 }
@@ -740,7 +743,8 @@ export async function handleAgentControlToolCall(
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
+        const targetPolicy = context.kernel.executionPolicyForSession(parsed.sessionId);
+        const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         assertAdapterAllowedForControlRun(context, adapterId);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
@@ -759,6 +763,7 @@ export async function handleAgentControlToolCall(
             clientId: parsed.clientId,
             adapterId,
             screenContext: true,
+            executionRole: targetPolicy.executionRole,
           }),
         });
         return stringifyToolResult({
@@ -795,6 +800,7 @@ export async function handleAgentControlToolCall(
             clientId: parsed.clientId,
             adapterId,
             screenContext: true,
+            executionRole: "leaf",
           }),
         });
         return stringifyToolResult({
@@ -814,10 +820,10 @@ export async function handleAgentControlToolCall(
         const adapterId =
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
-          (parsed.parentRunId ? undefined : defaultControlAdapterId(context));
-        if (adapterId) {
-          assertAdapterAllowedForControlRun(context, adapterId);
-        }
+          (parsed.parentRunId
+            ? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
+            : defaultControlAdapterId(context));
+        assertAdapterAllowedForControlRun(context, adapterId);
         const visiblePillExternalRefId = parsed.visible
           ? (parsed.externalRefId ?? randomUUID())
           : parsed.externalRefId;
@@ -834,6 +840,7 @@ export async function handleAgentControlToolCall(
           externalRefKind: childExternalRefKind,
           externalRefId: visiblePillExternalRefId,
           screenContext: true,
+          executionRole: "leaf",
         });
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
@@ -924,6 +931,7 @@ export async function handleAgentControlToolCall(
             clientId: parsed.clientId,
             adapterId,
             screenContext: true,
+            executionRole: "leaf",
           }),
         });
         return stringifyToolResult({
@@ -1236,6 +1244,7 @@ function buildControlRunMcpServers(
     externalRefKind?: string;
     externalRefId?: string;
     screenContext?: boolean;
+    executionRole?: AgentExecutionRole;
   }
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
@@ -1252,6 +1261,7 @@ function buildControlRunMcpServers(
     externalRefId: input.externalRefId,
     includeSwiftBackedTools: true,
     screenContext: input.screenContext === true,
+    executionRole: input.executionRole,
   });
   return servers;
 }
@@ -1502,6 +1512,8 @@ function serializeSession(session: AgentSession): Record<string, unknown> {
     title: session.title,
     status: session.status,
     surfaceKind: session.surfaceKind,
+    executionRole: session.executionRole,
+    providerBoundary: session.providerBoundary,
     externalRefKind: session.externalRefKind,
     externalRefId: session.externalRefId,
     defaultAdapterId: session.defaultAdapterId,

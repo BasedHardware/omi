@@ -18,6 +18,7 @@ import type { AgentArtifact, AgentStore, ConversationTurn } from "./types.js";
 import type { SurfaceRef } from "./surface-session.js";
 import { surfaceRefKey as surfaceKeyFor } from "./surface-session.js";
 import type { KernelSessionSummary } from "./kernel.js";
+import type { AgentExecutionRole } from "./execution-policy.js";
 
 const COMPLETION_DELTA_MAX_AGE_MS = 30 * 60 * 1_000;
 
@@ -58,6 +59,7 @@ export interface AssembleTurnContextInput {
   sessionId: string;
   conversationId: string | null;
   surfaceRef: SurfaceRef;
+  executionRole?: AgentExecutionRole;
   userText: string;
   attachmentMetadataJson?: string | null;
   surfaceContextJson?: string | null;
@@ -74,8 +76,11 @@ export function isLeafWorkerSurface(surfaceRef: SurfaceRef): boolean {
     || (surfaceRef.surfaceKind === "floating_bar" && surfaceRef.externalRefKind === "pill");
 }
 
-export function leafWorkerExecutionBoundary(surfaceRef: SurfaceRef): string | null {
-  if (!isLeafWorkerSurface(surfaceRef)) return null;
+export function leafWorkerExecutionBoundary(
+  surfaceRef: SurfaceRef,
+  executionRole: AgentExecutionRole = isLeafWorkerSurface(surfaceRef) ? "leaf" : "coordinator",
+): string | null {
+  if (executionRole !== "leaf") return null;
   return `# Execution Boundary
 
 You are a leaf background worker. Complete the assigned objective yourself and report the result to your parent. Do not call spawn_agent, spawn_background_agent, or run_agent_and_wait; background agents cannot create more agents.`;
@@ -197,7 +202,7 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
     }
   }
 
-  const leafWorkerBoundary = leafWorkerExecutionBoundary(input.surfaceRef);
+  const leafWorkerBoundary = leafWorkerExecutionBoundary(input.surfaceRef, input.executionRole);
   if (leafWorkerBoundary) {
     sections.push(leafWorkerBoundary);
   }

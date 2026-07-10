@@ -19,6 +19,7 @@ import { serializeArtifact } from "./artifact-serialization.js";
 import { failureFromError, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
+import { executionRoleForSurface } from "./execution-policy.js";
 
 export type JsonlTransportSend = (message: OutboundMessageDraft) => void;
 export type JsonlTransportLog = (message: string) => void;
@@ -37,6 +38,7 @@ export interface McpServerBuildContext {
   adapterId?: string;
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export type McpServerBuilder = (
@@ -450,11 +452,13 @@ export class JsonlTransport {
     const hint = this.warmupHints.get(warmupKey);
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
     const ownerId = message.ownerId ?? this.ownerId;
+    const executionRole = executionRoleForSurface(message);
 
     return {
       ownerId,
       sessionId: message.sessionId,
       surfaceKind: message.surfaceKind,
+      executionRole,
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
       defaultAdapterId: requestedAdapterId,
@@ -474,6 +478,7 @@ export class JsonlTransport {
         protocolVersion: PROTOCOL_VERSION,
         sessionId: message.sessionId,
         adapterId: requestedAdapterId,
+        executionRole,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(requestedAdapterId),

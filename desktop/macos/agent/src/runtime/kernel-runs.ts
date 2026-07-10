@@ -165,6 +165,7 @@ export class KernelRuns extends KernelCore {
     const runInput: ExecuteAgentRunInput = {
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind ?? "floating_bar",
+      executionRole: "leaf",
       externalRefKind: input.externalRefKind,
       externalRefId: input.externalRefId,
       title: input.title ?? `Background: ${input.prompt.slice(0, 80)}`,
@@ -198,6 +199,9 @@ export class KernelRuns extends KernelCore {
     this.assertDelegationConstraints(input);
     const parentRun = this.readRun(input.parentRunId);
     const parentSession = this.readSession(parentRun.sessionId);
+    if (parentSession.executionRole === "leaf") {
+      throw new Error("Leaf workers cannot create delegated agents.");
+    }
     if (input.ownerId && parentSession.ownerId !== input.ownerId) {
       throw new Error(`Parent run ${input.parentRunId} does not belong to owner ${input.ownerId}`);
     }
@@ -207,6 +211,8 @@ export class KernelRuns extends KernelCore {
       ownerId,
       sessionId: input.mode === "continue" ? requiredChildSessionId(input.childSessionId) : input.childSessionId,
       surfaceKind: input.childSurfaceKind ?? "delegated_agent",
+      executionRole: "leaf",
+      providerBoundary: parentSession.providerBoundary,
       externalRefKind: input.childExternalRefKind,
       externalRefId: input.childExternalRefId,
       title: input.childTitle ?? `Delegated: ${input.objective.slice(0, 80)}`,

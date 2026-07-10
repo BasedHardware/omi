@@ -12,6 +12,8 @@ import type {
   NewAgentGrant,
   RunAttempt,
   RunMode,
+  AgentExecutionRole,
+  ProviderBoundary,
   RunStatus,
   DelegationMode,
 } from "./types.js";
@@ -37,6 +39,8 @@ export interface KernelSessionResolutionInput {
   sessionId?: string;
   ownerId: string;
   surfaceKind: string;
+  executionRole?: AgentExecutionRole;
+  providerBoundary?: ProviderBoundary;
   externalRefKind?: string;
   externalRefId?: string;
   title?: string;

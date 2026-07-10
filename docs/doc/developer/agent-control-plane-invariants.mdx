@@ -169,6 +169,51 @@ Guard surface:
 - `runtime-adapter.test.ts` verifies production expectations and ticketed known
   limitations.
 
+### Adapter credential scope is explicit and inherited
+
+Every production adapter declares `managed_cloud` or `local_user` in
+`ADAPTER_CAPABILITY_MATRIX`. Sessions persist a provider boundary when the
+kernel creates them. Managed sessions may select only managed-cloud adapters;
+local-user sessions are pinned to the exact selected local adapter. Missing
+adapter arguments inherit that boundary, while unknown adapters fail closed.
+
+Guard surface:
+
+- `execution-policy.ts` is the shared resolver used by control tools and the
+  kernel run-acceptance path.
+- `runtime-adapter.test.ts`, `execution-policy.test.ts`, and
+  `control-tools.test.ts` exhaust production declarations and managed routing.
+
+### Execution role owns agent-management authority
+
+Sessions persist `coordinator` or `leaf`. Background, delegated, and floating
+pill sessions are created as leaves. Leaf tool projections omit agent creation
+and continuation tools, while the control relay and kernel delegation path
+independently reject stale or forged calls. Surface-derived role exists only in
+the creation/legacy migration boundary; persisted kernel state is authoritative
+afterward.
+
+Guard surface:
+
+- `omi-tool-manifest.test.ts` verifies leaf capability projection.
+- `control-tools.test.ts` verifies server denial for every nested creation
+  entry point.
+- `sqlite-store.test.ts` verifies role and provider-boundary persistence.
+
+### Required control failures cannot become successful runs
+
+Required spawn, delegate, and continuation operations remain unresolved after
+failure until the same logical operation succeeds. Transport correlation and
+adapter-selection fields do not define logical identity, so a corrected retry
+can resolve the obligation; an unrelated successful operation cannot.
+
+Guard surface:
+
+- `pi-mono-adapter.test.ts` covers terminal failure, matching retry success,
+  and unrelated-success denial.
+- The kernel remains the only component that persists run and attempt terminal
+  state; adapter outcomes are inputs to that transition, not an alternate store.
+
 ## Persistence
 
 Lifecycle state transitions and their durable events should commit in the same
