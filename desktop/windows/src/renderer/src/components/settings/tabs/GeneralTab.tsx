@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { MessagesSquare, Power, Keyboard, Download } from 'lucide-react'
+import { MessagesSquare, Power, Keyboard, Download, Presentation } from 'lucide-react'
+import type { MeetingMode } from '../../../../../shared/types'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
@@ -35,10 +36,55 @@ export function GeneralTab(): React.JSX.Element {
           </select>
         }
       />
+      <MeetingDetectionRow />
       <LaunchAtLoginRow />
       <RecordHotkeyRow />
       <UpdateReadyRow />
     </>
+  )
+}
+
+// Meeting detection (Phase 5): off / ask (default) / auto. Per-app overrides
+// live in the same settings object (userData/app-settings.json → meeting.perApp,
+// keyed by pattern id) — editable as JSON; no dedicated UI yet.
+function MeetingDetectionRow(): React.JSX.Element {
+  const [mode, setMode] = useState<MeetingMode | null>(null)
+
+  useEffect(() => {
+    void window.omi?.meetingGetSettings?.().then((s) => setMode(s.mode))
+  }, [])
+
+  const change = (next: MeetingMode): void => {
+    setMode(next) // optimistic
+    void window.omi?.meetingSetSettings?.({ mode: next })
+  }
+
+  return (
+    <SettingRow
+      icon={Presentation}
+      dot={mode === 'off' ? 'off' : 'on'}
+      title="Meeting detection"
+      subtitle="When a meeting app is holding the microphone (Zoom, Teams, Meet, and more), Omi can capture and transcribe it — always with a visible notice, never silently."
+      keywords="meeting zoom teams meet webex discord detect auto capture record"
+      control={
+        <select
+          value={mode ?? 'ask'}
+          disabled={mode === null}
+          onChange={(e) => change(e.target.value as MeetingMode)}
+          className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none"
+        >
+          <option value="ask" className="bg-neutral-900">
+            Ask before capturing (default)
+          </option>
+          <option value="auto" className="bg-neutral-900">
+            Capture automatically
+          </option>
+          <option value="off" className="bg-neutral-900">
+            Off
+          </option>
+        </select>
+      }
+    />
   )
 }
 

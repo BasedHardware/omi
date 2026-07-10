@@ -6,6 +6,10 @@ import {
   type VadGate
 } from '../lib/capture/captureEngine'
 import { getSystemAudioStream } from '../lib/capture/systemAudio'
+import {
+  createLoopbackMusicFilter,
+  type LoopbackMusicFilter
+} from '../lib/capture/loopbackMusicFilter'
 import { acquireMicStream } from '../lib/audio'
 import type { ListenSource } from '../../../shared/types'
 
@@ -25,6 +29,9 @@ type AudioSession = {
   ownerId: number
   pipeline: PcmPipeline | null
   gate: VadGate | null
+  // Loopback lane only: YAMNet speech/music filter between the VAD gate and the
+  // WebSocket feed (a confident music verdict drops the audio).
+  musicFilter: LoopbackMusicFilter | null
   // Set if audio-stop lands while the source stream is still being acquired, so
   // the resolved stream is torn down instead of leaking.
   stopped: boolean
@@ -42,6 +49,7 @@ async function startAudioSession(
     ownerId,
     pipeline: null,
     gate: null,
+    musicFilter: null,
     stopped: false
   }
   sessions.set(sessionId, session)
@@ -70,9 +78,28 @@ async function startAudioSession(
 
   const feed = (pcm: Int16Array): void =>
     window.omi?.listenFeed(sessionId, pcm.buffer as ArrayBuffer)
-  const gate = createVadGate({ onVoiced: feed })
+  // Loopback lane: classify VAD-gated windows (YAMNet) so a confident music
+  // verdict closes the lane — ambient/meeting capture never transcribes a
+  // movie. The mic lane never classifies (the user's own voice always counts).
+  let onVoiced = feed
+  if (source !== 'mic') {
+    const filter = createLoopbackMusicFilter(feed)
+    session.musicFilter = filter
+    onVoiced = filter.push
+  }
+  const gate = createVadGate({ onVoiced })
   session.gate = gate
   session.pipeline = createPcmPipeline(stream, (pcm) => gate.push(pcm))
+}
+
+/** Test-only (read via the OMI_E2E-gated capture hook): current music-gate
+ *  verdict of each active loopback session. Empty when no loopback lane runs. */
+export function _loopbackVerdictsForTest(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [id, s] of sessions) {
+    if (s.musicFilter) out[id] = s.musicFilter.verdict()
+  }
+  return out
 }
 
 function stopAudioSession(sessionId: string): void {
@@ -81,6 +108,7 @@ function stopAudioSession(sessionId: string): void {
   s.stopped = true
   s.pipeline?.stop() // tears down the graph and stops the stream tracks
   s.gate?.stop()
+  s.musicFilter?.stop()
   sessions.delete(sessionId)
 }
 

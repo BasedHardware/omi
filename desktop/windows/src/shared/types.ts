@@ -218,6 +218,11 @@ export type CaptureCommand =
   // reloads itself if its own auth.currentUser disagrees, so its WS auth is always
   // fresh even across an account switch.
   | { type: 'auth-changed'; uid: string | null }
+  // Meeting detection (Phase 5, sent by MAIN): start/stop the auto-capture
+  // session (mic + system lanes) for a detected meeting. Serviced by
+  // MeetingSessionHost in the capture window.
+  | { type: 'meeting-capture-start'; meetingId: string; appName: string }
+  | { type: 'meeting-capture-stop'; meetingId: string }
 
 /** A mutation to the shared live-conversation store, emitted by the capture
  *  window as it owns the always-on mic session. UI windows apply these via
@@ -247,6 +252,14 @@ export type CaptureEvent =
   // The capture window was recreated/reloaded — UI windows re-issue their
   // standing commands (live-view, screen-view, an active PTT is abandoned).
   | { type: 'capture-window-restarted' }
+  // Meeting auto-capture lifecycle, emitted by MeetingSessionHost. Broadcast
+  // (and tapped by main's meeting monitor to keep the toast honest).
+  | {
+      type: 'meeting-capture-status'
+      meetingId: string
+      status: 'started' | 'error' | 'saved'
+      message?: string
+    }
 
 /** The minimal surface the waveform visualizer needs from an amplitude source.
  *  A live `AnalyserNode` satisfies it directly (in-window PTT), and the IPC-fed
@@ -466,6 +479,16 @@ export type OmiBridgeApi = {
   insightTest: () => void
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
+  // --- Meeting detection (Phase 5) ---
+  meetingGetSettings: () => Promise<MeetingSettings>
+  /** Toast renderer → main: fetch the pending meeting toast payload on mount
+   *  (a push can arrive before the React subscription exists). */
+  meetingGetToast: () => Promise<MeetingToastPayload | null>
+  meetingSetSettings: (patch: Partial<MeetingSettings>) => Promise<MeetingSettings>
+  /** Toast renderer → main: a meeting-toast button was clicked. */
+  meetingAction: (meetingId: string, action: MeetingToastAction) => void
+  /** Toast renderer subscribes to meeting toast payloads. */
+  onMeetingToast: (cb: (p: MeetingToastPayload) => void) => () => void
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   // Animation bench (OMI_ANIM_BENCH): the renderer probe reports a jank summary
@@ -477,6 +500,8 @@ export type OmiBridgeApi = {
   // one-time onboarding gate so the bench mounts the authed shell (a returning
   // user is always onboarded), instead of stalling on the wizard.
   isBench: boolean
+  // True only in the E2E harness (OMI_E2E=1) — gates renderer-side test hooks.
+  isE2E: boolean
   // Whether the desktop-automation bridge is enabled (ON unless OMI_AUTOMATION=0).
   // When false the renderer skips its action-planner pre-step so chat behaves
   // like a normal assistant.
@@ -882,6 +907,33 @@ export type InsightPayload = {
 export type InsightRecord = InsightPayload & { id: number; ts: number; dismissed: number }
 
 export type InsightNotificationStyle = 'omi' | 'native'
+
+// --- Meeting detection (Phase 5) ---
+export type MeetingMode = 'off' | 'ask' | 'auto'
+
+export type MeetingSettings = {
+  /** Global behavior when a meeting is detected. Default 'ask' — never a silent
+   *  auto-start on first run. */
+  mode: MeetingMode
+  /** Minutes of Tier-2 (mic) silence before the meeting is considered over. */
+  endGraceMinutes: number
+  /** Per-app overrides keyed by pattern id ('zoom', 'meet-web', …). */
+  perApp: Record<string, MeetingMode>
+  /** Whether the one-time "meeting detection is on" hint was shown. */
+  firstRunToastShown: boolean
+}
+
+/** Payload for the meeting toast (rendered by the shared acrylic toast window). */
+export type MeetingToastPayload = {
+  meetingId: string
+  appName: string
+  /** 'ask' → "Meeting detected — start capturing?"; 'capturing' → live notice. */
+  kind: 'ask' | 'capturing'
+  /** Show the one-time first-run hint line. */
+  firstRun?: boolean
+}
+
+export type MeetingToastAction = 'start' | 'stop' | 'dismiss'
 
 export type InsightSettings = {
   enabled: boolean // default ON
