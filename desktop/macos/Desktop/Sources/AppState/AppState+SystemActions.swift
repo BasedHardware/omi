@@ -77,7 +77,13 @@ extension AppState {
     // Use a shell script to wait briefly, then relaunch the app
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "sleep 0.5 && open \"\(relaunchURL.path)\""]
+    task.arguments = [
+      "-c",
+      Self.relaunchCommand(
+        appPath: relaunchURL.path,
+        isNonProduction: AppBuild.isNonProduction,
+        automationPort: DesktopAutomationLaunchOptions.port),
+    ]
 
     do {
       try task.run()
@@ -90,6 +96,28 @@ extension AppState {
     } catch {
       log("Failed to schedule restart: \(error)")
     }
+  }
+
+  /// Builds the `/bin/sh -c` payload that relaunches the app after a short delay.
+  ///
+  /// On **non-production** builds the automation port is re-passed as an argv
+  /// (`--automation-port=`) so the reopened bundle rebinds the SAME port the harness
+  /// launched with. A plain `open <bundle>` carries no argv and no env, so on its own
+  /// the reopened app would fall back to a launchd-session-inherited
+  /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
+  /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
+  /// is the highest-precedence port source, so it wins over any inherited env. The
+  /// production relaunch stays a plain `open` and is unchanged.
+  nonisolated static func relaunchCommand(
+    appPath: String,
+    isNonProduction: Bool,
+    automationPort: UInt16
+  ) -> String {
+    var openCommand = "open \"\(appPath)\""
+    if isNonProduction {
+      openCommand += " --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+    }
+    return "sleep 0.5 && \(openCommand)"
   }
 
   /// Reset onboarding state for the current app only, then restart.
