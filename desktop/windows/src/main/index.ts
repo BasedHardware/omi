@@ -1,13 +1,4 @@
-import {
-  app,
-  shell,
-  BrowserWindow,
-  ipcMain,
-  session,
-  nativeImage,
-  desktopCapturer,
-  Notification
-} from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -49,11 +40,12 @@ import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 import { initSentry } from './sentry'
-import { isQuitting, markQuitting, quitApp } from './lifecycle'
+import { isQuitting, quitApp } from './lifecycle'
 import { createTray, updateTrayState, destroyTray } from './tray'
 import { initAutoUpdater } from './updater'
 import { registerRecordShortcut, setRecordAccelerator, getRecordShortcut } from './shortcuts'
 import { getAppSettings, setAppSettings } from './appSettings'
+import { showBestEffortNotification } from './notify'
 
 // THE main window — single module-level owner. Everything that outlives the
 // whenReady scope (tray menu, updater, shortcuts, second-instance handoff,
@@ -210,15 +202,10 @@ import {
 function maybeShowCloseToTrayNotice(): void {
   if (getAppSettings().closeToTrayNoticeShown) return
   setAppSettings({ closeToTrayNoticeShown: true })
-  if (!Notification.isSupported()) return
-  try {
-    new Notification({
-      title: 'Omi is still running',
-      body: 'Omi keeps listening in the tray. Right-click the tray icon to pause or quit.'
-    }).show()
-  } catch (e) {
-    console.warn('[tray] close-to-tray notice failed:', e)
-  }
+  showBestEffortNotification(
+    'Omi is still running',
+    'Omi keeps listening in the tray. Right-click the tray icon to pause or quit.'
+  )
 }
 
 function createWindow(): BrowserWindow {
@@ -477,7 +464,10 @@ app.whenReady().then(async () => {
     showMainWindow: surfaceMainWindow,
     hideMainWindow: () => withMainWindow((win) => win.hide()),
     isMainWindowVisible: () =>
-      !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized(),
+      !!mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.isVisible() &&
+      !mainWindow.isMinimized(),
     toggleListening: () => withMainWindow((win) => win.webContents.send('tray:toggle-listening')),
     openSettings: () => {
       surfaceMainWindow()
@@ -554,7 +544,8 @@ app.whenReady().then(async () => {
   // WITHOUT the app path, so a dev-written Run entry would launch an empty
   // Electron shell at every login (found live during Phase 1 verification).
   ipcMain.handle('app:get-login-item', () => ({
-    openAtLogin: app.isPackaged ? app.getLoginItemSettings().openAtLogin : false
+    openAtLogin: app.isPackaged ? app.getLoginItemSettings().openAtLogin : false,
+    supported: app.isPackaged
   }))
   ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
     if (!app.isPackaged) {
@@ -667,11 +658,11 @@ app.on('window-all-closed', () => {
   app.quit()
 })
 
-// On a normal shutdown: mark quitting (so any late close handlers don't cancel),
-// tear down the tray + always-alive overlay window, flush perf marks, release the
-// overlay shortcut, and dispose the automation helper + foreground-window hook.
+// On a normal shutdown (the quitting flag is already set — lifecycle.ts's
+// before-quit hook runs first): tear down the tray + always-alive overlay window,
+// flush perf marks, release the overlay shortcut, and dispose the automation
+// helper + foreground-window hook.
 app.on('will-quit', () => {
-  markQuitting()
   destroyTray()
   const overlay = getOverlayWindow()
   if (overlay && !overlay.isDestroyed()) overlay.destroy()

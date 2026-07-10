@@ -1,8 +1,10 @@
-// PII scrubbing for Sentry events sent from the renderer. Strips email addresses
-// out of the human-readable text fields (message + exception values) before an
-// event leaves the app. Kept dependency-free (a structural event type, not
-// Sentry's) so it's cheap to unit-test. Not exhaustive — a best-effort guard
-// against the most common leak (emails in error strings), not a full redactor.
+// PII scrubbing for Sentry events. Strips email addresses out of the
+// human-readable text fields (message + exception values) before an event leaves
+// the app. Shared by BOTH the renderer (renderer/main.tsx) and the main process
+// (main/sentry.ts) so the two Sentry inits scrub identically. Kept dependency-free
+// (a structural event type, not Sentry's) so it's cheap to unit-test. Not
+// exhaustive — a best-effort guard against the most common leak (emails in error
+// strings), not a full redactor.
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
 

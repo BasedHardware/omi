@@ -14,12 +14,8 @@ export type AppSettings = {
   recordHotkey: string
 }
 
-const DEFAULTS: AppSettings = {
-  closeToTrayNoticeShown: false,
-  recordHotkey: DEFAULT_RECORD_HOTKEY
-}
-
-// Coerce a partial/untrusted object into fully-valid settings.
+// Coerce a partial/untrusted object into fully-valid settings. Passing null/
+// undefined yields the defaults, so defaults live in exactly one place.
 export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
   const r = raw ?? {}
   const hotkey =
@@ -36,22 +32,40 @@ function file(): string {
   return join(app.getPath('userData'), 'app-settings.json')
 }
 
-// Read persisted settings. Never throws — a missing/corrupt file yields defaults.
-export function getAppSettings(): AppSettings {
+// Read + sanitize the on-disk settings. Never throws — a missing/corrupt file
+// yields defaults.
+function readFromDisk(): AppSettings {
   try {
     return sanitizeAppSettings(JSON.parse(readFileSync(file(), 'utf-8')) as Partial<AppSettings>)
   } catch {
-    return { ...DEFAULTS }
+    return sanitizeAppSettings(null)
   }
 }
 
-// Merge a patch over the current settings and persist. Returns the written value.
+// The file is read at most once per process; every getAppSettings after that is
+// served from memory, and setAppSettings keeps the cache in lock-step with disk.
+let cache: AppSettings | null = null
+
+// Read persisted settings (cached after the first call).
+export function getAppSettings(): AppSettings {
+  if (!cache) cache = readFromDisk()
+  return cache
+}
+
+// Merge a patch over the current settings, update the cache, and persist. Returns
+// the written value.
 export function setAppSettings(patch: Partial<AppSettings>): AppSettings {
   const next = sanitizeAppSettings({ ...getAppSettings(), ...patch })
+  cache = next
   try {
     writeFileSync(file(), JSON.stringify(next), 'utf-8')
   } catch (e) {
     console.warn('[app-settings] failed to persist:', e)
   }
   return next
+}
+
+/** Test-only: drop the in-memory cache so the next read comes from disk. */
+export function _resetForTests(): void {
+  cache = null
 }

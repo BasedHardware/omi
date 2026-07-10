@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/electron/renderer'
 import App from './App'
 import { SandboxBadge } from './components/SandboxBadge'
-import { scrubEventPii } from './lib/sentryScrub'
+import { scrubEventPii } from '../../shared/sentryScrub'
 
 // Renderer-side crash reporting. Only initializes when a DSN is configured, so
 // dev builds (and any build without the env var) stay entirely offline. Emails

@@ -16,11 +16,12 @@
 // lock); only a foreign squatter forces a fallback port — surfaced to the user
 // because it means a one-time re-login (deliberate tradeoff: better than
 // refusing to launch).
-import { app, Notification } from 'electron'
+import { app } from 'electron'
 import { createServer, type Server } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { derivePort, planPortSequence } from './portDerivation'
+import { showBestEffortNotification } from './notify'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -119,14 +120,8 @@ function sleep(ms: number): Promise<void> {
 /** A fallback port means the origin changed and the saved sign-in is unreachable —
  * tell the user why they're being asked to log in again instead of failing silently. */
 function notifyFallbackPort(): void {
-  try {
-    if (Notification.isSupported()) {
-      new Notification({
-        title: 'Omi started on a backup port',
-        body: 'Another program was using Omi’s usual port, so you may need to sign in again.'
-      }).show()
-    }
-  } catch {
-    // Notification failures must never block startup.
-  }
+  showBestEffortNotification(
+    'Omi started on a backup port',
+    'Another program was using Omi’s usual port, so you may need to sign in again.'
+  )
 }

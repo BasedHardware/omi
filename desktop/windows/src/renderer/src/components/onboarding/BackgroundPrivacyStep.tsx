@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { StepScaffold } from './StepScaffold'
-import { getPreferences, setPreferences } from '../../lib/preferences'
+import { getPreferences } from '../../lib/preferences'
+import { persistBackgroundConsent } from '../../lib/backgroundConsent'
 import { BackgroundConsentControls } from '../consent/BackgroundConsentControls'
 
 type BackgroundPrivacyStepProps = {
@@ -25,17 +26,7 @@ export function BackgroundPrivacyStep({
   const [launchAtLogin, setLaunchAtLogin] = useState(true)
 
   const handleContinue = (): void => {
-    // Stamp backgroundConsentAt so the post-update interstitial (which targets
-    // users who onboarded before this step existed) never fires for a user who
-    // just consented here — see shouldShowBackgroundConsent.
-    setPreferences({
-      continuousRecording: listening,
-      backgroundConsentAt: Date.now(),
-      ...(listening ? { recordingConsentedAt: Date.now() } : {})
-    })
-    // Apply the launch-at-login choice to the OS. Best-effort — never block
-    // onboarding on it.
-    void window.omi?.setLaunchAtLogin?.(launchAtLogin)
+    persistBackgroundConsent({ listening, launchAtLogin })
     onContinue()
   }
 

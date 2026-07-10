@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Mic, AppWindow, Power, type LucideIcon } from 'lucide-react'
 import { Toggle } from '../settings/Toggle'
 
@@ -39,6 +40,14 @@ export function BackgroundConsentControls({
   launchAtLogin,
   onLaunchAtLoginChange
 }: Props): React.JSX.Element {
+  // Launch-at-login is only writable in packaged builds (see the app:get-login-item
+  // handler). In unpackaged dev the card stays visible but its toggle is disabled
+  // so the UI never offers a switch that silently does nothing.
+  const [launchSupported, setLaunchSupported] = useState(true)
+  useEffect(() => {
+    void window.omi?.getLoginItemSettings?.().then((s) => setLaunchSupported(!!s?.supported))
+  }, [])
+
   return (
     <div className="flex w-full flex-col gap-3">
       <Row
@@ -62,9 +71,18 @@ export function BackgroundConsentControls({
       <Row
         icon={Power}
         title="Launch at login"
-        detail="Start Omi automatically when you sign in to Windows."
+        detail={
+          launchSupported
+            ? 'Start Omi automatically when you sign in to Windows.'
+            : 'Start Omi automatically when you sign in to Windows. Available in installed builds only.'
+        }
         control={
-          <Toggle on={launchAtLogin} onChange={onLaunchAtLoginChange} label="Launch at login" />
+          <Toggle
+            on={launchAtLogin}
+            onChange={onLaunchAtLoginChange}
+            disabled={!launchSupported}
+            label="Launch at login"
+          />
         }
       />
     </div>

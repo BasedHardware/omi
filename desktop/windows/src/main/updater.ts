@@ -43,6 +43,8 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
       console.warn('[updater] check failed (non-fatal):', e?.message ?? e)
     })
   }
-  check()
+  // Delay the first check so it doesn't compete with startup/renderer load — a
+  // fresh update can trigger a full background download.
+  setTimeout(check, 45_000)
   setInterval(check, CHECK_INTERVAL_MS)
 }

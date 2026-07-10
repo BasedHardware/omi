@@ -4,9 +4,12 @@
 // own Sentry init separately.
 import { app } from 'electron'
 import * as Sentry from '@sentry/electron/main'
+import { scrubEventPii } from '../shared/sentryScrub'
 
 // Redact obvious secrets/PII before an event leaves the machine: strip
-// Authorization headers and drop the user's email from the user context.
+// Authorization/Cookie headers, drop the user's email from the user context, and
+// scrub emails out of the message/exception text (the shared scrubber the
+// renderer uses too).
 function scrub<T extends Sentry.Event>(event: T): T {
   const headers = event.request?.headers as Record<string, string> | undefined
   if (headers) {
@@ -17,7 +20,7 @@ function scrub<T extends Sentry.Event>(event: T): T {
     }
   }
   if (event.user && 'email' in event.user) delete event.user.email
-  return event
+  return scrubEventPii(event)
 }
 
 let initialized = false

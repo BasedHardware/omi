@@ -29,9 +29,13 @@ export function fnv1a(input: string): number {
  * Windows paths are case-insensitive and separator-flexible — normalize so
  * `C:\Users\X` and `c:/users/x` derive the same port.
  */
-export function derivePort(userDataPath: string, base = PORT_BASE, span = PORT_SPAN): number {
-  const normalized = userDataPath.trim().toLowerCase().replace(/[\\/]+/g, '/').replace(/\/$/, '')
-  return base + (avalanche(fnv1a(normalized)) % span)
+export function derivePort(userDataPath: string): number {
+  const normalized = userDataPath
+    .trim()
+    .toLowerCase()
+    .replace(/[\\/]+/g, '/')
+    .replace(/\/$/, '')
+  return PORT_BASE + (avalanche(fnv1a(normalized)) % PORT_SPAN)
 }
 
 /** Murmur3-style finalizer: FNV-1a's low bits disperse poorly for near-identical

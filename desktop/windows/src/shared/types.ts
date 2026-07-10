@@ -328,8 +328,10 @@ export type OmiBridgeApi = {
   /** Tray Settings clicked (the window is already surfaced) — route to Settings.
    *  Returns an unsubscribe fn. */
   onTrayOpenSettings: (cb: () => void) => () => void
-  /** Whether the app is set to launch at login. */
-  getLoginItemSettings: () => Promise<{ openAtLogin: boolean }>
+  /** Whether the app is set to launch at login, and whether the OS setting is
+   *  even writable in this build (`supported` is false in unpackaged dev, where
+   *  execPath is the bare electron.exe and a Run entry would be bogus). */
+  getLoginItemSettings: () => Promise<{ openAtLogin: boolean; supported: boolean }>
   /** Enable/disable launch-at-login (writes the HKCU Run key via Electron). */
   setLaunchAtLogin: (enabled: boolean) => Promise<void>
   /** Quit for real (sets the quitting flag so windows don't just hide, then quits). */

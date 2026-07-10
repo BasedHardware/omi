@@ -25,6 +25,7 @@ import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
+import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 
 // The overlay and insight-toast windows load this same bundle at their own hash
@@ -155,6 +156,7 @@ function App(): React.JSX.Element {
       {/* Tray state reporting + tray-driven pause. Main window only (not the
           overlay/insight-toast windows sharing this bundle). */}
       {!IS_SECONDARY_WINDOW && <TrayStateHost />}
+      {!IS_SECONDARY_WINDOW && <RecordHotkeyHost />}
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
         <Route path="/overlay" element={<OverlayApp />} />

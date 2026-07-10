@@ -21,22 +21,12 @@ vi.mock('electron', () => ({
 
 import {
   createShortcutSlot,
-  decideRegistered,
   registerRecordShortcut,
   setRecordAccelerator,
   getRecordShortcut,
   __resetRecordShortcutForTests,
   DEFAULT_RECORD_HOTKEY
 } from './shortcuts'
-
-describe('decideRegistered', () => {
-  it('is claimed only when register() succeeded and the probe confirms it', () => {
-    expect(decideRegistered(true, true)).toBe(true)
-    expect(decideRegistered(true, false)).toBe(false)
-    expect(decideRegistered(false, true)).toBe(false)
-    expect(decideRegistered(false, false)).toBe(false)
-  })
-})
 
 describe('createShortcutSlot', () => {
   beforeEach(() => {
@@ -49,6 +39,23 @@ describe('createShortcutSlot', () => {
     expect(slot.register(() => {})).toBe(true)
     expect(slot.getAccelerator()).toBe('Shift+Space')
     expect(slot.isRegistered()).toBe(true)
+  })
+
+  it('register(onFire, accelerator) claims the requested accelerator, not the default', () => {
+    const slot = createShortcutSlot('Shift+Space')
+    expect(slot.register(() => {}, 'Ctrl+K')).toBe(true)
+    expect(slot.getAccelerator()).toBe('Ctrl+K')
+    expect(registered.has('Ctrl+K')).toBe(true)
+    expect(registered.has('Shift+Space')).toBe(false)
+  })
+
+  it('register(onFire, accelerator) rolls back to the default when the requested chord is taken', () => {
+    taken.add('Ctrl+O')
+    const slot = createShortcutSlot('Shift+Space')
+    expect(slot.register(() => {}, 'Ctrl+O')).toBe(false)
+    expect(slot.getAccelerator()).toBe('Shift+Space') // fell back to the default
+    expect(registered.has('Shift+Space')).toBe(true)
+    expect(registered.has('Ctrl+O')).toBe(false)
   })
 
   it('does not register before a handler is attached', () => {

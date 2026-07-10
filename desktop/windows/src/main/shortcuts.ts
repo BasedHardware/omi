@@ -11,8 +11,10 @@ import { globalShortcut } from 'electron'
 export const DEFAULT_RECORD_HOTKEY = 'Ctrl+Space'
 
 export interface ShortcutSlot {
-  /** Claim the (default) accelerator with the given handler. Returns whether it stuck. */
-  register(onFire: () => void): boolean
+  /** Attach the handler and claim an accelerator (the default, or `accelerator`
+   *  when given). If the requested accelerator is taken it rolls back to the
+   *  default so there's always a working binding. Returns whether it stuck. */
+  register(onFire: () => void, accelerator?: string): boolean
   /** Release the current (or a specific) accelerator. Idempotent. */
   unregister(accelerator?: string): void
   /** Rebind to a new accelerator, rolling back to the previous one if it is taken. */
@@ -25,15 +27,6 @@ export interface ShortcutSlot {
   isRegistered(): boolean
 }
 
-/**
- * Pure fallback decision: an accelerator is only truly claimed when register()
- * returned true AND a follow-up isRegistered() probe confirms it. Split out so
- * the "did the OS give it to us?" logic is unit-testable without Electron.
- */
-export function decideRegistered(registerReturned: boolean, isRegisteredNow: boolean): boolean {
-  return registerReturned && isRegisteredNow
-}
-
 export function createShortcutSlot(defaultAccelerator: string): ShortcutSlot {
   let currentAccelerator = defaultAccelerator
   let handler: (() => void) | null = null
@@ -41,8 +34,10 @@ export function createShortcutSlot(defaultAccelerator: string): ShortcutSlot {
   const tryRegister = (accelerator: string = currentAccelerator): boolean => {
     if (!handler) return false
     try {
+      // Only truly claimed when register() returned true AND the probe confirms
+      // it — the OS can silently decline a chord another app owns.
       const ok = globalShortcut.register(accelerator, handler)
-      if (!decideRegistered(ok, globalShortcut.isRegistered(accelerator))) {
+      if (!(ok && globalShortcut.isRegistered(accelerator))) {
         console.warn(`[shortcut] "${accelerator}" is unavailable (already in use?)`)
         return false
       }
@@ -63,8 +58,16 @@ export function createShortcutSlot(defaultAccelerator: string): ShortcutSlot {
   }
 
   return {
-    register(onFire) {
+    register(onFire, accelerator) {
       handler = onFire
+      if (accelerator && accelerator !== currentAccelerator) {
+        const previous = currentAccelerator
+        if (tryRegister(accelerator)) return true
+        // Requested chord is taken — fall back to the default so the user is
+        // never left without a working shortcut.
+        tryRegister(previous)
+        return false
+      }
       return tryRegister(currentAccelerator)
     },
     unregister,
@@ -81,7 +84,9 @@ export function createShortcutSlot(defaultAccelerator: string): ShortcutSlot {
       unregister(currentAccelerator)
     },
     resume() {
-      return globalShortcut.isRegistered(currentAccelerator) ? true : tryRegister(currentAccelerator)
+      return globalShortcut.isRegistered(currentAccelerator)
+        ? true
+        : tryRegister(currentAccelerator)
     },
     getAccelerator() {
       return currentAccelerator

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { getPreferences, setPreferences } from '../../lib/preferences'
-import { shouldShowBackgroundConsent } from '../../lib/backgroundConsent'
+import { getPreferences } from '../../lib/preferences'
+import { shouldShowBackgroundConsent, persistBackgroundConsent } from '../../lib/backgroundConsent'
 import { BackgroundConsentControls } from './BackgroundConsentControls'
 
 /**
@@ -19,12 +19,7 @@ export function BackgroundConsentInterstitial(): React.JSX.Element | null {
   if (!open) return null
 
   const acknowledge = (): void => {
-    setPreferences({
-      continuousRecording: listening,
-      backgroundConsentAt: Date.now(),
-      ...(listening ? { recordingConsentedAt: Date.now() } : {})
-    })
-    void window.omi?.setLaunchAtLogin?.(launchAtLogin)
+    persistBackgroundConsent({ listening, launchAtLogin })
     setOpen(false)
   }
 

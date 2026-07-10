@@ -14,8 +14,7 @@ const slot = createShortcutSlot(OVERLAY_ACCELERATOR)
  * already taken by another app. The app keeps running either way.
  */
 export function registerOverlayShortcut(accelerator: string, onToggle: () => void): boolean {
-  slot.register(onToggle)
-  return slot.getAccelerator() === accelerator ? slot.isRegistered() : slot.setAccelerator(accelerator)
+  return slot.register(onToggle, accelerator)
 }
 
 export function unregisterOverlayShortcut(accelerator?: string): void {

@@ -49,9 +49,15 @@ export function GeneralTab(): React.JSX.Element {
 // state from main on mount; the toggle writes it through and updates optimistically.
 function LaunchAtLoginRow(): React.JSX.Element {
   const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null)
+  // The OS Run entry is only writable in packaged builds (see the main handler);
+  // in unpackaged dev the toggle must not pretend it works.
+  const [supported, setSupported] = useState(true)
 
   useEffect(() => {
-    void window.omi?.getLoginItemSettings?.().then((s) => setOpenAtLogin(!!s?.openAtLogin))
+    void window.omi?.getLoginItemSettings?.().then((s) => {
+      setOpenAtLogin(!!s?.openAtLogin)
+      setSupported(!!s?.supported)
+    })
   }, [])
 
   const change = (next: boolean): void => {
@@ -64,13 +70,17 @@ function LaunchAtLoginRow(): React.JSX.Element {
       icon={Power}
       dot={openAtLogin ? 'on' : 'off'}
       title="Launch at login"
-      subtitle="Start Omi automatically when you sign in to Windows."
+      subtitle={
+        supported
+          ? 'Start Omi automatically when you sign in to Windows.'
+          : 'Start Omi automatically when you sign in to Windows. Available in installed builds only.'
+      }
       keywords="startup autostart launch login boot start"
       control={
         <Toggle
           on={!!openAtLogin}
           onChange={change}
-          disabled={openAtLogin === null}
+          disabled={openAtLogin === null || !supported}
           label="Launch at login"
         />
       }

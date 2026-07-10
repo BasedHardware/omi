@@ -121,7 +121,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 0) {
       return (
         <NameStep
-          stepIndex={0}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           initialValue={prefs.displayName ?? ''}
           onContinue={handleName}
@@ -131,7 +131,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 1) {
       return (
         <LanguageStep
-          stepIndex={1}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           initialValue={prefs.language}
           onContinue={handleLanguage}
@@ -142,7 +142,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 2) {
       return (
         <HowDidYouHearStep
-          stepIndex={2}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={handleHowDidYouHear}
           onBack={back}
@@ -150,17 +150,17 @@ export function Onboarding(): React.JSX.Element {
       )
     }
     if (step === 3) {
-      return <TrustStep stepIndex={3} totalSteps={TOTAL_STEPS} onContinue={next} onBack={back} />
+      return <TrustStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onBack={back} />
     }
     if (step === 4) {
       // Background/privacy consent: always-on listening, tray residence, and
       // launch-at-login, established up front for this tray-resident companion.
-      return <BackgroundPrivacyStep stepIndex={4} totalSteps={TOTAL_STEPS} onContinue={next} />
+      return <BackgroundPrivacyStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} />
     }
     if (step === 5) {
       return (
         <ScreenPermissionStep
-          stepIndex={5}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onSkip={next}
@@ -171,18 +171,28 @@ export function Onboarding(): React.JSX.Element {
       // The old DiskAccessStep (button-driven file scan) is hidden; this
       // discovery step scans automatically with the orbit animation instead.
       return (
-        <BuildProfileStep stepIndex={6} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <BuildProfileStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
       )
     }
     if (step === 7) {
       return (
-        <MicPermissionStep stepIndex={7} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <MicPermissionStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
       )
     }
     if (step === 8) {
       return (
         <AutomationPermissionStep
-          stepIndex={8}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onSkip={next}
@@ -193,23 +203,30 @@ export function Onboarding(): React.JSX.Element {
       // Floating-bar shortcut setup: enables + warms the overlay so the user can
       // test the press here, then advances to the voice intro.
       return (
-        <ShortcutSetupStep stepIndex={9} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <ShortcutSetupStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
       )
     }
     if (step === 10) {
       return (
-        <VoiceIntroStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <VoiceIntroStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     if (step === 11) {
       // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
       // reveals, then advances to the goal step.
-      return <AskDemoStep stepIndex={11} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+      return (
+        <AskDemoStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+      )
     }
     if (step === 12) {
       return (
         <GoalStep
-          stepIndex={12}
+          stepIndex={step}
           totalSteps={TOTAL_STEPS}
           apps={appNames}
           onContinue={handleGoal}

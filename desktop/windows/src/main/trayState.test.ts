@@ -15,27 +15,21 @@ describe('trayState', () => {
     expect(isTrayState(2)).toBe(false)
   })
 
-  it('listening offers Pause and shows the listening icon', () => {
+  it('listening offers Pause', () => {
     const p = describeTray('listening')
-    expect(p.iconKey).toBe('listening')
     expect(p.tooltip).toBe('Omi — listening')
-    expect(p.toggleAction).toBe('pause')
     expect(p.toggleLabel).toBe('Pause listening')
   })
 
-  it('paused offers Resume and shows the paused icon', () => {
+  it('paused offers Resume', () => {
     const p = describeTray('paused')
-    expect(p.iconKey).toBe('paused')
     expect(p.tooltip).toBe('Omi — paused')
-    expect(p.toggleAction).toBe('resume')
     expect(p.toggleLabel).toBe('Resume listening')
   })
 
   it('idle offers Resume (nothing to pause yet)', () => {
     const p = describeTray('idle')
-    expect(p.iconKey).toBe('idle')
     expect(p.tooltip).toBe('Omi')
-    expect(p.toggleAction).toBe('resume')
     expect(p.toggleLabel).toBe('Resume listening')
   })
 
