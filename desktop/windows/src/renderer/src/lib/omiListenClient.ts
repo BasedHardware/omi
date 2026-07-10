@@ -1,5 +1,5 @@
 import { auth } from './firebase'
-import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
+import type { BackendSegment, ListenEvent, ListenMode, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
 export type OmiListenCallbacks = {
@@ -24,6 +24,10 @@ export type OmiListenCallbacks = {
 
 export type OmiListenHandle = {
   stop: () => void
+  /** Ask a transcribe-stream session ('transcribe' mode) to flush its trailing
+   * segment now instead of waiting out silence. No-op for 'conversation'
+   * sessions and for lanes that never reached OPEN. */
+  finalize: () => void
 }
 
 let nextSessionId = 1
@@ -41,7 +45,8 @@ let nextSessionId = 1
  */
 export async function startOmiListen(
   source: ListenSource,
-  cb: OmiListenCallbacks
+  cb: OmiListenCallbacks,
+  mode: Extract<ListenMode, 'conversation' | 'transcribe'> = 'conversation'
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
@@ -92,7 +97,7 @@ export async function startOmiListen(
       source,
       token,
       language: getPreferences().language,
-      mode: 'conversation'
+      mode
     })
   } catch (e) {
     unsubMsg()
@@ -111,6 +116,9 @@ export async function startOmiListen(
       unsubCapture()
       window.omi.captureCommand({ type: 'audio-stop', sessionId })
       void window.omi.listenStop(sessionId)
+    },
+    finalize: (): void => {
+      window.omi.listenFinalize(sessionId)
     }
   }
 }
