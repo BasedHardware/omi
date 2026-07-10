@@ -19,6 +19,12 @@ dist/
 *.dmg
 *.AppImage
 
+# Generated audio test fixtures (pnpm fixtures:audio) — never commit binaries
+test/fixtures/audio/
+
+# TypeScript incremental-build cache
+*.tsbuildinfo
+
 # Perf benchmark artifacts + tooling (dev-only; keep out of the public repo)
 .bench/
 scripts/bench/

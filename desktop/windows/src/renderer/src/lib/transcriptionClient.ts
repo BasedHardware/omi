@@ -2,6 +2,9 @@ import { auth } from './firebase'
 import { startOmiListen, type OmiListenHandle } from './omiListenClient'
 import type { BackendSegment, ListenSource, TranscriptLine } from '../../../shared/types'
 
+// Conversation (/v4/listen) connects fast; a tight timeout surfaces failures
+// quickly. (Push-to-talk does NOT ride this client — see lib/ptt/, whose stream
+// lane is opportunistic and needs no connect timeout at all.)
 const CONNECT_TIMEOUT_MS = 3000
 
 export type TranscriptionCallbacks = {
@@ -89,73 +92,76 @@ async function startWithOmi(
       resolve(null)
     }, CONNECT_TIMEOUT_MS)
 
-    startOmiListen(source, {
-      onConnected: () => {
-        if (outcome !== 'pending') return
-        outcome = 'omi'
-        clearTimeout(timeout)
-        cb.onBackend('omi')
-        resolve(handle)
-      },
-      onSegments: (segs) => {
-        if (outcome !== 'omi') return
-        for (const s of segs) cb.onLine(segmentToLine(s))
-      },
-      onEvent: (ev) => {
-        cb.onEvent?.(ev)
-        if (!isQuotaExhaustedEvent(ev)) return
-        // Free quota is used up — the cloud STT will never emit transcripts.
-        if (outcome === 'pending') {
-          // Never connected as the winner yet: treat as an initial failure.
-          outcome = 'failed'
+    startOmiListen(
+      source,
+      {
+        onConnected: () => {
+          if (outcome !== 'pending') return
+          outcome = 'omi'
           clearTimeout(timeout)
-          try {
-            handle?.stop()
-          } catch {
-            /* ignore */
+          cb.onBackend('omi')
+          resolve(handle)
+        },
+        onSegments: (segs) => {
+          if (outcome !== 'omi') return
+          for (const s of segs) cb.onLine(segmentToLine(s))
+        },
+        onEvent: (ev) => {
+          cb.onEvent?.(ev)
+          if (!isQuotaExhaustedEvent(ev)) return
+          // Free quota is used up — the cloud STT will never emit transcripts.
+          if (outcome === 'pending') {
+            // Never connected as the winner yet: treat as an initial failure.
+            outcome = 'failed'
+            clearTimeout(timeout)
+            try {
+              handle?.stop()
+            } catch {
+              /* ignore */
+            }
+            resolve(null)
+          } else if (outcome === 'omi') {
+            // Already connected and committed: tell the caller the session is over.
+            onLost('Omi free quota exhausted')
           }
-          resolve(null)
-        } else if (outcome === 'omi') {
-          // Already connected and committed: tell the caller the session is over.
-          onLost('Omi free quota exhausted')
-        }
-      },
-      onClosed: (code, reason) => {
-        // The Omi socket dropped AFTER connecting (abnormal 1005/1006, clean
-        // 1000, etc.). Omi will emit no more transcripts, so end the session.
-        // (Pre-connect closes arrive via onError and drive the initial failure.)
-        if (outcome !== 'omi') return
-        onLost(
-          isQuotaClose(code, reason)
-            ? QUOTA_MESSAGE
-            : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
-        )
-      },
-      onError: (err, fatal) => {
-        if (outcome === 'pending' && fatal) {
-          outcome = 'failed'
-          clearTimeout(timeout)
-          try {
-            handle?.stop()
-          } catch {
-            /* ignore */
-          }
-          console.warn(`[v4/listen ${source}] initial failure:`, err.message)
-          resolve(null)
-          return
-        }
-        // Only surface post-connect errors when Omi actually connected.
-        if (outcome === 'omi') {
-          // Quota backstop: a 1008 'trial_expired' close (in case the typed
-          // event didn't arrive first). End the session rather than erroring twice.
-          if (isTrialExpiredError(err)) {
-            onLost(QUOTA_MESSAGE)
+        },
+        onClosed: (code, reason) => {
+          // The Omi socket dropped AFTER connecting (abnormal 1005/1006, clean
+          // 1000, etc.). Omi will emit no more transcripts, so end the session.
+          // (Pre-connect closes arrive via onError and drive the initial failure.)
+          if (outcome !== 'omi') return
+          onLost(
+            isQuotaClose(code, reason)
+              ? QUOTA_MESSAGE
+              : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
+          )
+        },
+        onError: (err, fatal) => {
+          if (outcome === 'pending' && fatal) {
+            outcome = 'failed'
+            clearTimeout(timeout)
+            try {
+              handle?.stop()
+            } catch {
+              /* ignore */
+            }
+            console.warn(`[v4/listen ${source}] initial failure:`, err.message)
+            resolve(null)
             return
           }
-          cb.onError(err)
+          // Only surface post-connect errors when Omi actually connected.
+          if (outcome === 'omi') {
+            // Quota backstop: a 1008 'trial_expired' close (in case the typed
+            // event didn't arrive first). End the session rather than erroring twice.
+            if (isTrialExpiredError(err)) {
+              onLost(QUOTA_MESSAGE)
+              return
+            }
+            cb.onError(err)
+          }
         }
       }
-    })
+    )
       .then((h) => {
         // startOmiListen resolves as soon as the WS is *created* — long before
         // it reaches OPEN (~150ms+ away). At that point `outcome` is still
@@ -183,10 +189,12 @@ async function startWithOmi(
 }
 
 /**
- * Begin transcribing one audio source via Omi v4/listen. Omi is the only
- * transcription backend: if it can't connect, runs out of free quota, or its
- * socket drops mid-session, the session ends and `onError` fires. (There is no
- * Deepgram fallback.)
+ * Begin transcribing one audio source over Omi `/v4/listen` (the full
+ * conversation pipeline with per-uid server-side state) — used by continuous
+ * recording. Push-to-talk does NOT ride this client; it lives in `lib/ptt/`.
+ * Omi is the only transcription backend: if it can't connect, runs out of free
+ * quota, or its socket drops mid-session, the session ends and `onError` fires.
+ * (There is no Deepgram fallback.)
  */
 export async function startTranscription(
   source: ListenSource,

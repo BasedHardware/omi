@@ -1,4 +1,5 @@
 import { auth } from './firebase'
+import { acquireMicStream, floatTo16BitPCM, teardownAudioGraph } from './audio'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
@@ -64,10 +65,9 @@ export async function startOmiListen(
   const token = await user.getIdToken()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
-  const stream =
-    source === 'mic'
-      ? await navigator.mediaDevices.getUserMedia({ audio: true })
-      : await getSystemAudioStream()
+  // acquireMicStream (shared) steers away from virtual/loopback default inputs —
+  // the conversation lane must not silently record a VB-Cable's silence either.
+  const stream = source === 'mic' ? await acquireMicStream() : await getSystemAudioStream()
 
   const audioCtx = new AudioContext({ sampleRate: 16000 })
   const node = audioCtx.createMediaStreamSource(stream)
@@ -76,6 +76,15 @@ export async function startOmiListen(
 
   let stopped = false
   let connected = false
+  let captureStopped = false
+
+  // Tear down the audio-capture graph — idempotent, shared by the start-failure
+  // path and stop().
+  const stopCapture = (): void => {
+    if (captureStopped) return
+    captureStopped = true
+    teardownAudioGraph({ nodes: [processor, node], stream, ctx: audioCtx })
+  }
 
   const unsub = window.omi.onListenMessage((msg) => {
     if (msg.sessionId !== sessionId) return
@@ -108,42 +117,18 @@ export async function startOmiListen(
       sessionId,
       source,
       token,
-      language: getPreferences().language
+      language: getPreferences().language,
+      mode: 'conversation'
     })
   } catch (e) {
     unsub()
-    try {
-      processor.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      node.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      stream.getTracks().forEach((t) => t.stop())
-    } catch {
-      /* ignore */
-    }
-    try {
-      void audioCtx.close()
-    } catch {
-      /* ignore */
-    }
+    stopCapture()
     throw e
   }
 
   processor.onaudioprocess = (e): void => {
     if (stopped) return
-    const f32 = e.inputBuffer.getChannelData(0)
-    const i16 = new Int16Array(f32.length)
-    for (let i = 0; i < f32.length; i++) {
-      const s = Math.max(-1, Math.min(1, f32[i]))
-      i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-    }
-    // Transfer the underlying buffer to keep IPC cheap.
+    const i16 = floatTo16BitPCM(e.inputBuffer.getChannelData(0))
     window.omi.listenFeed(sessionId, i16.buffer)
   }
   processor.connect(audioCtx.destination)
@@ -152,26 +137,7 @@ export async function startOmiListen(
     stop: (): void => {
       stopped = true
       unsub()
-      try {
-        processor.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        node.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        stream.getTracks().forEach((t) => t.stop())
-      } catch {
-        /* ignore */
-      }
-      try {
-        void audioCtx.close()
-      } catch {
-        /* ignore */
-      }
+      stopCapture()
       void window.omi.listenStop(sessionId)
     }
   }

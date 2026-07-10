@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs']
+    // .tsx suites opt into jsdom per-file via `// @vitest-environment jsdom`.
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs']
   }
 })

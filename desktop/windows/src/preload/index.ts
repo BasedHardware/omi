@@ -40,6 +40,7 @@ const omi: OmiBridgeApi = {
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => {
     ipcRenderer.send('omi-listen:feed', sessionId, pcm)
   },
+  listenFinalize: (sessionId: string) => ipcRenderer.send('omi-listen:finalize', sessionId),
   onListenMessage: (cb: (msg: ListenMessage) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, msg: ListenMessage): void => cb(msg)
     ipcRenderer.on('omi-listen:message', listener)
