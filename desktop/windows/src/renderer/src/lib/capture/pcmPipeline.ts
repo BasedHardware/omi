@@ -31,7 +31,11 @@ export type PcmPipeline = {
 export async function createPcmPipeline(
   stream: MediaStream,
   onChunk: (i16: Int16Array) => void,
-  onFallback?: (reason: string) => void
+  onFallback?: (reason: string) => void,
+  // Frame size at 16kHz. The capture lanes keep the 4096 default (256ms — sized
+  // for VAD + WS batching); the realtime-voice uplink passes ~1024 (64ms) so
+  // conversational latency isn't paying a quarter second of framing.
+  frameSamples: number = FRAME_SAMPLES
 ): Promise<PcmPipeline> {
   let ctx: AudioContext
   try {
@@ -54,7 +58,7 @@ export async function createPcmPipeline(
       processorOptions: {
         inputRate: ctx.sampleRate,
         targetRate: TARGET_RATE,
-        frameSamples: FRAME_SAMPLES
+        frameSamples
       }
     })
     worklet.port.onmessage = (e: MessageEvent<ArrayBuffer>): void => onChunk(new Int16Array(e.data))
@@ -66,7 +70,9 @@ export async function createPcmPipeline(
     mode = 'script-processor'
     console.warn('[pcm-pipeline] worklet init failed — falling back to ScriptProcessor:', e)
     onFallback?.('worklet_init_failed')
-    const sp = ctx.createScriptProcessor(FRAME_SAMPLES, 1, 1)
+    // ScriptProcessor buffer sizes must be a power of two in [256, 16384].
+    const spFrame = Math.max(256, Math.min(16384, 2 ** Math.round(Math.log2(frameSamples))))
+    const sp = ctx.createScriptProcessor(spFrame, 1, 1)
     const needsResample = ctx.sampleRate !== TARGET_RATE
     sp.onaudioprocess = (ev): void => {
       const raw = ev.inputBuffer.getChannelData(0)
