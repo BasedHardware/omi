@@ -1,23 +1,24 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a WhatsApp connector setup flow with QR linking and connection status",
+    "Improved WhatsApp draft failures so account limit errors show in settings and audit history",
+    "Fixed WhatsApp linking showing a store-lock error when the account was already connected",
+    "Fixed WhatsApp reconnecting events incorrectly showing reconnect required while sync was still running",
+    "Improved WhatsApp reply drafts by including the last few synced thread messages as context",
+    "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting",
+    "Added a Messages page with a WhatsApp-style chat and draft inbox, opened from the new Messages tile on the dashboard; moved WhatsApp settings into the Messages page",
+    "Fixed the Messages page to sort WhatsApp threads by recent activity, show cleaner contact names, keep drafts attached to the right chats, refresh live chats, and display sent messages immediately",
+    "Fixed WhatsApp reply drafts so reasoning text is hidden and never sent as part of the message",
+    "Improved WhatsApp reliability by hardening local webhooks, message syncing, draft handling, and agent tool timeouts",
+    "Hid WhatsApp audit logs and connection diagnostics from production builds",
+    "Fixed WhatsApp unread badges clearing after opening a chat",
+    "Fixed WhatsApp settings and linking screens so disconnected accounts hide reply controls and transient sync warnings stay out of the UI",
+    "Fixed WhatsApp linked-device chats merging with their real contact thread and allowlisted contacts auto-sending from Draft mode",
+    "Fixed WhatsApp thread ordering when synced chat metadata reports newer placeholder activity than real messages",
+    "Updated WhatsApp to use the official logo instead of the generic message icon",
+    "Fixed WhatsApp link modal dismiss sending the app to the background"
+  ],
   "releases": [
-    {
-      "version": "0.12.67",
-      "date": "2026-07-10",
-      "changes": [
-        "Fixed a stalled AI chat response silently ending with no message — it now shows \"Response took too long. Try again.\" so you know to retry",
-        "Improved Conversations so cached details load instantly without hiding newer summaries, statuses, titles, stars, or folders",
-        "Kept conversation details and edits isolated across account changes while preserving simultaneous title, star, and folder updates",
-        "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)",
-        "Fixed the This device memory filter for new desktop conversations and memories",
-        "Made the desktop brain map reopen faster by preserving its scene during navigation and reusing cached layouts when the graph has not changed.",
-        "Fixed Reset Onboarding clearing signed-in state incorrectly and leaving the app in a broken half-onboarded state",
-        "Preserved unsent chat drafts separately across the main app, notch, agents, tasks, restarts, and updates",
-        "Made desktop updates safer with qualified beta releases, explicit stable and beta channels, and verified post-relaunch install reporting",
-        "Made push-to-talk and realtime voice more reliable during barge-in, provider delays, playback fallbacks, and rapid repeated turns.",
-        "Improved transcription cloud/local fallback reliability and memory sync stability."
-      ]
-    },
     {
       "version": "0.12.66",
       "date": "2026-07-09",

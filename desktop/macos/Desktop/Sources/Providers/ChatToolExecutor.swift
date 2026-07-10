@@ -89,7 +89,11 @@ class ChatToolExecutor {
     originatingSurfaceRef: AgentSurfaceReference? = nil,
     originatingRunId: String? = nil
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    if toolCall.name.hasPrefix("wa_") {
+      log("Executing tool: \(toolCall.name) with redacted WhatsApp args keys=\(toolCall.arguments.keys.sorted())")
+    } else {
+      log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    }
     let telemetryContext = ScreenContextTelemetryContext.from(
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
@@ -222,6 +226,22 @@ class ChatToolExecutor {
       return await executeBackendTool(toolCall)
 
     case .unhandled:
+      if toolCall.name == "check_calendar_availability" {
+        return await executeCheckCalendarAvailability(toolCall.arguments)
+      }
+      // WhatsApp tools — native wacli execution through the on-demand binary/store.
+      switch toolCall.name {
+      case "wa_list_chats":
+        return await executeWaListChats(toolCall.arguments)
+      case "wa_read_thread":
+        return await executeWaReadThread(toolCall.arguments)
+      case "wa_search_messages":
+        return await executeWaSearchMessages(toolCall.arguments)
+      case "wa_send_message":
+        return await executeWaSendMessage(toolCall.arguments)
+      default:
+        break
+      }
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus()
       }
@@ -1954,6 +1974,278 @@ class ChatToolExecutor {
     )
   }
 
+  private static func parseFlexibleDate(_ dateStr: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: dateStr) {
+      return date
+    }
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: dateStr) {
+      return date
+    }
+    let fallback = DateFormatter()
+    fallback.locale = Locale(identifier: "en_US_POSIX")
+    fallback.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+    return fallback.date(from: dateStr)
+  }
+
+  private static func executeCheckCalendarAvailability(_ args: [String: Any]) async -> String {
+    guard let startString = nonEmptyString(args["start_date"] ?? args["start"] ?? args["datetime"]) else {
+      return "Error: start_date is required and must be ISO format with timezone offset."
+    }
+    let startValidation = validateISODate(startString, paramName: "start_date")
+    if let error = startValidation.error { return error }
+    guard let startDate = parseFlexibleDate(startValidation.valid ?? startString) else {
+      return "Error: could not parse start_date."
+    }
+
+    let endDate: Date
+    if let endString = nonEmptyString(args["end_date"] ?? args["end"]) {
+      let endValidation = validateISODate(endString, paramName: "end_date")
+      if let error = endValidation.error { return error }
+      guard let parsedEnd = parseFlexibleDate(endValidation.valid ?? endString) else {
+        return "Error: could not parse end_date."
+      }
+      endDate = parsedEnd
+    } else {
+      let durationMinutes = intArg(args["duration_minutes"], defaultValue: 60, maxValue: 24 * 60)
+      endDate = startDate.addingTimeInterval(TimeInterval(durationMinutes * 60))
+    }
+
+    guard endDate > startDate else {
+      return "Error: end_date must be after start_date."
+    }
+
+    let now = Date()
+    let daysBack = max(0, Calendar.current.dateComponents([.day], from: startDate, to: now).day ?? 0) + 1
+    let daysForward = max(1, Calendar.current.dateComponents([.day], from: now, to: endDate).day ?? 0) + 2
+
+    do {
+      let events = try await CalendarReaderService.shared.readEvents(
+        daysBack: daysBack,
+        daysForward: daysForward,
+        maxResults: 10_000
+      )
+      let conflicts = events.filter { event in
+        guard !event.isAllDay,
+          let eventStart = parseFlexibleDate(event.startTime),
+          let eventEnd = parseFlexibleDate(event.endTime)
+        else {
+          return false
+        }
+        return eventStart < endDate && eventEnd > startDate
+      }
+
+      let displayFormatter = DateFormatter()
+      displayFormatter.dateStyle = .medium
+      displayFormatter.timeStyle = .short
+      let requested = "\(displayFormatter.string(from: startDate)) - \(displayFormatter.string(from: endDate))"
+      guard !conflicts.isEmpty else {
+        return "Available: no calendar conflicts found for \(requested)."
+      }
+
+      let conflictLines = conflicts.prefix(8).map { event -> String in
+        let attendees = event.attendees.isEmpty ? "" : " with \(event.attendees.prefix(3).joined(separator: ", "))"
+        return "- \(event.summary) (\(event.startTime) to \(event.endTime))\(attendees)"
+      }.joined(separator: "\n")
+      return "Busy: found \(conflicts.count) calendar conflict(s) for \(requested):\n\(conflictLines)"
+    } catch {
+      return "Error checking calendar availability: \(error.localizedDescription)"
+    }
+  }
+
+  // MARK: - WhatsApp Tools
+
+  private static func executeWaListChats(_ args: [String: Any]) async -> String {
+    var command = ["chats", "list", "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200))]
+    appendStringFlag("--query", from: args["query"], to: &command)
+    appendBoolFlag("--unread", from: args["unread"], to: &command)
+    appendBoolFlag("--archived", from: args["archived"], to: &command)
+    appendBoolFlag("--pinned", from: args["pinned"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaReadThread(_ args: [String: Any]) async -> String {
+    guard let chat = nonEmptyString(args["chat_jid"] ?? args["chat"] ?? args["to"]) else {
+      return "Error: chat_jid is required"
+    }
+
+    var command = [
+      "messages", "list",
+      "--chat", chat,
+      "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200)),
+    ]
+    appendStringFlag("--after", from: args["after"], to: &command)
+    appendStringFlag("--before", from: args["before"], to: &command)
+    appendStringFlag("--sender", from: args["sender_jid"] ?? args["sender"], to: &command)
+    appendBoolFlag("--asc", from: args["ascending"] ?? args["asc"], to: &command)
+    appendBoolFlag("--from-me", from: args["from_me"], to: &command)
+    appendBoolFlag("--from-them", from: args["from_them"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaSearchMessages(_ args: [String: Any]) async -> String {
+    guard let query = nonEmptyString(args["query"]) else {
+      return "Error: query is required"
+    }
+
+    var command = [
+      "messages", "search", query,
+      "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200)),
+    ]
+    appendStringFlag("--chat", from: args["chat_jid"] ?? args["chat"], to: &command)
+    appendStringFlag("--from", from: args["sender_jid"] ?? args["from"], to: &command)
+    appendStringFlag("--after", from: args["after"], to: &command)
+    appendStringFlag("--before", from: args["before"], to: &command)
+    appendStringFlag("--type", from: args["message_type"] ?? args["type"], to: &command)
+    appendBoolFlag("--has-media", from: args["has_media"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaSendMessage(_ args: [String: Any]) async -> String {
+    guard let recipient = nonEmptyString(args["to"] ?? args["chat_jid"] ?? args["recipient"]) else {
+      return waJSON([
+        "status": "error",
+        "error": "to is required",
+      ])
+    }
+    guard let message = nonEmptyString(args["message"] ?? args["text"]) else {
+      return waJSON([
+        "status": "error",
+        "error": "message is required",
+      ])
+    }
+    let resolvedRecipient: String
+    do {
+      resolvedRecipient = try await WhatsAppContactResolver.shared.resolveRecipient(recipient)
+    } catch {
+      return waJSON([
+        "status": "error",
+        "sent": false,
+        "error": error.localizedDescription,
+      ])
+    }
+
+    let clientMessageID = nonEmptyString(args["client_message_id"] ?? args["dedupe_id"])
+    switch WhatsAppReplySettings.shared.canAttemptManualSend(clientMessageID: clientMessageID) {
+    case .allowed:
+      break
+    case .duplicate:
+      return waJSON([
+        "status": "duplicate",
+        "client_message_id": clientMessageID ?? "",
+        "sent": false,
+      ])
+    case .blocked(let reason):
+      return waJSON([
+        "status": "blocked",
+        "error": reason,
+        "sent": false,
+      ])
+    }
+
+    if (args["queue_for_approval"] as? Bool) == true {
+      return waJSON([
+        "status": "queued_for_approval",
+        "to": resolvedRecipient,
+        "sent": false,
+      ])
+    }
+
+    var command = ["send", "text", "--to", resolvedRecipient, "--message", message]
+    appendStringFlag("--reply-to", from: args["reply_to"], to: &command)
+    appendStringFlag("--reply-to-sender", from: args["reply_to_sender"], to: &command)
+    appendBoolFlag("--no-preview", from: args["no_preview"], to: &command)
+
+    let result = await runWacli(command, readOnly: false)
+    guard result.exitCode == 0 else {
+      return waJSON([
+        "status": "error",
+        "sent": false,
+        "exit_code": Int(result.exitCode),
+        "output": result.output,
+      ])
+    }
+
+    return waJSON([
+      "status": "sent",
+      "sent": true,
+      "to": resolvedRecipient,
+      "display_name": WhatsAppContactResolver.shared.displayName(for: resolvedRecipient),
+      "output": result.output,
+    ])
+  }
+
+  static func sendWhatsAppMessage(to recipient: String, text message: String, clientMessageID: String? = nil) async -> String {
+    var arguments: [String: Any] = [
+      "to": recipient,
+      "message": message,
+    ]
+    if let clientMessageID, !clientMessageID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      arguments["client_message_id"] = clientMessageID
+    }
+    return await executeWaSendMessage(arguments)
+  }
+
+  private static func waToolResult(_ arguments: [String], readOnly: Bool) async -> String {
+    let result = await runWacli(arguments, readOnly: readOnly)
+    guard result.exitCode == 0 else {
+      return "Error: wacli exited with \(result.exitCode)\n\(result.output)"
+    }
+    return result.output.isEmpty ? "[]" : result.output
+  }
+
+  private static func runWacli(_ arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    guard let binary = WhatsAppService.findWacliBinary() else {
+      return ("wacli not installed", 127)
+    }
+
+    let storeDir = WhatsAppService.defaultStoreDirectory()
+    return await WhatsAppCLIRunner.shared.run(binary: binary, storeDir: storeDir, arguments: arguments, readOnly: readOnly)
+  }
+
+  private static func appendStringFlag(_ flag: String, from value: Any?, to command: inout [String]) {
+    guard let value = nonEmptyString(value) else { return }
+    command.append(contentsOf: [flag, value])
+  }
+
+  private static func appendBoolFlag(_ flag: String, from value: Any?, to command: inout [String]) {
+    guard (value as? Bool) == true else { return }
+    command.append(flag)
+  }
+
+  private static func nonEmptyString(_ value: Any?) -> String? {
+    guard let string = value as? String else { return nil }
+    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private static func intArg(_ value: Any?, defaultValue: Int, maxValue: Int) -> Int {
+    let parsed: Int?
+    if let intValue = value as? Int {
+      parsed = intValue
+    } else if let stringValue = value as? String {
+      parsed = Int(stringValue)
+    } else {
+      parsed = nil
+    }
+    return min(max(parsed ?? defaultValue, 1), maxValue)
+  }
+
+  private static func waJSON(_ object: [String: Any]) -> String {
+    guard JSONSerialization.isValidJSONObject(object),
+      let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+      let string = String(data: data, encoding: .utf8)
+    else {
+      return "\(object)"
+    }
+    return string
+  }
+
   // MARK: - Backend RAG Tools
 
   private static func executeBackendTool(_ toolCall: ToolCall) async -> String {
@@ -2112,5 +2404,80 @@ class ChatToolExecutor {
       log("Backend tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
     }
+  }
+}
+
+private actor WhatsAppCLIRunner {
+  static let shared = WhatsAppCLIRunner()
+
+  private let timeoutNanoseconds: UInt64 = 30 * 1_000_000_000
+  private let maxAttempts = 3
+
+  func run(binary: String, storeDir: String, arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    for attempt in 1...maxAttempts {
+      let result = await runOnce(binary: binary, storeDir: storeDir, arguments: arguments, readOnly: readOnly)
+      if isStoreLockError(result.output), attempt < maxAttempts {
+        try? await Task.sleep(nanoseconds: UInt64(attempt) * 300_000_000)
+        continue
+      }
+      return result
+    }
+    return ("wacli store is locked", 75)
+  }
+
+  private func runOnce(binary: String, storeDir: String, arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    do {
+      try FileManager.default.createDirectory(atPath: storeDir, withIntermediateDirectories: true)
+
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: binary)
+      process.arguments = ["--store", storeDir, "--json"] + (readOnly ? ["--read-only"] : []) + arguments
+
+      var env = ProcessInfo.processInfo.environment
+      let binaryDir = (binary as NSString).deletingLastPathComponent
+      let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+      if !existingPath.components(separatedBy: ":").contains(binaryDir) {
+        env["PATH"] = "\(binaryDir):\(existingPath)"
+      }
+      if readOnly {
+        env["WACLI_READONLY"] = "1"
+      }
+      process.environment = env
+
+      let outputPipe = Pipe()
+      process.standardOutput = outputPipe
+      process.standardError = outputPipe
+      try process.run()
+
+      return await withTaskGroup(of: (output: String, exitCode: Int32).self) { group in
+        group.addTask {
+          let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+          process.waitUntilExit()
+          let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          return (output, process.terminationStatus)
+        }
+        group.addTask {
+          try? await Task.sleep(nanoseconds: self.timeoutNanoseconds)
+          if process.isRunning {
+            process.terminate()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if process.isRunning {
+              kill(process.processIdentifier, SIGKILL)
+            }
+          }
+          return ("wacli timed out", 124)
+        }
+        let result = await group.next() ?? ("wacli did not return a result", 1)
+        group.cancelAll()
+        return result
+      }
+    } catch {
+      return ("\(error)", 1)
+    }
+  }
+
+  private func isStoreLockError(_ output: String) -> Bool {
+    let normalized = output.lowercased()
+    return normalized.contains("store is locked") || normalized.contains("store locked")
   }
 }

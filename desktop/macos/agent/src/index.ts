@@ -52,7 +52,7 @@ import type {
   MergeFloatingChatIntoMainChatMessage,
   AuthMethod,
 } from "./protocol.js";
-import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
+import { PROTOCOL_VERSION, ensureOutboundProtocolVersion, type ProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
@@ -248,8 +248,9 @@ function startOmiToolsRelay(): Promise<string> {
             const msg = JSON.parse(line) as {
               type: string;
               callId: string;
-              name: string;
+              name?: string;
               input: Record<string, unknown>;
+              protocolVersion?: number;
               requestId?: string;
               clientId?: string;
               sessionId?: string;
@@ -259,7 +260,55 @@ function startOmiToolsRelay(): Promise<string> {
               adapterId?: string;
             };
 
+            if (msg.type === "tool_cancel") {
+              const requestId = msg.requestId?.trim();
+              const clientId = msg.clientId?.trim();
+              const resolvedCorrelation =
+                requestId && clientId
+                  ? toolCallCorrelation?.({ requestId, clientId, adapterId: msg.adapterId }) ?? {}
+                  : {};
+              const messageRequestIsActive = Boolean(
+                requestId &&
+                  clientId &&
+                  resolvedCorrelation.requestId === requestId &&
+                  resolvedCorrelation.clientId === clientId
+              );
+              const correlation = {
+                ...resolvedCorrelation,
+                protocolVersion: PROTOCOL_VERSION,
+                ...(messageRequestIsActive && requestId ? { requestId } : {}),
+                ...(messageRequestIsActive && clientId ? { clientId } : {}),
+              };
+              const pendingKey = toolCallPendingKey({
+                callId: msg.callId,
+                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
+                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+              });
+              const pending = pendingToolCalls.get(pendingKey);
+              if (pending) {
+                pendingToolCalls.delete(pendingKey);
+                clearTimeout(pending.timeout);
+              }
+              send({
+                type: "tool_cancel",
+                callId: msg.callId,
+                ...correlation,
+              });
+              continue;
+            }
+
             if (msg.type === "tool_use") {
+              if (!msg.name) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing tool name",
+                  }) + "\n"
+                );
+                continue;
+              }
+              const toolName = msg.name;
               const requestId = msg.requestId?.trim();
               const clientId = msg.clientId?.trim();
               if (!requestId || !clientId) {
@@ -286,7 +335,7 @@ function startOmiToolsRelay(): Promise<string> {
                 );
                 continue;
               }
-              if (isAgentControlToolName(msg.name)) {
+              if (isAgentControlToolName(toolName)) {
                 void (async () => {
                   const controlToolContext = agentControlToolContext
                     ? {
@@ -299,7 +348,7 @@ function startOmiToolsRelay(): Promise<string> {
                       }
                     : undefined;
                   const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
+                    ? await handleAgentControlToolCall(controlToolContext, toolName, msg.input ?? {})
                     : JSON.stringify({
                         ok: false,
                         error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },

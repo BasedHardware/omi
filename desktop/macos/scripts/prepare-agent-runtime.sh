@@ -497,6 +497,10 @@ stage_universal_node() {
   log "Staged universal Node $NODE_VERSION at $NODE_RESOURCE"
 }
 
+# wacli is downloaded on demand when the user connects WhatsApp (see WacliInstaller.swift).
+# Do not stage or ship it in the app bundle.
+rm -f "$DESKTOP_DIR/Desktop/Sources/Resources/wacli"
+
 validate_runtime_tree() {
   require_executable "$NODE_RESOURCE"
   require_file "$AGENT_DIR/dist/index.js"

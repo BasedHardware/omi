@@ -659,6 +659,7 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
   });
 }
 
+
 function loadSkillTool() {
   return defineTool({
     name: "load_skill",

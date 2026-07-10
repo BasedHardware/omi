@@ -263,7 +263,7 @@ struct ConversationDetailView: View {
                                 isUser: isUser,
                                 personId: personId
                             )
-                            await updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
+                            updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
                         }
                         selectedSegmentForNaming = nil
                     }
