@@ -1,0 +1,3 @@
+[submodule "omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus"]
+	path = omiGlass/firmware/.pio/libdeps/seeed_xiao_esp32s3/libopus
+	url = https://github.com/pschatzmann/arduino-libopus.git
