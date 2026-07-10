@@ -4,6 +4,7 @@ import { useChat } from '../../hooks/useChat'
 import { useAuth } from '../../hooks/useAuth'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { auth } from '../../lib/firebase'
+import { warmPttMic, releasePttMic } from '../../lib/ptt/capture'
 import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
@@ -67,6 +68,28 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
 
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // Warm the PTT mic while the overlay is FOCUSED, release it on blur/hide. A
+  // warm graph lets a hold attach instantly and backfill to the key-down moment
+  // (zero speech loss); while idle the audio only feeds a ~2s rolling buffer
+  // that's continuously discarded — nothing is stored or sent. Windows shows the
+  // mic-in-use indicator while the overlay is focused; that's the tradeoff.
+  useEffect(() => {
+    const sync = (active: boolean): void => {
+      if (active) void warmPttMic()
+      else releasePttMic()
+    }
+    sync(document.hasFocus())
+    const unActive = window.omiOverlay.onActiveChange(sync)
+    const unShown = window.omiOverlay.onShown(() => void warmPttMic())
+    const unHide = window.omiOverlay.onWillHide(() => releasePttMic())
+    return () => {
+      unActive()
+      unShown()
+      unHide()
+      releasePttMic()
+    }
   }, [])
 
   // Auto-grow the input to fit its contents — especially the live voice transcript,

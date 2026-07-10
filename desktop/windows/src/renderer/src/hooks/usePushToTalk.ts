@@ -73,6 +73,9 @@ type Job = {
   abort: AbortController | null
   deadlineTimer: ReturnType<typeof setTimeout> | null
   watchdogTimer: ReturnType<typeof setTimeout> | null
+  /** Time between the physical key-down and the hold threshold firing — the
+   *  warm mic backfills this much pre-roll so the threshold costs no speech. */
+  backfillMs: number
 }
 
 function isSpace(e: { key: string; code: string }): boolean {
@@ -93,6 +96,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const recordingRef = useRef(false)
   // Pending hold timer (armed at key-down; firing starts the capture).
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // When the physical key went down — the warm mic backfills from this moment.
+  const keyDownAtRef = useRef(0)
   // Draft snapshot taken at key-down, restored when the hold crosses the threshold.
   const snapshotRef = useRef('')
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,7 +145,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
         case 'startCapture': {
           job.capturePromise = startPttCapture({
             onChunk: (pcm) => job.stream?.feed(pcm),
-            onCapped: () => dispatch(job, { type: 'BUFFER_CAPPED' })
+            onCapped: () => dispatch(job, { type: 'BUFFER_CAPPED' }),
+            backfillMs: job.backfillMs
           })
             .then((capture) => {
               if (job.state.phase === 'idle') {
@@ -278,7 +284,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
       buffer: null,
       abort: null,
       deadlineTimer: null,
-      watchdogTimer: null
+      watchdogTimer: null,
+      backfillMs: keyDownAtRef.current > 0 ? Date.now() - keyDownAtRef.current : 0
     }
     jobRef.current = job
     setError(null)
@@ -314,6 +321,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       return true
     }
     if (!e.repeat && holdTimerRef.current === null) {
+      keyDownAtRef.current = Date.now()
       snapshotRef.current = (e.currentTarget as HTMLTextAreaElement).value ?? ''
       holdTimerRef.current = setTimeout(() => {
         holdTimerRef.current = null
@@ -356,6 +364,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       }
       if (!e.repeat && holdTimerRef.current === null) {
         e.preventDefault() // don't let Space scroll or activate a focused control
+        keyDownAtRef.current = Date.now()
         snapshotRef.current = optsRef.current.getDraft()
         holdTimerRef.current = setTimeout(() => {
           holdTimerRef.current = null
