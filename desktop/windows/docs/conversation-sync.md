@@ -60,8 +60,20 @@ local_only ─▶ pending ─▶ posting ─▶ done
   conversation whose `started_at`/`finished_at` match ours (they round-trip from
   our own POST; segment count breaks ties — `findCloudMatch`). Match → adopt it
   as `done` without posting. No match → the earlier POST never landed → re-post.
+- **The pending→posting flip is a DB compare-and-swap** (`db.claimConversationForPosting`
+  — `UPDATE … SET sync_state='posting' WHERE id=? AND sync_state IN (pending,failed,unconfirmed)`,
+  returning whether it won). Two drivers can target one row (stop()'s
+  fire-and-forget sync + the Conversations retry pass running a row it read
+  before the first sync moved it on); the in-process `inFlight` Set only guards
+  *concurrent* drivers, so `syncLocalConversation` also **re-reads the row fresh
+  from the DB** before deciding (bails if already `done`), and the CAS gates the
+  single POST — the loser returns `{status:'skipped'}` and never posts. This is
+  what makes duplicate-prevention independent of backend list freshness.
 - A row found `posting` with no in-flight request in this process is a crash
-  mid-POST → recovered as `unconfirmed`.
+  mid-POST → recovered as `unconfirmed` (dedupe then runs before any re-post).
+- Auto-retries stop after `MAX_AUTO_SYNC_ATTEMPTS` (10); the row stays visible as
+  **Sync failed** with a **Retry** action (`resyncConversation`, resets the
+  attempt counter via `claimConversationForPosting(id, resetAttempts=true)`).
 - State lives in `local_conversation` (columns `sync_state`, `segments_json`,
   `cloud_id`, `sync_attempts`, `sync_error`) added by **versioned migration 1**
   (`src/main/ipc/dbMigrations.ts` — `PRAGMA user_version`, ordered, exactly-once,
