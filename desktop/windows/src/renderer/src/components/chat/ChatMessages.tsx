@@ -34,15 +34,15 @@ function RevealMarkdown({
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
-    user: 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white',
+    user: 'bubble-in ml-auto w-fit max-w-[75%] rounded-[18px] rounded-br-[6px] bg-[color:var(--accent)] px-4 py-2.5 text-sm leading-snug text-[color:var(--accent-contrast)]',
     assistant:
-      'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
+      'bubble-in mr-auto w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-white/[0.06] px-4 py-2.5 text-sm leading-relaxed text-white/85'
   },
   // Same bubble design as the main window (Home) — shape, padding, asymmetric
-  // corner, and the bubble-in entrance animation — but keeping the overlay's
-  // neutral colors (the floating bar's dark acrylic, not Home's accent/white).
+  // corner, the white-accent user bubble, and the bubble-in entrance — sized
+  // down slightly for the floating bar's dark acrylic panel.
   overlay: {
-    user: 'bubble-in ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-neutral-700/70 px-3.5 py-2 text-sm leading-snug text-neutral-100',
+    user: 'bubble-in ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-[color:var(--accent)] px-3.5 py-2 text-sm leading-snug text-[color:var(--accent-contrast)]',
     assistant:
       'bubble-in mr-auto w-fit max-w-[80%] rounded-2xl rounded-bl-md bg-neutral-800/60 px-3.5 py-2 text-sm leading-snug text-neutral-100'
   }

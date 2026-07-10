@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDown, AudioLines, Send } from 'lucide-react'
+import { ArrowDown, ArrowUp, AudioLines } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/appState'
@@ -43,10 +43,11 @@ function ChatBar(props: {
   voiceOpen: boolean
   onToggleVoice: () => void
 }): React.JSX.Element {
+  const canSend = props.value.trim().length > 0 && !props.sending
   // Solid (no backdrop-blur): a blurred bar re-rasterizes every frame during the
   // bar's slide, which made that transition feel laggy.
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[color:var(--surface)] px-3 py-1.5">
+    <div className="flex items-center gap-1.5 rounded-section border border-line bg-[color:var(--surface)] py-1.5 pl-4 pr-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.28)] transition-colors duration-200 focus-within:border-line-strong">
       <input
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
@@ -54,27 +55,34 @@ function ChatBar(props: {
           if (e.key === 'Enter') props.onSend()
         }}
         placeholder="Ask Omi…"
-        className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
+        className="flex-1 border-0 bg-transparent py-2 pr-2 text-[15px] text-white placeholder:text-white/35 focus:outline-none focus:ring-0"
       />
       <button
         onClick={props.onToggleVoice}
         aria-label={props.voiceOpen ? 'Hide voice session' : 'Talk with Omi'}
         className={cn(
-          'shrink-0 rounded-xl p-2.5 transition-colors',
+          'shrink-0 rounded-full p-2.5 transition-colors duration-150',
           props.voiceOpen
             ? 'bg-white/[0.14] text-white'
-            : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.12] hover:text-white'
+            : 'text-white/60 hover:bg-white/[0.08] hover:text-white'
         )}
       >
         <AudioLines className="h-4 w-4" />
       </button>
+      {/* Send is THE primary action: white fill + dark glyph once there is
+          something to send, quiet until then. */}
       <button
-        disabled={props.sending}
+        disabled={!canSend}
         onClick={props.onSend}
         aria-label="Send"
-        className="shrink-0 rounded-xl bg-white/[0.06] p-2.5 text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white disabled:opacity-50"
+        className={cn(
+          'shrink-0 rounded-full p-2.5 transition-all duration-150',
+          canSend
+            ? 'bg-[color:var(--accent)] text-[color:var(--accent-contrast)] hover:opacity-90'
+            : 'bg-white/[0.06] text-white/40'
+        )}
       >
-        <Send className="h-4 w-4" />
+        <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
       </button>
     </div>
   )
@@ -198,8 +206,6 @@ export function Home(): React.JSX.Element {
   const [showThread, setShowThread] = useState(false)
 
   const started = chat.history.length > 0
-  const photoURL = user?.photoURL
-  const initial = (user?.displayName || user?.email)?.[0]?.toUpperCase() ?? '?'
 
   // Draft text is LOCAL state (not in the app-wide chat hook) so typing only
   // re-renders Home's chat bar — not the whole app shell + every mounted page.
@@ -371,59 +377,42 @@ export function Home(): React.JSX.Element {
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-            <div className="mt-auto space-y-2 pb-2">
+            <div className="mt-auto space-y-5 pb-2">
               {started && showThread ? (
                 windowed.map((m, i) => {
                   const isUser = m.role === 'user'
                   const isLast = i === windowed.length - 1
+                  if (isUser) {
+                    // User turn: white accent bubble, no avatar (iMessage-style —
+                    // the right alignment already says "you").
+                    return (
+                      <div key={m.id ?? `${windowStart}-${i}`} className="flex justify-end">
+                        <div className="bubble-in w-fit max-w-[75%] whitespace-pre-wrap rounded-[18px] rounded-br-[6px] bg-[color:var(--accent)] px-4 py-2.5 text-[15px] leading-snug text-[color:var(--accent-contrast)]">
+                          {m.content}
+                        </div>
+                      </div>
+                    )
+                  }
+                  // Assistant turn: omi mark + open text on the canvas (no bubble)
+                  // so replies read like a document, not a widget.
                   return (
                     <div
                       key={m.id ?? `${windowStart}-${i}`}
-                      className={cn('flex items-end gap-2.5', isUser && 'flex-row-reverse')}
+                      className="bubble-in flex items-start gap-3"
                     >
-                      {isUser ? (
-                        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/10">
-                          <img
-                            src={photoURL ?? ''}
-                            alt=""
-                            className={cn(
-                              'h-full w-full object-cover',
-                              photoURL ? 'block' : 'hidden'
-                            )}
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              const el = e.currentTarget
-                              el.classList.add('hidden')
-                              el.nextElementSibling?.classList.remove('hidden')
-                            }}
-                          />
-                          <div
-                            className={cn(
-                              'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
-                              photoURL ? 'hidden' : ''
-                            )}
-                          >
-                            {initial}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                          <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
-                        </div>
-                      )}
-                      <div
-                        className={cn(
-                          'bubble-in w-fit max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug',
-                          isUser
-                            ? 'rounded-br-md bg-[color:var(--accent)] text-right text-[color:var(--accent-contrast)]'
-                            : 'rounded-bl-md bg-white/[0.06] text-left text-white/80'
-                        )}
-                      >
-                        {isUser ? (
-                          <div className="whitespace-pre-wrap">{m.content}</div>
-                        ) : (
-                          <Markdown text={m.content || (chat.sending && isLast ? '…' : '')} />
-                        )}
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                        <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
+                      </div>
+                      <div className="min-w-0 max-w-[85%] pt-0.5 text-[15px] leading-[1.65] text-white/90">
+                        {m.content ? (
+                          <Markdown text={m.content} />
+                        ) : chat.sending && isLast ? (
+                          <span className="typing-dots" aria-label="Omi is replying">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   )
@@ -441,7 +430,7 @@ export function Home(): React.JSX.Element {
             type="button"
             aria-label="Jump to latest message"
             onClick={() => resumeFollowing(true)}
-            className="absolute bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-white/15"
+            className="absolute bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line-strong bg-[color:var(--bg-raised)] px-3.5 py-2 text-sm font-medium text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-colors hover:bg-[color:var(--bg-tertiary)]"
           >
             <ArrowDown className="h-4 w-4" />
             Latest

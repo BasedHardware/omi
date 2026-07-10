@@ -145,7 +145,7 @@ export function Sidebar(): React.JSX.Element {
   return (
     <nav
       className={cn(
-        'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a] px-2 py-3',
+        'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-line px-2 py-3',
         'transition-[width] duration-200 ease-out',
         collapsed ? 'w-16' : 'w-60'
       )}
@@ -155,16 +155,17 @@ export function Sidebar(): React.JSX.Element {
           here it reflects the app's listening state (calm orbit while the
           always-on mic is live, idle otherwise). */}
       <div className="flex items-center justify-between px-1.5 py-1">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
           <Orb size={22} preset="compact" state={micOn && user ? 'listening' : 'idle'} />
-          <img
-            src="https://personas.omi.me/omilogo.png"
-            alt="omi"
+          {/* Wordmark as text (crisp at every DPI, no network fetch). */}
+          <span
             className={cn(
-              'h-4 shrink-0 overflow-hidden transition-opacity duration-200',
+              'shrink-0 select-none overflow-hidden text-[15px] font-semibold lowercase tracking-tight text-white transition-opacity duration-200',
               collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
             )}
-          />
+          >
+            omi
+          </span>
         </div>
         <button
           onClick={() => setCollapsed((c) => !c)}
@@ -183,7 +184,7 @@ export function Sidebar(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
         {navItems.map(({ label: text, to, Icon }) => (
@@ -214,7 +215,7 @@ export function Sidebar(): React.JSX.Element {
         ))}
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       {/* Quick capture toggles, sitting just above the account row. */}
       <div className="flex flex-col gap-1">
@@ -222,7 +223,7 @@ export function Sidebar(): React.JSX.Element {
         {toggleRow('Microphone', Mic, micOn, toggleMic)}
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       {/* Account row → opens Settings (Sign out now lives in Settings). */}
       <NavLink
@@ -236,7 +237,7 @@ export function Sidebar(): React.JSX.Element {
           )
         }
       >
-        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
+        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-line">
           <img
             src={photoURL ?? ''}
             alt=""
