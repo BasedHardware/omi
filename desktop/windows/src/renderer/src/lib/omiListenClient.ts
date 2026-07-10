@@ -1,5 +1,5 @@
 import { auth } from './firebase'
-import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
+import type { BackendSegment, ListenEvent, ListenMode, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
 export type OmiListenCallbacks = {
@@ -24,6 +24,9 @@ export type OmiListenCallbacks = {
 
 export type OmiListenHandle = {
   stop: () => void
+  /** PTT only: flush + finalize so the trailing segment lands promptly. No-op for
+   *  conversation sessions. */
+  finalize: () => void
 }
 
 let nextSessionId = 1
@@ -57,7 +60,8 @@ async function getSystemAudioStream(): Promise<MediaStream> {
  */
 export async function startOmiListen(
   source: ListenSource,
-  cb: OmiListenCallbacks
+  cb: OmiListenCallbacks,
+  mode: ListenMode = 'conversation'
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
@@ -108,7 +112,8 @@ export async function startOmiListen(
       sessionId,
       source,
       token,
-      language: getPreferences().language
+      language: getPreferences().language,
+      mode
     })
   } catch (e) {
     unsub()
@@ -149,6 +154,9 @@ export async function startOmiListen(
   processor.connect(audioCtx.destination)
 
   return {
+    finalize: (): void => {
+      if (!stopped) window.omi.listenFinalize(sessionId)
+    },
     stop: (): void => {
       stopped = true
       unsub()

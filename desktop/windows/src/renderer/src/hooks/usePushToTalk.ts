@@ -12,17 +12,18 @@ import {
 // After Space is released we keep the mic + transcription stream OPEN and decide
 // when to commit from live signals (see shouldFinalize), rather than a fixed delay:
 //  - VAD watches the mic so we wait until you've actually STOPPED talking, then
-//  - wait for the backend's trailing FINAL segment (v4/listen lags ~1.8s, no interim)
-//    to land and settle. If you held long enough that it already arrived, this is
-//    immediate. A capture that produced nothing ends fast; a hard cap always ends it.
+//  - send the PTT 'finalize' frame (on release) and wait for the backend's trailing
+//    FINAL segment to land and settle. The transcribe-stream backend flushes +
+//    finalizes Deepgram on that frame, so the tail arrives ~0.3s later. A capture
+//    that produced nothing ends fast; a hard cap always ends it.
 const FINALIZE_CFG: FinalizeConfig = {
   maxMs: 6000,
   noVoiceGraceMs: 700,
   silenceMs: 350,
   settleMs: 400,
-  // Balanced: hold the commit ~1s after release so Omi's ~1.8s-late trailing
-  // segment usually lands before we send (catches the tail most of the time),
-  // without making every voice message wait out the full backend lag.
+  // Hold the commit briefly past release so the post-'finalize' trailing segment
+  // (~0.3s) lands before we send. (Legacy value from the v4/listen era, when the
+  // tail was ~1.8s-late with no interim; safe to lower now that PTT finalizes.)
   trailingGraceMs: 1000
 }
 const POLL_MS = 120
@@ -73,9 +74,10 @@ function isSpace(e: React.KeyboardEvent): boolean {
 
 /**
  * Hold-Space-to-talk for the overlay's Ask box. A quick Space tap types a space as
- * usual; holding past HOLD_THRESHOLD_MS starts mic transcription (Omi v4/listen,
- * via startTranscription) and exposes a live analyser for
- * the waveform. Releasing enters a VAD-gated finalize phase that waits until you've
+ * usual; holding past HOLD_THRESHOLD_MS starts mic transcription (PTT mode → Omi's
+ * transcription-only /v2/voice-message/transcribe-stream, via startTranscription)
+ * and exposes a live analyser for the waveform. Releasing enters a VAD-gated
+ * finalize phase (which sends the 'finalize' frame) that waits until you've
  * stopped speaking and the backend's transcript has settled, then auto-sends it.
  * Normal typing stays fully native — the space is only "taken back" (draft restored
  * to the key-down snapshot) once a hold actually crosses the threshold.
@@ -106,10 +108,12 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // VAD: last time the mic had speech-level energy, and whether it ever did.
   const lastVoiceAtRef = useRef(0)
   const everVoicedRef = useRef(false)
-  // Segment ids already consumed by PRIOR holds. The v4/listen backend keeps a
-  // server-side conversation and RE-SENDS earlier segments (same id) on each new
-  // connection, so without this an old utterance bleeds into the next message. Any
-  // id seen in a previous, finished hold is skipped as an echo.
+  // Segment ids already consumed by PRIOR holds, skipped as echoes. This guarded a
+  // v4/listen quirk (its per-uid server-side conversation RE-SENT earlier segments
+  // on each connection, bleeding an old utterance into the next message). PTT now
+  // uses the transcription-only transcribe-stream endpoint, which has no server-side
+  // conversation and emits id-less finals — so this is inert on the current path,
+  // kept as a harmless backstop.
   const consumedIdsRef = useRef<Set<string>>(new Set())
 
   // Poll timer for the finalize phase.
@@ -239,27 +243,31 @@ export function usePushToTalk(opts: Options): PushToTalk {
     void startAudioViz(session)
     void (async () => {
       try {
-        const handle = await startTranscription('mic', {
-          onLine: (l) => {
-            if (sessionRef.current !== session) return
-            // Skip segments the backend re-sends from a PRIOR hold (server-side
-            // conversation echo), then upsert by id so re-sent/refined segments
-            // within THIS hold don't duplicate either.
-            if (l.id != null && consumedIdsRef.current.has(l.id)) return
-            upsertLine(linesRef.current, l)
-            lastSegmentAtRef.current = Date.now()
-            onTranscript(assembleTranscript(linesRef.current, interimRef.current))
+        const handle = await startTranscription(
+          'mic',
+          {
+            onLine: (l) => {
+              if (sessionRef.current !== session) return
+              // Skip segments the backend re-sends from a PRIOR hold (server-side
+              // conversation echo), then upsert by id so re-sent/refined segments
+              // within THIS hold don't duplicate either.
+              if (l.id != null && consumedIdsRef.current.has(l.id)) return
+              upsertLine(linesRef.current, l)
+              lastSegmentAtRef.current = Date.now()
+              onTranscript(assembleTranscript(linesRef.current, interimRef.current))
+            },
+            onInterim: (t) => {
+              if (sessionRef.current !== session) return
+              interimRef.current = t
+              onTranscript(assembleTranscript(linesRef.current, interimRef.current))
+            },
+            onBackend: () => {},
+            onError: (e) => {
+              if (sessionRef.current === session) setError(e.message)
+            }
           },
-          onInterim: (t) => {
-            if (sessionRef.current !== session) return
-            interimRef.current = t
-            onTranscript(assembleTranscript(linesRef.current, interimRef.current))
-          },
-          onBackend: () => {},
-          onError: (e) => {
-            if (sessionRef.current === session) setError(e.message)
-          }
-        })
+          'ptt'
+        )
         // Released/superseded before the connection resolved — tear it straight down.
         if (sessionRef.current !== session) {
           try {
@@ -287,7 +295,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
     }
 
     // Keep the mic + transcription stream open through finalize: VAD watches for you
-    // to stop talking and the backend still needs ~1.8s for the trailing segment.
+    // to stop talking. Tell the PTT backend to flush + finalize so the trailing
+    // segment lands promptly (~0.3s) instead of waiting out silence.
+    handleRef.current?.finalize()
     const session = sessionRef.current
     finalizingRef.current = true
     setFinalizing(true)

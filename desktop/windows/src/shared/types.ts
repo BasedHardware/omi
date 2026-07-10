@@ -75,6 +75,17 @@ export type LocalConversation = {
 
 export type ListenSource = 'mic' | 'system'
 
+/**
+ * Which backend transcription pipeline a session uses:
+ *  - 'conversation' → `/v4/listen`: the full pipeline (speech profiles, speaker
+ *    assignment, memory events) that keeps a per-uid server-side conversation.
+ *    Used by continuous mic/screen recording.
+ *  - 'ptt' → `/v2/voice-message/transcribe-stream`: transcription-only, NO
+ *    conversation lifecycle. Used by the overlay's hold-Space Ask box so separate
+ *    holds never share a server-side conversation (which caused an earlier hold's
+ *    speech to bleed into the next). Mirrors the macOS app's split. */
+export type ListenMode = 'conversation' | 'ptt'
+
 export type ListenStartArgs = {
   sessionId: string
   source: ListenSource
@@ -82,6 +93,8 @@ export type ListenStartArgs = {
   token: string
   /** BCP-47-ish language code for transcription (e.g. 'en', 'es'). */
   language: string
+  /** Backend pipeline to use. Defaults to 'conversation' when omitted. */
+  mode?: ListenMode
 }
 
 export type ListenMessage =
@@ -159,6 +172,10 @@ export type OmiBridgeApi = {
   listenStop: (sessionId: string) => Promise<void>
   /** Push a PCM16 chunk for an active listen session. Fire-and-forget. */
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => void
+  /** Ask a PTT session to finalize: flush buffered audio and trigger the backend's
+   *  endpointing so the trailing transcript segment is emitted promptly. No-op for
+   *  'conversation' sessions (v4/listen manages its own endpointing). */
+  listenFinalize: (sessionId: string) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
   indexFilesScan: () => Promise<FileIndexStatus>
