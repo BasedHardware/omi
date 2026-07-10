@@ -1,0 +1,32 @@
+version: 2
+name: ai-chat-settings
+tier: 2
+description: AI Chat settings section navigation and snapshot (non-prod only)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings AI Chat section
+    bridge.navigate:
+      target: settings
+      settingsSection: AI Chat
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: AI Chat
+
+  - id: S2
+    name: AI Chat settings snapshot
+    bridge.action:
+      name: settings_aichat_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

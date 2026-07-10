@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a stalled AI chat response silently ending with no message — it now shows \"Response took too long. Try again.\" so you know to retry"
+}

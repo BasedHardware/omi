@@ -27,6 +27,10 @@ import pytest
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 APICLIENT_SWIFT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'APIClient.swift'
+# High-water mark ratchet: APIClient.swift must shrink as transport/DTOs extract out.
+# Raised after the INV-AUTH-1 and revision-aware conversation merges left the
+# consolidated client at 6500 lines. Future transport/DTO extractions lower it.
+APICLIENT_SWIFT_MAX_LINES = 6500
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
 CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 
@@ -131,6 +135,15 @@ def _is_free_form_object_schema(schema: dict[str, Any]) -> bool:
 
 def test_apiclient_swift_exists():
     assert APICLIENT_SWIFT.exists(), f'APIClient.swift missing at {APICLIENT_SWIFT}'
+
+
+def test_apiclient_swift_line_count_ratchet():
+    """APIClient.swift must not grow — transport/DTO extractions lower this cap over time."""
+    line_count = len(APICLIENT_SWIFT.read_text(encoding='utf-8').splitlines())
+    assert line_count <= APICLIENT_SWIFT_MAX_LINES, (
+        f'APIClient.swift has {line_count} lines (max {APICLIENT_SWIFT_MAX_LINES}). '
+        'Extract transport/DTOs instead of growing the god file.'
+    )
 
 
 def test_out_of_scope_prefixes_match_at_least_one_route():

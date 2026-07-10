@@ -488,6 +488,30 @@ jobs:
             exit 1
           fi
 
+      - name: Advance explicit stable pointer
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest \
+            --secret=ADMIN_KEY \
+            --project "$PROJECT_ID")
+          python3 - "$RELEASE_TAG" <<'PY' > /tmp/desktop-stable-pointer.json
+          import json
+          import sys
+          print(json.dumps({"platform": "macos", "channel": "stable", "release_id": sys.argv[1]}))
+          PY
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-stable-pointer.json \
+            https://api.omi.me/v2/desktop/channels/promote \
+            > /tmp/desktop-stable-pointer-response.json
+          python3 -m json.tool /tmp/desktop-stable-pointer-response.json
+          echo "Advanced explicit stable pointer to $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate Omi Bot token for release mutations
         id: app-token
         uses: actions/create-github-app-token@v1

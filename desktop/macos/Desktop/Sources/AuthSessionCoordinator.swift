@@ -12,6 +12,7 @@ extension Notification.Name {
 enum AuthSessionPhase: Equatable, Sendable {
     case restoring
     case authenticated
+    case recoveryRequired
     case needsReauth
     case signedOut
 }
@@ -93,30 +94,18 @@ final class AuthSessionCoordinator {
         case bridgeAuthMissing
     }
 
-    private(set) var phase: AuthSessionPhase = .signedOut
+    var phase: AuthSessionPhase { AuthState.shared.sessionPhase }
     private var refreshFlight: Task<String, Error>?
     private var lastProactiveValidation: Date?
 
     private init() {}
-
-    func syncPhaseFromAuthState(isSignedIn: Bool, isRestoringAuth: Bool) {
-        if isRestoringAuth {
-            phase = .restoring
-        } else if isSignedIn {
-            phase = .authenticated
-        } else if phase == .needsReauth {
-            // Preserve needsReauth until explicit sign-in or nuclear sign-out.
-        } else {
-            phase = .signedOut
-        }
-    }
 
     /// Light session invalidation: clears credentials and signed-in UI state without
     /// the nuclear teardown performed by `AuthService.signOut()`.
     func invalidateSession(reason: InvalidateReason, auth: AuthService) {
         NSLog("OMI AUTH: invalidateSession reason=%@", reason.rawValue)
         auth.performLightSessionInvalidation()
-        phase = .needsReauth
+        AuthState.shared.transition(to: .needsReauth)
         NotificationCenter.default.post(
             name: .sessionDidInvalidate,
             object: nil,
@@ -139,13 +128,8 @@ final class AuthSessionCoordinator {
 
     /// Returns true when the session has a usable ID token after optional refresh.
     func ensureValidSession(trigger: EnsureValidSessionTrigger, auth: AuthService) async -> Bool {
-        syncPhaseFromAuthState(
-            isSignedIn: auth.isSignedIn,
-            isRestoringAuth: AuthState.shared.isRestoringAuth
-        )
         guard phase != .restoring, phase != .needsReauth else { return false }
-        guard auth.isSignedIn else {
-            phase = .signedOut
+        guard phase == .authenticated || phase == .recoveryRequired else {
             return false
         }
         let forceRefresh = trigger == .appBecameActive
@@ -155,13 +139,17 @@ final class AuthSessionCoordinator {
             } else {
                 _ = try await auth.getIdToken(forceRefresh: false)
             }
-            phase = .authenticated
+            AuthState.shared.transition(to: .authenticated)
             return true
         } catch AuthError.notSignedIn {
             NSLog("OMI AUTH: ensureValidSession(%@) session not signed in", trigger.rawValue)
+            if phase != .needsReauth {
+                AuthState.shared.transition(to: .recoveryRequired)
+            }
             return false
         } catch {
             NSLog("OMI AUTH: ensureValidSession(%@) deferred: %@", trigger.rawValue, error.localizedDescription)
+            AuthState.shared.transition(to: .recoveryRequired)
             return false
         }
     }
@@ -172,7 +160,7 @@ final class AuthSessionCoordinator {
         auth: AuthService,
         minInterval: TimeInterval = 30
     ) async {
-        guard phase != .restoring, phase != .needsReauth else { return }
+        guard phase != .restoring, phase != .needsReauth, phase != .signedOut else { return }
         let now = Date()
         if let last = lastProactiveValidation, now.timeIntervalSince(last) < minInterval {
             return
@@ -195,11 +183,11 @@ final class AuthSessionCoordinator {
     func resetAfterNuclearSignOut() {
         refreshFlight?.cancel()
         refreshFlight = nil
-        phase = .signedOut
+        AuthState.shared.transition(to: .signedOut)
     }
 
     func resetAfterSuccessfulSignIn() {
         refreshFlight = nil
-        phase = .authenticated
+        AuthState.shared.transition(to: .authenticated)
     }
 }

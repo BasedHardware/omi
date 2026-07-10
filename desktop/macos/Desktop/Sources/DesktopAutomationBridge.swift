@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import Network
+import OmiSupport
 
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
@@ -548,6 +549,19 @@ actor DesktopAutomationTraceStore {
 /// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
 /// remove them with `unregister(_:)`.
 @MainActor
+private func ensureConversationsTabVisibleForAutomation() async throws {
+  NotificationCenter.default.post(
+    name: .navigateToSidebarItem,
+    object: nil,
+    userInfo: ["rawValue": SidebarNavItem.conversations.rawValue]
+  )
+  // Propagate cancellation instead of swallowing it with try? — if the
+  // automation task is cancelled during the settle sleep, the caller should
+  // not continue to post further notifications.
+  try await Task.sleep(nanoseconds: 150_000_000)
+}
+
+@MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
 
@@ -681,7 +695,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "capture_test_transcript",
       summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
-      params: ["phase", "text"]
+      params: ["phase", "text", "segments"]
     ) { params in
       guard let appState = AppState.current else { return ["error": "app state unavailable"] }
       let phase = (params["phase"] ?? "inject").lowercased()
@@ -690,6 +704,9 @@ final class DesktopAutomationActionRegistry {
         return await appState.automationStartCaptureTestSession()
       case "inject":
         return await appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+      case "inject_multi":
+        return await appState.automationInjectCaptureTestTranscriptMulti(
+          segmentsJSON: params["segments"] ?? params["text"] ?? "")
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -701,7 +718,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
       }
     }
 
@@ -713,7 +730,9 @@ final class DesktopAutomationActionRegistry {
       guard let appState = AppState.current else { return ["error": "app state unavailable"] }
       let limit = max(1, intParam(params["limit"], default: 5))
       let titles = appState.conversations.prefix(limit).map { $0.structured.title }
+      let ids = appState.conversations.prefix(limit).map { $0.id }
       let titlesJSON: String
+      let idsJSON: String
       if let data = try? JSONSerialization.data(withJSONObject: Array(titles)),
         let encoded = String(data: data, encoding: .utf8)
       {
@@ -721,11 +740,62 @@ final class DesktopAutomationActionRegistry {
       } else {
         titlesJSON = "[]"
       }
+      if let data = try? JSONSerialization.data(withJSONObject: Array(ids)),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        idsJSON = encoded
+      } else {
+        idsJSON = "[]"
+      }
+      let starredCount = appState.conversations.filter(\.starred).count
+      if appState.folders.isEmpty {
+        await appState.loadFolders()
+      }
       return [
         "conversation_count": "\(appState.totalConversationsCount ?? appState.conversations.count)",
         "loaded_count": "\(appState.conversations.count)",
         "is_transcribing": appState.isTranscribing ? "true" : "false",
         "recent_titles_json": titlesJSON,
+        "recent_ids_json": idsJSON,
+        "folder_count": "\(appState.folders.count)",
+        "starred_count": "\(starredCount)",
+        "active_folder_id": appState.selectedFolderId ?? "none",
+        "show_starred_only": appState.showStarredOnly ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "conversation_reconciliation_snapshot",
+      summary: "Exercise cache-first list/detail reconciliation and open the canonical detail",
+      params: []
+    ) { _ in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      await appState.loadConversations()
+      guard let seed = appState.conversations.first else {
+        return ["error": "no conversation available for reconciliation"]
+      }
+
+      var cachedProjectionId: String?
+      let detail = await appState.loadConversationDetail(seed) { cached in
+        cachedProjectionId = cached.id
+      }
+      let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
+
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": detail.id, "showTranscript": true]
+      )
+
+      return [
+        "list_loaded": appState.conversations.isEmpty ? "false" : "true",
+        "cached_projection_seen": cachedProjectionId == seed.id ? "true" : "false",
+        "detail_id_matches": detail.id == seed.id ? "true" : "false",
+        "detail_has_revision": detail.updatedAt == nil ? "false" : "true",
+        "detail_transcript_included": detail.transcriptSegmentsIncluded ? "true" : "false",
+        "cache_id_matches": persisted?.id == detail.id ? "true" : "false",
+        "cache_revision_matches": persisted?.updatedAt == detail.updatedAt ? "true" : "false",
+        "opened_detail": "true",
       ]
     }
 
@@ -822,6 +892,24 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    register(
+      name: "ptt_turn_snapshot",
+      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+    ) { _ in
+      let coordinator = VoiceTurnCoordinator.shared
+      let turn = coordinator.model.turn
+      let terminalReason = turn?.terminalReason?.rawValue ?? ""
+      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
+      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
+      return [
+        "phase": phase,
+        "route": route,
+        "terminal_reason": terminalReason,
+        "stale_event_count": "\(coordinator.model.staleEventCount)",
+        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
+      ]
+    }
+
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(
@@ -897,9 +985,30 @@ final class DesktopAutomationActionRegistry {
       name: "reset_onboarding",
       summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
     ) { _ in
-      let appState = await MainActor.run { AppState() }
-      appState.resetOnboardingAndRestart()
+      await MainActor.run {
+        (AppState.current ?? AppState()).resetOnboardingAndRestart()
+      }
       return ["status": "resetting and restarting"]
+    }
+
+    register(
+      name: "sign_out",
+      summary: "Sign out via AuthService (local Auth emulator harness only)"
+    ) { _ in
+      guard DesktopLocalProfile.isEnabled else {
+        return ["error": "sign_out is only available with OMI_DESKTOP_LOCAL_PROFILE=1 (local Auth emulator)"]
+      }
+      guard AuthState.shared.isSignedIn else {
+        return ["signed_out": "true", "was_signed_in": "false"]
+      }
+      try await MainActor.run {
+        try AuthService.shared.signOut()
+      }
+      return [
+        "signed_out": "true",
+        "was_signed_in": "true",
+        "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
+      ]
     }
 
     // Send a typed query through the real floating-bar AI path
@@ -1166,6 +1275,61 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "set_chat_drafts",
+      summary: "Set main and floating composer drafts without sending (non-prod persistence harness)",
+      params: ["main", "floating"],
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "local",
+      sideEffects: ["local_storage"],
+      examples: ["./scripts/omi-ctl action set_chat_drafts main=main-draft floating=notch-draft"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "set_chat_drafts is disabled on production bundles"]
+      }
+      if let main = params["main"] {
+        if let provider = ChatProvider.mainInstance {
+          provider.draftText = main
+        } else {
+          ChatDraftStore.shared.setText(main, for: .mainChat(contextID: "omi:default"))
+        }
+      }
+      if let floating = params["floating"] {
+        if let barState = FloatingControlBarManager.shared.barState {
+          barState.switchAIDraft(to: .floatingMain)
+          barState.aiInputText = floating
+        } else {
+          ChatDraftStore.shared.setText(floating, for: .floatingMain)
+        }
+      }
+      ChatDraftStore.shared.flush()
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
+      name: "chat_drafts_snapshot",
+      summary: "Read current main and floating composer drafts (non-prod persistence harness)",
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "read_only"
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "chat_drafts_snapshot is disabled on production bundles"]
+      }
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
       name: "clear_owner_surface_state",
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
       params: ["chatId"]
@@ -1401,17 +1565,17 @@ final class DesktopAutomationActionRegistry {
       guard let id = params["id"], !id.isEmpty else {
         return ["error": "missing 'id'"]
       }
-      try await APIClient.shared.deleteConversation(id: id)
-      await MainActor.run {
-        if let appState = AppState.current {
-          appState.deleteConversationLocally(id)
-        } else {
-          NotificationCenter.default.post(
-            name: .conversationDeleted,
-            object: nil,
-            userInfo: ["conversationId": id]
-          )
+      if let appState = await MainActor.run(body: { AppState.current }) {
+        guard await appState.deleteConversation(id) else {
+          throw APIError.invalidResponse
         }
+      } else {
+        try await APIClient.shared.deleteConversation(id: id)
+        NotificationCenter.default.post(
+          name: .conversationDeleted,
+          object: nil,
+          userInfo: ["conversationId": id]
+        )
       }
       return ["deleted": id]
     }
@@ -1748,6 +1912,734 @@ final class DesktopAutomationActionRegistry {
       return CloudConnectorGuidanceOverlay.shared.automationState()
     }
 
+    register(
+      name: "open_conversation",
+      summary: "Open a conversation detail view (same path as POST /conversation/open)",
+      params: ["conversationId", "showTranscript"]
+    ) { params in
+      guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !conversationId.isEmpty
+      else {
+        return ["error": "missing conversationId"]
+      }
+      let showTranscript = boolParam(params["showTranscript"], default: false)
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
+      )
+      return [
+        "opened": conversationId,
+        "show_transcript": showTranscript ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "open_latest_conversation",
+      summary: "Open the most recently loaded conversation detail view",
+      params: ["showTranscript"]
+    ) { params in
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      if appState.conversations.isEmpty {
+        await appState.refreshConversations()
+      }
+      guard let conversationId = appState.conversations.first?.id else {
+        return ["error": "no conversations available"]
+      }
+      let showTranscript = boolParam(params["showTranscript"], default: false)
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
+      )
+      return [
+        "opened": conversationId,
+        "show_transcript": showTranscript ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "conversation_detail_snapshot",
+      summary: "Return open conversation detail fields for harness assertions",
+      params: ["conversationId"]
+    ) { params in
+      var requestedId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if requestedId == "latest" {
+        if let appState = AppState.current, appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        requestedId = AppState.current?.conversations.first?.id
+      }
+      let automation = ConversationDetailAutomationState.shared
+      let conversationId = (requestedId?.isEmpty == false ? requestedId : automation.openConversationId)
+      guard let conversationId, !conversationId.isEmpty else {
+        return [
+          "detail_open": "false",
+          "error": "no open conversation",
+        ]
+      }
+      let detailOpen = automation.openConversationId == conversationId
+      let drawerOpen = detailOpen && automation.transcriptDrawerOpen
+      do {
+        let conversation = try await APIClient.shared.getConversation(id: conversationId)
+        let segmentCount = conversation.transcriptSegments.count
+        return [
+          "detail_open": detailOpen ? "true" : "false",
+          "conversation_id": conversationId,
+          "title": conversation.structured.title,
+          "segment_count": "\(segmentCount)",
+          "transcript_drawer_open": drawerOpen ? "true" : "false",
+          "folder_id": conversation.folderId ?? "none",
+          "starred": conversation.starred ? "true" : "false",
+        ]
+      } catch {
+        guard let appState = AppState.current,
+          let cached = appState.conversations.first(where: { $0.id == conversationId })
+        else {
+          return [
+            "detail_open": detailOpen ? "true" : "false",
+            "conversation_id": conversationId,
+            "transcript_drawer_open": drawerOpen ? "true" : "false",
+            "error": error.localizedDescription,
+          ]
+        }
+        return [
+          "detail_open": detailOpen ? "true" : "false",
+          "conversation_id": conversationId,
+          "title": cached.structured.title,
+          "segment_count": "\(cached.transcriptSegments.count)",
+          "transcript_drawer_open": drawerOpen ? "true" : "false",
+          "folder_id": cached.folderId ?? "none",
+          "starred": cached.starred ? "true" : "false",
+        ]
+      }
+    }
+
+    register(
+      name: "create_test_memory",
+      summary: "Create a hermetic test memory via the real API",
+      params: ["content", "source"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_memory is disabled on production bundles"]
+      }
+      let content = params["content"] ?? "[[MARKER:memory-crud]] hermetic desktop memory"
+      let response = try await APIClient.shared.createMemory(
+        content: content,
+        source: params["source"] ?? "harness"
+      )
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
+      return [
+        "created": "true",
+        "memory_id": response.id,
+        "memory_count": "\(memoryCount)",
+      ]
+    }
+
+    register(
+      name: "edit_test_memory",
+      summary: "Edit a hermetic test memory via the real API",
+      params: ["id", "marker", "content"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "edit_test_memory is disabled on production bundles"]
+      }
+      let content = params["content"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !content.isEmpty else {
+        return ["error": "missing content"]
+      }
+      let id: String?
+      if let explicit = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !explicit.isEmpty {
+        id = explicit
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines), !marker.isEmpty {
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        id = page.memories.first(where: { $0.content.contains(marker) })?.id
+      } else {
+        id = nil
+      }
+      guard let id, !id.isEmpty else {
+        return ["error": "missing id or marker match"]
+      }
+      try await APIClient.shared.editMemory(id: id, content: content)
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      return [
+        "edited": id,
+        "content": content,
+      ]
+    }
+
+    register(
+      name: "delete_test_memory",
+      summary: "Delete a hermetic test memory via the real API",
+      params: ["id", "marker"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "delete_test_memory is disabled on production bundles"]
+      }
+      let id: String?
+      if let explicit = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !explicit.isEmpty {
+        id = explicit
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines), !marker.isEmpty {
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        id = page.memories.first(where: { $0.content.contains(marker) })?.id
+      } else {
+        id = nil
+      }
+      guard let id, !id.isEmpty else {
+        return ["error": "missing id or marker match"]
+      }
+      try await APIClient.shared.deleteMemory(id: id)
+      try? await MemoryStorage.shared.deleteMemoryByBackendId(id)
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
+      return [
+        "deleted": id,
+        "memory_count": "\(memoryCount)",
+      ]
+    }
+
+    register(
+      name: "vocabulary_snapshot",
+      summary: "Return transcription custom vocabulary for harness assertions"
+    ) { _ in
+      let terms = AssistantSettings.shared.transcriptionVocabulary
+      let termsJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: terms),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        termsJSON = encoded
+      } else {
+        termsJSON = "[]"
+      }
+      return [
+        "term_count": "\(terms.count)",
+        "terms_json": termsJSON,
+      ]
+    }
+
+    register(
+      name: "vocabulary_set_terms",
+      summary: "Set transcription custom vocabulary (local + backend)",
+      params: ["terms"]
+    ) { params in
+      let raw = params["terms"] ?? ""
+      let terms = raw.split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+      AssistantSettings.shared.transcriptionVocabulary = terms
+      _ = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      return [
+        "saved": "true",
+        "term_count": "\(terms.count)",
+      ]
+    }
+
+    register(
+      name: "goals_snapshot",
+      summary: "Return dashboard goals state for harness assertions"
+    ) { _ in
+      let goals: [Goal]
+      if let apiGoals = try? await APIClient.shared.getGoals() {
+        goals = apiGoals
+      } else if let localGoals = try? await GoalStorage.shared.getLocalGoals() {
+        goals = localGoals
+      } else {
+        goals = []
+      }
+      let titles = goals.map(\.title)
+      let titlesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: titles),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        titlesJSON = encoded
+      } else {
+        titlesJSON = "[]"
+      }
+      return [
+        "goal_count": "\(goals.count)",
+        "titles_json": titlesJSON,
+      ]
+    }
+
+    register(
+      name: "create_test_goal",
+      summary: "Create a hermetic dashboard goal via the real API",
+      params: ["title", "targetValue", "currentValue"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_goal is disabled on production bundles"]
+      }
+      let title = params["title"] ?? "[[MARKER:goals-dashboard]] harness goal"
+      let targetValue = Double(params["targetValue"] ?? "") ?? 10
+      let currentValue = Double(params["currentValue"] ?? "") ?? 0
+      let goal = try await APIClient.shared.createGoal(
+        title: title,
+        goalType: .numeric,
+        targetValue: targetValue,
+        currentValue: currentValue,
+        source: "harness"
+      )
+      _ = try? await GoalStorage.shared.syncServerGoal(goal)
+      let goals = (try? await GoalStorage.shared.getLocalGoals()) ?? []
+      return [
+        "created": "true",
+        "goal_id": goal.id,
+        "goal_count": "\(goals.count)",
+      ]
+    }
+
+    register(
+      name: "apps_catalog_snapshot",
+      summary: "Return apps marketplace catalog counts for harness assertions"
+    ) { _ in
+      let v2 = try await APIClient.shared.getAppsV2()
+      let marketplaceCount = v2.groups.reduce(0) { $0 + $1.data.count }
+      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 200)
+      return [
+        "marketplace_count": "\(marketplaceCount)",
+        "group_count": "\(v2.meta.groupCount)",
+        "capability_count": "\(v2.meta.capabilities.count)",
+        "installed_count": "\(installed.count)",
+      ]
+    }
+
+    register(
+      name: "subscription_snapshot",
+      summary: "Return cached subscription/plan info from the billing API"
+    ) { _ in
+      let response = try await APIClient.shared.getUserSubscription()
+      let subscription = response.subscription
+      return [
+        "plan": subscription.plan.rawValue,
+        "status": subscription.status.rawValue,
+        "show_subscription_ui": response.showSubscriptionUI ? "true" : "false",
+        "transcription_seconds_used": "\(response.transcriptionSecondsUsed)",
+        "transcription_seconds_limit": "\(response.transcriptionSecondsLimit)",
+      ]
+    }
+
+    register(
+      name: "settings_privacy_snapshot",
+      summary: "Return privacy toggle defaults (store recordings, cloud sync, tracking)"
+    ) { _ in
+      async let recordingTask = APIClient.shared.getRecordingPermission()
+      async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
+      let (recording, cloudSync) = try await (recordingTask, cloudSyncTask)
+      let trackingEnabled = PostHogManager.shared.hasOptedOut
+      return [
+        "store_recordings": recording.enabled ? "true" : "false",
+        "cloud_sync": cloudSync.enabled ? "true" : "false",
+        "tracking_enabled": trackingEnabled ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "create_test_folder",
+      summary: "Create a hermetic conversation folder via the real API",
+      params: ["name"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_folder is disabled on production bundles"]
+      }
+      let name = params["name"] ?? "[[MARKER:conversation-folders]] harness folder"
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      guard let folder = await appState.createFolder(name: name) else {
+        return ["error": "failed to create folder"]
+      }
+      return [
+        "created": "true",
+        "folder_id": folder.id,
+        "folder_name": folder.name,
+        "folder_count": "\(appState.folders.count)",
+      ]
+    }
+
+    register(
+      name: "set_conversation_starred",
+      summary: "Set conversation starred status via the real API",
+      params: ["conversationId", "starred"]
+    ) { params in
+      guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !conversationId.isEmpty
+      else {
+        return ["error": "missing conversationId"]
+      }
+      let resolvedConversationId: String
+      if conversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        resolvedConversationId = latestId
+      } else {
+        resolvedConversationId = conversationId
+      }
+      let starred = boolParam(params["starred"], default: true)
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      try await appState.conversationRepository.setStarred(
+        id: resolvedConversationId, starred: starred)
+      return [
+        "conversation_id": resolvedConversationId,
+        "starred": starred ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "set_conversation_folder",
+      summary: "Move a conversation into a folder via the real API",
+      params: ["conversationId", "folderId"]
+    ) { params in
+      let rawConversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let rawConversationId, !rawConversationId.isEmpty else {
+        return ["error": "missing conversationId"]
+      }
+      let conversationId: String
+      if rawConversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        conversationId = latestId
+      } else {
+        conversationId = rawConversationId
+      }
+      let folderId = params["folderId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let resolvedFolderId = (folderId?.isEmpty == false && folderId != "none") ? folderId : nil
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      await appState.moveConversationToFolder(conversationId, folderId: resolvedFolderId)
+      return [
+        "conversation_id": conversationId,
+        "folder_id": resolvedFolderId ?? "none",
+      ]
+    }
+
+    register(
+      name: "set_transcription_language",
+      summary: "Set transcription language (local + backend)",
+      params: ["language", "autoDetect"]
+    ) { params in
+      guard let rawLanguage = params["language"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !rawLanguage.isEmpty
+      else {
+        return ["error": "missing language"]
+      }
+      let normalized = AssistantSettings.normalizeTranscriptionLanguageCode(rawLanguage)
+      if let autoDetectRaw = params["autoDetect"] {
+        AssistantSettings.shared.transcriptionAutoDetect = boolParam(autoDetectRaw, default: true)
+      }
+      AssistantSettings.shared.transcriptionLanguage = normalized
+      _ = try await APIClient.shared.updateUserLanguage(normalized)
+      return [
+        "saved": "true",
+        "language": normalized,
+        "auto_detect": AssistantSettings.shared.transcriptionAutoDetect ? "true" : "false",
+        "effective_language": AssistantSettings.shared.effectiveTranscriptionLanguage,
+      ]
+    }
+
+    register(
+      name: "transcription_language_snapshot",
+      summary: "Return transcription language settings for harness assertions"
+    ) { _ in
+      let settings = AssistantSettings.shared
+      return [
+        "language": settings.transcriptionLanguage,
+        "auto_detect": settings.transcriptionAutoDetect ? "true" : "false",
+        "effective_language": settings.effectiveTranscriptionLanguage,
+      ]
+    }
+
+    register(
+      name: "memory_graph_snapshot",
+      summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
+      params: []
+    ) { _ in
+      do {
+        let graph = try await APIClient.shared.getKnowledgeGraph()
+        return [
+          "node_count": "\(graph.nodes.count)",
+          "edge_count": "\(graph.edges.count)",
+          "is_empty": graph.nodes.isEmpty ? "true" : "false",
+        ]
+      } catch {
+        return [
+          "node_count": "0",
+          "edge_count": "0",
+          "is_empty": "true",
+          "has_error": "true",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "open_quick_note",
+      summary: "Open Quick Note via Rewind notes path (same as dashboard Quick Note button)"
+    ) { _ in
+      NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
+      return [
+        "posted": "navigateToRewindNotes",
+        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+      ]
+    }
+
+    register(
+      name: "about_snapshot",
+      summary: "Return About settings version/build/bundle metadata"
+    ) { _ in
+      let updater = UpdaterViewModel.shared
+      return [
+        "version": updater.currentVersion,
+        "build": updater.buildNumber,
+        "bundle_id": AppBuild.bundleIdentifier,
+        "channel": updater.activeChannelLabel,
+      ]
+    }
+
+    register(
+      name: "settings_notifications_snapshot",
+      summary: "Return notification settings and local permission state"
+    ) { _ in
+      async let settingsTask = APIClient.shared.getNotificationSettings()
+      let settings = try await settingsTask
+      let appState = await MainActor.run { AppState.current }
+      let hasPermission = appState?.hasNotificationPermission ?? false
+      let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      return [
+        "enabled": settings.enabled ? "true" : "false",
+        "frequency": "\(settings.frequency)",
+        "frequency_label": settings.frequencyDescription,
+        "has_permission": hasPermission ? "true" : "false",
+        "banners_disabled": bannersDisabled ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "set_notification_settings",
+      summary: "Update notification settings via the real API",
+      params: ["enabled", "frequency"]
+    ) { params in
+      let enabled = params["enabled"].map { boolParam($0, default: true) }
+      let frequency = params["frequency"].flatMap { Int($0) }
+      let response = try await APIClient.shared.updateNotificationSettings(
+        enabled: enabled,
+        frequency: frequency
+      )
+      return [
+        "saved": "true",
+        "enabled": response.enabled ? "true" : "false",
+        "frequency": "\(response.frequency)",
+      ]
+    }
+
+    register(
+      name: "rewind_settings_snapshot",
+      summary: "Return Rewind settings retention and excluded-app counts"
+    ) { _ in
+      let settings = RewindSettings.shared
+      let stats = await RewindIndexer.shared.getStats()
+      return [
+        "retention_days": "\(settings.retentionDays)",
+        "capture_interval": String(format: "%.1f", settings.captureInterval),
+        "excluded_app_count": "\(settings.excludedApps.count)",
+        "indexed_frames": "\(stats?.indexed ?? 0)",
+        "total_frames": "\(stats?.total ?? 0)",
+        "storage_bytes": "\(stats?.storageSize ?? 0)",
+      ]
+    }
+
+    register(
+      name: "navigate_via_shortcut",
+      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      params: ["shortcut"]
+    ) { params in
+      let shortcut = (params["shortcut"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      guard !shortcut.isEmpty else {
+        return ["error": "missing shortcut (1-6 or comma)"]
+      }
+      let item: SidebarNavItem?
+      switch shortcut {
+      case "1", "home", "dashboard": item = .dashboard
+      case "2", "conversations": item = .conversations
+      case "3", "memories": item = .memories
+      case "4", "tasks": item = .tasks
+      case "5", "rewind": item = .rewind
+      case "6", "apps": item = .apps
+      case ",", "comma", "settings": item = .settings
+      default: item = nil
+      }
+      guard let item else {
+        return ["error": "unsupported shortcut '\(shortcut)'"]
+      }
+      NotificationCenter.default.post(
+        name: .navigateToSidebarItem,
+        object: nil,
+        userInfo: ["rawValue": item.rawValue]
+      )
+      return [
+        "navigated": item.title,
+        "selected_tab_index": "\(item.rawValue)",
+      ]
+    }
+
+    register(
+      name: "advanced_settings_snapshot",
+      summary: "Return safe Advanced settings booleans (never raw BYOK keys)",
+      params: []
+    ) { _ in
+      let focus = FocusAssistantSettings.shared
+      let task = TaskAssistantSettings.shared
+      let insight = InsightAssistantSettings.shared
+      let memory = MemoryAssistantSettings.shared
+      let assistant = AssistantSettings.shared
+      return [
+        "focus_enabled": focus.isEnabled ? "true" : "false",
+        "task_enabled": task.isEnabled ? "true" : "false",
+        "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
+        "insight_enabled": insight.isEnabled ? "true" : "false",
+        "memory_enabled": memory.isEnabled ? "true" : "false",
+        "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
+        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
+        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "settings_aichat_snapshot",
+      summary: "Return AI Chat settings safe fields (provider mode, working directory presence)",
+      params: []
+    ) { _ in
+      let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
+      let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
+      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
+      return [
+        "bridge_mode": bridgeMode,
+        "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
+        "multi_chat_enabled": multiChat ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "assign_speaker_fixture",
+      summary: "Assign a person name to a conversation segment (hermetic speaker naming)",
+      params: ["conversationId", "segmentIndex", "personName"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "assign_speaker_fixture is disabled on production bundles"]
+      }
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      let personName = params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        ?? "[[MARKER:speaker-naming]] Harness Speaker"
+      let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
+
+      var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if conversationId == "latest" || conversationId?.isEmpty != false {
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        conversationId = appState.conversations.first?.id
+      }
+      guard let conversationId, !conversationId.isEmpty else {
+        return ["error": "no conversation available"]
+      }
+
+      let conversation = try await APIClient.shared.getConversation(id: conversationId)
+      guard segmentIndex < conversation.transcriptSegments.count else {
+        return [
+          "error": "segment index out of range",
+          "segment_count": "\(conversation.transcriptSegments.count)",
+        ]
+      }
+      let segment = conversation.transcriptSegments[segmentIndex]
+      guard let person = await appState.createPerson(name: personName) else {
+        return ["error": "failed to create person"]
+      }
+      let assigned = await appState.assignSpeakerToSegments(
+        conversationId: conversationId,
+        segmentIds: [segment.id],
+        personId: person.id,
+        isUser: false
+      )
+      guard assigned else {
+        return ["error": "assign segments failed"]
+      }
+      let refreshed = try await APIClient.shared.getConversation(id: conversationId)
+      let assignedSegment = refreshed.transcriptSegments.first(where: { $0.id == segment.id })
+      return [
+        "assigned": "true",
+        "conversation_id": conversationId,
+        "segment_id": segment.id,
+        "segment_index": "\(segmentIndex)",
+        "person_id": person.id,
+        "person_name": person.name,
+        "speaker_label": assignedSegment?.speaker ?? segment.speaker ?? "",
+        "segment_count": "\(refreshed.transcriptSegments.count)",
+      ]
+    }
+
+    register(
+      name: "conversation_share_probe",
+      summary: "Hermetic share affordance probe — fetches share link without clipboard",
+      params: ["conversationId"]
+    ) { params in
+      let rawConversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let rawConversationId, !rawConversationId.isEmpty else {
+        return ["error": "missing conversationId"]
+      }
+      let conversationId: String
+      if rawConversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        conversationId = latestId
+      } else {
+        conversationId = rawConversationId
+      }
+      let shareURL = try await APIClient.shared.getConversationShareLink(id: conversationId)
+      let shareAvailable = !shareURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      return [
+        "conversation_id": conversationId,
+        "share_available": shareAvailable ? "true" : "false",
+        "share_url_present": shareAvailable ? "true" : "false",
+      ]
+    }
+
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
     // attach — the report title + the desktop_diagnostics.json attachment + the
     // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
@@ -1824,6 +2716,40 @@ final class DesktopAutomationActionRegistry {
       }
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
+
+    // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
+    // AppState.restartApp() path used after granting Accessibility / Screen
+    // Recording — so a harness can prove the SAME bundle relaunches with the
+    // session intact. Distinct from `reset_onboarding`, which mutates onboarding
+    // state. The restart is scheduled after a short delay so this action's HTTP
+    // response flushes before restartApp() terminates the process. Non-prod only.
+    register(
+      name: "quit_and_reopen",
+      summary: "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
+      params: ["delayMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "quit_and_reopen is disabled on production bundles"]
+      }
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      if UpdaterViewModel.isUpdateInProgress {
+        return ["error": "sparkle update in progress — restart is deferred to Sparkle"]
+      }
+      let bundleId = Bundle.main.bundleIdentifier ?? ""
+      let relaunchPath = Bundle.main.bundleURL.path
+      let delayMs = min(max(intParam(params["delayMs"], default: 400), 100), 5000)
+      DispatchQueue.main.asyncAfter(deadline: .now() + Double(delayMs) / 1000.0) {
+        appState.restartApp()
+      }
+      return [
+        "restarting": "true",
+        "bundle_id": bundleId,
+        "relaunch_path": relaunchPath,
+        "delay_ms": "\(delayMs)",
+      ]
+    }
   }
 }
 
@@ -1847,13 +2773,19 @@ final class DesktopAutomationBridge {
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
   private var listener: NWListener?
+  private var bindAttempts = 0
+  private let maxBindAttempts = 3
 
   private init() {}
 
   func startIfNeeded() {
     guard DesktopAutomationLaunchOptions.isEnabled else { return }
     guard listener == nil else { return }
+    bindAttempts = 0
+    attemptStartListener()
+  }
 
+  private func attemptStartListener() {
     do {
       let parameters = NWParameters.tcp
       parameters.allowLocalEndpointReuse = true
@@ -1871,19 +2803,46 @@ final class DesktopAutomationBridge {
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
-      listener.stateUpdateHandler = { (state: NWListener.State) in
+      listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
         log("DesktopAutomationBridge: listener state changed to \(String(describing: state))")
+        if case .failed(let error) = state {
+          self?.handleListenerBindFailure(error: error)
+        }
       }
       listener.start(queue: queue)
       self.listener = listener
+      bindAttempts = 0
       DesktopAutomationLaunchOptions.writeTokenFileIfNeeded()
       Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
       )
     } catch {
-      logError("DesktopAutomationBridge: failed to start listener", error: error)
+      handleListenerBindFailure(error: error)
     }
+  }
+
+  private func handleListenerBindFailure(error: Error) {
+    listener?.cancel()
+    listener = nil
+    bindAttempts += 1
+    let reason = error.localizedDescription
+    if bindAttempts < maxBindAttempts {
+      log(
+        "DesktopAutomationBridge: bind failed (attempt \(bindAttempts)/\(maxBindAttempts)), retrying: \(reason)")
+      queue.asyncAfter(deadline: .now() + Double(bindAttempts)) { [weak self] in
+        self?.attemptStartListener()
+      }
+      return
+    }
+    log(
+      "DesktopAutomationBridge: bind failed after \(maxBindAttempts) attempts "
+        + "(failure_class=bind_failed recovery_action=retry_exhausted recovery_result=exhausted): \(reason)")
+    logError("DesktopAutomationBridge: failed to start listener", error: error)
+    DesktopDiagnosticsManager.shared.recordAutomationBridgeBindFailed(
+      port: Int(DesktopAutomationLaunchOptions.port),
+      reason: reason
+    )
   }
 
   private func handleConnection(_ connection: NWConnection) {
@@ -2279,6 +3238,7 @@ final class DesktopAutomationBridge {
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    try await ensureConversationsTabVisibleForAutomation()
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,

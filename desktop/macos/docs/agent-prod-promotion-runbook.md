@@ -32,7 +32,7 @@ Identify and report:
 - newest published GitHub macOS release;
 - whether a newer auto-release or Codemagic build is currently in flight.
 
-A tag is eligible only after Codemagic has successfully published the GitHub Release, Sparkle ZIP/DMG assets, and beta/dev appcast metadata. If the newest tag is queued/building or not published, hold and report it as not ready.
+A tag is eligible only after Codemagic has published the immutable ZIP/DMG candidate and `bless-release.sh` has completed T2 qualification and promoted its explicit beta pointer. If the newest tag is still a candidate, queued, building, or unblessed, hold and report it as not ready.
 
 ## 2. Verify release artifact alignment
 
@@ -58,7 +58,7 @@ Confirm:
 - GitHub Release exists and is not draft;
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
-- for prod promotion, release metadata includes `blessed: true`, `blessedSha` matching the tag commit, and `blessedAt` (or run `desktop/macos/scripts/bless-release.sh <tag>` first);
+- release metadata includes `blessed: true`, `blessedTier: 2`, `blessedSha` matching the tag commit, `blessedAt`, and a published `blessedEvidence` asset;
 - live appcast beta/dev item points to the same build.
 
 For high-risk desktop auth/runtime releases, run the live signed-artifact canary
@@ -82,9 +82,9 @@ restart, and authenticated API), not only curl an API with an injected bearer
 token. `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER='Bearer ...'` is only for the
 separate minimal chat endpoint probe.
 
-Before making this mandatory for beta exposure, split the release flow so the
-artifact is created/uploaded first, the smoke runs against that immutable digest,
-and only then are beta/stable appcast or Firestore visibility pointers changed.
+Beta exposure is gated: Codemagic uploads a non-live candidate, the signed-artifact
+smoke runs against that digest, `bless-release.sh` rebuilds the exact tag and runs
+the T2 harness, and only the beta promotion workflow can advance visibility.
 For stable promotion, add an upgrade-path canary: previous signed release signed
 in → update to candidate → restart → auth, helper runtime, and local storage
 still work.

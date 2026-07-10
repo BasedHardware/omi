@@ -299,7 +299,7 @@ class TestSyncRouterStructure:
         assert 'is_cloud_tasks_dispatch_enabled() and not has_byok_keys()' in source
 
     def test_pipeline_reraises_in_task_mode(self):
-        source = self._read(os.path.join('routers', 'sync.py'))
+        source = self._read(os.path.join('utils', 'sync', 'pipeline.py'))
         assert 'task_mode: bool = False' in source
         # Catch-all must re-raise in task mode so the handler controls retry
         assert 'if task_mode:' in source
@@ -376,6 +376,7 @@ def _load_sync_router_for_fast_path():
         'utils',
         'utils.analytics',
         'utils.byok',
+        'utils.client_device',
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
@@ -395,7 +396,6 @@ def _load_sync_router_for_fast_path():
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.request_validation',
-        'utils.sync',
         'utils.sync.files',
         'utils.sync.playback',
         'utils.speaker_assignment',
@@ -446,11 +446,22 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
     sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+    sync_pkg = types.ModuleType('utils.sync')
+    sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
+    sys.modules['utils.sync'] = sync_pkg
+    sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
     sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
     sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=True)
     sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
     sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
+    sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
+    sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+    )
 
     sync_dispatch_fallback_calls = []
     sync_dispatch_attempt_modes = []
@@ -490,6 +501,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
     sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
     spec = importlib.util.spec_from_file_location(
         'sync_post_enqueue_cleanup',
         os.path.join(BACKEND_DIR, 'routers', 'sync.py'),
@@ -547,6 +559,7 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
         module.enqueue_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -569,6 +582,37 @@ async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch
         assert fallback_calls == []
         assert attempt_modes == ['cloud_tasks']
         module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.resolve_client_device.return_value = types.SimpleNamespace(client_device_id='ios_a1b2c3d4', platform='ios')
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            x_app_platform='ios',
+            x_device_id_hash='a1b2c3d4',
+        )
+
+        assert response.status_code == 202
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['client_device_id'] == 'ios_a1b2c3d4'
+        assert payload['client_platform'] == 'ios'
     finally:
         sys.modules.pop('routers.sync', None)
         for mod_name, orig in saved_modules.items():
@@ -606,6 +650,7 @@ async def test_sync_dispatch_enqueue_failed_records_degraded_inline(monkeypatch)
         assert pipeline_call.kwargs.get('name', '').startswith('sync_pipeline:')
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -640,6 +685,7 @@ async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
         module.enqueue_sync_job.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -674,6 +720,7 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
         module.enqueue_sync_job.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)

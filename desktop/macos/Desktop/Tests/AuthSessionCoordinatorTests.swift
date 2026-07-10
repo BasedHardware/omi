@@ -106,18 +106,52 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(source.contains("AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure"))
     let refreshRange = source.range(of: "private func refreshIdToken()")
     XCTAssertNotNil(refreshRange)
-    let snippet = String(source[refreshRange!.lowerBound...]).prefix(2500)
+    let snippet = String(source[refreshRange!.lowerBound...]).prefix(3200)
     XCTAssertFalse(snippet.contains("httpResponse.statusCode == 400"))
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .definitiveRefreshFailure)"))
   }
 
   func testRestoreValidationUsesRefreshSingleFlight() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
     XCTAssertNotNil(validationRange)
-    let snippet = String(source[validationRange!.lowerBound...]).prefix(800)
+    let snippet = String(source[validationRange!.lowerBound...]).prefix(1800)
     XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))
-    XCTAssertTrue(snippet.contains("defer { AuthState.shared.isRestoringAuth = false }"))
+    XCTAssertTrue(snippet.contains("transition(to: .recoveryRequired)"))
+    XCTAssertTrue(snippet.contains("resetAfterSuccessfulSignIn()"))
+  }
+
+  func testOnlyAuthenticatedPhaseReportsSignedIn() {
+    let state = AuthState.shared
+    let original = state.sessionPhase
+    defer { state.transition(to: original) }
+
+    state.transition(to: .restoring)
+    XCTAssertFalse(state.isSignedIn)
+    XCTAssertTrue(state.isRestoringAuth)
+
+    state.transition(to: .recoveryRequired)
+    XCTAssertFalse(state.isSignedIn)
+    XCTAssertFalse(state.isRestoringAuth)
+
+    state.transition(to: .needsReauth)
+    XCTAssertFalse(state.isSignedIn)
+
+    state.transition(to: .authenticated)
+    XCTAssertTrue(state.isSignedIn)
+  }
+
+  func testPersistedSignedInBooleanIsOnlyARestoreHint() throws {
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertTrue(app.contains("self.sessionPhase = savedSignedIn ? .restoring : .signedOut"))
+    XCTAssertFalse(app.contains("self.isSignedIn = savedSignedIn"))
+
+    let home = try sourceFile("MainWindow/DesktopHomeView.swift")
+    let recovery = home.range(of: "authState.sessionPhase == .recoveryRequired")
+    let main = home.range(of: "// State 3: Signed in and onboarded")
+    XCTAssertNotNil(recovery)
+    XCTAssertNotNil(main)
+    XCTAssertLessThan(recovery!.lowerBound, main!.lowerBound)
   }
 
   func testProactiveEnsureValidSessionOnBecomeActive() throws {

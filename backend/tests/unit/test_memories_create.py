@@ -121,6 +121,16 @@ class TestMemoriesRateLimitWiring:
 class TestCreateMemoryErrorHandling:
     """Verify error handling structure in create_memory source code."""
 
+    def test_single_and_batch_create_stamp_request_device_provenance(self):
+        source = _read_router()
+        create_body = source.split("async def create_memory(", 1)[1].split("\n@router.", 1)[0]
+        batch_body = source.split("async def create_memories_batch(", 1)[1].split("\n@router.", 1)[0]
+
+        assert "resolve_client_device_from_request(request)" in create_body
+        assert "client_device_id=device_context.client_device_id" in create_body
+        assert "resolve_client_device_from_request(request_context)" in batch_body
+        assert "client_device_id=device_context.client_device_id" in batch_body
+
     def test_create_memory_is_async(self):
         """create_memory must be async def (prevents threadpool exhaustion)."""
         source = _read_router()

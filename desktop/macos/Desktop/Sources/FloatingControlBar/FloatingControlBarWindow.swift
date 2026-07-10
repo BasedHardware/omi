@@ -163,6 +163,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var pttHintCancellable: AnyCancellable?
     private var agentPillsCancellable: AnyCancellable?
     private var voiceResponseGlowCancellable: AnyCancellable?
+    private var draggableBarCancellable: AnyCancellable?
     private var previousVoiceResponseGlowActive = false
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -189,7 +190,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.isVoiceListening || state.isThinking || state.isVoiceResponseGlowActive
     }
     private var notchModeEnabled: Bool {
-        Self.screenHasCameraHousing(screenForPlacement) || barWantsActiveIsland
+        Self.shouldUseNotchIsland(
+            displayHasCameraHousing: Self.screenHasCameraHousing(screenForPlacement),
+            hasActiveIsland: barWantsActiveIsland,
+            draggableBarEnabled: ShortcutSettings.shared.draggableBarEnabled
+        )
     }
     /// Hardware-only notch detection (ignores the transient active-island state) —
     /// "does this display physically have a camera housing".
@@ -312,11 +317,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialSize = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+        let initialScreen = NSScreen.main ?? NSScreen.screens.first
+        let initialUsesNotchIsland = FloatingControlBarWindow.shouldUseNotchIsland(
+            displayHasCameraHousing: FloatingControlBarWindow.screenHasCameraHousing(initialScreen),
+            hasActiveIsland: false,
+            draggableBarEnabled: ShortcutSettings.shared.draggableBarEnabled
+        )
+        let initialSize = initialUsesNotchIsland
             ? NSSize(
-                width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
+                width: FloatingControlBarWindow.notchHiddenCenterWidth(for: initialScreen)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
-                height: FloatingControlBarWindow.notchChromeHeight(for: NSScreen.main ?? NSScreen.screens.first)
+                height: FloatingControlBarWindow.notchChromeHeight(for: initialScreen)
             )
             : FloatingControlBarWindow.minBarSize
         let initialRect = NSRect(origin: .zero, size: initialSize)
@@ -332,9 +343,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
-            ? .statusBar
-            : .floating
+        self.level = initialUsesNotchIsland ? .statusBar : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -403,6 +412,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return false
     }
 
+    /// A physical notch is fixed to the display, so the movable-bar preference
+    /// always opts into the pill presentation instead.
+    static func shouldUseNotchIsland(
+        displayHasCameraHousing: Bool,
+        hasActiveIsland: Bool,
+        draggableBarEnabled: Bool
+    ) -> Bool {
+        !draggableBarEnabled && (displayHasCameraHousing || hasActiveIsland)
+    }
+
     static func notchChromeHeight(for screen: NSScreen?) -> CGFloat {
         guard let screen else { return notchChromeHeight }
         if #available(macOS 12.0, *) {
@@ -467,6 +486,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         level = usesNotch ? .statusBar : .floating
     }
 
+    private func refreshPresentationForDraggableBarPreference() {
+        let wasUsingNotchIsland = state.usesNotchIsland
+        updateNotchIslandState()
+        guard wasUsingNotchIsland != state.usesNotchIsland,
+              let screen = screenForPlacement
+        else { return }
+
+        let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
+        resizeToFrame(
+            targetFrame,
+            makeResizable: state.showingAIConversation && state.showingAIResponse,
+            animated: isVisible
+        )
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
@@ -490,6 +524,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
 
         guard state.showingAIConversation else { return }
+
+        if !state.aiInputText.isEmpty {
+            state.aiInputText = ""
+            return
+        }
 
         if state.hasVisibleConversation {
             clearVisibleConversationFromUI()
@@ -584,6 +623,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self?.performSpacesTransitionGrowIn()
             }
         }
+
+        draggableBarCancellable = ShortcutSettings.shared.$draggableBarEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshPresentationForDraggableBarPreference()
+                }
+            }
 
         // Follow cursor across monitors — poll mouse position to move bar instantly
         startCursorScreenTracking()
@@ -1062,7 +1109,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             // treats the dead agent surface as restorable and the next Ask Omi open
             // restores into a blank response panel instead of a fresh input.
             state.conversationSurface = .closed
-            state.aiInputText = ""
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
             state.isAILoading = false
@@ -1165,7 +1211,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             withAnimation(.easeOut(duration: 0.08)) {
                 state.present(.mainResponse)
                 state.isAILoading = false
-                state.aiInputText = ""
             }
             resizeToResponseHeight(animated: true)
             // Mid-stream close cancels the floating binder; re-subscribe so the
@@ -1188,7 +1233,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.present(.mainInput)
                 state.isAILoading = false
-                state.aiInputText = ""
                 state.setLocalAnswerOverride(nil)
                 // Match the explicit resize height so the observer doesn't immediately override it
                 state.inputViewHeight = inputPanelHeight
@@ -1950,7 +1994,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if Self.screenHasCameraHousing(screen) {
+        if notchModeEnabled {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")
@@ -2213,7 +2257,6 @@ class FloatingControlBarManager {
             withAnimation(.easeOut(duration: 0.10)) {
                 window.state.present(.agent(pillID))
                 window.state.isAILoading = false
-                window.state.aiInputText = ""
             }
             window.resizeForActiveAgentChatPublic(pillID: pillID, animated: true)
             completion?(true)
@@ -2554,7 +2597,6 @@ class FloatingControlBarManager {
         }
         window.state.present(.mainInput)
         window.state.isAILoading = false
-        window.state.aiInputText = ""
         window.resizeToResponseHeightPublic(animated: false)
         window.state.present(.mainInput)
         return [
@@ -2578,7 +2620,6 @@ class FloatingControlBarManager {
         withAnimation(.easeOut(duration: 0.10)) {
             window.state.present(.agent(pill.id))
             window.state.isAILoading = false
-            window.state.aiInputText = ""
         }
         window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: false)
         guard wait else {
@@ -3362,7 +3403,6 @@ class FloatingControlBarManager {
         case .visible:
             chatCancellable?.cancel()
             chatCancellable = nil
-            barWindow.state.aiInputText = ""
             barWindow.state.displayedQuery = ""
             barWindow.state.bindQuestionMessageId(nil)
             barWindow.state.setLocalAnswerOverride(message)
@@ -3443,7 +3483,7 @@ class FloatingControlBarManager {
     ) {
         chatCancellable?.cancel()
         chatCancellable = nil
-        barWindow.state.aiInputText = ""
+        barWindow.state.clearSubmittedAIDraftIfUnchanged(userText)
         barWindow.state.displayedQuery = userText
         // Provider timeline is SoT: enrich the existing message in place (e.g. spawn_agent
         // tool block), then bindAnswerMessage only. localAnswerOverride is reserved for
@@ -3869,7 +3909,6 @@ class FloatingControlBarManager {
 
         window.state.present(.mainResponse)
         window.state.isAILoading = false
-        window.state.aiInputText = ""
         if !shouldRestoreVisibleConversation {
             window.state.clearViewport()
         }
@@ -4198,7 +4237,10 @@ class FloatingControlBarManager {
             surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
-            clientTurnId: clientTurnId
+            clientTurnId: clientTurnId,
+            onAccepted: { [weak barWindow] in
+                barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+            }
         )
 
         if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
@@ -4273,11 +4315,9 @@ class FloatingControlBarManager {
         let generation = activeQueryGeneration
 
         barWindow.state.currentQueryFromVoice = true
-        barWindow.state.isVoiceListening = false
-        barWindow.state.isVoiceLocked = false
-        barWindow.state.isVoiceFollowUp = false
-        barWindow.state.voiceTranscript = ""
-        barWindow.state.voiceFollowUpTranscript = ""
+        if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+            VoiceTurnCoordinator.shared.send(.clearPresentation(turnID: turnID))
+        }
 
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider {
@@ -4446,7 +4486,7 @@ extension FloatingControlBarWindow {
     func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true) {
         cancelInputHeightObserver()
         state.currentQueryFromVoice = fromVoice
-        state.aiInputText = ""
+        state.markAIDraftSubmitted(message)
         state.displayedQuery = message
         state.clearCurrentAnswerAnchors()
         // clearCurrentAnswerAnchors keeps archived exchanges; sendAIQuery binds the real turn id.

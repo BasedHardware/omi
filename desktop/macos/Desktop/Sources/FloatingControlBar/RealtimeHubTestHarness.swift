@@ -106,15 +106,24 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidConnect(source: RealtimeHubSession) { connected = true }
 
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
+  func hubDidReceiveInputTranscript(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) {
     if isFinal { if !text.isEmpty { transcriptIn = text } } else { transcriptIn += text }
   }
 
-  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) { audioBytes += pcm24k.count }
+  func hubDidReceiveAudio(
+    _ pcm24k: Data, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) { audioBytes += pcm24k.count }
 
-  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) { textOut += text }
+  func hubDidEmitText(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) { textOut += text }
 
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
+  func hubDidRequestTool(
+    name: String, callId: String, argumentsJSON: String,
+    identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) {
     toolCalls.append("\(name)(\(argumentsJSON))")
     // Return a stub result so the turn completes and we observe the full loop —
     // without spawning real agents / network calls inside the test.
@@ -148,7 +157,9 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     session?.sendToolResult(callId: callId, name: name, output: stub)
   }
 
-  func hubDidFinishTurn(source: RealtimeHubSession) { finish(timedOut: false) }
+  func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {
+    finish(timedOut: false)
+  }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
     if errorMsg == nil { errorMsg = message }

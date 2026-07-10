@@ -845,12 +845,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Published State
     @Published var chatMode: ChatMode = .act
-    @Published var draftText = ""
+    @Published var draftText = "" {
+        didSet {
+            guard !isRestoringDraft else { return }
+            draftRevision &+= 1
+            ChatDraftStore.shared.setText(draftText, for: activeDraftKey)
+        }
+    }
     /// Files staged for attachment to the next message. Cleared when the message is sent.
     @Published var pendingAttachments: [ChatAttachment] = []
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
-    @Published var currentSession: ChatSession?
+    @Published var currentSession: ChatSession? {
+        didSet { restoreDraftForCurrentContextIfNeeded() }
+    }
     @Published var isLoading = false
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
@@ -898,10 +906,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var sendGeneration: Int = 0
     private var activeBridgeSendGeneration: Int?
 
+    /// Set to a send's generation when the 180s watchdog fires for it, *before*
+    /// the watchdog interrupts the bridge. `interrupt()` resumes the in-flight
+    /// request with `BridgeError.stopped`, which the send-loop catch would
+    /// otherwise treat as a silent user stop — so the catch checks this marker to
+    /// surface "Response took too long" instead of vanishing the turn. See the
+    /// watchdog in sendMessage() and the `.stopped` catch branch.
+    private var sendWatchdogFiredGeneration: Int?
+
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
     @Published var sessionsLoadError: String?
-    @Published var selectedAppId: String?
+    @Published var selectedAppId: String? {
+        didSet { restoreDraftForCurrentContextIfNeeded() }
+    }
     @Published var hasMoreMessages = false
     @Published var isLoadingMoreMessages = false
     @Published var showStarredOnly = false
@@ -934,6 +952,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// This lets a single pill run Hermes/OpenClaw without changing the user's
     /// global chat provider preference stored in `chatBridgeMode`.
     private let bridgeHarnessOverride: AgentHarnessMode?
+    private var activeDraftKey = ChatDraftKey.mainChat(contextID: "omi:default")
+    private var isRestoringDraft = false
+    private var draftRevision: UInt64 = 0
 
     var hasBridgeHarnessOverride: Bool {
         bridgeHarnessOverride != nil
@@ -967,7 +988,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var modeSwitchInProgress = false
     /// Continuations for callers waiting on an in-flight mode switch. Supports
     /// arbitrary overlap (A→B→A→B) without losing waiters.
-    private var modeSwitchWaiters: [CheckedContinuation<Void, Never>] = []
+    private struct ModeSwitchWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    private var modeSwitchWaiters: [ModeSwitchWaiter] = []
+    private let modeSwitchWaitTimeoutSeconds: TimeInterval = 90
 
     enum BridgeMode: String {
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
@@ -1120,6 +1147,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
         self.bridgeHarnessOverride = bridgeHarnessOverride
+        isRestoringDraft = true
+        draftText = ChatDraftStore.shared.text(for: activeDraftKey)
+        isRestoringDraft = false
         log("ChatProvider initialized, will start Claude bridge on first use")
 
         // When the last in-flight save completes, re-run any poll cycle
@@ -1185,6 +1215,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self.agentBridgeStarted = false
                     }
                     self.resetSessionStateForAuthChange()
+                    self.resetDraftAfterSignOut()
                     AgentRuntimeStatusStore.shared.reset()
                 }
             }
@@ -1252,6 +1283,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
+            // The notification is delivered on the main queue, so force the
+            // latest coalesced draft writes to disk before this callback can
+            // return and the process exits (including Sparkle relaunches).
+            MainActor.assumeIsolated {
+                ChatDraftStore.shared.flush()
+            }
             guard let self else { return }
             Task { @MainActor in
                 await self.resolvedAgentClient().stop()
@@ -1260,6 +1297,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private var terminationObserver: NSObjectProtocol?
+
+    private var currentDraftKey: ChatDraftKey {
+        let appContext = selectedAppId?.isEmpty == false ? selectedAppId! : "omi"
+        let chatContext = currentSession?.id ?? "default"
+        return .mainChat(contextID: "\(appContext):\(chatContext)")
+    }
+
+    private func restoreDraftForCurrentContextIfNeeded() {
+        let nextKey = currentDraftKey
+        guard nextKey != activeDraftKey else { return }
+        activeDraftKey = nextKey
+        isRestoringDraft = true
+        draftText = ChatDraftStore.shared.text(for: nextKey)
+        isRestoringDraft = false
+    }
+
+    private func resetDraftAfterSignOut() {
+        activeDraftKey = .mainChat(contextID: "omi:default")
+        isRestoringDraft = true
+        draftText = ""
+        isRestoringDraft = false
+    }
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
@@ -1312,19 +1371,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Without this, a query arriving mid-switch could restart the OLD bridge
         // with the wrong harness mode. Skipped when called from switchBridgeMode
         // itself (which holds the flag). External callers join the waiters array
-        // and are woken when the switch (including warmup) completes — no timeout.
+        // and are woken when the switch (including warmup) completes. Waiters
+        // time out after modeSwitchWaitTimeoutSeconds without releasing the
+        // switcher's lock — only the switcher clears modeSwitchInProgress.
         while !fromModeSwitch && modeSwitchInProgress {
-            log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
-            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                modeSwitchWaiters.append(c)
+            guard await waitForModeSwitchCompletion() else {
+                return false
             }
         }
         if agentBridgeStarted {
             let alive = await resolvedAgentClient().isAlive
-            if !alive {
-                log("ChatProvider: agent bridge process died, will restart")
-                agentBridgeStarted = false
+            if alive {
+                return true
             }
+            log("ChatProvider: agent bridge process died, will restart")
+            agentBridgeStarted = false
+            await resolvedAgentClient().prepareForCrashRecovery()
         }
         guard !agentBridgeStarted else { return true }
         // Wait for API keys (Firebase, Calendar) before starting the bridge.
@@ -1491,7 +1553,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         while modeSwitchInProgress {
             log("ChatProvider: switchBridgeMode waiting for in-flight switch to finish")
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                modeSwitchWaiters.append(c)
+                modeSwitchWaiters.append(ModeSwitchWaiter(id: UUID(), continuation: c))
             }
         }
 
@@ -1509,6 +1571,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Block queries during the transition so sendMessage doesn't race and
         // restart the OLD bridge while we're replacing it.
         modeSwitchInProgress = true
+        defer {
+            if modeSwitchInProgress {
+                finishModeSwitchWaiters()
+            }
+        }
 
         // Stop the current bridge and wait for the subprocess to fully terminate.
         // This is critical: without the wait, the old Node.js process can still be
@@ -1534,10 +1601,65 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Unblock queries and wake all waiting switches now that the bridge
         // is fully started and warmed.
+        finishModeSwitchWaiters()
+    }
+
+    private func waitForModeSwitchCompletion() async -> Bool {
+        log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
+        let waiterID = UUID()
+        let completed = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    self.modeSwitchWaiters.append(
+                        ModeSwitchWaiter(id: waiterID, continuation: continuation))
+                }
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(self.modeSwitchWaitTimeoutSeconds * 1_000_000_000))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            if first {
+                // Drain the cancelled timeout task.
+                _ = await group.next()
+            } else {
+                // Timeout won: resume the suspended waiter continuation so the
+                // child task completes before the group returns. Without this,
+                // withTaskGroup's implicit wait for remaining tasks would hang
+                // because withCheckedContinuation does not resume on cancellation.
+                if let idx = self.modeSwitchWaiters.firstIndex(where: { $0.id == waiterID }) {
+                    let waiter = self.modeSwitchWaiters.remove(at: idx)
+                    waiter.continuation.resume()
+                }
+                // Drain the now-resumed waiter task.
+                _ = await group.next()
+            }
+            return first
+        }
+        guard completed else {
+            // Timeout: Do NOT clear modeSwitchInProgress —
+            // the in-flight switchBridgeMode still owns the serialization lock.
+            log(
+                "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
+                    + "(failure_class=mode_switch_timeout recovery_action=fail_soft recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordChatBridgeModeSwitchTimeout(
+                waitSeconds: Int(modeSwitchWaitTimeoutSeconds)
+            )
+            return false
+        }
+        return true
+    }
+
+    private func finishModeSwitchWaiters() {
         modeSwitchInProgress = false
         let waiters = modeSwitchWaiters
         modeSwitchWaiters.removeAll()
-        for waiter in waiters { waiter.resume() }
+        for waiter in waiters {
+            waiter.continuation.resume()
+        }
     }
 
     /// Start Claude OAuth authentication (Mode B)
@@ -3495,7 +3617,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         surfaceRef: AgentSurfaceReference? = nil,
         imageData: Data? = nil,
         turnOwner: ChatTurnOwner = .mainChat,
-        clientTurnId: String = UUID().uuidString
+        clientTurnId: String = UUID().uuidString,
+        onAccepted: (@MainActor () -> Void)? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3541,9 +3664,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard await ensureBridgeStarted() else {
             tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            if currentError == .authRequired {
-                draftText = trimmedText
-            } else if currentError == nil, errorMessage?.isEmpty ?? true {
+            if currentError == nil, errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
             releaseSendLock(sendGeneration: sendGen)
@@ -3603,10 +3724,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let stillStuck = await MainActor.run { () -> Bool in
                 guard self.isSending, self.sendGeneration == sendGen else { return false }
                 log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
+                // Mark this generation before interrupting: interrupt() resumes the
+                // in-flight request with `.stopped`, and the catch below uses this
+                // marker to surface the timeout instead of silently dropping the turn.
+                self.sendWatchdogFiredGeneration = sendGen
                 return true
             }
             guard stillStuck else { return }
             await self.resolvedAgentClient().interrupt()
+            // Fallback for the "stray turn_end" case where interrupt() does not
+            // route through the catch (no active request to resume): if the lock is
+            // somehow still held, force-release it and surface the timeout here.
+            // Deliberately does NOT clear sendWatchdogFiredGeneration — only the
+            // catch clears it, so if this fallback wins the race with the catch, the
+            // catch still sees the marker and surfaces the timeout instead of
+            // re-silencing the turn. A stale marker is harmless: generations only
+            // increase, so it never matches a later send.
             await MainActor.run {
                 guard self.isSending, self.sendGeneration == sendGen else { return }
                 _ = self.releaseSendLock(sendGeneration: sendGen)
@@ -3699,6 +3832,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Signal to ChatMessagesView after the local user row exists so
         // it anchors the new turn, not the previous one.
         localSendToken = LocalSendToken(generation: sendGeneration)
+        onAccepted?()
 
         // Track onboarding user messages with full content
         if isOnboarding {
@@ -4361,17 +4495,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Both surfaces coexist — only one is active at a time per
             // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                stoppedByUser = true
+                // `.stopped` normally means the user pressed Stop (silent). But if the
+                // 180s watchdog fired for THIS send, the `.stopped` came from the
+                // watchdog's own interrupt() — the turn timed out, so surface it
+                // instead of letting the turn vanish (the watchdog's own error-set
+                // races this catch and bails once `isSending` is released here).
+                let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
+                sendWatchdogFiredGeneration = nil
                 currentError = nil
-                lastFailedPrompt = nil
-                errorMessage = nil
+                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(watchdogFired: watchdogFired) {
+                    errorMessage = timeoutMessage
+                } else {
+                    stoppedByUser = true
+                    lastFailedPrompt = nil
+                    errorMessage = nil
+                }
             } else if let bridgeError = error as? BridgeError,
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
                 lastFailedPrompt = trimmedText
-                if card == .authRequired {
-                    draftText = trimmedText
-                }
                 errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
@@ -4386,6 +4528,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         return completedResponseText
+    }
+
+    /// Sends the active main-chat composer and clears only the exact draft that
+    /// was accepted into the timeline. Preflight failures leave it untouched,
+    /// and typing a new draft while acceptance is pending is never overwritten.
+    @discardableResult
+    func sendMainDraft(_ text: String) async -> String? {
+        let submittedRevision = draftRevision
+        return await sendMessage(text, onAccepted: { [weak self] in
+            guard let self,
+                  self.draftRevision == submittedRevision,
+                  self.draftText == text else { return }
+            self.draftText = ""
+        })
     }
 
     @discardableResult
@@ -4807,6 +4963,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return .completed
         }
         return .failed
+    }
+
+    /// The banner text to show when a turn ends with `BridgeError.stopped`.
+    /// A user-initiated Stop is silent (`nil`). But when the 180s send watchdog
+    /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
+    /// the turn timed out, so surface "Response took too long" rather than letting
+    /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.
+    nonisolated static func stoppedTurnErrorMessage(watchdogFired: Bool) -> String? {
+        watchdogFired ? "Response took too long. Try again." : nil
     }
 
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.

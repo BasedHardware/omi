@@ -139,6 +139,16 @@ actor AgentBridge {
     registered = true
   }
 
+  /// Reset client registration after an unexpected process exit so `restart()`/`start()`
+  /// can spawn a fresh Node bridge (the process is already gone).
+  func prepareForCrashRecovery() {
+    tokenRefreshTask?.cancel()
+    tokenRefreshTask = nil
+    registered = false
+    activeRequestId = nil
+    lastKnownQuota = nil
+  }
+
   func stopAndWaitForExit() async {
     tokenRefreshTask?.cancel()
     tokenRefreshTask = nil

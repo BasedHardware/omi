@@ -40,11 +40,13 @@ class AuthState: ObservableObject {
   private static let kAuthUserEmail = "auth_userEmail"
   private static let kAuthUserId = "auth_userId"
 
-  @Published var isSignedIn: Bool
+  @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
-  @Published var isRestoringAuth: Bool = true
   @Published var error: String?
   @Published var userEmail: String?
+
+  var isSignedIn: Bool { sessionPhase == .authenticated }
+  var isRestoringAuth: Bool { sessionPhase == .restoring }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -55,13 +57,13 @@ class AuthState: ObservableObject {
 
     if DesktopLocalProfile.isEnabled {
       // Harness-owned emulator auth replaces any persisted cloud session.
-      self.isSignedIn = false
+      self.sessionPhase = .restoring
       self.userEmail = nil
-      self.isRestoringAuth = true
     } else {
-      self.isSignedIn = savedSignedIn
+      // `auth_isSignedIn` is only a restore hint. Never expose authenticated UI
+      // until AuthService has validated a usable credential for this launch.
+      self.sessionPhase = savedSignedIn ? .restoring : .signedOut
       self.userEmail = savedEmail
-      self.isRestoringAuth = savedSignedIn
     }
     NSLog(
       "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
@@ -71,8 +73,14 @@ class AuthState: ObservableObject {
   }
 
   func update(isSignedIn: Bool, userEmail: String? = nil) {
-    self.isSignedIn = isSignedIn
+    transition(to: isSignedIn ? .authenticated : .signedOut)
     self.userEmail = userEmail
+  }
+
+  func transition(to phase: AuthSessionPhase) {
+    guard sessionPhase != phase else { return }
+    sessionPhase = phase
+    NSLog("OMI AUTH: session phase -> %@", String(describing: phase))
   }
 
   /// Get the user's Firebase UID from UserDefaults (fallback when Firebase SDK auth fails)
@@ -244,6 +252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
+    if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
     // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
@@ -259,6 +268,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       ViewExporter.run()
       return
     }
+
+    // The release pipeline launches the exact signed artifact in this isolated
+    // mode before publication. Run before installer, database, defaults, or
+    // background-service startup so the probe has no product side effects.
+    if AuthStorageCanary.runIfRequested() { return }
 
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
@@ -284,7 +298,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
-    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
         "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
@@ -460,14 +475,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     if DesktopLocalProfile.isEnabled {
       log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
-      AuthState.shared.isRestoringAuth = true
+      AuthState.shared.transition(to: .restoring)
       Task { @MainActor in
         await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
         if AuthState.shared.isRestoringAuth {
           log("Local harness auth watchdog: clearing stuck restoring_auth splash")
-          AuthState.shared.isRestoringAuth = false
+          AuthState.shared.transition(to: .recoveryRequired)
         }
       }
     } else if let path = plistPath,
@@ -482,6 +497,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
+    if let attempt = pendingUpdateRelaunch?.attempt {
+      let installedVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown"
+      let installedBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown"
+      if installedBuild == attempt.targetBuild {
+        AnalyticsManager.shared.updateInstalled(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log("Sparkle: Verified installed update attempt \(attempt.id) at build \(installedBuild)")
+      } else {
+        AnalyticsManager.shared.updateInstallVerificationFailed(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log(
+          "Sparkle: Update attempt \(attempt.id) expected build \(attempt.targetBuild), relaunched build \(installedBuild)"
+        )
+      }
+    }
     AnalyticsManager.shared.appLaunched()
 
     // Tier gating: migrate old boolean key to new 6-tier system
@@ -1089,7 +1127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    AppState().resetOnboardingAndRestart()
+    (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
   @MainActor @objc private func reportIssue() {

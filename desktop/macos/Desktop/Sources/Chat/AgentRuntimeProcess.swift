@@ -192,7 +192,21 @@ actor AgentRuntimeProcess {
   private var isRestarting = false
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
-  var isAlive: Bool { isRunning }
+  var isAlive: Bool {
+    let processRunning = process?.isRunning ?? false
+    if isRunning && !processRunning {
+      log(
+        "AgentRuntimeProcess: stale alive latch — process no longer running "
+          + "(failure_class=stale_alive_latch recovery_action=route_to_termination recovery_result=degraded)")
+      DesktopDiagnosticsManager.shared.recordAgentRuntimeStaleAliveCheck()
+      // Route through handleTermination so in-flight continuations are resumed
+      // and the old terminationHandler is properly superseded. Only clearing the
+      // latch here would leave active requests dangling if the terminationHandler
+      // hasn't fired (or is about to be ignored by generation mismatch).
+      handleTermination(reason: .exit)
+    }
+    return isRunning && processRunning
+  }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
     guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
@@ -1479,6 +1493,14 @@ actor AgentRuntimeProcess {
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
 
+    log(
+      "AgentRuntimeProcess: process terminated "
+        + "(failure_class=\(likelyOOM ? "out_of_memory" : "process_exited") "
+        + "recovery_action=restart_on_next_send recovery_result=degraded code=\(exitCode))")
+    DesktopDiagnosticsManager.shared.recordAgentRuntimeUnexpectedExit(
+      exitCode: exitCode,
+      oom: likelyOOM
+    )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false

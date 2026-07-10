@@ -1,64 +1,69 @@
 import Foundation
 
-enum PTTVoiceOutputLane: String, Equatable, Sendable {
-  case nativeRealtime = "native_realtime"
-  case selectedVoiceFallback = "selected_voice_fallback"
-  case deterministicAgentAck = "deterministic_agent_ack"
-}
-
-struct PTTVoiceLease: Equatable, Sendable {
-  let id: UUID
-  let turnID: UUID
-  let lane: PTTVoiceOutputLane
-  let epoch: UInt64
-}
-
-enum PTTVoiceOutputDecision: Equatable, Sendable {
-  case acquired(PTTVoiceLease)
-  case denied(active: PTTVoiceLease)
+enum VoiceOutputDecision: Equatable, Sendable {
+  case acquired(VoiceOutputLease)
+  case denied(active: VoiceOutputLease)
   case staleTurn
 }
 
-struct PTTVoiceOutputSnapshot: Equatable, Sendable {
-  let turnID: UUID?
-  let activeLease: PTTVoiceLease?
+struct VoiceOutputSnapshot: Equatable, Sendable {
+  let turnID: VoiceTurnID?
+  let activeLease: VoiceOutputLease?
   let providerOutputSuppressed: Bool
 }
 
-/// Small turn-scoped voice-output arbiter for PTT.
-///
-/// Realtime native PCM, selected voice fallback, and deterministic agent acks
-/// must not independently start audible output. This coordinator gives the
-/// current PTT turn exactly one audible lane at a time and makes late provider
-/// callbacks easy to reject by turn id.
-struct PTTVoiceOutputCoordinator {
-  private(set) var turnID: UUID?
-  private(set) var activeLease: PTTVoiceLease?
-  private(set) var providerOutputSuppressed = false
-  private var epoch: UInt64 = 0
+enum VoiceOutputHandoffPolicy {
+  static func fillerCanYield(
+    active: VoiceOutputLease,
+    to incomingLane: VoiceOutputLane,
+    turnID: VoiceTurnID
+  ) -> Bool {
+    active.turnID == turnID && active.lane == .filler && incomingLane != .filler
+  }
+}
 
-  mutating func beginTurn(id: UUID = UUID()) -> UUID {
+/// Authoritative audible-output owner for a PTT turn.
+///
+/// Every PTT audio path must acquire a turn-scoped lease before it can play.
+/// Releases and turn endings are identity checked so an old playback callback
+/// cannot clear a newer turn's output or UI.
+@MainActor
+final class VoiceOutputCoordinator {
+  static let shared = VoiceOutputCoordinator()
+
+  private(set) var turnID: VoiceTurnID?
+  private(set) var activeLease: VoiceOutputLease?
+  private(set) var providerOutputSuppressed = false
+
+  init() {}
+
+  @discardableResult
+  func beginTurn(id: VoiceTurnID = VoiceTurnID()) -> VoiceTurnID {
     turnID = id
     activeLease = nil
     providerOutputSuppressed = false
-    epoch &+= 1
     return id
   }
 
-  mutating func endTurn() {
+  @discardableResult
+  func endTurn(_ requestedTurnID: VoiceTurnID) -> Bool {
+    guard requestedTurnID == turnID else { return false }
     turnID = nil
     activeLease = nil
     providerOutputSuppressed = false
-    epoch &+= 1
+    return true
   }
 
-  mutating func interruptCurrentOutput() {
+  @discardableResult
+  func interrupt(turnID requestedTurnID: VoiceTurnID) -> Bool {
+    guard requestedTurnID == turnID else { return false }
     activeLease = nil
     providerOutputSuppressed = false
-    epoch &+= 1
+    return true
   }
 
-  mutating func acquire(_ lane: PTTVoiceOutputLane, turnID requestedTurnID: UUID) -> PTTVoiceOutputDecision {
+  func acquire(_ lane: VoiceOutputLane, turnID requestedTurnID: VoiceTurnID) -> VoiceOutputDecision
+  {
     guard requestedTurnID == turnID else { return .staleTurn }
     if let activeLease {
       if activeLease.turnID == requestedTurnID, activeLease.lane == lane {
@@ -66,7 +71,7 @@ struct PTTVoiceOutputCoordinator {
       }
       return .denied(active: activeLease)
     }
-    let lease = PTTVoiceLease(id: UUID(), turnID: requestedTurnID, lane: lane, epoch: epoch)
+    let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: requestedTurnID, lane: lane)
     activeLease = lease
     if lane == .deterministicAgentAck {
       providerOutputSuppressed = true
@@ -74,14 +79,16 @@ struct PTTVoiceOutputCoordinator {
     return .acquired(lease)
   }
 
-  mutating func release(_ lease: PTTVoiceLease) {
-    guard activeLease == lease else { return }
+  @discardableResult
+  func release(_ lease: VoiceOutputLease) -> Bool {
+    guard activeLease == lease, turnID == lease.turnID else { return false }
     activeLease = nil
     providerOutputSuppressed = false
+    return true
   }
 
-  func snapshot() -> PTTVoiceOutputSnapshot {
-    PTTVoiceOutputSnapshot(
+  func snapshot() -> VoiceOutputSnapshot {
+    VoiceOutputSnapshot(
       turnID: turnID,
       activeLease: activeLease,
       providerOutputSuppressed: providerOutputSuppressed)

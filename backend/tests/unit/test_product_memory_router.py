@@ -175,7 +175,7 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'version': 1,
         'tier': tier,
         'status': MemoryItemStatus.active,
-        'processing_state': ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        'processing_state': ProcessingState.processed,
         'content': content or f'{memory_id} coffee preference',
         'evidence': [_evidence(f'{memory_id}-source')],
         'source_state': SourceState.active,

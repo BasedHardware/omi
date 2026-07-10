@@ -761,12 +761,32 @@ class AnalyticsManager {
     PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
   }
 
+  func updateInstallStarted(attempt: UpdateInstallAttempt) {
+    PostHogManager.shared.updateInstallStarted(attempt: attempt)
+  }
+
   func updateInstalled(
-    version: String,
-    context: UpdateAnalyticsContext,
-    item: UpdateItemAnalytics
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
   ) {
-    PostHogManager.shared.updateInstalled(version: version, context: context, item: item)
+    PostHogManager.shared.updateInstalled(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
+  }
+
+  func updateInstallVerificationFailed(
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
+  ) {
+    PostHogManager.shared.updateInstallVerificationFailed(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

@@ -4742,6 +4742,18 @@
             "default": false,
             "title": "Transcript Segments Compressed"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
             "default": "private"
@@ -4988,6 +5000,24 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationMutationResponse": {
+        "description": "Canonical conversation snapshot returned after a user mutation.",
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "conversation"
+        ],
+        "title": "ConversationMutationResponse",
         "type": "object"
       },
       "ConversationPhoto": {
@@ -13446,6 +13476,18 @@
             ],
             "default": false,
             "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -25899,7 +25941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FolderMutationResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26676,7 +26718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -27058,7 +27100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -44438,15 +44480,6 @@
           },
           {
             "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
             "name": "X-App-Platform",
             "required": false,
             "schema": {
@@ -44469,6 +44502,47 @@
             "required": false,
             "schema": {
               "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Cloud-Trace-Context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cloud-Trace-Context"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
               "type": "string"
             }
           }

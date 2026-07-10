@@ -115,6 +115,7 @@ struct OnboardingFloatingBarDemoView: View {
         .onAppear {
             // Set up the real floating bar (creates the window if needed)
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             // Use the same global shortcut flow as the normal app so onboarding
             // behaves like production when the user presses Cmd+Enter.
             GlobalShortcutManager.shared.registerShortcuts()

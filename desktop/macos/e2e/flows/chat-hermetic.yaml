@@ -26,6 +26,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
   - desktop/macos/Desktop/Sources/Generated/OmiToolManifest.generated.swift

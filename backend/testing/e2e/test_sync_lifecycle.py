@@ -43,6 +43,7 @@ def _patch_sync_pipeline(
     reprocessed: list[str],
 ):
     import routers.sync as sync_router
+    import utils.sync.pipeline as sync_pipeline
 
     pending_coroutines = []
 
@@ -136,17 +137,17 @@ def _patch_sync_pipeline(
         updated["structured"] = structured
         seed_conversation(uid, updated)
 
-    monkeypatch.setattr(sync_router, "decode_files_to_wav", fake_decode_files_to_wav)
-    monkeypatch.setattr(sync_router, "retrieve_vad_segments", fake_retrieve_vad_segments)
-    monkeypatch.setattr(sync_router, "get_wav_duration", lambda path: 1.25)
+    monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
+    monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
+    monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 1.25)
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
-    monkeypatch.setattr(sync_router, "build_person_embeddings_cache", lambda uid: {})
-    monkeypatch.setattr(sync_router, "get_syncing_file_temporal_signed_url", lambda path: path)
-    monkeypatch.setattr(sync_router, "schedule_syncing_temporal_file_deletion", lambda path: None)
-    monkeypatch.setattr(sync_router, "prerecorded", fake_prerecorded)
-    monkeypatch.setattr(sync_router, "postprocess_words", fake_postprocess_words)
-    monkeypatch.setattr(sync_router, "process_conversation", fake_process_conversation)
-    monkeypatch.setattr(sync_router, "_reprocess_conversation_after_update", fake_reprocess_after_update)
+    monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
+    monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
+    monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
+    monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)
+    monkeypatch.setattr(sync_pipeline, "postprocess_words", fake_postprocess_words)
+    monkeypatch.setattr(sync_pipeline, "process_conversation", fake_process_conversation)
+    monkeypatch.setattr(sync_pipeline, "_reprocess_conversation_after_update", fake_reprocess_after_update)
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
     return pending_coroutines
 

@@ -7,10 +7,13 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
+  - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceDemoView.swift
