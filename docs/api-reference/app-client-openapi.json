@@ -39886,6 +39886,101 @@
         ]
       }
     },
+    "/v1/users/me/llm-usage/daily": {
+      "get": {
+        "description": "The current user's LLM token usage for a single UTC day, by feature and totals.\n\nThe existing GET /v1/users/me/llm-usage returns only a 30-day aggregate; this exposes a\nsingle day. The date query param is a typed date, so Pydantic validates it at the API\nboundary (a malformed value yields 422). Returns zeros with has_data=false when the day\nhas no recorded usage.",
+        "operationId": "get_daily_llm_usage_v1_users_me_llm_usage_daily_get",
+        "parameters": [
+          {
+            "description": "UTC day (YYYY-MM-DD); defaults to today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "UTC day (YYYY-MM-DD); defaults to today",
+              "title": "Date"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Daily Llm Usage",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/me/llm-usage/top-features": {
       "get": {
         "description": "Get top features by LLM token usage for the current user.\n\nReturns the top N features sorted by total token consumption.",

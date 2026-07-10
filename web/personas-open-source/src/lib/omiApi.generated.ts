@@ -6072,6 +6072,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/users/me/llm-usage/daily": {
+    get: {
+      operationId: "get_daily_llm_usage_v1_users_me_llm_usage_daily_get";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/users/me/llm-usage/top-features": {
     get: {
       operationId: "get_llm_top_features_v1_users_me_llm_usage_top_features_get";
@@ -11236,6 +11246,24 @@ export async function record_llm_usage_bucket_v1_users_me_llm_usage_post(body: R
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_daily_llm_usage_v1_users_me_llm_usage_daily_get(query: { date?: string | null }, init?: OmiApiClientInit): Promise<unknown> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/llm-usage/daily`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_llm_top_features_v1_users_me_llm_usage_top_features_get(query: { days?: number, limit?: number }, init?: OmiApiClientInit): Promise<Array<LlmUsageFeatureResponse>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/llm-usage/top-features`;
@@ -12413,4 +12441,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.
