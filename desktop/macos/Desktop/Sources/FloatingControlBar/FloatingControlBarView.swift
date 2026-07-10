@@ -2,6 +2,8 @@ import AppKit
 import Combine
 import MarkdownUI
 import SwiftUI
+import UniformTypeIdentifiers
+import OmiTheme
 
 enum ShortcutHintLayout {
     static func visibleTokens(for keys: [String]) -> [String] {
@@ -35,16 +37,22 @@ struct FloatingControlBarView: View {
     /// Last reported text-editor height so inputViewHeight can be recomputed
     /// when the pill list changes while the input is open. (Cubic P2.)
     @State private var lastInputEditorHeight: CGFloat = 0
-    private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
     private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
     private var notchHiddenCenterWidth: CGFloat {
-        FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+        // Without a physical notch there is no dead zone to straddle — keep a
+        // small deliberate gap between the lobes instead of the phantom one.
+        state.usesNotchIsland
+            ? FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+            : FloatingControlBarWindow.pillSurfaceCenterGapWidth
     }
     private var notchSideWidth: CGFloat {
         if state.showingAIConversation {
             return agentPills.pills.isEmpty
                 ? FloatingControlBarWindow.notchCompactSideWidth
                 : FloatingControlBarWindow.notchActiveSideWidth
+        }
+        if showingNotchThinking {
+            return FloatingControlBarWindow.notchThinkingSideWidth
         }
         if agentPills.pills.isEmpty && !state.isVoiceListening {
             return FloatingControlBarWindow.notchCompactSideWidth
@@ -79,8 +87,8 @@ struct FloatingControlBarView: View {
     }
     var body: some View {
         Group {
-            if state.usesNotchIsland {
-                notchModeBody
+            if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {
+                unifiedFloatingSurface
             } else {
                 VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
                     barChrome
@@ -94,14 +102,30 @@ struct FloatingControlBarView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: state.usesNotchIsland ? .top : .center)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible
+                ? .top : .center
+        )
         .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+        // Placed on the always-mounted root (not inside unifiedFloatingSurface) so
+        // the pill→island morph still fires when transitioning out of the idle pill.
+        .onChange(of: activeLifecycleKey) { _, _ in
+            (window as? FloatingControlBarWindow)?.syncActiveIsland()
+        }
+    }
+
+    /// Composite key for the active PTT lifecycle — any change drives the
+    /// pill ↔ notch-island morph (see FloatingControlBarWindow.syncActiveIsland).
+    private var activeLifecycleKey: String {
+        "\(state.isVoiceListening)-\(state.isThinking)-\(state.isVoiceResponseGlowActive)"
     }
 
     /// Whether the bar chrome should stretch to fill the window width
     private var barNeedsFullWidth: Bool {
-        isHovering || state.showingAIConversation || state.isVoiceListening
+        isHovering || state.isVoiceListening
     }
 
     private var shouldShowAgentSwitcher: Bool {
@@ -122,30 +146,57 @@ struct FloatingControlBarView: View {
         state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
     }
 
+    /// The notch "thinking" state: a PTT query is committed and being processed,
+    /// with no live listening or open conversation surface. Shows the spinning
+    /// Omi mark in the left notch lobe.
+    private var showingNotchThinking: Bool {
+        (state.isThinking || state.isVoiceResponseWaiting)
+            && !state.showingAIConversation && !state.isVoiceListening
+    }
+
     private var shouldUseOmiChatOverlayHitTarget: Bool {
         shouldShowNotchHoverMenu && !showingNotchWaveform
     }
 
-    private var notchModeBody: some View {
+    private var unifiedFloatingSurface: some View {
         VStack(spacing: 0) {
-            notchChrome
+            if state.usesNotchIsland {
+                notchChrome
+            } else {
+                // No camera housing to blend into — the pill surface starts
+                // with a slim top inset instead of the notch chrome band.
+                Color.clear
+                    .frame(height: FloatingControlBarWindow.pillSurfaceTopPadding)
+            }
 
             if shouldShowNotchHoverMenu {
-                VStack(spacing: 0) {
-                    notchOmiChatRow
-                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
-                        .opacity(notchSwitcherProgress)
-                        .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
+                if state.usesNotchIsland {
+                    VStack(spacing: 0) {
+                        notchOmiChatRow
+                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                            .opacity(notchSwitcherProgress)
+                            .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
 
-                    Color.clear
-                        .frame(
-                            width: notchChromeLayoutWidth,
-                            height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
-                        )
-                }
+                        Color.clear
+                            .frame(
+                                width: notchChromeLayoutWidth,
+                                height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
+                            )
+                    }
                     .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
                     .onHover { setAgentSwitcherHovering($0) }
                     .transition(.identity)
+                } else {
+                    pillAgentListMenu
+                }
+            }
+
+            if state.usesNotchIsland && !state.pttHintText.isEmpty && !state.showingAIConversation {
+                notchPttHintRow
+                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
             }
 
             if state.showingAIConversation {
@@ -164,7 +215,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if shouldUseOmiChatOverlayHitTarget {
+            if state.usesNotchIsland && shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
@@ -200,7 +251,10 @@ struct FloatingControlBarView: View {
         .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
             GeometryReader { geometry in
-                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowNotchHoverMenu
+                let hasExpandedSurface = state.showingAIConversation
+                    || state.currentNotification != nil
+                    || shouldShowNotchHoverMenu
+                    || !state.pttHintText.isEmpty
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -210,13 +264,20 @@ struct FloatingControlBarView: View {
                     : notchChromeHeight
 
                 ZStack(alignment: .top) {
-                    NotchDockShape(bottomRadius: bottomRadius)
-                        .fill(Color.black)
-                        .frame(width: surfaceWidth, height: surfaceHeight)
+                    NotchDockShape(
+                        bottomRadius: bottomRadius,
+                        topRadius: state.usesNotchIsland ? 0 : 14
+                    )
+                    .fill(Color.black)
+                    .frame(width: surfaceWidth, height: surfaceHeight)
 
-                    if state.isVoiceResponseActive {
-                        NotchResponseGlowView(bottomRadius: bottomRadius)
-                            .frame(width: surfaceWidth, height: surfaceHeight)
+                    if state.isVoiceResponseGlowActive {
+                        NotchResponseGlowView(
+                            bottomRadius: bottomRadius,
+                            topRadius: state.usesNotchIsland ? 0 : 14,
+                            edgeInset: state.usesNotchIsland ? 0 : 3
+                        )
+                        .frame(width: surfaceWidth, height: surfaceHeight)
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
@@ -245,21 +306,20 @@ struct FloatingControlBarView: View {
         .contentShape(Rectangle())
         .contextMenu { barContextMenu }
         .onHover(perform: handleBarHover)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
-            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
-            // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
-            // dots are back in the notch before the surface shrinks (no stranded dots).
+            // NSPanel owns geometry. This value only fades/morphs the row
+            // contents, using a monotonic curve so it cannot overshoot
+            // vertically. Match the window's expand/collapse durations exactly
+            // so the rows and the panel finish together (no post-expand slide).
             let morphAnim: Animation = visible
-                ? .spring(response: 0.34, dampingFraction: 0.86)
-                : .spring(response: 0.18, dampingFraction: 0.92)
+                ? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)
+                : .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)
             withAnimation(morphAnim) {
                 notchSwitcherProgress = visible ? 1 : 0
             }
         }
         .onChange(of: state.showingAIConversation) { _, isShowing in
-            guard !isShowing, shouldShowNotchHoverMenu else { return }
+            guard state.usesNotchIsland, !isShowing, shouldShowNotchHoverMenu else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                 guard shouldShowNotchHoverMenu else { return }
                 (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
@@ -270,6 +330,7 @@ struct FloatingControlBarView: View {
                 state.agentSwitcherPinned = false
                 state.agentSwitcherHovering = false
                 notchLogoHovering = false
+                (window as? FloatingControlBarWindow)?.setPillAgentListVisible(false)
             }
         }
         .onDisappear { state.setNotchHoverMenuOpen(false) }
@@ -301,6 +362,11 @@ struct FloatingControlBarView: View {
                     .scaleEffect(0.72)
                     .frame(width: 28, height: 15)
                     .frame(width: 38, height: 27)
+            } else if showingNotchThinking {
+                NotchThinkingMark()
+                    .frame(width: 24, height: 24)
+                    .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                    .padding(.trailing, 2)
             } else {
                 ZStack(alignment: .trailing) {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
@@ -351,41 +417,53 @@ struct FloatingControlBarView: View {
         // It is intentionally subtle (transparent) to preserve the minimal
         // notch aesthetic.
         ZStack(alignment: .leading) {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onAskAI()
-                }
+            Button(action: onAskAI) {
+                Color.clear
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
-            if notchSettingsHovering {
-                Button {
-                    openFloatingBarSettings()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.86))
-                        .frame(width: 26, height: 24)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Floating Bar Settings")
-                .transition(.scale.combined(with: .opacity))
+            if !showingNotchThinking && notchSettingsHovering {
+                notchSettingsButton
+                    .zIndex(1)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.leading, 5)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(notchSettingsHovering ? "Floating Bar Settings" : "Ask Omi")
-        .accessibilityHint(notchSettingsHovering ? "Open settings" : "Open the conversation")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction {
-            if notchSettingsHovering {
-                openFloatingBarSettings()
-            } else {
-                onAskAI()
-            }
+        .padding(.leading, 6)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var notchSettingsButton: some View {
+        Button(action: openFloatingBarSettings) {
+            Image(systemName: "gearshape.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white.opacity(0.86))
+                .frame(width: 26, height: 24)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help("Floating Bar Settings")
+        .accessibilityIdentifier("notch_floating_bar_settings")
+        .accessibilityLabel("Floating Bar Settings")
+        .accessibilityHint("Open settings")
+    }
+
+    /// Transient too-short PTT hint shown below the notch chrome (notch layout has
+    /// no inline text spot, unlike the pill's `voiceListeningView`). White/neutral,
+    /// no toast; cleared on the same ~2s lifecycle as `pttHintText`.
+    private var notchPttHintRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 11, weight: .semibold)
+                .foregroundColor(.white.opacity(0.9))
+            Text(state.pttHintText)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var notchOmiChatRow: some View {
@@ -476,46 +554,14 @@ struct FloatingControlBarView: View {
         FloatingControlBarWindow.notchChromeHeight(for: window?.screen ?? NSScreen.main)
     }
 
+    /// Collapsed pill / hover bar chrome. Conversations, notifications-with-
+    /// chat, and the agent list all render on `unifiedFloatingSurface` — this
+    /// chrome only ever shows the idle pill, hover hints, and voice states.
     private var barChrome: some View {
         VStack(spacing: 0) {
-            // Main control bar - always visible
             controlBarView
-
-            // AI conversation view - conditionally visible
-            if state.showingAIConversation {
-                conversationView
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-                .transition(.opacity)
-            }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(conversationTransition, value: state.showingAIResponse)
-        .overlay(alignment: .topLeading) {
-            if state.showingAIConversation {
-                Button {
-                    onCloseAI()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                            .frame(width: 16, height: 16)
-
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8))
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-                .padding(2)
-                .transition(.opacity)
-            }
-        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {
@@ -533,20 +579,8 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if state.showingAIConversation {
-                ZStack {
-                    ResizeHandleView(targetWindow: window)
-                        .frame(width: 20, height: 20)
-                    ResizeGripShape()
-                        .foregroundStyle(.white.opacity(0.3))
-                        .frame(width: 14, height: 14)
-                        .allowsHitTesting(false)
-                }
-                .padding(4)
-            }
-        }
-        .clipped()
+        // No .clipped() here: the pill's status/voice glow needs to render
+        // outside the chrome bounds (the window grows via glow outsets).
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
         .contextMenu {
@@ -600,7 +634,7 @@ struct FloatingControlBarView: View {
 
     @ViewBuilder
     private func mainConversationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        if state.usesNotchIsland && !agentPills.pills.isEmpty {
+        if !agentPills.pills.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Button(action: showAgentListFromConversation) {
@@ -696,32 +730,70 @@ struct FloatingControlBarView: View {
             showAgentListFromConversation()
             return
         }
-        toggleAgentSwitcherPinned()
-        (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+        if state.usesNotchIsland {
+            toggleAgentSwitcherPinned()
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+        } else {
+            (window as? FloatingControlBarWindow)?
+                .setPillAgentListVisible(!state.isNotchHoverMenuVisible)
+        }
     }
 
     private func openAgentInChat(_ pill: AgentPill) {
         openAgentInChat(agentID: pill.id)
     }
 
-    private func openAgentInChat(agentID: UUID) {
-        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
-        if state.conversationSurface == .agent(pill.id) {
-            showAgentListFromConversation()
-            return
+    private func openAgentInChat(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
+        openAgentInChat(
+            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),
+            completion: completion
+        )
+    }
+
+    private func openAgentInChat(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
+        Task { @MainActor in
+            let resolved = await agentPills.resolveAndPresentAgent(
+                pillId: ref.pillId,
+                sessionId: ref.sessionId,
+                runId: ref.runId
+            )
+            guard resolved else {
+                log(
+                    "FloatingControlBarView: agent open unavailable after hydrate "
+                        + "pillId=\(ref.pillId?.uuidString ?? "nil") "
+                        + "sessionId=\(ref.sessionId ?? "nil") "
+                        + "runId=\(ref.runId ?? "nil")"
+                )
+                completion?(false)
+                return
+            }
+            guard let pill = agentPills.pills.first(where: { pill in
+                if let pillId = ref.pillId, pill.id == pillId { return true }
+                if let runId = ref.runId, pill.canonicalRunId == runId { return true }
+                if let sessionId = ref.sessionId, pill.canonicalSessionId == sessionId { return true }
+                return false
+            }) ?? ref.pillId.flatMap({ id in agentPills.pills.first(where: { $0.id == id }) }) else {
+                completion?(false)
+                return
+            }
+            if state.conversationSurface == .agent(pill.id) {
+                showAgentListFromConversation()
+                completion?(true)
+                return
+            }
+            agentPills.markViewed(pillID: pill.id)
+            let barWindow = window as? FloatingControlBarWindow
+            let wasShowingConversation = state.showingAIConversation
+            state.setNotchHoverMenuOpen(false)
+            notchLogoHovering = false
+            barWindow?.makeKeyAndOrderFront(nil)
+            withAnimation(agentChatSwitchTransition) {
+                state.present(.agent(pill.id))
+                state.isAILoading = false
+            }
+            barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
+            completion?(true)
         }
-        agentPills.markViewed(pillID: pill.id)
-        let barWindow = window as? FloatingControlBarWindow
-        let wasShowingConversation = state.showingAIConversation
-        state.setNotchHoverMenuOpen(false)
-        notchLogoHovering = false
-        barWindow?.makeKeyAndOrderFront(nil)
-        withAnimation(agentChatSwitchTransition) {
-            state.present(.agent(pill.id))
-            state.isAILoading = false
-            state.aiInputText = ""
-        }
-        barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
     }
 
     private func openOmiChatFromNotchRow() {
@@ -753,13 +825,31 @@ struct FloatingControlBarView: View {
 
         let effectiveHover = hovering && !state.requiresHoverReset && isWithinActivationZoneForCurrentMode()
         state.isHoveringBar = effectiveHover
+
+        // With subagents present, hovering the pill unfurls the agent rows —
+        // the same surface the notch shows on hover — instead of the legacy
+        // expanded bar. Moving the pointer away collapses back to the pill.
+        if !agentPills.pills.isEmpty, !state.showingAIConversation {
+            let barWindow = window as? FloatingControlBarWindow
+            if effectiveHover {
+                barWindow?.setPillAgentListVisible(true)
+            } else {
+                barWindow?.schedulePillAgentListCollapse()
+            }
+            return
+        }
+
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
-        // content never renders in a too-small window (which causes overflow).
+        // content never renders in a too-small window. If the resize was
+        // skipped (guarded), do NOT show the expanded bar — oversized content
+        // in a small window force-grows it with the origin pinned, sliding
+        // the pill sideways.
+        var didExpand = false
         if effectiveHover {
-            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            didExpand = (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true) ?? false
         }
         withAnimation(.easeInOut(duration: 0.12)) {
-            isHovering = effectiveHover
+            isHovering = effectiveHover && didExpand
         }
         if !effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
@@ -884,7 +974,10 @@ struct FloatingControlBarView: View {
 
     private func openFloatingBarSettings() {
         activateMainAppWindow()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        // Post the navigate request once the main window is key (its
+        // `navigateToFloatingBarSettings` receiver is mounted by then) rather than
+        // guessing a fixed delay for the window to appear (BL-005).
+        runWhenMainAppWindowKey {
             NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
         }
     }
@@ -892,13 +985,56 @@ struct FloatingControlBarView: View {
     private func activateMainAppWindow() {
         NSApp.activate()
 
-        if !revealMainAppWindow() {
-            AppDelegate.openMainWindow?()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                NSApp.activate()
-                _ = revealMainAppWindow()
-            }
+        if revealMainAppWindow() { return }
+
+        // No existing window — open one and reveal it the moment it becomes key,
+        // instead of guessing a fixed delay for openWindow(id:) to create it (BL-005).
+        AppDelegate.openMainWindow?()
+        runWhenMainAppWindowKey {
+            NSApp.activate()
+            _ = revealMainAppWindow()
         }
+    }
+
+    /// True for the app's real main window (not the floating panel or the
+    /// menu-bar popover).
+    private static func isRealMainAppWindow(_ window: NSWindow) -> Bool {
+        !(window is NSPanel)
+            && window.frame.width > 300
+            && window.frame.height > 200
+            && !window.title.hasPrefix("Item-")
+    }
+
+    /// Run `action` once the app's main window is key — immediately if one already
+    /// is, otherwise on the next `didBecomeKeyNotification` for a real main window.
+    /// Replaces fixed `asyncAfter` guesses that waited for `openWindow(id:)` to
+    /// create/activate the window (BL-005); the window-key event is the real signal.
+    private func runWhenMainAppWindowKey(_ action: @escaping () -> Void) {
+        if let key = NSApp.keyWindow, Self.isRealMainAppWindow(key) {
+            // One runloop hop, same as the observer path below, so a freshly-keyed
+            // window's content (e.g. the navigate receiver) is mounted before we act.
+            DispatchQueue.main.async { action() }
+            return
+        }
+        var token: NSObjectProtocol?
+        let removeObserver = {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+        token = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { note in
+            guard let window = note.object as? NSWindow, Self.isRealMainAppWindow(window) else {
+                return
+            }
+            removeObserver()
+            // One runloop hop so SwiftUI can mount the freshly-opened window's
+            // content (e.g. the navigate receiver) before we act.
+            DispatchQueue.main.async { action() }
+        }
+        // Safety net: if no real main window ever becomes key (e.g. openMainWindow
+        // was nil, or the view went away), drop the observer after a bounded delay
+        // so it can't linger on the default center indefinitely.
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in removeObserver() }
     }
 
     @discardableResult
@@ -926,15 +1062,23 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        let allowsHoverExpansion = isHovering && !state.isVoiceResponseActive
+        let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT hint takes precedence over every other bar state
+                // (incl. follow-up turns) for its brief window.
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .frame(height: 42)
                     .transition(.opacity)
-            } else if allowsHoverExpansion || state.showingAIConversation {
+            } else if state.isVoiceListening && !state.isVoiceFollowUp {
+                voiceListeningView
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
+                    .transition(.opacity)
+            } else if allowsHoverExpansion {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
@@ -949,31 +1093,100 @@ struct FloatingControlBarView: View {
                 .frame(height: 50)
                 .transition(.opacity)
             } else {
-                compactCircleView
-                    .transition(.opacity)
+                PillStatusObservingView(manager: agentPills) { pills in
+                    let agentGroup = state.isVoiceResponseGlowActive
+                        ? nil
+                        : NotchAgentStatusGroup.aggregate(for: pills)
+                    compactCircleView(agentGroup: agentGroup)
+                        .modifier(AgentStatusGlow(group: agentGroup))
+                }
+                .transition(.opacity)
             }
         }
     }
 
-    /// Minimal thin bar shown when not hovering
-    private var compactCircleView: some View {
+    /// The pill-mode agent list: same rows as the notch hover menu, rendered
+    /// directly (no notch morph — there is no logo ring to unfurl from).
+    private var pillAgentListMenu: some View {
+        PillStatusObservingView(manager: agentPills) { pills in
+            VStack(spacing: 0) {
+                notchOmiChatRow
+                    .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+
+                ForEach(pills.prefix(NotchAgentStackMetrics.maxAgents), id: \.id) { pill in
+                    Button {
+                        openAgentInChat(pill)
+                    } label: {
+                        NotchAgentListRow(
+                            title: pill.title,
+                            status: pill.status,
+                            activity: ChatContinuityInvariants.agentPreviewText(
+                                prompt: pill.query,
+                                output: pill.latestActivity
+                            ),
+                            isSelected: pill.id == state.activeAgentChatPillID,
+                            progress: 1
+                        )
+                        .overlay(alignment: .leading) {
+                            pillRowIdentityMark(pill)
+                                .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+                        }
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                    }
+                    .buttonStyle(.plain)
+                    .help(pill.title)
+                }
+            }
+            .padding(.bottom, FloatingControlBarWindow.notchHoverMenuBottomMargin)
+            .frame(width: notchChromeLayoutWidth, alignment: .top)
+            .onHover { handleBarHover($0) }
+            .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private func pillRowIdentityMark(_ pill: AgentPill) -> some View {
+        let group = NotchAgentStatusGroup(status: pill.status)
+        if pill.bridgeHarnessOverride.rendersProviderMark {
+            AgentProviderLogoMark(
+                provider: pill.bridgeHarnessOverride,
+                statusColor: group.color,
+                size: NotchAgentStackMetrics.listOrbSize + 5
+            )
+            .shadow(color: group.color.opacity(0.55), radius: 5)
+        } else {
+            Circle()
+                .fill(group.color)
+                .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.42), lineWidth: 0.8)
+                )
+                .shadow(color: group.color.opacity(0.6), radius: 5)
+        }
+    }
+
+    /// Minimal thin bar shown when not hovering. The fill is the primary
+    /// ambient status channel at this size: voice-response gradient wins,
+    /// then the aggregate subagent color, then neutral gray.
+    private func compactCircleView(agentGroup: NotchAgentStatusGroup?) -> some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(compactPillFill)
+            .fill(compactPillFill(agentGroup: agentGroup))
             .frame(width: 28, height: 6)
             .shadow(
-                color: state.isVoiceResponseActive ? Color.white.opacity(0.85) : .clear,
-                radius: state.isVoiceResponseActive ? 16 : 0,
+                color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.85) : .clear,
+                radius: state.isVoiceResponseGlowActive ? 16 : 0,
                 x: 0,
                 y: 0
             )
             .shadow(
-                color: state.isVoiceResponseActive ? Color.white.opacity(0.45) : .clear,
-                radius: state.isVoiceResponseActive ? 28 : 0,
+                color: state.isVoiceResponseGlowActive ? Color.white.opacity(0.45) : .clear,
+                radius: state.isVoiceResponseGlowActive ? 28 : 0,
                 x: 0,
                 y: 0
             )
             .overlay {
-                if state.isVoiceResponseActive {
+                if state.isVoiceResponseGlowActive {
                     RoundedRectangle(cornerRadius: 3)
                         .stroke(
                             LinearGradient(
@@ -991,16 +1204,27 @@ struct FloatingControlBarView: View {
                         .blur(radius: 0.25)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
+            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseGlowActive)
     }
 
-    private var compactPillFill: LinearGradient {
-        if state.isVoiceResponseActive {
+    private func compactPillFill(agentGroup: NotchAgentStatusGroup?) -> LinearGradient {
+        if state.isVoiceResponseGlowActive {
             return LinearGradient(
                 colors: [
                     Color.white.opacity(0.9),
                     Color(red: 0.50, green: 0.75, blue: 1.0),
                     Color.white.opacity(0.7)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        if let agentGroup {
+            return LinearGradient(
+                colors: [
+                    agentGroup.color.opacity(0.85),
+                    agentGroup.color,
+                    agentGroup.color.opacity(0.85)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
@@ -1060,20 +1284,30 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 7) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: state.isVoiceListening)
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT tap: inline hint instead of the live waveform.
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
+                Text(state.pttHintText)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+            } else {
+                // Playful realtime mic waveform (replaces the old pulsing red dot)
+                VoiceWaveformBars(isActive: state.isVoiceListening)
 
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 12, weight: .semibold)
-                .foregroundColor(.white)
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
 
-            if state.isVoiceLocked {
-                Image(systemName: "lock.fill")
-                    .scaledFont(size: 10, weight: .bold)
-                    .foregroundColor(.orange)
-                    .frame(width: 18, height: 18)
-                    .background(Color.orange.opacity(0.2))
-                    .cornerRadius(4)
+                if state.isVoiceLocked {
+                    Image(systemName: "lock.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(.orange)
+                        .frame(width: 18, height: 18)
+                        .background(Color.orange.opacity(0.2))
+                        .cornerRadius(4)
+                }
             }
         }
     }
@@ -1084,7 +1318,7 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
-            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
+            canClearVisibleConversation: false,
             onSend: { message in
                 (window as? FloatingControlBarWindow)?
                     .beginVisibleMainQuery(message, fromVoice: false, animated: true)
@@ -1094,11 +1328,7 @@ struct FloatingControlBarView: View {
             onEscape: onEscape,
             onHeightChange: { [self] height in
                 lastInputEditorHeight = height
-                if state.usesNotchIsland {
-                    recomputeNotchInputHeight()
-                } else {
-                    state.inputViewHeight = 50 + height + 24
-                }
+                recomputeUnifiedInputHeight()
             }
         )
         .onChange(of: agentPills.pills.count) {
@@ -1106,7 +1336,7 @@ struct FloatingControlBarView: View {
             // recompute the input height when the pill list changes while the
             // input/chat view is open. Without this the budget goes stale and
             // causes clipping or extra empty space. (Cubic P2.)
-            recomputeNotchInputHeight()
+            recomputeUnifiedInputHeight()
         }
         .transition(
             .asymmetric(
@@ -1117,9 +1347,8 @@ struct FloatingControlBarView: View {
 
     /// Recompute inputViewHeight from the last known editor height and the
     /// current agent-pills presence. Called on editor height change and on
-    /// pill-list change so the header height budget never goes stale.
-    private func recomputeNotchInputHeight() {
-        guard state.usesNotchIsland else { return }
+    /// pill-list change so the shared expanded surface budget never goes stale.
+    private func recomputeUnifiedInputHeight() {
         // Guard against stale zero editor height: the editor has not reported
         // its size yet (or was just re-created after a surface switch), so
         // recomputing now would shrink the window and clip input/send
@@ -1128,22 +1357,37 @@ struct FloatingControlBarView: View {
         let height = lastInputEditorHeight > 0
             ? lastInputEditorHeight
             : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
-        let baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+        let topBand = state.usesNotchIsland
+            ? notchChromeHeight
+            : FloatingControlBarWindow.pillSurfaceTopPadding
+        let baseHeight = topBand + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
         let headerBudget = !agentPills.pills.isEmpty
             ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
             : 0
         state.inputViewHeight = baseHeight + headerBudget
     }
 
+    private var floatingChatProvider: ChatProvider? {
+        FloatingControlBarManager.shared.sharedFloatingProvider
+    }
+
     private var aiResponseView: some View {
-        AIResponseView(
+        // Re-read derived content when viewport anchors or streamed answer tokens change.
+        let _ = state.chatViewport
+        let _ = state.answerStreamToken
+        let provider = floatingChatProvider
+        return AIResponseView(
             isLoading: Binding(
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            currentMessage: state.currentAIMessage,
+            currentMessage: state.currentAIMessage(from: provider),
+            followUpText: Binding(
+                get: { state.aiInputText },
+                set: { state.aiInputText = $0 }
+            ),
             userInput: state.displayedQuery,
-            chatHistory: state.chatHistory,
+            chatHistory: state.derivedChatHistory(from: provider),
             isVoiceFollowUp: Binding(
                 get: { state.isVoiceFollowUp },
                 set: { state.isVoiceFollowUp = $0 }
@@ -1152,28 +1396,30 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
-            showsHeader: !state.usesNotchIsland,
+            canClearVisibleConversation: false,
+            showsHeader: false,
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
             onSendFollowUp: { message in
-                archiveCurrentExchange()
+                state.archiveCurrentExchange(using: floatingChatProvider)
 
                 (window as? FloatingControlBarWindow)?
                     .beginVisibleMainQuery(message, fromVoice: false, animated: true)
                 state.displayedQuery = message
-                state.currentQuestionMessageId = nil
+                state.bindQuestionMessageId(nil)
                 state.markConversationActivity()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = true
-                    state.currentAIMessage = nil
                 }
                 onSendQuery(message)
             },
             onRate: onRate,
             onShareLink: onShareLink,
-            onOpenAgent: { agentID in
-                openAgentInChat(agentID: agentID)
+            onOpenAgent: { agentID, completion in
+                openAgentInChat(agentID: agentID, completion: completion)
+            },
+            onOpenAgentRef: { ref, completion in
+                openAgentInChat(ref: ref, completion: completion)
             }
         )
         .transition(
@@ -1183,30 +1429,24 @@ struct FloatingControlBarView: View {
             ))
     }
 
-    private func archiveCurrentExchange() {
-        guard let currentMessage = state.currentAIMessage else { return }
-        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
-
-        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        state.chatHistory.append(
-            FloatingChatExchange(
-                question: currentQuery.isEmpty ? nil : currentQuery,
-                questionMessageId: state.currentQuestionMessageId,
-                aiMessage: currentMessage
-            )
-        )
-    }
-
 }
 
 private struct NotchDockShape: Shape {
     let bottomRadius: CGFloat
+    var topRadius: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
         let radius = min(bottomRadius, rect.height / 2)
+        // Square top corners blend into a physical notch/bezel; a floating
+        // surface on a non-notched display rounds them instead.
+        let topR = min(topRadius, rect.height / 2)
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.move(to: CGPoint(x: rect.minX + topR, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topR, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + topR),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
         path.addQuadCurve(
             to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
@@ -1217,7 +1457,11 @@ private struct NotchDockShape: Shape {
             to: CGPoint(x: rect.minX, y: rect.maxY - radius),
             control: CGPoint(x: rect.minX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topR))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + topR, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
         path.closeSubpath()
         return path
     }
@@ -1225,28 +1469,60 @@ private struct NotchDockShape: Shape {
 
 private struct NotchLowerEdgeShape: Shape {
     let bottomRadius: CGFloat
+    /// 0 = open lower-edge path (notch mode: the top blends into the bezel).
+    /// > 0 = closed full-perimeter ring with rounded top corners (pill mode:
+    /// the surface is a floating card, so the glow wraps all the way around).
+    var topRadius: CGFloat = 0
+    /// Inset from the shape bounds. Pill-mode windows have no glow outsets,
+    /// so the ring is drawn slightly inside the surface to avoid clipping.
+    var edgeInset: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        let radius = min(bottomRadius, rect.height / 2)
+        let rect = rect.insetBy(dx: edgeInset, dy: edgeInset)
+        let radius = min(max(0, bottomRadius - edgeInset), rect.height / 2)
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + 1))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+        if topRadius > 0 {
+            let topR = min(max(0, topRadius - edgeInset), rect.height / 2)
+            path.move(to: CGPoint(x: rect.minX + topR, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - topR, y: rect.minY))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.maxX, y: rect.minY + topR),
+                control: CGPoint(x: rect.maxX, y: rect.minY)
+            )
+        } else {
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX + radius, y: rect.maxY),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.maxY - radius),
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
             control: CGPoint(x: rect.maxX, y: rect.maxY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        if topRadius > 0 {
+            let topR = min(max(0, topRadius - edgeInset), rect.height / 2)
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topR))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX + topR, y: rect.minY),
+                control: CGPoint(x: rect.minX, y: rect.minY)
+            )
+            path.closeSubpath()
+        } else {
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 1))
+        }
         return path
     }
 }
 
 private struct NotchResponseGlowView: View {
     let bottomRadius: CGFloat
+    /// See `NotchLowerEdgeShape`: 0 = notch lower-edge glow, > 0 = pill-mode
+    /// full-perimeter ring with this top corner radius.
+    var topRadius: CGFloat = 0
+    var edgeInset: CGFloat = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1.0 / 24.0)) { timeline in
@@ -1254,7 +1530,11 @@ private struct NotchResponseGlowView: View {
             let phase = time.truncatingRemainder(dividingBy: 2.4) / 2.4
             let sweepStart = UnitPoint(x: -0.35 + phase * 1.7, y: 0.0)
             let sweepEnd = UnitPoint(x: 0.35 + phase * 1.7, y: 1.0)
-            let edge = NotchLowerEdgeShape(bottomRadius: bottomRadius)
+            let edge = NotchLowerEdgeShape(
+                bottomRadius: bottomRadius,
+                topRadius: topRadius,
+                edgeInset: edgeInset
+            )
 
             ZStack {
                 edge
@@ -1329,6 +1609,15 @@ private struct NotchOmiMark: View {
     }
 }
 
+/// The Omi mark rendered as a spinning "thinking" indicator. The ring's dots
+/// carry a brightness trail (bright head → faint tail) so the continuous
+/// rotation reads as a sweeping comet rather than a static ring of dots.
+private struct NotchThinkingMark: View {
+    var body: some View {
+        OmiThinkingMark()
+    }
+}
+
 private struct SubagentChatPointer: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -1348,14 +1637,32 @@ private struct AgentMainChatView: View {
     let onEscape: () -> Void
     let onSpawnSibling: (UUID) -> Void
 
-    @State private var followUpText = ""
+    @State private var followUpText: String
+    @State private var attachments: [ChatAttachment] = []
+    @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
+
+    init(
+        pill: AgentPill,
+        manager: AgentPillsManager,
+        onBackToAgentRows: @escaping () -> Void,
+        onEscape: @escaping () -> Void,
+        onSpawnSibling: @escaping (UUID) -> Void
+    ) {
+        self.pill = pill
+        self.manager = manager
+        self.onBackToAgentRows = onBackToAgentRows
+        self.onEscape = onEscape
+        self.onSpawnSibling = onSpawnSibling
+        _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
+    }
 
     private var isRecording: Bool {
         manager.recordingPillID == pill.id
     }
 
     private var isRunning: Bool {
+        guard !hasFinalAssistantOutput else { return false }
         switch pill.status {
         case .queued, .starting, .running:
             return true
@@ -1366,7 +1673,7 @@ private struct AgentMainChatView: View {
 
     private var displayedMessages: [ChatMessage] {
         if !pill.conversationMessages.isEmpty {
-            return pill.conversationMessages
+            return normalizedAgentMessages(pill.conversationMessages)
         }
         var fallback = [ChatMessage(id: "\(pill.id.uuidString)-query", text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
@@ -1375,11 +1682,19 @@ private struct AgentMainChatView: View {
                 fallback.append(message)
             }
         }
-        return fallback
+        return normalizedAgentMessages(fallback)
     }
 
     private var hasAssistantTurn: Bool {
         displayedMessages.contains { $0.sender == .ai }
+    }
+
+    private var hasFinalAssistantOutput: Bool {
+        displayedMessages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
     }
 
     private var activityText: String {
@@ -1396,6 +1711,7 @@ private struct AgentMainChatView: View {
                         message.id,
                         message.text,
                         String(message.contentBlocks.count),
+                        String(message.displayResources.count),
                         String(message.isStreaming),
                     ].joined(separator: "\u{1F}")
                 }.joined(separator: "\u{1E}"),
@@ -1432,9 +1748,11 @@ private struct AgentMainChatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             manager.markViewed(pillID: pill.id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                isFollowUpFocused = true
-            }
+        }
+        .task {
+            // Focus the follow-up field once the view is on screen (view-lifecycle
+            // signal) instead of guessing a fixed delay for it to mount (BL-005).
+            isFollowUpFocused = true
         }
         .onExitCommand {
             onEscape()
@@ -1467,7 +1785,7 @@ private struct AgentMainChatView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Group {
-                if pill.status == .done {
+                if displayStatus.isFinished {
                     Button {
                         manager.dismiss(pillID: pill.id)
                         onBackToAgentRows()
@@ -1475,7 +1793,7 @@ private struct AgentMainChatView: View {
                         statusBadgeLabel
                     }
                     .buttonStyle(.plain)
-                    .help("Dismiss completed agent")
+                    .help("Dismiss agent")
                 } else {
                     statusBadgeLabel
                 }
@@ -1504,17 +1822,24 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadgeLabel: some View {
-        Text(pill.status.displayLabel)
+        Text(displayStatus.displayLabel)
             .scaledFont(size: 9, weight: .bold)
             .foregroundColor(statusForeground)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(pill.status.tintColor.opacity(statusBackgroundOpacity))
+            .background(displayStatus.tintColor.opacity(statusBackgroundOpacity))
             .clipShape(Capsule())
     }
 
+    private var displayStatus: AgentPill.Status {
+        if hasFinalAssistantOutput, !pill.status.isFinished {
+            return .done
+        }
+        return pill.status
+    }
+
     private var statusForeground: Color {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done:
             return .black.opacity(0.86)
         case .stopped:
@@ -1525,7 +1850,7 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBackgroundOpacity: Double {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done, .stopped:
             return 1
         case .failed:
@@ -1546,6 +1871,26 @@ private struct AgentMainChatView: View {
         }
     }
 
+    private func normalizedAgentMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        let hasFinalOutput = messages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
+        guard hasFinalOutput else { return messages }
+        return messages.filter { message in
+            !(message.sender == .ai
+                && message.isStreaming
+                && !hasVisibleAssistantContent(message))
+        }
+    }
+
+    private func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.displayResources.isEmpty
+    }
+
     private var runningActivityView: some View {
         VStack(alignment: .leading, spacing: 8) {
             TypingIndicator()
@@ -1563,23 +1908,28 @@ private struct AgentMainChatView: View {
     private func agentMessageBubble(_ message: ChatMessage) -> some View {
         let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if message.sender == .user {
-            Text(trimmed)
-                .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(.white)
-                .textSelection(.enabled)
-                .lineLimit(nil)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(Color.white.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .contextMenu {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.copyableText, forType: .string)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                if !trimmed.isEmpty {
+                    Text(trimmed)
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .textSelection(.enabled)
+                        .lineLimit(nil)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-        } else if trimmed.isEmpty && message.isStreaming {
+                agentResourceStrip(message)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message.copyableText, forType: .string)
+                }
+            }
+        } else if trimmed.isEmpty && message.isStreaming && message.displayResources.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
@@ -1591,14 +1941,30 @@ private struct AgentMainChatView: View {
                     }
             }
         } else {
-            agentAssistantContent(message)
-                .padding(.horizontal, 4)
-                .contextMenu {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.copyableText, forType: .string)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                agentAssistantContent(message)
+                agentResourceStrip(message)
+            }
+            .padding(.horizontal, 4)
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message.copyableText, forType: .string)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agentResourceStrip(_ message: ChatMessage) -> some View {
+        if !message.displayResources.isEmpty {
+            ChatResourceStrip(
+                resources: message.displayResources,
+                density: .compact,
+                alignment: .leading
+            )
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -1623,6 +1989,27 @@ private struct AgentMainChatView: View {
                     case .discoveryCard(_, let title, let summary, let fullText):
                         DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                        AgentSpawnCard(
+                            title: title,
+                            objective: objective,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentCompletion(
+                        _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output,
+                        let status
+                    ):
+                        AgentCompletionCard(
+                            title: title,
+                            promptSnippet: promptSnippet,
+                            output: output,
+                            status: status,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -1643,7 +2030,7 @@ private struct AgentMainChatView: View {
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
             case .toolCalls(_, let calls):
                 if calls.contains(where: { $0.spawnedAgentID != nil }) {
@@ -1682,54 +2069,82 @@ private struct AgentMainChatView: View {
     }
 
     private var followUpInput: some View {
-        HStack(spacing: 6) {
-            Button {
-                manager.toggleFollowUpVoice(for: pill)
-            } label: {
-                Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
-                    .scaledFont(size: 17, weight: .semibold)
-                    .foregroundColor(isRecording ? Color.white : .secondary)
-                    .frame(width: 24, height: 24)
+        VStack(alignment: .leading, spacing: 8) {
+            if !attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: attachments,
+                    onRemove: removeAttachment
+                )
+                .environment(\.colorScheme, .dark)
             }
-            .buttonStyle(.plain)
-            .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
 
-            TextField("Ask this agent...", text: $followUpText)
-                .textFieldStyle(.plain)
-                .scaledFont(size: 13)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .focused($isFollowUpFocused)
-                .onSubmit {
-                    sendFollowUp()
+            HStack(spacing: 6) {
+                Button {
+                    manager.toggleFollowUpVoice(for: pill)
+                } label: {
+                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
+                        .scaledFont(size: 17, weight: .semibold)
+                        .foregroundColor(isRecording ? Color.white : .secondary)
+                        .frame(width: 24, height: 24)
                 }
+                .buttonStyle(.plain)
+                .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
 
-            Button(action: sendFollowUp) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .scaledFont(size: 20)
-                    .foregroundColor(canSend ? .white : .secondary)
+                TextField("Ask this agent...", text: $followUpText)
+                    .textFieldStyle(.plain)
+                    .scaledFont(size: 13)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .focused($isFollowUpFocused)
+                    .onSubmit {
+                        sendFollowUp()
+                    }
+
+                Button(action: sendFollowUp) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(size: 20)
+                        .foregroundColor(canSend ? .white : .secondary)
+                }
+                .disabled(!canSend)
+                .buttonStyle(.plain)
             }
-            .disabled(!canSend)
-            .buttonStyle(.plain)
+        }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
+        .onChange(of: followUpText) { _, text in
+            ChatDraftStore.shared.setText(text, for: .floatingAgent(pill.id))
         }
     }
 
     private var canSend: Bool {
-        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let staged = attachments
+        guard !trimmed.isEmpty || !staged.isEmpty else { return }
         followUpText = ""
-        if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            let sibling = manager.spawnFromHandoff(
-                handoff,
+        attachments = []
+        // Attachments are addressed to *this* agent (they reference local files it
+        // should read), so bypass the "@agent" handoff heuristic when files are staged.
+        if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
+            guard let sibling = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+                .init(
+                    originalUserText: handoff.originalRequest,
+                    brief: handoff.agentTask,
+                    title: nil,
+                    spokenAck: nil,
+                    directedProvider: nil,
+                    harnessOverride: pill.bridgeHarnessOverride
+                ),
                 model: pill.model,
-                bridgeHarnessOverride: pill.bridgeHarnessOverride
-            )
+                fromVoice: false
+            ) else {
+                manager.continueAgent(from: pill, text: trimmed)
+                return
+            }
             state.present(.agent(sibling.id))
             // Route through the window resize/observer setup so the new
             // sibling's reportContentHeight(.agent(sibling.id)) updates are
@@ -1738,9 +2153,103 @@ private struct AgentMainChatView: View {
             onSpawnSibling(sibling.id)
             return
         }
-        manager.continueAgent(from: pill, text: trimmed)
+        manager.continueAgent(from: pill, text: trimmed, attachments: staged)
     }
 
+    // MARK: - Attachments
+
+    private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
+        ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
+            addAttachmentURLs(urls)
+        }
+    }
+
+    private func addAttachmentURLs(_ urls: [URL]) {
+        let remaining = max(0, kMaxChatAttachments - attachments.count)
+        guard remaining > 0 else { return }
+        let staged = urls.prefix(remaining).compactMap { url -> ChatAttachment? in
+            guard var attachment = ChatAttachment.from(url: url) else { return nil }
+            // Files are read from disk by the local agent, so mark them ready
+            // immediately — there is no upload step in the floating-pill path.
+            attachment.state = .localOnly
+            return attachment
+        }
+        guard !staged.isEmpty else { return }
+        attachments.append(contentsOf: staged)
+    }
+
+    private func removeAttachment(_ id: String) {
+        attachments.removeAll { $0.id == id }
+    }
+}
+
+/// Re-renders when any individual pill's @Published status changes — the
+/// manager only publishes on pill add/remove, so per-pill observers are needed
+/// for live status color updates (same pattern as NotchAgentPillsRowView).
+private struct PillStatusObservingView<Content: View>: View {
+    @ObservedObject var manager: AgentPillsManager
+    @ViewBuilder let content: ([AgentPill]) -> Content
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    var body: some View {
+        let _ = pillStatusChangeToken
+        content(NotchAgentStackMetrics.sortedPills(manager.pills))
+            .onAppear { syncPillStatusObservers() }
+            .onChange(of: manager.pills.map(\.id)) { _, _ in
+                syncPillStatusObservers()
+            }
+    }
+
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
+                }
+        }
+    }
+}
+
+/// Aggregate agent-status glow on the collapsed pill — the pill itself glows
+/// in the highest-priority status color (failed > running > queued > done >
+/// stopped), breathing while agents are active, mirroring the PTT voice glow.
+private struct AgentStatusGlow: ViewModifier {
+    let group: NotchAgentStatusGroup?
+    @State private var breathing = false
+
+    private var isAnimated: Bool { group == .running || group == .queued }
+    private var glowColor: Color { group?.color ?? .clear }
+
+    func body(content: Content) -> some View {
+        let pulse = isAnimated && breathing
+        content
+            .shadow(
+                color: group == nil ? .clear : glowColor.opacity(pulse ? 0.95 : 0.6),
+                radius: group == nil ? 0 : (pulse ? 15 : 9)
+            )
+            .shadow(
+                color: group == nil ? .clear : glowColor.opacity(pulse ? 0.5 : 0.3),
+                radius: group == nil ? 0 : (pulse ? 26 : 16)
+            )
+            .animation(
+                isAnimated
+                    ? .easeInOut(duration: 1.15).repeatForever(autoreverses: true)
+                    : .easeInOut(duration: 0.25),
+                value: breathing
+            )
+            .onAppear { breathing = true }
+            .onChange(of: isAnimated) { _, _ in
+                // Restart the repeat-forever animation when the aggregate
+                // state flips between animated and static groups.
+                breathing = false
+                DispatchQueue.main.async { breathing = true }
+            }
+            .accessibilityLabel(group.map { "Subagents: \($0.title)" } ?? "")
+    }
 }
 
 private struct NotchAgentPillsRowView: View {
@@ -1927,7 +2436,10 @@ private struct NotchAgentMorphField: View {
                             NotchAgentListRow(
                                 title: pill.title,
                                 status: pill.status,
-                                activity: pill.latestActivity,
+                                activity: ChatContinuityInvariants.agentPreviewText(
+                                    prompt: pill.query,
+                                    output: pill.latestActivity
+                                ),
                                 isSelected: pill.id == activePillID,
                                 progress: rowRevealProgress
                             )
@@ -2188,6 +2700,22 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .stopped: return 3
         case .done: return 4
         }
+    }
+
+    /// Highest-priority aggregate across all pills, for the collapsed-pill
+    /// tint/glow: failure needs the user, activity is ambient. Finished
+    /// agents the user has already viewed go quiet — done work should stop
+    /// tugging at the eye.
+    @MainActor
+    static func aggregate(for pills: [AgentPill]) -> NotchAgentStatusGroup? {
+        let groups = pills
+            .filter { !($0.status.isFinished && $0.viewedAt != nil) }
+            .map { NotchAgentStatusGroup(status: $0.status) }
+        for candidate: NotchAgentStatusGroup in [.failed, .running, .queued, .done, .stopped]
+        where groups.contains(candidate) {
+            return candidate
+        }
+        return groups.first
     }
 
 }

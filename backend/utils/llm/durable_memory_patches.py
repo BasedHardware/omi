@@ -1,5 +1,7 @@
 """Backward-compatible shim — implementation lives in ``utils.llm.promotion_proposals`` (WS-G11)."""
 
+# pyright: reportPrivateUsage=false
+
 from utils.llm.promotion_proposals import (
     PROMOTION_RUBRIC,
     CandidateOutcome,

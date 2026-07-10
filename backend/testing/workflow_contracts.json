@@ -49,15 +49,41 @@
   },
   "workflows": [
     {
+      "id": "desktop_update_channel_promotion",
+      "risk": "high",
+      "sources": [
+        "backend/database/desktop_update_channels.py",
+        "backend/utils/desktop_update_resolver.py",
+        "backend/routers/updates.py",
+        ".github/workflows/desktop_promote_beta.yml",
+        ".github/workflows/desktop_promote_prod.yml"
+      ],
+      "tests": [
+        "tests/unit/test_desktop_update_channels.py",
+        "tests/unit/test_desktop_update_resolver.py",
+        "tests/unit/test_desktop_updates.py",
+        "tests/unit/test_desktop_release_scripts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "stable never resolves or downloads a beta release",
+        "validated pointer LKG precedes exact-channel legacy fallback",
+        "immutable manifests are registered before atomic pointer promotion",
+        "beta visibility requires exact-tag T2 qualification evidence"
+      ]
+    },
+    {
       "id": "legacy_memory_backfill",
       "risk": "high",
       "sources": ["backend/utils/memory/legacy_backfill.py", "backend/scripts/backfill_legacy_memories.py"],
       "tests": ["tests/unit/test_ws_c_backfill.py"],
       "checks": ["no_large_tuple_results"],
       "invariants": [
-        "completed checkpoints still reconcile side effects",
+        "completed checkpoints recognize required-processing and quarantined pending-admission destinations without derived side effects",
         "partial checkpoints resume idempotently",
-        "legacy/domain timestamps are preserved across operational side effects"
+        "legacy/domain timestamps are preserved while rows await required processing",
+        "unreviewed bulk legacy rows remain hidden pending-admission candidates",
+        "legacy rows never reach long-term, vector, keyword, or KG without processing admission"
       ]
     },
     {
@@ -76,14 +102,47 @@
       ]
     },
     {
+      "id": "canonical_memory_admission",
+      "risk": "high",
+      "sources": [
+        "backend/models/memory_admission.py",
+        "backend/models/memory_apply.py",
+        "backend/utils/memory/canonical_required_processing.py",
+        "backend/utils/memory/required_promotion.py",
+        "backend/utils/memory/short_term_promotion.py",
+        "backend/utils/memory/canonical_memory_adapter.py"
+      ],
+      "tests": [
+        "tests/unit/test_ws_b_short_term_lifecycle.py",
+        "tests/unit/test_memory_read_api.py",
+        "tests/unit/test_developer_memory_adapter.py",
+        "tests/unit/test_mcp_memory_adapter.py",
+        "tests/unit/test_ws_m_atom_keyword_index.py",
+        "tests/unit/test_ws_n_graph_traversal.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "explicit submissions remain pending short-term until a content-bound processing receipt exists",
+        "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
+        "processing, review, and promotion use revision/content CAS and rebase after unrelated head advances",
+        "negative user review remains authoritative across all derived projection rebuilds"
+      ]
+    },
+    {
       "id": "sync_cloud_tasks",
       "risk": "high",
-      "sources": ["backend/routers/sync.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
-      "tests": ["tests/unit/test_sync_v2.py", "tests/unit/test_sync_cloud_tasks.py", "tests/unit/test_audio_merge_tasks.py"],
+      "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
+      "tests": [
+        "tests/unit/test_sync_v2.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_audio_merge_tasks.py",
+        "tests/unit/test_sync_fair_use_gate.py"
+      ],
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",
-        "segment failures cannot be reported as completed work"
+        "segment failures cannot be reported as completed work",
+        "enqueued jobs retain staged blobs until handler completion"
       ]
     },
     {
@@ -153,7 +212,10 @@
       "id": "l2_promotion_worker",
       "risk": "high",
       "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
-      "tests": ["tests/unit/test_l2_promotion_agent_v2.py"],
+      "tests": [
+        "tests/unit/test_l2_promotion_agent_v2.py",
+        "tests/unit/test_l2_promotion_worker.py"
+      ],
       "checks": [],
       "invariants": [
         "forward and backfill modes have explicit gates",
@@ -180,6 +242,87 @@
       "invariants": [
         "resume config mismatches fail closed",
         "failed shards remain visible in run summaries"
+      ]
+    },
+    {
+      "id": "listen_ws_session",
+      "risk": "high",
+      "sources": [
+        "backend/utils/listen_session_bootstrap.py",
+        "backend/routers/transcribe.py",
+        "backend/utils/transcribe_decisions.py"
+      ],
+      "tests": [
+        "tests/unit/test_listen_session_bootstrap.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/utils/test_listen_pusher_session.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "connect-time Firestore reads run off the event loop",
+        "translation and vocabulary decisions stay pinned by characterization tests"
+      ]
+    },
+    {
+      "id": "canonical_memory_pipeline",
+      "risk": "high",
+      "sources": [
+        "backend/utils/memory/**",
+        "backend/utils/memory_ingestion/**"
+      ],
+      "tests": ["testing/e2e/test_canonical_memory_pipeline.py"],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "capture→consolidate→promote→read with archive excluded from default reads",
+        "canonical fail-closed without legacy bleed"
+      ]
+    },
+    {
+      "id": "listen_pusher_pipeline",
+      "risk": "high",
+      "sources": [
+        "backend/routers/transcribe.py",
+        "backend/utils/listen_pusher_session.py",
+        "backend/utils/pusher.py",
+        "backend/utils/transcribe_decisions.py",
+        "backend/pusher/main.py"
+      ],
+      "tests": [
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/test_pusher_heartbeat.py",
+        "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/utils/test_listen_pusher_session.py",
+        "tests/unit/test_transcribe_teardown_flush.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "teardown flushes tail audio before pusher close",
+        "pending conversation requests retry until ack or give-up limit",
+        "pusher heartbeat prevents idle connection drops"
+      ]
+    },
+    {
+      "id": "backend_cloud_run_deploy",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_backend.yml",
+        "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/pre-deploy-check.sh"
+      ],
+      "tests": [
+        "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_repair_cloud_run_traffic.py",
+        "tests/unit/test_deploy_status_report.py",
+        "tests/unit/test_backend_runtime_env_validator.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "preflight fails before revision creation when Secret Manager bindings are missing",
+        "traffic shifts only after candidate revisions are Ready=True",
+        "spec.traffic mismatches are repaired or block deploy with an explicit command"
       ]
     }
   ]

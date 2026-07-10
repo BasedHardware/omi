@@ -235,6 +235,10 @@ class $AssetsImagesGen {
   AssetGenImage get omiWithRope =>
       const AssetGenImage('assets/images/omi-with-rope.webp');
 
+  /// File path: assets/images/omi-without-rope-green-charging.webp
+  AssetGenImage get omiWithoutRopeGreenCharging =>
+      const AssetGenImage('assets/images/omi-without-rope-green-charging.webp');
+
   /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
       const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
@@ -277,6 +281,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/plaud_note_pin.webp
   AssetGenImage get plaudNotePin =>
       const AssetGenImage('assets/images/plaud_note_pin.webp');
+
+  /// File path: assets/images/rayban_meta.png
+  AssetGenImage get raybanMeta =>
+      const AssetGenImage('assets/images/rayban_meta.png');
 
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
@@ -374,6 +382,7 @@ class $AssetsImagesGen {
     omiGlass,
     omiWithRopeNoPadding,
     omiWithRope,
+    omiWithoutRopeGreenCharging,
     omiWithoutRopeTurnedOff,
     omiWithoutRope,
     onboardingBg1,
@@ -385,6 +394,7 @@ class $AssetsImagesGen {
     onboardingBg6,
     onboarding,
     plaudNotePin,
+    raybanMeta,
     recordingGreenCircleIcon,
     slackLogo,
     speaker0Icon,

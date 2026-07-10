@@ -3,7 +3,7 @@ import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import fal_client
 import httpx
@@ -64,13 +64,13 @@ class PrerecordedSTTProvider(ABC):
     def transcribe_url(
         self,
         audio_url: str,
-        speakers_count: int = None,
+        speakers_count: Optional[int] = None,
         attempts: int = 0,
         return_language: bool = False,
         diarize: bool = True,
         language: Optional[str] = None,
         keywords: Optional[Sequence[str]] = None,
-    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
 
     @abstractmethod
     def transcribe_bytes(
@@ -84,7 +84,7 @@ class PrerecordedSTTProvider(ABC):
         language: Optional[str] = None,
         return_language: bool = False,
         keywords: Optional[Sequence[str]] = None,
-    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
 
 
 class PrerecordedSTTService:
@@ -93,7 +93,7 @@ class PrerecordedSTTService:
     PARAKEET = 'parakeet'
 
 
-def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
+def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
     """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
 
     Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
@@ -120,7 +120,7 @@ def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
 # Initialize Deepgram client for pre-recorded transcription
 # WARN: the pre-recorded transcription is available on deepgram cloud
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-_deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
+_deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', _deepgram_options)
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
@@ -246,14 +246,14 @@ def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
 @timeit
 def deepgram_prerecorded(
     audio_url: str,
-    speakers_count: int = None,
+    speakers_count: Optional[int] = None,
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
     model: str = "nova-3",
     keywords: Optional[Sequence[str]] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
     Returns words in same format as fal_whisperx for compatibility with existing postprocessing.
@@ -277,7 +277,7 @@ def deepgram_prerecorded(
         # 'multi' language means auto-detection
         is_multi = language == 'multi'
         should_detect_language = return_language or is_multi
-        options = {
+        options: Dict[str, Any] = {
             "model": model,
             "smart_format": True,
             "punctuate": True,
@@ -294,14 +294,11 @@ def deepgram_prerecorded(
             else:
                 options["keywords"] = list(keywords)
 
-        response = (
-            _deepgram_client_for_request()
-            .listen.rest.v("1")
-            .transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
-        )
+        rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        response = rest_client.transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
 
         # Extract words from response
-        result = response.to_dict()
+        result: Dict[str, Any] = response.to_dict()
         channels = result.get('results', {}).get('channels', [])
         if not channels:
             raise Exception('No channels found in response')
@@ -322,7 +319,7 @@ def deepgram_prerecorded(
         # Convert Deepgram format to fal_whisperx compatible format
         # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
         # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
-        words = []
+        words: List[Dict[str, Any]] = []
         for w in dg_words:
             speaker_id = w.get('speaker', 0)
             words.append(
@@ -371,7 +368,7 @@ def deepgram_prerecorded_from_bytes(
     model: str = "nova-3",
     return_language: bool = False,
     keywords: Optional[Sequence[str]] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """
     Transcribe audio bytes using Deepgram's pre-recorded API.
     Returns words with speaker labels when diarize=True.
@@ -402,7 +399,7 @@ def deepgram_prerecorded_from_bytes(
     try:
         is_multi = language == 'multi'
         should_detect_language = return_language or is_multi
-        options = {
+        options: Dict[str, Any] = {
             "model": model,
             "smart_format": True,
             "punctuate": True,
@@ -428,14 +425,13 @@ def deepgram_prerecorded_from_bytes(
         # Wrap bytes in BytesIO for Deepgram client
         audio_buffer = BytesIO(audio_bytes)
         mimetype = "audio/raw" if encoding else "audio/wav"
-        source = {"buffer": audio_buffer, "mimetype": mimetype}
+        source: Dict[str, Any] = {"buffer": audio_buffer, "mimetype": mimetype}
 
-        response = (
-            _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options, timeout=_DG_TIMEOUT)
-        )
+        rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        response = rest_client.transcribe_file(source, options, timeout=_DG_TIMEOUT)
 
         # Extract words from response
-        result = response.to_dict()
+        result: Dict[str, Any] = response.to_dict()
         result_channels = result.get('results', {}).get('channels', [])
         if not result_channels:
             raise Exception('No channels found in response')
@@ -456,7 +452,7 @@ def deepgram_prerecorded_from_bytes(
         # Convert Deepgram format to standard format
         # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
         # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
-        words = []
+        words: List[Dict[str, Any]] = []
         for w in dg_words:
             speaker_id = w.get('speaker', 0)
             words.append(
@@ -496,12 +492,12 @@ def deepgram_prerecorded_from_bytes(
 @timeit
 def fal_whisperx(
     audio_url: str,
-    speakers_count: int = None,
+    speakers_count: Optional[int] = None,
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
     chunk_level: str = 'word',
-) -> List[dict]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'fal_whisperx {audio_url} {speakers_count} {attempts}')
 
     try:
@@ -543,7 +539,7 @@ def modulate_prerecorded_from_bytes(
     diarize: bool = True,
     attempts: int = 0,
     return_language: bool = False,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
     api_key = os.getenv('MODULATE_API_KEY')
@@ -567,7 +563,7 @@ def modulate_prerecorded_from_bytes(
                 return [], 'en'
             return []
 
-        words = []
+        words: List[Dict[str, Any]] = []
         detected_language = 'en'
         for utt in utterances:
             text = utt.get('text', '').strip()
@@ -607,12 +603,12 @@ def modulate_prerecorded_from_bytes(
 @timeit
 def modulate_prerecorded(
     audio_url: str,
-    speakers_count: int = None,
+    speakers_count: Optional[int] = None,
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'modulate_prerecorded {audio_url} {speakers_count} {attempts}')
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
@@ -641,14 +637,14 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_url(
         self,
-        audio_url,
-        speakers_count=None,
-        attempts=0,
-        return_language=False,
-        diarize=True,
-        language=None,
-        keywords=None,
-    ):
+        audio_url: str,
+        speakers_count: Optional[int] = None,
+        attempts: int = 0,
+        return_language: bool = False,
+        diarize: bool = True,
+        language: Optional[str] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
         return deepgram_prerecorded(
             audio_url,
@@ -663,16 +659,16 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_bytes(
         self,
-        audio_bytes,
-        sample_rate=16000,
-        diarize=True,
-        attempts=0,
-        encoding=None,
-        channels=1,
-        language=None,
-        return_language=False,
-        keywords=None,
-    ):
+        audio_bytes: bytes,
+        sample_rate: int = 16000,
+        diarize: bool = True,
+        attempts: int = 0,
+        encoding: Optional[str] = None,
+        channels: int = 1,
+        language: Optional[str] = None,
+        return_language: bool = False,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
         return deepgram_prerecorded_from_bytes(
             audio_bytes,
@@ -697,14 +693,14 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_url(
         self,
-        audio_url,
-        speakers_count=None,
-        attempts=0,
-        return_language=False,
-        diarize=True,
-        language=None,
-        keywords=None,
-    ):
+        audio_url: str,
+        speakers_count: Optional[int] = None,
+        attempts: int = 0,
+        return_language: bool = False,
+        diarize: bool = True,
+        language: Optional[str] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         return modulate_prerecorded(
             audio_url,
             speakers_count=speakers_count,
@@ -716,16 +712,16 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_bytes(
         self,
-        audio_bytes,
-        sample_rate=16000,
-        diarize=True,
-        attempts=0,
-        encoding=None,
-        channels=1,
-        language=None,
-        return_language=False,
-        keywords=None,
-    ):
+        audio_bytes: bytes,
+        sample_rate: int = 16000,
+        diarize: bool = True,
+        attempts: int = 0,
+        encoding: Optional[str] = None,
+        channels: int = 1,
+        language: Optional[str] = None,
+        return_language: bool = False,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
         return modulate_prerecorded_from_bytes(
@@ -752,7 +748,7 @@ def parakeet_prerecorded_from_bytes(
     channels: int = 1,
     language: Optional[str] = None,
     return_language: bool = False,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(
         f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
     )
@@ -782,9 +778,10 @@ def parakeet_prerecorded_from_bytes(
                 response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
                 use_v2 = False
         response.raise_for_status()
-        result = response.json()
+        result: Dict[str, Any] = response.json()
 
-        segments = result.get('segments', []) or []
+        raw_segments = result.get('segments', [])
+        segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
         full_text = (result.get('text') or '').strip()
 
         if not segments and not full_text:
@@ -792,10 +789,10 @@ def parakeet_prerecorded_from_bytes(
                 return [], language or 'en'
             return []
 
-        spk_centroids: List[np.ndarray] = []
+        spk_centroids: List[np.ndarray[Any, Any]] = []
         spk_counts: List[int] = []
 
-        words = []
+        words: List[Dict[str, Any]] = []
         for seg in segments:
             text = (seg.get('text') or '').strip()
             if not text:
@@ -837,12 +834,12 @@ def parakeet_prerecorded_from_bytes(
 @timeit
 def parakeet_prerecorded(
     audio_url: str,
-    speakers_count: int = None,
+    speakers_count: Optional[int] = None,
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'parakeet_prerecorded url_len={len(audio_url)} {speakers_count} {attempts}')
     try:
         with httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
@@ -853,7 +850,7 @@ def parakeet_prerecorded(
                     raise ValueError(
                         f'Audio file too large: {content_length} bytes (max {_PARAKEET_MAX_DOWNLOAD_BYTES})'
                     )
-                chunks = []
+                chunks: List[bytes] = []
                 total = 0
                 for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
                     total += len(chunk)
@@ -877,7 +874,7 @@ def _parakeet_assign_speaker_sync(
     sample_rate: int,
     seg_start: float,
     seg_end: float,
-    centroids: List[np.ndarray],
+    centroids: List[np.ndarray[Any, Any]],
     counts: List[int],
 ) -> str:
     if seg_end - seg_start < 0.6:
@@ -936,14 +933,14 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_url(
         self,
-        audio_url,
-        speakers_count=None,
-        attempts=0,
-        return_language=False,
-        diarize=True,
-        language=None,
-        keywords=None,
-    ):
+        audio_url: str,
+        speakers_count: Optional[int] = None,
+        attempts: int = 0,
+        return_language: bool = False,
+        diarize: bool = True,
+        language: Optional[str] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         return parakeet_prerecorded(
             audio_url,
             speakers_count=speakers_count,
@@ -955,16 +952,16 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 
     def transcribe_bytes(
         self,
-        audio_bytes,
-        sample_rate=16000,
-        diarize=True,
-        attempts=0,
-        encoding=None,
-        channels=1,
-        language=None,
-        return_language=False,
-        keywords=None,
-    ):
+        audio_bytes: bytes,
+        sample_rate: int = 16000,
+        diarize: bool = True,
+        attempts: int = 0,
+        encoding: Optional[str] = None,
+        channels: int = 1,
+        language: Optional[str] = None,
+        return_language: bool = False,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         return parakeet_prerecorded_from_bytes(
             audio_bytes,
             sample_rate=sample_rate,
@@ -1000,14 +997,14 @@ def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
 
 def prerecorded(
     audio_url: str,
-    speakers_count: int = None,
+    speakers_count: Optional[int] = None,
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
     model: str = "nova-3",
     keywords: Optional[Sequence[str]] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
     provider = get_prerecorded_provider()
     return provider.transcribe_url(
@@ -1032,7 +1029,7 @@ def prerecorded_from_bytes(
     model: str = "nova-3",
     return_language: bool = False,
     keywords: Optional[Sequence[str]] = None,
-) -> Union[List[dict], Tuple[List[dict], str]]:
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
     provider = get_prerecorded_provider()
     return provider.transcribe_bytes(
@@ -1048,8 +1045,8 @@ def prerecorded_from_bytes(
     )
 
 
-def _words_cleaning(words: List[dict]):
-    words_cleaned: List[dict] = []
+def _words_cleaning(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    words_cleaned: List[Dict[str, Any]] = []
     for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
@@ -1074,7 +1071,7 @@ def _words_cleaning(words: List[dict]):
 
             if prev_speaker and next_speaker:
                 if prev_speaker == next_speaker:
-                    speaker = prev_chunk['speaker']
+                    speaker = prev_speaker
                 else:
                     secs_from_prev = word['start'] - prev_chunk['end'] if prev_chunk else 0
                     secs_to_next = next_chunk['start'] - word['end'] if next_chunk else 0
@@ -1093,11 +1090,11 @@ def _words_cleaning(words: List[dict]):
     return words_cleaned
 
 
-def _retrieve_user_speaker_id(words: list, skip_n_seconds: int):
+def _retrieve_user_speaker_id(words: List[Dict[str, Any]], skip_n_seconds: int) -> Optional[str]:
     if not skip_n_seconds:
         return None
 
-    user_speaker_id = defaultdict(int)
+    user_speaker_id: defaultdict[str, int] = defaultdict(int)
     for word in words:
         if word['start'] >= skip_n_seconds:
             break
@@ -1105,12 +1102,15 @@ def _retrieve_user_speaker_id(words: list, skip_n_seconds: int):
             continue
         user_speaker_id[word['speaker']] += 1
 
-    user_speaker_id = max(user_speaker_id, key=user_speaker_id.get) if user_speaker_id else None
-    return user_speaker_id
+    if not user_speaker_id:
+        return None
+    return max(user_speaker_id, key=user_speaker_id.get)  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # pyright can't infer defaultdict key type
 
 
-def _merge_segments(words: List[dict], skip_n_seconds: int, user_speaker_id: str):
-    segments = []
+def _merge_segments(
+    words: List[Dict[str, Any]], skip_n_seconds: int, user_speaker_id: Optional[str]
+) -> List[Dict[str, Any]]:
+    segments: List[Dict[str, Any]] = []
     for word in words:
         if word['start'] < skip_n_seconds:
             continue
@@ -1128,7 +1128,7 @@ def _merge_segments(words: List[dict], skip_n_seconds: int, user_speaker_id: str
     return segments
 
 
-def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
+def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
@@ -1146,10 +1146,10 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
 
 
 def postprocess_words(
-    words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
 ) -> List[TranscriptSegment]:
-    words: List[dict] = _words_cleaning(words)
-    user_speaker_id = _retrieve_user_speaker_id(words, skip_n_seconds)
-    segments = _merge_segments(words, skip_n_seconds, user_speaker_id)
-    segments = _segments_as_objects(segments)
-    return segments
+    cleaned_words = _words_cleaning(words)
+    user_speaker_id = _retrieve_user_speaker_id(cleaned_words, skip_n_seconds)
+    segments = _merge_segments(cleaned_words, skip_n_seconds, user_speaker_id)
+    segments_objs = _segments_as_objects(segments)
+    return segments_objs

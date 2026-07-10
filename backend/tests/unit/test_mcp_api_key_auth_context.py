@@ -1,59 +1,45 @@
-from datetime import datetime
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 import asyncio
 import sys
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 
-class _FakeHTTPException(Exception):
-    def __init__(self, status_code, detail):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        if "." in name:
+            parent_name, attr_name = name.rsplit(".", 1)
+            parent = sys.modules.get(parent_name)
+            parent_attr = getattr(parent, attr_name, None) if isinstance(parent, ModuleType) else None
+            if parent_attr is not None and getattr(parent_attr, "__file__", None) != str(expected_file):
+                delattr(parent, attr_name)
+        return
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+    if module_path == expected_file.resolve():
+        return
+    sys.modules.pop(name, None)
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType) and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
 
 
-def _identity_dependency(value=None):
-    return value
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_drop_stale_module("database.mcp_api_key", _BACKEND_DIR / "database" / "mcp_api_key.py")
+sys.modules.pop("dependencies", None)
 
-
-try:
-    import fastapi  # noqa: F401
-    import fastapi.security  # noqa: F401
-except ImportError:
-    _fake_fastapi = ModuleType('fastapi')
-    setattr(_fake_fastapi, 'HTTPException', _FakeHTTPException)
-    setattr(_fake_fastapi, 'Depends', _identity_dependency)
-    setattr(_fake_fastapi, 'Security', _identity_dependency)
-    setattr(_fake_fastapi, 'Request', type('Request', (), {}))
-    setattr(_fake_fastapi, 'Response', type('Response', (), {}))
-    _fake_fastapi_security = ModuleType('fastapi.security')
-    setattr(_fake_fastapi_security, 'APIKeyHeader', lambda *args, **kwargs: None)
-    setattr(_fake_fastapi_security, 'HTTPBearer', lambda *args, **kwargs: None)
-    setattr(_fake_fastapi_security, 'HTTPAuthorizationCredentials', object)
-    sys.modules.setdefault('fastapi', _fake_fastapi)
-    sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
-_fake_firebase_admin = ModuleType('firebase_admin')
-_fake_firebase_auth = ModuleType('firebase_admin.auth')
-setattr(_fake_firebase_auth, 'verify_id_token', lambda _token: {'uid': 'unused'})
-setattr(_fake_firebase_auth, 'CertificateFetchError', type('CertificateFetchError', (Exception,), {}))
-setattr(_fake_firebase_auth, 'ExpiredIdTokenError', type('ExpiredIdTokenError', (Exception,), {}))
-setattr(_fake_firebase_auth, 'InvalidIdTokenError', type('InvalidIdTokenError', (Exception,), {}))
-setattr(_fake_firebase_auth, 'RevokedIdTokenError', type('RevokedIdTokenError', (Exception,), {}))
-setattr(_fake_firebase_admin, 'auth', _fake_firebase_auth)
-sys.modules.setdefault('firebase_admin', _fake_firebase_admin)
-sys.modules.setdefault('firebase_admin.auth', _fake_firebase_auth)
-
+import dependencies
 from fastapi import HTTPException
 
-_fake_client = ModuleType('database._client')
-setattr(_fake_client, 'db', SimpleNamespace())
-setattr(_fake_client, 'document_id_from_seed', lambda seed: 'id-' + str(abs(hash(seed)) % (10**12)))
-setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
-sys.modules['database._client'] = _fake_client
-
 import database.mcp_api_key as mcp_api_key_db
-import dependencies as dependencies_module
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.memory.product_authorization import authorize_memory_external_default_memory_read
@@ -255,12 +241,12 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
 
 
 def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
-    monkeypatch.setattr(dependencies_module, 'check_api_key_rate_limit', lambda **_kwargs: None)
     monkeypatch.setattr(
         mcp_api_key_db,
         'get_user_and_scopes_by_api_key',
         lambda token: {'user_id': 'u1', 'scopes': ['memories.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'},
     )
+    monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))

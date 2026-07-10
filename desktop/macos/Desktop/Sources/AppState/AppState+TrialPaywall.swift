@@ -26,6 +26,22 @@ extension AppState {
     !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
   }
 
+  /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
+  /// Pure so it is unit-testable: resume screen-analysis monitoring only when
+  /// this fetch actually cleared the paywall (set → clear transition), the
+  /// user still has screen analysis enabled, nothing is already running, and
+  /// API keys are loaded (mirrors the launch gate; the key-load retry path
+  /// covers the not-yet-loaded case).
+  nonisolated static func shouldResumeMonitoringAfterPaywallClear(
+    wasPaywalled: Bool,
+    isPaywalledNow: Bool,
+    screenAnalysisEnabled: Bool,
+    isMonitoring: Bool,
+    keysAvailable: Bool
+  ) -> Bool {
+    wasPaywalled && !isPaywalledNow && screenAnalysisEnabled && !isMonitoring && keysAvailable
+  }
+
   @discardableResult
   func blockIfPaywalled(reason: String = "trial_expired") -> Bool {
     // BYOK users are never paywalled. If the user has all four BYOK keys
@@ -58,6 +74,11 @@ extension AppState {
       do {
         let metadata = try await APIClient.shared.getTrialMetadata()
         self.trialMetadata = metadata
+        // Snapshot the paywall state observed AFTER the network await resolves
+        // (intentionally not before): if two fetches are in flight, whichever
+        // resolves first clears the flag, so the second sees false here and
+        // the resume hook below fires exactly once instead of double-starting.
+        let wasPaywalled = self.isPaywalled
         // Local BYOK always wins — never re-block a user who has all four keys
         // configured, regardless of what the (possibly heartbeat-lagged)
         // backend trial state says.
@@ -67,6 +88,26 @@ extension AppState {
           self.isPaywalled = true
         } else if !metadata.trialExpired && self.isPaywalled {
           self.isPaywalled = false
+        }
+        // A mid-session `freemium_threshold_reached` event stops capture and
+        // sets the sticky flag; nothing else observes the flag clearing, so
+        // without this hook capture stays off after the paywall lifts until
+        // the next incidental startMonitoring trigger (e.g. app
+        // re-activation) — indefinitely for a user who leaves the window in
+        // the background.
+        if AppState.shouldResumeMonitoringAfterPaywallClear(
+          wasPaywalled: wasPaywalled,
+          isPaywalledNow: self.isPaywalled,
+          screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled,
+          isMonitoring: ProactiveAssistantsPlugin.shared.isMonitoring,
+          keysAvailable: APIKeyService.keysAvailable
+        ) {
+          log("AppState: paywall lifted — resuming screen analysis monitoring")
+          ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+            if !success, let error, !error.isEmpty {
+              log("AppState: paywall-lifted monitoring restart failed: \(error)")
+            }
+          }
         }
       } catch {
         log("AppState: failed to fetch trial metadata: \(error.localizedDescription)")
@@ -150,6 +191,16 @@ extension AppState {
     if !hasMicrophonePermission { missing.append("Microphone") }
     if !hasScreenRecordingPermission || isScreenRecordingStale {
       missing.append("Screen Recording")
+    }
+    // System audio is optional/best-effort and its status idles at .unknown
+    // (Core Audio taps have no preflight API — only a live capture proves the
+    // grant). Counting .unknown as missing would permanently suppress the
+    // "All permissions granted" banner for default users, so only a proven
+    // denial counts.
+    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+      systemAudioPermissionStatus == .denied
+    {
+      missing.append("System Audio")
     }
     if !hasNotificationPermission {
       missing.append("Notifications")

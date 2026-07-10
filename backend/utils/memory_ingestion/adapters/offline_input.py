@@ -9,7 +9,7 @@ from utils.memory_ingestion.models import MemoryPipelineInput, MemoryPipelineOut
 def read_pipeline_inputs(path: str) -> list[MemoryPipelineInput]:
     input_path = Path(path)
     if input_path.suffix == ".jsonl":
-        inputs = []
+        inputs: list[MemoryPipelineInput] = []
         for line in input_path.read_text().splitlines():
             if line.strip():
                 inputs.append(MemoryPipelineInput.model_validate_json(line))

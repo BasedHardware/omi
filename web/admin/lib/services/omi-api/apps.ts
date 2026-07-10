@@ -1,17 +1,22 @@
-import omiApiClient from './client';
-import type { OmiApp, OmiAppInput } from './types';
-import { getDb } from '@/lib/firebase/admin';
+import omiApiClient, { adminInit } from "./client";
+import {
+  delete_app_v1_apps__app_id__delete,
+  get_app_details_v1_apps__app_id__get,
+  get_apps_v1_apps_get,
+  get_unapproved_public_apps_v1_apps_public_unapproved_get,
+  type UnapprovedPublicAppResponse,
+} from "./omiApi.generated";
+import type { OmiApp, OmiAppInput } from "./types";
+import { getDb } from "@/lib/firebase/admin";
 
-// Adjust endpoint paths based on actual API
-const APPS_ENDPOINT = '/v1/apps';
+const APPS_ENDPOINT = "/v1/apps";
 
 /**
  * Fetches a list of all apps.
  * @param uid - The UID of the authenticated user.
  */
 export async function getApps(uid: string): Promise<OmiApp[]> {
-  const endpoint = `${APPS_ENDPOINT}`;
-  return await omiApiClient<OmiApp[]>(endpoint, uid, { method: 'GET' });
+  return get_apps_v1_apps_get({}, adminInit(uid));
 }
 
 /**
@@ -19,17 +24,23 @@ export async function getApps(uid: string): Promise<OmiApp[]> {
  * @param uid - The UID of the authenticated user.
  */
 export async function getAppById(uid: string, appId: string): Promise<OmiApp> {
-  const endpoint = `${APPS_ENDPOINT}/${appId}`;
-  return await omiApiClient<OmiApp>(endpoint, uid, { method: 'GET' });
+  return get_app_details_v1_apps__app_id__get(
+    { app_id: appId },
+    adminInit(uid),
+  );
 }
 
 /**
  * Creates a new app.
  * @param uid - The UID of the authenticated user.
  */
-export async function createApp(uid: string, appData: OmiAppInput): Promise<OmiApp> {
+export async function createApp(
+  uid: string,
+  appData: OmiAppInput,
+): Promise<OmiApp> {
+  // Not wired: POST /v1/apps needs multipart form+file; generated client omits body.
   return await omiApiClient<OmiApp>(APPS_ENDPOINT, uid, {
-    method: 'POST',
+    method: "POST",
     body: appData,
   });
 }
@@ -41,11 +52,12 @@ export async function createApp(uid: string, appData: OmiAppInput): Promise<OmiA
 export async function updateApp(
   uid: string,
   appId: string,
-  appData: Partial<OmiAppInput>
+  appData: Partial<OmiAppInput>,
 ): Promise<OmiApp> {
-   const endpoint = `${APPS_ENDPOINT}/${appId}`;
-   return await omiApiClient<OmiApp>(endpoint, uid, {
-    method: 'PATCH', // Or 'PUT' depending on API design
+  // Not wired: PATCH /v1/apps/{id} needs multipart form; generated client omits body.
+  const endpoint = `${APPS_ENDPOINT}/${appId}`;
+  return await omiApiClient<OmiApp>(endpoint, uid, {
+    method: "PATCH",
     body: appData,
   });
 }
@@ -55,16 +67,16 @@ export async function updateApp(
  * @param uid - The UID of the authenticated user.
  */
 export async function deleteApp(uid: string, appId: string): Promise<void> {
-  const endpoint = `${APPS_ENDPOINT}/${appId}`;
-  // Expecting a 204 No Content or similar on success
-  await omiApiClient<void>(endpoint, uid, { method: 'DELETE' });
+  await delete_app_v1_apps__app_id__delete({ app_id: appId }, adminInit(uid));
 }
 
 // Fetch all public unapproved apps
-export const getUnapprovedApps = async (uid: string): Promise<OmiApp[]> => {
-  // Assuming this endpoint exists in the Omi API
-  // Pass a dummy/empty UID or adjust client if UID is mandatory but not used for this specific GET
-  return omiApiClient<OmiApp[]>('/v1/apps/public/unapproved', uid, { method: 'GET' });
+export const getUnapprovedApps = async (
+  uid: string,
+): Promise<UnapprovedPublicAppResponse[]> => {
+  return get_unapproved_public_apps_v1_apps_public_unapproved_get(
+    adminInit(uid),
+  );
 };
 
 /**
@@ -77,35 +89,42 @@ export const getUnapprovedApps = async (uid: string): Promise<OmiApp[]> => {
 export async function reviewApp(
   uid: string,
   appId: string,
-  action: 'approve' | 'reject',
-  reason?: string
+  action: "approve" | "reject",
+  reason?: string,
 ): Promise<{ success: boolean; message?: string }> {
   const db = getDb();
-  const appDocRef = db.collection('plugins_data').doc(appId);
+  const appDocRef = db.collection("plugins_data").doc(appId);
 
   let dataToUpdate: {
     status: string;
     approved: boolean;
   };
 
-  if (action === 'approve') {
+  if (action === "approve") {
     dataToUpdate = {
-      status: 'approved',
+      status: "approved",
       approved: true,
     };
-  } else { // action === 'reject'
+  } else {
+    // action === 'reject'
     dataToUpdate = {
-      status: 'rejected',
+      status: "rejected",
       approved: false,
     };
   }
 
   try {
     await appDocRef.update(dataToUpdate);
-     console.log(`App ${appId} status updated to ${action} by user ${uid}.`); // Optional: for server logs
+    console.log(`App ${appId} status updated to ${action} by user ${uid}.`); // Optional: for server logs
     return { success: true };
   } catch (error: any) {
-    console.error(`Error updating app ${appId} to ${action} by user ${uid}:`, error);
-    return { success: false, message: error.message || `Failed to ${action} app ${appId}.` };
+    console.error(
+      `Error updating app ${appId} to ${action} by user ${uid}:`,
+      error,
+    );
+    return {
+      success: false,
+      message: error.message || `Failed to ${action} app ${appId}.`,
+    };
   }
-} 
+}

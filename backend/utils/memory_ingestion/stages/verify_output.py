@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from difflib import SequenceMatcher
 import re
 
 from utils.memory_ingestion.ids import stable_hash
-from utils.memory_ingestion.models import LintResult, MemoryPipelineOutput
+from utils.memory_ingestion.models import EvidenceSpan, LintResult, MemoryPipelineOutput
 
 
 def _edit_distance(a: str, b: str) -> int:
@@ -233,7 +232,7 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
     return lints
 
 
-def _has_self_report_evidence(evidence_spans) -> bool:
+def _has_self_report_evidence(evidence_spans: list[EvidenceSpan]) -> bool:
     for evidence in evidence_spans:
         if evidence.speaker and evidence.speaker.is_actor_user is True:
             return True

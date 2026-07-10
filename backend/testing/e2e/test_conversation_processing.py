@@ -62,6 +62,9 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "_update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
     monkeypatch.setattr(kg_module, "extract_knowledge_from_memory", record_kg_extract)
+    # process_conversation imported extract_knowledge_from_memory directly,
+    # so patch it on the process_module namespace too
+    monkeypatch.setattr(process_module, "extract_knowledge_from_memory", record_kg_extract)
     monkeypatch.setattr(
         kg_module,
         "get_llm",

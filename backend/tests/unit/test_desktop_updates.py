@@ -1,27 +1,10 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
-import sys
 import xml.etree.ElementTree as ET
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
-# Stub heavy dependencies before importing the module under test
-sys.modules.setdefault('firebase_admin', MagicMock())
-sys.modules.setdefault('firebase_admin.auth', MagicMock())
-sys.modules.setdefault('firebase_admin.firestore', MagicMock())
-sys.modules.setdefault('firebase_admin.messaging', MagicMock())
-sys.modules.setdefault('google.cloud', MagicMock())
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-sys.modules.setdefault('google.auth', MagicMock())
-sys.modules.setdefault('google.auth.transport.requests', MagicMock())
-
-redis_db_stub = sys.modules.setdefault('database.redis_db', MagicMock())
-redis_db_stub.get_generic_cache = MagicMock(return_value=None)
-redis_db_stub.set_generic_cache = MagicMock()
-redis_db_stub.delete_generic_cache = MagicMock()
 
 from fastapi import FastAPI
 
@@ -93,6 +76,45 @@ class TestParseDesktopVersion:
         assert result is not None
         assert result["version"] == "11.3.0+11003"
         assert result["build"] == "11003"
+
+    # --- Regression anchor for issue #5285 ---
+    #
+    # https://github.com/BasedHardware/omi/issues/5285 — the appcast endpoint
+    # silently dropped newer 2-component release tags (e.g. ``v11.0+11000-macos``)
+    # because the patch group was mandatory, breaking desktop auto-updates. The
+    # fix made the patch component optional (defaulting to "0"). These cases pin
+    # that behavior so the regex can never regress to requiring a patch component
+    # while still accepting the legacy 3-component form.
+    @pytest.mark.parametrize(
+        "tag, expected_version, expected_patch",
+        [
+            # The exact 2-component tags called out in issue #5285 (patch omitted).
+            ("v11.0+11000-macos", "11.0.0+11000", "0"),
+            ("v11.3+11003-macos", "11.3.0+11003", "0"),
+            # The legacy 3-component form must keep parsing (guard vs. over-correction).
+            ("v1.0.77+464-desktop-cm", "1.0.77+464", "77"),
+        ],
+    )
+    def test_issue_5285_supported_tags_parse(self, tag, expected_version, expected_patch):
+        result = _parse_desktop_version(tag)
+        assert result is not None, f"expected {tag!r} to parse (issue #5285)"
+        assert result["version"] == expected_version
+        assert result["patch"] == expected_patch
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "v11+11000-macos",  # missing minor component
+            "v11.0-macos",  # missing +build component
+            "v11.0+11000",  # missing platform suffix
+            "v11.0+11000-ios",  # unsupported platform
+            "not-a-version",
+            "",
+        ],
+    )
+    def test_issue_5285_malformed_tags_return_none(self, tag):
+        # Making patch optional must not loosen the rest of the grammar.
+        assert _parse_desktop_version(tag) is None
 
 
 # --- _parse_changelog_to_changes ---
@@ -283,108 +305,254 @@ def _dmg_asset(url="https://example.com/Omi.dmg"):
     return {"name": "Omi Beta.dmg", "browser_download_url": url}
 
 
-# --- _get_live_desktop_releases ---
+# --- _get_legacy_live_desktop_releases ---
 
 
 class TestGetLiveDesktopReleases:
     @pytest.mark.asyncio
     async def test_empty_releases(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
-        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]):
-            result = await _get_live_desktop_releases("macos")
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]) as mock_releases:
+            result = await get_releases("macos")
         assert result == []
+        _, kwargs = mock_releases.await_args
+        assert kwargs["tag_filter"].match("v0.12.0+12000-macos")
 
     @pytest.mark.asyncio
     async def test_filters_non_desktop_tags(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-ios", body_kv={"isLive": "true"}),
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset()]),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert len(result) == 1
         assert result[0]["version_info"]["build"] == "100"
 
+
+def _pointer_release(channel="beta", build=200):
+    return {
+        "pointer": {
+            "platform": "macos",
+            "channel": channel,
+            "release_id": f"v1.0.0+{build}-macos",
+            "generation": 1,
+            "updated_at": "2026-03-01T00:00:00Z",
+        },
+        "manifest": {
+            "release_id": f"v1.0.0+{build}-macos",
+            "platform": "macos",
+            "version": f"1.0.0+{build}",
+            "build_number": build,
+            "zip_url": f"https://example.com/{build}/Omi.zip",
+            "dmg_url": f"https://example.com/{build}/Omi.dmg",
+            "ed_signature": "signature",
+            "published_at": "2026-03-01T00:00:00Z",
+            "changelog": ["Qualified release"],
+            "mandatory": False,
+            "source_sha": "a" * 40,
+            "zip_sha256": None,
+            "dmg_sha256": None,
+            "qualification": {"tier": "T2", "passed": True},
+        },
+    }
+
+
+class TestResolveDesktopReleases:
+    @pytest.mark.asyncio
+    async def test_legacy_kill_switch_records_degraded_mode(self):
+        from routers.updates import _get_live_desktop_releases
+
+        legacy_beta = {
+            "channel": "beta",
+            "release": {"published_at": "2026-02-01T00:00:00Z", "assets": [_zip_asset(), _dmg_asset()]},
+            "version_info": {"version": "0.12.0+12000", "build": "12000"},
+            "metadata": {"edSignature": "legacy"},
+        }
+        with (
+            patch.dict("os.environ", {"DESKTOP_UPDATE_POINTERS_MODE": "legacy"}),
+            patch(
+                "routers.updates._get_legacy_live_desktop_releases",
+                new_callable=AsyncMock,
+                return_value=[legacy_beta],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            result = await _get_live_desktop_releases("macos")
+
+        assert result == [legacy_beta]
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="desktop_update_pointer",
+            to_mode="desktop_update_legacy",
+            reason="policy",
+            outcome="degraded",
+            log=ANY,
+        )
+
+    @pytest.mark.asyncio
+    async def test_explicit_pointers_are_primary(self):
+        from routers.updates import _get_live_desktop_releases
+
+        def resolve(_platform, channel):
+            return _pointer_release(channel), "pointer", None
+
+        with (
+            patch("routers.updates.resolve_pointer_release", side_effect=resolve),
+            patch("routers.updates.random.random", return_value=1.0),
+            patch("routers.updates._get_legacy_live_desktop_releases", new_callable=AsyncMock) as legacy,
+        ):
+            result = await _get_live_desktop_releases("macos")
+
+        assert {entry["channel"] for entry in result} == {"stable", "beta"}
+        assert all(entry["source"] == "pointer" for entry in result)
+        legacy.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_missing_pointer_falls_back_only_to_same_legacy_channel(self):
+        from routers.updates import _get_live_desktop_releases
+
+        def resolve(_platform, channel):
+            if channel == "beta":
+                return _pointer_release(channel), "pointer", None
+            return None, "none", "pointer_missing"
+
+        legacy_stable = {
+            "channel": "stable",
+            "release": {"published_at": "2026-02-01T00:00:00Z", "assets": [_zip_asset(), _dmg_asset()]},
+            "version_info": {"version": "0.12.0+12000", "build": "12000"},
+            "metadata": {"edSignature": "legacy"},
+        }
+        older_legacy_stable = {
+            "channel": "stable",
+            "release": {"published_at": "2026-01-01T00:00:00Z", "assets": [_zip_asset(), _dmg_asset()]},
+            "version_info": {"version": "0.11.99+11999", "build": "11999"},
+            "metadata": {"edSignature": "older-legacy"},
+        }
+        with (
+            patch("routers.updates.resolve_pointer_release", side_effect=resolve),
+            patch(
+                "routers.updates._get_legacy_live_desktop_releases",
+                new_callable=AsyncMock,
+                return_value=[legacy_stable, older_legacy_stable],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            result = await _get_live_desktop_releases("macos")
+
+        by_channel = {entry["channel"]: entry for entry in result}
+        assert by_channel["stable"]["source"] == "legacy_fallback"
+        assert by_channel["stable"]["version_info"]["build"] == "12000"
+        assert by_channel["beta"]["source"] == "pointer"
+        fallback.assert_called_once()
+        assert fallback.call_args.kwargs == {
+            "component": "other",
+            "from_mode": "desktop_update_pointer_lkg",
+            "to_mode": "desktop_update_legacy",
+            "reason": "config_incomplete",
+            "outcome": "recovered",
+            "log": ANY,
+        }
+
+    @pytest.mark.asyncio
+    async def test_validated_lkg_precedes_legacy(self):
+        from routers.updates import _get_live_desktop_releases
+
+        def resolve(_platform, channel):
+            return _pointer_release(channel), "pointer_lkg", "pointer_invalid"
+
+        with (
+            patch("routers.updates.resolve_pointer_release", side_effect=resolve),
+            patch("routers.updates.random.random", return_value=1.0),
+            patch("routers.updates._get_legacy_live_desktop_releases", new_callable=AsyncMock) as legacy,
+        ):
+            result = await _get_live_desktop_releases("macos")
+
+        assert all(entry["source"] == "pointer_lkg" for entry in result)
+        legacy.assert_not_awaited()
+
+
+class TestLegacyDesktopReleaseFiltering:
     @pytest.mark.asyncio
     async def test_filters_draft_releases(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true"}, draft=True),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result == []
 
     @pytest.mark.asyncio
     async def test_filters_not_live(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "false"}),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result == []
 
     @pytest.mark.asyncio
     async def test_channel_defaults_to_beta(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true"}),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result[0]["channel"] == "beta"
 
     @pytest.mark.asyncio
     async def test_invalid_channel_falls_back_to_beta(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true", "channel": "nightly"}),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result[0]["channel"] == "beta"
 
     @pytest.mark.asyncio
     async def test_stable_channel_preserved(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true", "channel": "stable"}),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result[0]["channel"] == "stable"
 
     @pytest.mark.asyncio
     async def test_sorted_newest_first(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-macos", body_kv={"isLive": "true"}, published_at="2026-01-01T00:00:00Z"),
             _make_github_release("v2.0.0+200-macos", body_kv={"isLive": "true"}, published_at="2026-03-01T00:00:00Z"),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert result[0]["version_info"]["build"] == "200"
         assert result[1]["version_info"]["build"] == "100"
 
     @pytest.mark.asyncio
     async def test_desktop_cm_tag_accepted(self):
-        from routers.updates import _get_live_desktop_releases
+        from routers.updates import _get_legacy_live_desktop_releases as get_releases
 
         releases = [
             _make_github_release("v1.0.0+100-desktop-cm", body_kv={"isLive": "true"}),
         ]
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
-            result = await _get_live_desktop_releases("macos")
+            result = await get_releases("macos")
         assert len(result) == 1
 
 
@@ -510,7 +678,7 @@ class TestDownloadEndpoint:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_stable_fallback_to_beta(self):
+    async def test_stable_never_falls_back_to_beta(self):
         mock_releases = [
             {
                 "channel": "beta",
@@ -521,11 +689,10 @@ class TestDownloadEndpoint:
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
-        assert resp.status_code == 200
-        assert "beta.dmg" in resp.text
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_beta_no_fallback(self):
+    async def test_beta_never_falls_back_to_stable(self):
         mock_releases = [
             {
                 "channel": "stable",
@@ -536,11 +703,10 @@ class TestDownloadEndpoint:
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 200
-        assert "https://example.com/stable.dmg" in resp.text
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_beta_uses_latest_release_even_if_marked_stable(self):
+    async def test_beta_uses_explicit_beta_release(self):
         mock_releases = [
             {
                 "channel": "stable",
@@ -557,7 +723,7 @@ class TestDownloadEndpoint:
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
         assert resp.status_code == 200
-        assert "https://example.com/latest.dmg" in resp.text
+        assert "https://example.com/older-beta.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_404_when_no_dmg_asset(self):
@@ -595,15 +761,89 @@ class TestClearCacheEndpoint:
                 resp = await client.post("/v2/desktop/clear-cache", headers={"secret-key": "real-secret"})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
-        # Both the live cache and the last-known-good fallback are cleared.
+        # Live caches are cleared; last-known-good entries remain available.
         cleared_keys = {call.args[0] for call in mock_delete.call_args_list}
-        assert cleared_keys == {"github_releases_desktop", "github_releases_desktop:lkg"}
+        assert cleared_keys == {
+            "github_releases_desktop",
+            "desktop_update_pointer:macos:stable",
+            "desktop_update_pointer:macos:beta",
+            "desktop_update_pointer:windows:stable",
+            "desktop_update_pointer:windows:beta",
+            "desktop_update_pointer:linux:stable",
+            "desktop_update_pointer:linux:beta",
+        }
 
     @pytest.mark.asyncio
     async def test_missing_header_returns_422(self):
         async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
             resp = await client.post("/v2/desktop/clear-cache")
         assert resp.status_code == 422
+
+
+class TestDesktopUpdateAdminEndpoints:
+    @pytest.mark.asyncio
+    async def test_registers_immutable_manifest(self):
+        payload = _pointer_release()["manifest"]
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.register_release_manifest", return_value=payload) as register,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/releases",
+                    headers={"secret-key": "real-secret"},
+                    json=payload,
+                )
+
+        assert resp.status_code == 201
+        assert resp.json()["manifest"]["release_id"] == payload["release_id"]
+        register.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_manifest_mutation_conflict_is_reported(self):
+        payload = _pointer_release()["manifest"]
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.register_release_manifest", side_effect=ValueError("immutable metadata")),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/releases",
+                    headers={"secret-key": "real-secret"},
+                    json=payload,
+                )
+
+        assert resp.status_code == 409
+        assert "immutable" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_promotes_pointer_and_clears_only_live_pointer_cache(self):
+        pointer = {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": "v1.0.0+200-macos",
+            "generation": 2,
+        }
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.promote_channel", return_value=pointer) as promote,
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "beta",
+                        "release_id": "v1.0.0+200-macos",
+                        "expected_generation": 1,
+                    },
+                )
+
+        assert resp.status_code == 200
+        promote.assert_called_once_with("macos", "beta", "v1.0.0+200-macos", expected_generation=1)
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
 
 # --- Update policy endpoint ---

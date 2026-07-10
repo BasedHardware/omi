@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, List, Set, Tuple, cast
+
 import argparse
 import fnmatch
 import json
@@ -19,6 +21,9 @@ FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'routers',
 )
 FULL_TEST_GLOBS = (BACKEND_DIR / 'tests',)
+
+# Hermetic e2e tests selected by workflow contracts / memory policy core — not part of --all.
+EXTRA_DISCOVERABLE_TESTS = (BACKEND_DIR / 'testing' / 'e2e' / 'test_canonical_memory_pipeline.py',)
 
 LEGACY_UNLISTED_TESTS = {
     'tests/test_cache_manager.py',
@@ -48,16 +53,34 @@ FULL_RUN_PREFIXES = (
     'backend/testing/',
 )
 
+# Explicit cross-cutting paths only. Do not use `backend/*` or
+# `backend/utils/*.py` — those force the full suite for docs/AGENTS edits and
+# every flat utils module before AREA_TESTS can narrow.
 FULL_RUN_GLOBS = (
-    'backend/*',
+    'backend/main.py',
+    'backend/dependencies.py',
     'backend/scripts/update-python-lock.sh',
     'backend/scripts/sync-python-deps.sh',
     'backend/utils/executors.py',
     'backend/utils/log_sanitizer.py',
     'backend/utils/http_client.py',
-    'backend/utils/auth.py',
-    'backend/utils/secrets.py',
-    'backend/utils/*.py',
+    'backend/utils/async_tasks.py',
+    'backend/utils/encryption.py',
+)
+
+MEMORY_POLICY_CORE_PATH_PREFIXES = ('backend/utils/memory/',)
+
+MEMORY_POLICY_CORE_PATH_GLOBS = (
+    'backend/database/memory_*.py',
+    'backend/models/product_memory.py',
+    'backend/models/memory_search_gateway.py',
+    'backend/routers/memory_*.py',
+    'backend/routers/memories.py',
+)
+
+MEMORY_POLICY_CORE_TESTS = (
+    'tests/unit/test_inv_mem_1_guard.py',
+    'testing/e2e/test_canonical_memory_pipeline.py',
 )
 
 AREA_TESTS = (
@@ -185,7 +208,7 @@ AREA_TESTS = (
 )
 
 
-def discover_all_tests() -> list[str]:
+def discover_unit_tests() -> list[str]:
     tests: set[Path] = set()
     for root in FULL_TEST_ROOTS:
         tests.update(root.rglob('test_*.py'))
@@ -196,6 +219,15 @@ def discover_all_tests() -> list[str]:
         for test_path in (_backend_relative(path) for path in tests if path.is_file())
         if test_path not in LEGACY_UNLISTED_TESTS
     )
+
+
+def discover_all_tests() -> list[str]:
+    """Unit tests plus workflow-contract extras (e2e) for PR path selection only."""
+    tests = {Path(BACKEND_DIR / path) for path in discover_unit_tests()}
+    for path in EXTRA_DISCOVERABLE_TESTS:
+        if path.is_file():
+            tests.add(path)
+    return sorted(_backend_relative(path) for path in tests if path.is_file())
 
 
 def _backend_relative(path: Path) -> str:
@@ -220,23 +252,50 @@ def is_full_run_path(path: str) -> bool:
     return any(path_matches(path, pattern) for pattern in FULL_RUN_GLOBS)
 
 
+def is_selectable_backend_path(path: str) -> bool:
+    """Return True for backend paths that can select or force unit tests.
+
+    Docs, AGENTS, and chart/dashboard artifacts are ignored so editing them
+    does not trip the unmapped-path full-suite fallback.
+    """
+    if not path.startswith('backend/'):
+        return False
+    if path.endswith('.md'):
+        return False
+    if path.startswith('backend/docs/') or path.startswith('backend/charts/'):
+        return False
+    return True
+
+
 def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
 
 
-def load_workflow_contracts() -> list[dict]:
+def is_memory_policy_core_path(path: str) -> bool:
+    if any(path.startswith(prefix) for prefix in MEMORY_POLICY_CORE_PATH_PREFIXES):
+        return True
+    return any(path_matches(path, pattern) for pattern in MEMORY_POLICY_CORE_PATH_GLOBS)
+
+
+def load_workflow_contracts() -> List[Dict[str, Any]]:
     if not WORKFLOW_CONTRACTS_PATH.exists():
         return []
-    return list(json.loads(WORKFLOW_CONTRACTS_PATH.read_text()).get('workflows', []))
+    data: object = json.loads(WORKFLOW_CONTRACTS_PATH.read_text())
+    if not isinstance(data, dict):
+        return []
+    typed_data: Dict[str, Any] = cast(Dict[str, Any], data)
+    workflows_raw: Any = typed_data.get('workflows', [])
+    return cast(List[Dict[str, Any]], workflows_raw) if isinstance(workflows_raw, list) else []
 
 
-def workflow_contract_tests_for_path(path: str, all_tests: list[str]) -> set[str]:
-    selected: set[str] = set()
+def workflow_contract_tests_for_path(path: str, all_tests: List[str]) -> Set[str]:
+    selected: Set[str] = set()
     for workflow in load_workflow_contracts():
-        sources = tuple(workflow.get('sources') or ())
+        sources: Tuple[str, ...] = tuple(workflow.get('sources') or ())
         if not any(path_matches(path, source) for source in sources):
             continue
-        selected.update(test for test in workflow.get('tests') or () if test in all_tests)
+        tests_raw = workflow.get('tests') or ()
+        selected.update(test for test in tests_raw if test in all_tests)
     return selected
 
 
@@ -246,13 +305,13 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
-    backend_paths = [path for path in changed_paths if path.startswith('backend/')]
+    backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 
     for path in changed_paths:
         selected.update(workflow_contract_tests_for_path(path, all_tests))
 
-    for path in changed_paths:
+    for path in backend_paths:
         if is_full_run_path(path):
             return all_tests, f'{path} requires the full backend unit suite'
 
@@ -267,6 +326,9 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
                 path_matches(path, pattern) for pattern in source_globs
             ):
                 selected.update(match_tests(all_tests, test_globs))
+
+    if any(is_memory_policy_core_path(path) for path in backend_paths):
+        selected.update(test for test in MEMORY_POLICY_CORE_TESTS if test in all_tests)
 
     if not backend_paths:
         return [], 'no backend files changed'
@@ -305,7 +367,7 @@ def main() -> None:
     all_tests = discover_all_tests()
     reason = 'full backend unit suite'
     if args.all:
-        selected = all_tests
+        selected = discover_unit_tests()
     elif args.from_test_list:
         selected = existing_tests(read_lines(args.from_test_list), all_tests)
         reason = 'using provided backend unit test list'

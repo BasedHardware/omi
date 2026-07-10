@@ -79,8 +79,8 @@ from utils.executors import (
     log_executor_health,
     run_blocking,
     db_executor,
-    start_background_task,
 )
+from utils.executors import start_background_task
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -96,13 +96,13 @@ if _auth_emulator_host:
     _firebase_project_id = (
         os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
     )
-    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})
+    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 elif os.environ.get("SERVICE_ACCOUNT_JSON"):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
+    firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 else:
-    firebase_admin.initialize_app()
+    firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 # starlette 0.40 added a default 1 MB cap per multipart form part. Voice
 # messages, audio uploads, and persona/app images legitimately exceed that.
@@ -185,6 +185,7 @@ methods_timeout = {
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
+    "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -194,7 +195,7 @@ from utils.byok import BYOKMiddleware
 app.add_middleware(BYOKMiddleware)
 
 
-@app.on_event("startup")
+@app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
@@ -234,7 +235,7 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
 
 
-@app.on_event("shutdown")
+@app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

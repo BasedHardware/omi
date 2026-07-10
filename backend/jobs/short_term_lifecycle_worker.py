@@ -10,7 +10,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, cast
 
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryTier, MemoryItem
@@ -21,6 +21,16 @@ from utils.memory.short_term_lifecycle import (
     evaluate_short_term_lifecycle,
 )
 
+JsonDict = Dict[str, Any]
+
+
+def _empty_transition_records() -> List["ShortTermLifecycleTransitionRecord"]:
+    return []
+
+
+def _empty_memory_ids() -> List[str]:
+    return []
+
 
 @dataclass(frozen=True)
 class ShortTermLifecycleTransitionRecord:
@@ -30,7 +40,7 @@ class ShortTermLifecycleTransitionRecord:
     reason: str
     run_id: str
     evaluated_at: str
-    audit_metadata: Dict
+    audit_metadata: JsonDict
     idempotency_key: str
     fingerprint: str
 
@@ -49,9 +59,9 @@ class ShortTermLifecycleTransitionStore(Protocol):
 
 @dataclass
 class ShortTermLifecycleWorkerReport:
-    created_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
-    existing_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
-    skipped_memory_ids: List[str] = field(default_factory=list)
+    created_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=_empty_transition_records)
+    existing_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=_empty_transition_records)
+    skipped_memory_ids: List[str] = field(default_factory=_empty_memory_ids)
 
     @property
     def created_count(self) -> int:
@@ -111,7 +121,7 @@ class FirestoreShortTermLifecycleTransitionStore:
     drift fails closed before writing.
     """
 
-    def __init__(self, *, db_client, now: Optional[datetime] = None) -> None:
+    def __init__(self, *, db_client: Any, now: Optional[datetime] = None) -> None:
         self._db_client = db_client
         self._now = now
 
@@ -129,8 +139,8 @@ class FirestoreShortTermLifecycleTransitionStore:
 
 
 def _persist_short_term_lifecycle_transition_transaction(
-    transaction,
-    db_client,
+    transaction: Any,
+    db_client: Any,
     record: ShortTermLifecycleTransitionRecord,
     now: Optional[datetime],
 ) -> ShortTermLifecyclePersistResult:
@@ -140,7 +150,7 @@ def _persist_short_term_lifecycle_transition_transaction(
     snapshot = transition_ref.get(transaction=transaction)
 
     if snapshot.exists:
-        data = snapshot.to_dict() or {}
+        data = cast(JsonDict, snapshot.to_dict() or {})
         if data.get('fingerprint') != record.fingerprint:
             raise ValueError('short-term lifecycle idempotency key payload mismatch')
         return ShortTermLifecyclePersistResult(record=_record_from_firestore_data(data), created=False)
@@ -150,7 +160,11 @@ def _persist_short_term_lifecycle_transition_transaction(
     return ShortTermLifecyclePersistResult(record=record, created=True)
 
 
-def _run_short_term_lifecycle_transaction(transaction, func, *args):
+def _run_short_term_lifecycle_transaction(
+    transaction: Any,
+    func: Callable[..., ShortTermLifecyclePersistResult],
+    *args: Any,
+) -> ShortTermLifecyclePersistResult:
     if hasattr(transaction, '_begin'):
         transaction._begin()
     try:
@@ -180,7 +194,9 @@ def _coerce_dispositions(
     return dict(dispositions or {})
 
 
-def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optional[int] = None) -> List[MemoryItem]:
+def fetch_short_term_memory_items_firestore(
+    *, uid: str, db_client: Any, limit: Optional[int] = None
+) -> List[MemoryItem]:
     """Fetch authoritative Short-term memory memory_items for a user.
 
     The lifecycle runner only evaluates `memory_items` in the Short-term tier;
@@ -199,7 +215,7 @@ def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optio
     snapshots = query.stream()
     items: List[MemoryItem] = []
     for snapshot in snapshots:
-        item = MemoryItem(**(snapshot.to_dict() or {}))
+        item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
         if item.uid != uid:
             raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
         if item.tier == MemoryTier.short_term:
@@ -213,7 +229,7 @@ def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optio
 def run_short_term_lifecycle_firestore(
     *,
     uid: str,
-    db_client,
+    db_client: Any,
     run_id: str,
     now: Optional[datetime] = None,
     limit: Optional[int] = None,
@@ -248,11 +264,11 @@ def _source_refs(item: MemoryItem) -> List[Dict[str, Optional[str]]]:
     return refs
 
 
-def _canonical_json(payload: Dict) -> str:
+def _canonical_json(payload: JsonDict) -> str:
     return json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
 
 
-def _sha256(payload: Dict) -> str:
+def _sha256(payload: JsonDict) -> str:
     return hashlib.sha256(_canonical_json(payload).encode('utf-8')).hexdigest()
 
 
@@ -271,8 +287,8 @@ def _firestore_transition_payload(
     *,
     transition_id: str,
     now: Optional[datetime],
-) -> Dict:
-    source_refs = list(record.audit_metadata.get('source_refs') or [])
+) -> JsonDict:
+    source_refs = list(cast(List[Dict[str, Optional[str]]], record.audit_metadata.get('source_refs') or []))
     return {
         'transition_id': transition_id,
         'uid': record.uid,
@@ -291,7 +307,7 @@ def _firestore_transition_payload(
     }
 
 
-def _record_from_firestore_data(data: Dict) -> ShortTermLifecycleTransitionRecord:
+def _record_from_firestore_data(data: JsonDict) -> ShortTermLifecycleTransitionRecord:
     return ShortTermLifecycleTransitionRecord(
         uid=data['uid'],
         memory_item_id=data['memory_item_id'],
@@ -330,7 +346,7 @@ def build_short_term_lifecycle_transition_record(
 
     reason = str(audit_metadata['decision_reason'])
     evaluated_at = str(audit_metadata['evaluated_at'])
-    idempotency_payload = {
+    idempotency_payload: JsonDict = {
         'policy_version': audit_metadata['policy_version'],
         'uid': item.uid,
         'memory_item_id': item.memory_id,
@@ -339,7 +355,7 @@ def build_short_term_lifecycle_transition_record(
         'evaluated_at': evaluated_at,
         'source_refs': audit_metadata['source_refs'],
     }
-    fingerprint_payload = {
+    fingerprint_payload: JsonDict = {
         'uid': item.uid,
         'memory_item_id': item.memory_id,
         'outcome': decision.outcome.value,

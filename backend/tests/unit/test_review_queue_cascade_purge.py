@@ -3,33 +3,60 @@
 from __future__ import annotations
 
 import os
-import sys
 import types
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-ledger_stub = types.ModuleType("database.memory_ledger")
-ledger_stub.add_fact = lambda fact: {"type": "add_fact", "fact": fact}
-ledger_stub.supersede_fact = lambda existing_id, **kwargs: {"type": "supersede_fact", "fact_id": existing_id, **kwargs}
-ledger_stub.retract_fact = lambda fact_id, **kwargs: {"type": "retract_fact", "fact_id": fact_id, **kwargs}
-ledger_stub.refine_fact = lambda fact_id, arg_changes: {
-    "type": "refine_fact",
-    "fact_id": fact_id,
-    "arg_changes": arg_changes,
-}
-ledger_stub.append_commit = MagicMock()
+_BACKEND = Path(__file__).resolve().parents[2]
 
-sys.modules["database._client"] = MagicMock()
-sys.modules["database.memories"] = MagicMock()
-sys.modules["database.memory_ledger"] = ledger_stub
-sys.modules["database.short_term_memories"] = MagicMock()
 
-from database import review_queue  # noqa: E402
+@pytest.fixture(scope="module")
+def review_queue():
+    """Load a fresh database.review_queue against stubbed database deps.
+
+    review_queue binds ``db`` and sibling database modules at import time
+    (``from ._client import db``, ``from database import memories``, ...), so the
+    fakes must be active before the module is exec'd. This is the sanctioned
+    Tier-2 "fake must precede import" case -- see backend/docs/test_isolation.md
+    and testing/import_isolation.load_module_fresh.
+    """
+    ledger_stub = types.ModuleType("database.memory_ledger")
+    ledger_stub.add_fact = lambda fact: {"type": "add_fact", "fact": fact}
+    ledger_stub.supersede_fact = lambda existing_id, **kwargs: {
+        "type": "supersede_fact",
+        "fact_id": existing_id,
+        **kwargs,
+    }
+    ledger_stub.retract_fact = lambda fact_id, **kwargs: {"type": "retract_fact", "fact_id": fact_id, **kwargs}
+    ledger_stub.refine_fact = lambda fact_id, arg_changes: {
+        "type": "refine_fact",
+        "fact_id": fact_id,
+        "arg_changes": arg_changes,
+    }
+    ledger_stub.append_commit = MagicMock()
+
+    fakes = {
+        "database._client": MagicMock(),
+        "database.memories": MagicMock(),
+        "database.memory_ledger": ledger_stub,
+        "database.short_term_memories": MagicMock(),
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.review_queue",
+            os.path.join(str(_BACKEND), "database", "review_queue.py"),
+        )
+        yield module
 
 
 class _FakeDocRef:
@@ -92,7 +119,7 @@ def _seed_queue(store, uid: str, items: dict) -> None:
         store[f"{base}/{doc_id}"] = dict(data)
 
 
-def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch):
+def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, review_queue):
     uid = "uid-review-purge"
     store = {}
     _seed_queue(

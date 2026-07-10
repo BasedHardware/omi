@@ -1,0 +1,62 @@
+version: 2
+name: home-stage
+tier: 2
+description: Redesigned Home stage transitions (hub/chat/connect) via automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Home starts in hub mode
+    state.expect:
+      state.homeMode: hub
+
+  - id: S3
+    name: Open inline chat
+    bridge.action:
+      name: home_open_chat
+    wait:
+      state.homeMode: chat
+
+  - id: S4
+    name: Home ask stub (no LLM wait)
+    bridge.action:
+      name: home_ask
+      params:
+        query: "[[MARKER:home-stage-stub]]"
+    expect:
+      result.detail.sent: "[[MARKER:home-stage-stub]]"
+    wait:
+      state.homeMode: chat
+
+  - id: S5
+    name: Toggle connect tray
+    bridge.action:
+      name: home_connect_toggle
+    wait:
+      state.homeMode: connect
+
+  - id: S6
+    name: Collapse back to hub
+    bridge.action:
+      name: home_close_panel
+    wait:
+      state.homeMode: hub
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

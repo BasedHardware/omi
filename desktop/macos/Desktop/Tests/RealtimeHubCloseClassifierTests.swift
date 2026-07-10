@@ -55,4 +55,13 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
 
     XCTAssertEqual(failure, .providerQuotaExceeded(provider: .gemini))
   }
+
+  func testCloseClassifierUsesCurrentProviderForCredentialFailures() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "WebSocket closed (1008) insufficient_quota.insufficient_quota",
+      aliveFor: 3,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .providerQuotaExceeded)
+  }
 }

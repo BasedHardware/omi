@@ -106,6 +106,15 @@ class AnalyticsManager {
     track(eventName, properties: properties);
   }
 
+  void setInteractionContext({String? screenName, required String target}) =>
+      PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
+        final adapter = _adapter;
+        if (adapter == null || !adapter.isInitialized) return;
+        try {
+          adapter.setInteractionContext(screenName: screenName, target: target);
+        } catch (_) {}
+      });
+
   setPeopleValues() {
     _setUserPropertiesBatch({
       'Notifications Enabled': _preferences.notificationsEnabled,
@@ -409,7 +418,10 @@ class AnalyticsManager {
         },
       );
 
-  void pageOpened(String name) => track('$name Opened');
+  void pageOpened(String name) {
+    setInteractionContext(screenName: name, target: 'screen');
+    track('$name Opened');
+  }
 
   void appEnabled(String appId) {
     track('App Enabled', properties: {'app_id': appId});
@@ -505,7 +517,10 @@ class AnalyticsManager {
 
   void calendarSelected() => track('Calendar Selected');
 
-  void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
+  void bottomNavigationTabClicked(String tab) {
+    setInteractionContext(screenName: tab, target: 'bottom_navigation');
+    track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
+  }
 
   void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
 

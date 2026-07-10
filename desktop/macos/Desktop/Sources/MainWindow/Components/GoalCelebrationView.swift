@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Fullscreen overlay celebration when a goal is completed
 struct GoalCelebrationView: View {

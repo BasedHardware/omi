@@ -1,21 +1,11 @@
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
-if 'google' not in sys.modules:
-    sys.modules['google'] = types.ModuleType('google')
-if 'google.cloud' not in sys.modules:
-    sys.modules['google.cloud'] = types.ModuleType('google.cloud')
-if 'google.cloud.firestore' not in sys.modules:
-    sys.modules['google.cloud.firestore'] = types.ModuleType('google.cloud.firestore')
+import pytest
 
-sys.modules['google.cloud.firestore'].Client = MagicMock
-sys.modules['google.cloud.firestore'].Increment = lambda value: ("__increment__", value)
-if 'google.api_core' not in sys.modules:
-    sys.modules['google.api_core'] = types.ModuleType('google.api_core')
-if 'google.api_core.exceptions' not in sys.modules:
-    sys.modules['google.api_core.exceptions'] = types.ModuleType('google.api_core.exceptions')
+import database.memory_imports as memory_imports_db
+from database.memory_imports import ingest_memory_import_batch
+from models.memory_imports import MemoryImportBatchItem, MemoryImportBatchRequest
+from utils.memory.import_write_guard import import_write_block_mode, import_write_violation
 
 
 class _AlreadyExists(Exception):
@@ -26,17 +16,11 @@ class _Conflict(Exception):
     pass
 
 
-sys.modules['google.api_core.exceptions'].AlreadyExists = _AlreadyExists
-sys.modules['google.api_core.exceptions'].Conflict = _Conflict
-
-import database.memory_imports as memory_imports_db  # noqa: E402
-from database.memory_imports import ingest_memory_import_batch  # noqa: E402
-from models.memory_imports import MemoryImportBatchItem, MemoryImportBatchRequest  # noqa: E402
-from utils.memory.import_write_guard import import_write_block_mode, import_write_violation  # noqa: E402
-
-memory_imports_db.AlreadyExists = _AlreadyExists
-memory_imports_db.Conflict = _Conflict
-memory_imports_db._firestore_increment = lambda value: ("__increment__", value)
+@pytest.fixture(autouse=True)
+def _patch_memory_imports_firestore(monkeypatch):
+    monkeypatch.setattr(memory_imports_db, "AlreadyExists", _AlreadyExists)
+    monkeypatch.setattr(memory_imports_db, "Conflict", _Conflict)
+    monkeypatch.setattr(memory_imports_db, "_firestore_increment", lambda value: ("__increment__", value))
 
 
 class _FakeSnapshot:

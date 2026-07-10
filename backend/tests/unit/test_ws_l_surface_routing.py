@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+import importlib
 from datetime import datetime, timedelta, timezone
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
@@ -29,7 +30,16 @@ from tests.unit.memory_import_isolation import ensure_utils_memory_packages_impo
 
 ensure_utils_memory_packages_importable()
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+
+
+def _refresh_memory_system_bindings():
+    memory_system_mod = importlib.import_module("utils.memory.memory_system")
+    globals()["MemorySystem"] = memory_system_mod.MemorySystem
+    globals()["resolve_memory_system"] = memory_system_mod.resolve_memory_system
+    return memory_system_mod
+
+
+_refresh_memory_system_bindings()
 
 
 class _AutoMockModule(ModuleType):
@@ -122,6 +132,7 @@ class _FirestoreFake:
 def _clear_canonical_cohort(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_memory_system_bindings()
     clear_canonical_cohort(monkeypatch)
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
@@ -296,6 +307,7 @@ class TestMemorySystemRequestPinning:
             pin_memory_system,
             resolve_pinned_memory_system,
         )
+        import utils.memory.memory_system_pin as memory_system_pin
 
         uid = "uid-pin-flip"
         calls = {"count": 0}
@@ -304,7 +316,7 @@ class TestMemorySystemRequestPinning:
             calls["count"] += 1
             return MemorySystem.CANONICAL if calls["count"] == 1 else MemorySystem.LEGACY
 
-        monkeypatch.setattr("utils.memory.memory_system_pin.resolve_memory_system", flipping_resolve)
+        monkeypatch.setattr(memory_system_pin, "resolve_memory_system", flipping_resolve)
 
         assert pin_memory_system(uid) == MemorySystem.CANONICAL
         assert resolve_pinned_memory_system(uid) == MemorySystem.CANONICAL

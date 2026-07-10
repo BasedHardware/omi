@@ -201,8 +201,8 @@ def _legacy_runtime_calls(route: str, source_segment: str) -> list[str]:
     elif route == 'POST /v3/memories':
         required = [
             (
-                "MemoryDB.from_memory(memory, uid, None, manually_added)",
-                "MemoryDB.from_memory(memory, uid, None, manually_added)",
+                "client_device_id=device_context.client_device_id",
+                "MemoryDB.from_memory includes request device provenance",
             ),
             ("memories_db.create_memory", "memories_db.create_memory(uid, payload)"),
             (
@@ -301,6 +301,13 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "approval_claimed": False,
         },
     }
+
+
+def test_build_report_static_probe_is_read_only_and_blocked():
+    report = build_report()
+    assert report["summary"]["status"] == "BLOCKED"
+    assert report["summary"]["read_only"] is True
+    assert report["summary"]["router_imported"] is False
 
 
 def main() -> int:

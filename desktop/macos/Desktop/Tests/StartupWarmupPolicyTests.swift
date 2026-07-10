@@ -38,6 +38,36 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
+    func testProactiveAssistantsRemainingDelayIsFullAtLaunch() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 0),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayCountsDownFromLaunch() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 2.0),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay - 2.0,
+            accuracy: 0.0001
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayIsZeroOnceWindowHasElapsed() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(
+                elapsedSinceLaunch: StartupWarmupPolicy.proactiveAssistantsStartDelay + 60),
+            0
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayClampsNegativeElapsedToFullDelay() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: -5),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay
+        )
+    }
+
     func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
         XCTAssertGreaterThan(
             StartupWarmupPolicy.conversationWarmupDelay,
@@ -75,6 +105,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
     func testFloatingBarPlanFetchRunsImmediatelyForQuotaGate() {
         XCTAssertEqual(StartupWarmupPolicy.floatingBarPlanFetchDelay, 0)
+    }
+
+    func testMCPKeyWarmupRunsAfterInteractiveLoadButBeforeDeferredWarmup() {
+        XCTAssertGreaterThan(
+            StartupWarmupPolicy.mcpKeyWarmupDelay,
+            StartupWarmupPolicy.immediateWarmupDelay
+        )
+        XCTAssertLessThan(
+            StartupWarmupPolicy.mcpKeyWarmupDelay,
+            StartupWarmupPolicy.deferredWarmupDelay
+        )
     }
 
     func testInitialSettingsSyncWaitsUntilAfterDeferredWarmupStarts() {
@@ -238,6 +279,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
+        XCTAssertTrue(source.contains("scheduleSessionWarmup(id: .mcpKeyWarmup"))
         XCTAssertTrue(source.contains("guard await self.isCurrentSession(scope) else"))
         XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
         XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
@@ -409,9 +451,13 @@ final class StartupWarmupPolicyTests: XCTestCase {
             "enabledApps = []",
             "categories = []",
             "capabilities = []",
+            "marketplaceApps = []",
+            "filteredAppsCache = [:]",
+            "filteredAppsCacheOrder = []",
             "appLoadingStates = [:]",
-            "categoryFilteredApps = nil",
-            "categoryFilterOffset = 0",
+            "filteredApps = nil",
+            "hasMoreFilteredApps = false",
+            "filteredAppsOffset = 0",
             "searchQuery = \"\"",
             "selectedCategory = nil",
             "selectedCapability = nil",

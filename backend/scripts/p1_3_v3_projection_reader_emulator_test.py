@@ -68,7 +68,7 @@ def _state(**overrides: Any) -> dict[str, Any]:
 
 
 def _item(memory_id: str, created_at: datetime, **overrides: Any) -> dict[str, Any]:
-    doc = {
+    doc: dict[str, Any] = {
         "uid": UID,
         "memory_id": memory_id,
         "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
@@ -110,18 +110,17 @@ def _item(memory_id: str, created_at: datetime, **overrides: Any) -> dict[str, A
 
 
 def _request(**overrides: Any) -> V3ProjectionReadRequest:
-    params = {
-        "uid": UID,
-        "limit": 2,
-        "expected_account_generation": ACCOUNT_GENERATION,
-        "cursor": None,
-        "offset": None,
-    }
-    params.update(overrides)
-    return V3ProjectionReadRequest(**params)
+    return V3ProjectionReadRequest(
+        uid=UID,
+        limit=2,
+        expected_account_generation=ACCOUNT_GENERATION,
+        cursor=None,
+        offset=None,
+        **overrides,
+    )
 
 
-def _delete_collection(db: firestore.Client, collection_path: str) -> None:
+def _delete_collection(db: Any, collection_path: str) -> None:
     for snap in db.collection(collection_path).stream():
         snap.reference.delete()
 
@@ -131,7 +130,7 @@ def _reset_fixture(db: firestore.Client) -> None:
     _delete_collection(db, PATHS.v3_compatibility_projection_items)
 
 
-def _write_items(db: firestore.Client, items: dict[str, dict[str, Any]]) -> None:
+def _write_items(db: Any, items: dict[str, dict[str, Any]]) -> None:
     for memory_id, item in items.items():
         db.collection(PATHS.v3_compatibility_projection_items).document(memory_id).set(item)
 
@@ -147,7 +146,7 @@ def _assert_failure(
     raise AssertionError(f"expected {reason.value}")
 
 
-def _assert_ready_empty(db: firestore.Client) -> None:
+def _assert_ready_empty(db: Any) -> None:
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(_state(empty_projection=True))
     page = read_v3_compatibility_projection_page(db_client=db, request=_request())
@@ -155,7 +154,7 @@ def _assert_ready_empty(db: firestore.Client) -> None:
     assert page.empty_projection is True
 
 
-def _assert_fail_closed_cases(db: firestore.Client) -> None:
+def _assert_fail_closed_cases(db: Any) -> None:
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(_state())
     _assert_failure(
@@ -175,7 +174,7 @@ def _assert_fail_closed_cases(db: firestore.Client) -> None:
     _assert_failure(db, V3ProjectionFailureReason.FENCE_MISMATCH)
 
 
-def _assert_exclusions(db: firestore.Client) -> None:
+def _assert_exclusions(db: Any) -> None:
     _reset_fixture(db)
     now = datetime(2026, 1, 4, tzinfo=timezone.utc)
     db.document(PATHS.v3_compatibility_projection_state).set(_state())
@@ -192,7 +191,7 @@ def _assert_exclusions(db: firestore.Client) -> None:
     assert [item["id"] for item in page.items] == ["visible"]
 
 
-def _assert_keyset(db: firestore.Client) -> None:
+def _assert_keyset(db: Any) -> None:
     _reset_fixture(db)
     t3 = datetime(2026, 1, 3, tzinfo=timezone.utc)
     t2 = datetime(2026, 1, 2, tzinfo=timezone.utc)

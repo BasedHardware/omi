@@ -110,6 +110,7 @@ pub(super) fn memory_passes_default_filters(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod contract_tests {
     use super::*;
     use chrono::TimeZone;

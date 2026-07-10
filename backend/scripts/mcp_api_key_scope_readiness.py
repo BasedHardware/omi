@@ -8,7 +8,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 MCP_API_KEY_COLLECTION = "mcp_api_keys"
 DEFAULT_ASSIGNMENT_FILE_ENV = "MEMORY_MCP_API_KEY_SCOPE_ASSIGNMENTS"
@@ -32,13 +32,20 @@ class McpApiKeyInventoryRow:
 def normalize_scope_list(value: Any) -> Tuple[Optional[List[str]], bool]:
     if value is None:
         return None, False
-    if not isinstance(value, list) or any(not isinstance(scope, str) for scope in value):
+    if not isinstance(value, list):
         return None, True
-    return list(dict.fromkeys(value)), False
+    items = cast(List[Any], value)
+    scopes: List[str] = []
+    for scope in items:
+        if not isinstance(scope, str):
+            return None, True
+        scopes.append(scope)
+    return list(dict.fromkeys(scopes)), False
 
 
 def row_from_snapshot(snapshot: Any) -> McpApiKeyInventoryRow:
-    data = snapshot.to_dict() or {}
+    raw: object = snapshot.to_dict()
+    data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     key_id = str(data.get("id") or getattr(snapshot, "id", ""))
     scopes, malformed_scopes = normalize_scope_list(data.get("scopes"))
     unknown_scopes = sorted(scope for scope in (scopes or []) if scope not in ALLOWED_SERVER_ASSIGNED_SCOPES)
@@ -92,7 +99,7 @@ def normalize_assignments(
     for key_id, assignment in (assignments or {}).items():
         app_id = assignment.get("app_id")
         scopes, malformed_scopes = normalize_scope_list(assignment.get("scopes"))
-        if not isinstance(key_id, str) or not key_id:
+        if not key_id:
             errors.append("invalid_key_id")
             continue
         if not isinstance(app_id, str) or not app_id:
@@ -186,10 +193,10 @@ def load_assignments(path: Optional[str]) -> Dict[str, Dict[str, Any]]:
     if not path:
         return {}
     with Path(path).open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
+        loaded: object = json.load(handle)
+    if not isinstance(loaded, dict):
         raise ValueError("assignment file must be a JSON object keyed by MCP key id")
-    return payload
+    return cast(Dict[str, Dict[str, Any]], loaded)
 
 
 def build_production_db_client() -> Any:

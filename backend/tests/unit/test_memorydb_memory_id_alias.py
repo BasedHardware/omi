@@ -1,22 +1,6 @@
 """MemoryDB ``memory_id`` alias: always mirrors ``id``, never a stored legacy value."""
 
-import os
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
-import pytest
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-_db_client_mod.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
-sys.modules.setdefault("database._client", _db_client_mod)
 
 from models.memories import MemoryDB
 

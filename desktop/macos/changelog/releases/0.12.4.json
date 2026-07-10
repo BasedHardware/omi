@@ -1,0 +1,20 @@
+{
+  "version": "0.12.4",
+  "date": "2026-07-03",
+  "changes": [
+    "Improved desktop agent task reliability, status handling, and top-level awareness of completed subagent work.",
+    "Improved desktop chat continuity so follow-up answers stay tied to the same runtime conversation after restarts or runtime rebinding.",
+    "Fixed background-agent startup during push-to-talk so spawned pills wait for the agent bridge to finish initializing before dispatching.",
+    "Background-agent voice acknowledgements now use an approved phrase pack cached per selected OpenAI voice instead of falling back to arbitrary system speech.",
+    "Fixed subagent status checks so stale orphaned background-agent runs stop prompting recovery after newer successful work covers the same visible goal.",
+    "Fixed visible background-agent pill startup so top-level spawned agents keep canonical runtime context while their runs execute.",
+    "Migrated visible background-agent pills onto canonical Omi agent runtime sessions so push-to-talk and chat-spawned agents share the new control-plane context.",
+    "PTT and floating-bar chat now resolve background-agent requests through a shared delegation resolver before spawning a child agent, preventing vague follow-up briefs from being handed to subagents.",
+    "Hardened direct-control background-agent spawning with a runtime capability handshake, stricter payload contracts, and deterministic floating-pill lifecycle tests.",
+    "Fixed rapid push-to-talk follow-ups losing context by carrying recent voice turns into fresh realtime sessions after barge-in.",
+    "Stabilized push-to-talk barge-in handling so rapid follow-up turns keep conversation context and fall back cleanly if no realtime session owns the commit.",
+    "Improved push-to-talk continuity so follow-up voice turns retain recent Omi chat, voice context, and background-agent handoffs after realtime provider reconnects.",
+    "Realtime voice agents no longer dismiss completed floating agent pills unless the user explicitly asks, and silent background-agent handoffs can receive a same-provider spoken acknowledgement instead of switching to cached local voice.",
+    "Realtime push-to-talk now uses the selected app voice playback service for no-audio fallbacks and background-agent kickoff acknowledgements instead of owning a separate Apple TTS path."
+  ]
+}

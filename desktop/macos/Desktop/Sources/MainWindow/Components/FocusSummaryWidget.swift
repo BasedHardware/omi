@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct FocusSummaryWidget: View {
     let todayStats: FocusDayStats
@@ -146,6 +147,7 @@ struct FocusStatCard: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     FocusSummaryWidget(
         todayStats: FocusDayStats(
@@ -170,3 +172,4 @@ struct FocusStatCard: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
+#endif

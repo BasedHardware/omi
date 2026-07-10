@@ -23,14 +23,50 @@ class AppProvider: ObservableObject {
     @Published var showInstalledOnly = false
 
     @Published var errorMessage: String?
-    @Published var categoryFilteredApps: [OmiApp]?
-    @Published var hasMoreCategoryApps = false
+    @Published var filteredApps: [OmiApp]?
+    @Published var hasMoreFilteredApps = false
     @Published var isLoadingMore = false
 
-    private var categoryFilterOffset = 0
-    private let categoryPageSize = 50
+    private var filteredAppsOffset = 0
+    private let filteredAppsPageSize = 50
+    private let filteredAppsCacheLimit = 20
+    private var marketplaceApps: [OmiApp] = []
+    private var filteredAppsCache: [FilterKey: FilterCacheEntry] = [:]
+    private var filteredAppsCacheOrder: [FilterKey] = []
 
     private let apiClient = APIClient.shared
+
+    var hasActiveFilters: Bool {
+        normalizedSearchQuery != nil || selectedCategory != nil || selectedCapability != nil || showInstalledOnly
+    }
+
+    private var normalizedSearchQuery: String? {
+        let normalizedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedQuery.isEmpty ? nil : normalizedQuery
+    }
+
+    private var currentFilterKey: FilterKey? {
+        guard hasActiveFilters else { return nil }
+        return FilterKey(
+            query: normalizedSearchQuery,
+            category: selectedCategory,
+            capability: selectedCapability,
+            installedOnly: showInstalledOnly
+        )
+    }
+
+    private struct FilterKey: Hashable {
+        let query: String?
+        let category: String?
+        let capability: String?
+        let installedOnly: Bool
+    }
+
+    private struct FilterCacheEntry {
+        var apps: [OmiApp]
+        var offset: Int
+        var hasMore: Bool
+    }
 
     // MARK: - Session Lifecycle
 
@@ -44,6 +80,9 @@ class AppProvider: ObservableObject {
         enabledApps = []
         categories = []
         capabilities = []
+        marketplaceApps = []
+        filteredAppsCache = [:]
+        filteredAppsCacheOrder = []
 
         isLoading = false
         isSearching = false
@@ -55,10 +94,10 @@ class AppProvider: ObservableObject {
         showInstalledOnly = false
 
         errorMessage = nil
-        categoryFilteredApps = nil
-        hasMoreCategoryApps = false
+        filteredApps = nil
+        hasMoreFilteredApps = false
         isLoadingMore = false
-        categoryFilterOffset = 0
+        filteredAppsOffset = 0
     }
 
     // MARK: - Fetch Methods
@@ -138,6 +177,8 @@ class AppProvider: ObservableObject {
 
             // Batch-assign all @Published properties on main actor
             apps = processed.0
+            marketplaceApps = processed.0
+            filteredApps = nil
             popularApps = processed.1
             integrationApps = processed.2
             chatApps = processed.3
@@ -156,8 +197,10 @@ class AppProvider: ObservableObject {
             Task {
                 do {
                     let ratedApps = try await self.apiClient.getAppsWithRatings()
-                    // Build a map of id → full app (for ratings AND enabled state)
-                    let v1Map = Dictionary(uniqueKeysWithValues: ratedApps.map { ($0.id, $0) })
+                    // Build a map of id → full app (for ratings AND enabled state).
+                    // The API can return duplicate app ids; use last-write-wins instead of
+                    // Dictionary(uniqueKeysWithValues:), which traps on a duplicate key.
+                    let v1Map = Dictionary(ratedApps.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
                     func enrich(_ list: inout [OmiApp]) {
                         for index in list.indices {
                             guard let v1App = v1Map[list[index].id] else { continue }
@@ -170,6 +213,7 @@ class AppProvider: ObservableObject {
                         }
                     }
                     enrich(&self.apps)
+                    enrich(&self.marketplaceApps)
                     enrich(&self.popularApps)
                     enrich(&self.integrationApps)
                     enrich(&self.chatApps)
@@ -188,9 +232,26 @@ class AppProvider: ObservableObject {
 
     /// Search apps with current filters
     func searchApps() async {
-        guard !searchQuery.isEmpty || selectedCategory != nil || selectedCapability != nil || showInstalledOnly else {
+        guard hasActiveFilters else {
             // Reset to default view
+            filteredAppsOffset = 0
+            hasMoreFilteredApps = false
+            if !marketplaceApps.isEmpty {
+                apps = marketplaceApps
+                filteredApps = nil
+                updateDerivedLists()
+                return
+            }
             await fetchApps()
+            return
+        }
+
+        guard let cacheKey = currentFilterKey else { return }
+
+        if let cached = cachedFilteredApps(for: cacheKey) {
+            filteredApps = cached.apps
+            filteredAppsOffset = cached.offset
+            hasMoreFilteredApps = cached.hasMore
             return
         }
 
@@ -199,69 +260,87 @@ class AppProvider: ObservableObject {
         defer { isSearching = false }
 
         do {
-            apps = try await apiClient.searchApps(
-                query: searchQuery.isEmpty ? nil : searchQuery,
+            filteredAppsOffset = 0
+            let results = try await apiClient.searchApps(
+                query: normalizedSearchQuery,
                 category: selectedCategory,
                 capability: selectedCapability,
-                installedOnly: showInstalledOnly
+                installedOnly: showInstalledOnly,
+                limit: filteredAppsPageSize,
+                offset: 0
             )
-            updateDerivedLists()
+            guard currentFilterKey == cacheKey else { return }
+            filteredApps = results
+            hasMoreFilteredApps = results.count >= filteredAppsPageSize
+            cacheFilteredApps(
+                FilterCacheEntry(
+                    apps: results,
+                    offset: filteredAppsOffset,
+                    hasMore: hasMoreFilteredApps
+                ),
+                for: cacheKey
+            )
         } catch {
             logError("Failed to search apps", error: error)
             errorMessage = "Search failed: \(error.localizedDescription)"
+            hasMoreFilteredApps = false
         }
     }
 
-    /// Fetch apps for a specific category from the API
-    func fetchAppsForCategory(_ categoryId: String) async {
-        isSearching = true
-        categoryFilterOffset = 0
-        defer { isSearching = false }
-
-        do {
-            let results = try await apiClient.getApps(category: categoryId, limit: categoryPageSize, offset: 0)
-            categoryFilteredApps = results
-            hasMoreCategoryApps = results.count >= categoryPageSize
-            log("Fetched \(results.count) apps for category \(categoryId)")
-        } catch {
-            logError("Failed to fetch apps for category \(categoryId)", error: error)
-            // Fallback to client-side filtering
-            categoryFilteredApps = apps.filter { $0.category == categoryId }
-            hasMoreCategoryApps = false
-        }
-    }
-
-    /// Load more apps for the current category (pagination)
-    func loadMoreCategoryApps() async {
-        guard let categoryId = selectedCategory,
-              hasMoreCategoryApps,
-              !isLoadingMore else { return }
+    /// Load more apps for the current search/filter set.
+    func loadMoreFilteredApps() async {
+        guard hasActiveFilters,
+              hasMoreFilteredApps,
+              !isLoadingMore,
+              let cacheKey = currentFilterKey else { return }
 
         isLoadingMore = true
-        let newOffset = categoryFilterOffset + categoryPageSize
+        let newOffset = filteredAppsOffset + filteredAppsPageSize
         defer { isLoadingMore = false }
 
         do {
-            let results = try await apiClient.getApps(category: categoryId, limit: categoryPageSize, offset: newOffset)
+            let results = try await apiClient.searchApps(
+                query: normalizedSearchQuery,
+                category: selectedCategory,
+                capability: selectedCapability,
+                installedOnly: showInstalledOnly,
+                limit: filteredAppsPageSize,
+                offset: newOffset
+            )
+            guard currentFilterKey == cacheKey else { return }
             if !results.isEmpty {
-                categoryFilteredApps?.append(contentsOf: results)
-                categoryFilterOffset = newOffset
-                hasMoreCategoryApps = results.count >= categoryPageSize
-                log("Loaded \(results.count) more apps for category \(categoryId)")
+                var updatedResults = filteredApps ?? []
+                updatedResults.append(contentsOf: results)
+                filteredApps = updatedResults
+                filteredAppsOffset = newOffset
+                hasMoreFilteredApps = results.count >= filteredAppsPageSize
+                cacheFilteredApps(
+                    FilterCacheEntry(
+                        apps: updatedResults,
+                        offset: filteredAppsOffset,
+                        hasMore: hasMoreFilteredApps
+                    ),
+                    for: cacheKey
+                )
+                log("Loaded \(results.count) more filtered apps")
             } else {
-                hasMoreCategoryApps = false
+                hasMoreFilteredApps = false
+                if var cached = cachedFilteredApps(for: cacheKey) {
+                    cached.hasMore = false
+                    cacheFilteredApps(cached, for: cacheKey)
+                }
             }
         } catch {
-            logError("Failed to load more apps for category \(categoryId)", error: error)
+            logError("Failed to load more filtered apps", error: error)
         }
     }
 
     /// Clear category filter results
     func clearCategoryFilter() {
         selectedCategory = nil
-        categoryFilteredApps = nil
-        categoryFilterOffset = 0
-        hasMoreCategoryApps = false
+        filteredApps = nil
+        filteredAppsOffset = 0
+        hasMoreFilteredApps = false
     }
 
     /// Fetch user's enabled apps
@@ -282,6 +361,7 @@ class AppProvider: ObservableObject {
         defer { appLoadingStates[app.id] = false }
 
         do {
+            let newEnabled = !app.enabled
             if app.enabled {
                 try await apiClient.disableApp(appId: app.id)
                 // Track app disabled
@@ -293,26 +373,20 @@ class AppProvider: ObservableObject {
             }
 
             // Update local state across all lists
-            if let index = apps.firstIndex(where: { $0.id == app.id }) {
-                apps[index].enabled.toggle()
-            }
-            if let index = popularApps.firstIndex(where: { $0.id == app.id }) {
-                popularApps[index].enabled.toggle()
-            }
-            if let index = integrationApps.firstIndex(where: { $0.id == app.id }) {
-                integrationApps[index].enabled.toggle()
-            }
-            if let index = chatApps.firstIndex(where: { $0.id == app.id }) {
-                chatApps[index].enabled.toggle()
-            }
-            if let index = summaryApps.firstIndex(where: { $0.id == app.id }) {
-                summaryApps[index].enabled.toggle()
-            }
-            if let index = notificationApps.firstIndex(where: { $0.id == app.id }) {
-                notificationApps[index].enabled.toggle()
-            }
+            setEnabled(newEnabled, for: app.id, in: &apps)
+            setEnabled(newEnabled, for: app.id, in: &marketplaceApps)
+            setEnabled(newEnabled, for: app.id, in: &popularApps)
+            setEnabled(newEnabled, for: app.id, in: &integrationApps)
+            setEnabled(newEnabled, for: app.id, in: &chatApps)
+            setEnabled(newEnabled, for: app.id, in: &summaryApps)
+            setEnabled(newEnabled, for: app.id, in: &notificationApps)
+            setEnabled(newEnabled, for: app.id, in: &filteredApps)
+            updateCachedEnabledState(appId: app.id, enabled: newEnabled)
 
             updateDerivedLists()
+            if showInstalledOnly && !newEnabled {
+                await searchApps()
+            }
 
             log("Toggled app \(app.id) to enabled=\(!app.enabled)")
         } catch {
@@ -354,6 +428,54 @@ class AppProvider: ObservableObject {
         }
     }
 
+    private func setEnabled(_ enabled: Bool, for appId: String, in list: inout [OmiApp]) {
+        guard let index = list.firstIndex(where: { $0.id == appId }) else { return }
+        list[index].enabled = enabled
+    }
+
+    private func setEnabled(_ enabled: Bool, for appId: String, in list: inout [OmiApp]?) {
+        guard var updatedList = list else { return }
+        setEnabled(enabled, for: appId, in: &updatedList)
+        list = updatedList
+    }
+
+    private func cachedFilteredApps(for key: FilterKey) -> FilterCacheEntry? {
+        guard let cached = filteredAppsCache[key] else { return nil }
+        filteredAppsCacheOrder.removeAll { $0 == key }
+        filteredAppsCacheOrder.append(key)
+        return cached
+    }
+
+    private func cacheFilteredApps(_ entry: FilterCacheEntry, for key: FilterKey) {
+        filteredAppsCache[key] = entry
+        filteredAppsCacheOrder.removeAll { $0 == key }
+        filteredAppsCacheOrder.append(key)
+
+        while filteredAppsCacheOrder.count > filteredAppsCacheLimit {
+            let staleKey = filteredAppsCacheOrder.removeFirst()
+            filteredAppsCache[staleKey] = nil
+        }
+    }
+
+    private func removeCachedFilteredApps(for key: FilterKey) {
+        filteredAppsCache[key] = nil
+        filteredAppsCacheOrder.removeAll { $0 == key }
+    }
+
+    private func updateCachedEnabledState(appId: String, enabled: Bool) {
+        for key in Array(filteredAppsCache.keys) {
+            if key.installedOnly {
+                removeCachedFilteredApps(for: key)
+                continue
+            }
+
+            guard var cached = filteredAppsCache[key],
+                  let index = cached.apps.firstIndex(where: { $0.id == appId }) else { continue }
+            cached.apps[index].enabled = enabled
+            cacheFilteredApps(cached, for: key)
+        }
+    }
+
     /// Get apps filtered by category (supports special section IDs)
     func apps(forCategory category: String) -> [OmiApp] {
         switch category {
@@ -373,11 +495,18 @@ class AppProvider: ObservableObject {
         apps.filter { $0.capabilities.contains(capability) }
     }
 
-    /// Clear search and filters
+    /// Clear all marketplace filter/search state. Fresh catalog presentations
+    /// (the Home popup) call this so they open on the unfiltered sections
+    /// instead of whatever filters an earlier visit left behind. Results from
+    /// searches still in flight are discarded by their `currentFilterKey`
+    /// guard once this runs.
     func clearFilters() {
         searchQuery = ""
         selectedCategory = nil
         selectedCapability = nil
         showInstalledOnly = false
+        filteredApps = nil
+        filteredAppsOffset = 0
+        hasMoreFilteredApps = false
     }
 }

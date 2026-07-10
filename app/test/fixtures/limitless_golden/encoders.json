@@ -1,0 +1,57 @@
+{
+  "note": "Byte-exact TX vectors observed from a fresh LimitlessDeviceConnection driving connect(), enableBatchMode(), acknowledgeProcessedData(12345), getStorageStatus(), disableBatchMode(), setRealtimeAudioSuppressed(true) in order. messageIndex starts at 0 and increments per write; requestId starts at 1 and increments per write. msg6 is pinned at a fixed timestamp after byte-verifying the mirror encoder against the live write.",
+  "vectors": [
+    {
+      "name": "msg6_set_current_time",
+      "messageIndex": 0,
+      "requestId": 1,
+      "timestampMs": 1750000000000,
+      "hex": "080010001801221032070880b883a1f732f2010408011000"
+    },
+    {
+      "name": "msg8_realtime_connect",
+      "messageIndex": 1,
+      "requestId": 2,
+      "batchMode": false,
+      "realTime": true,
+      "hex": "080110001801220d420408001001f2010408021000"
+    },
+    {
+      "name": "msg8_batch_on",
+      "messageIndex": 2,
+      "requestId": 3,
+      "batchMode": true,
+      "realTime": false,
+      "hex": "080210001801220d420408011000f2010408031000"
+    },
+    {
+      "name": "msg7_ack_12345",
+      "messageIndex": 3,
+      "requestId": 4,
+      "upToIndex": 12345,
+      "hex": "080310001801220c3a0308b960f2010408041000"
+    },
+    {
+      "name": "msg21_get_device_status",
+      "messageIndex": 4,
+      "requestId": 5,
+      "hex": "080410001801220aaa0100f2010408051000"
+    },
+    {
+      "name": "msg8_realtime_batch_off",
+      "messageIndex": 5,
+      "requestId": 6,
+      "batchMode": false,
+      "realTime": true,
+      "hex": "080510001801220d420408001001f2010408061000"
+    },
+    {
+      "name": "msg8_record_to_flash",
+      "messageIndex": 6,
+      "requestId": 7,
+      "batchMode": false,
+      "realTime": false,
+      "hex": "080610001801220d420408001000f2010408071000"
+    }
+  ]
+}

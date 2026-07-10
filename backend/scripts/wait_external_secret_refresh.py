@@ -8,7 +8,12 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, cast
+
+EXIT_REFRESH_OBSERVED = 0
+EXIT_HARD_ERROR = 1
+EXIT_TIMEOUT = 2
+EXIT_NOT_READY_AFTER_REFRESH = 3
 
 
 def main() -> int:
@@ -26,23 +31,38 @@ def main() -> int:
     min_refresh_time = parse_timestamp(args.min_refresh_time)
     deadline = time.monotonic() + args.timeout_seconds
     last_reason = 'ExternalSecret status unavailable'
+    saw_fresh_refresh = False
 
     while True:
-        state = load_json(args.state_json) if args.state_json else fetch_external_secret(args.namespace, args.name)
+        try:
+            state = load_json(args.state_json) if args.state_json else fetch_external_secret(args.namespace, args.name)
+        except Exception as exc:
+            print(f'ERROR: failed to read ExternalSecret state: {exc}', file=sys.stderr)
+            return EXIT_HARD_ERROR
         observed, reason = external_secret_refresh_observed(state, min_refresh_time)
         if observed:
             print(f'ExternalSecret refresh observed: {reason}')
-            return 0
+            return EXIT_REFRESH_OBSERVED
         last_reason = reason
+        if reason.startswith('status.refreshTime') and 'Ready condition is not true' in reason:
+            saw_fresh_refresh = True
         if args.state_json or time.monotonic() >= deadline:
             break
         time.sleep(args.interval_seconds)
+
+    if saw_fresh_refresh:
+        print(
+            f'ERROR: ExternalSecret refreshed after {min_refresh_time.isoformat()} but Ready condition is not true: '
+            f'{last_reason}',
+            file=sys.stderr,
+        )
+        return EXIT_NOT_READY_AFTER_REFRESH
 
     print(
         f'ERROR: timed out waiting for ExternalSecret refresh after {min_refresh_time.isoformat()}: {last_reason}',
         file=sys.stderr,
     )
-    return 1
+    return EXIT_TIMEOUT
 
 
 def fetch_external_secret(namespace: str, name: str) -> dict[str, Any]:
@@ -59,16 +79,17 @@ def load_json(path: Path | None) -> dict[str, Any]:
     if path is None:
         return {}
     with path.open('r', encoding='utf-8') as handle:
-        loaded = json.load(handle)
+        loaded: object = json.load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a JSON object')
-    return loaded
+    return cast(dict[str, Any], loaded)
 
 
 def external_secret_refresh_observed(state: dict[str, Any], min_refresh_time: datetime) -> tuple[bool, str]:
-    status = state.get('status') if isinstance(state, dict) else {}
-    if not isinstance(status, dict):
+    status_raw = state.get('status')
+    if not isinstance(status_raw, dict):
         return False, 'ExternalSecret status missing'
+    status: dict[str, Any] = cast(dict[str, Any], status_raw)
 
     refresh_time = parse_optional_timestamp(status.get('refreshTime'))
     if refresh_time is None:
@@ -86,12 +107,14 @@ def external_secret_refresh_observed(state: dict[str, Any], min_refresh_time: da
 def is_ready(conditions: Any) -> bool:
     if not isinstance(conditions, list):
         return False
-    return any(
-        isinstance(condition, dict)
-        and condition.get('type') == 'Ready'
-        and str(condition.get('status') or '').lower() == 'true'
-        for condition in conditions
-    )
+    items: list[Any] = cast(list[Any], conditions)
+    for condition in items:
+        if not isinstance(condition, dict):
+            continue
+        condition_dict: dict[str, Any] = cast(dict[str, Any], condition)
+        if condition_dict.get('type') == 'Ready' and str(condition_dict.get('status') or '').lower() == 'true':
+            return True
+    return False
 
 
 def parse_optional_timestamp(value: Any) -> datetime | None:
