@@ -360,10 +360,10 @@ export function AppsList({
                         </TableCell>
                         {!minimal && (
                              <TableCell>
-                              {app.rating_avg > 0 ? (
+                              {(app.rating_avg ?? 0) > 0 ? (
                                 <div className="flex items-center gap-1">
                                   <Star className="h-4 w-4 fill-primary text-primary" />
-                                  {app.rating_avg.toFixed(1)}
+                                  {(app.rating_avg ?? 0).toFixed(1)}
                                 </div>
                               ) : (
                                 <span className="text-xs text-muted-foreground">No rating</span>
@@ -382,7 +382,7 @@ export function AppsList({
                   <TableCell>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Calendar className="h-3.5 w-3.5" />
-                        {new Date(app.created_at).toLocaleDateString()}
+                        {new Date(app.created_at ?? 0).toLocaleDateString()}
                       </div>
                     </TableCell>
                 )}

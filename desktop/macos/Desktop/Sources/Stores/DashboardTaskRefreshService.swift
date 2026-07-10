@@ -28,10 +28,6 @@ enum DashboardTaskRefreshService {
             await store.loadDashboardTasks()
             return
         }
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else {
-            await store.loadDashboardTasks()
-            return
-        }
 
         await store.loadDashboardTasks()
 
@@ -66,13 +62,7 @@ enum DashboardTaskRefreshService {
             log(
                 "DashboardTaskRefreshService: Dashboard freshness reconciled sync=\(plan.itemsToSync.count), hardDeleted=\(plan.backendIdsToHardDelete.count), visible=\(plan.dashboardVisibleServerIds.count), completed=\(plan.completedServerIds.count), movedOut=\(plan.movedOutServerIds.count) without loading Tasks page list"
             )
-            if !serverTruth.hadAuthFailure {
-                AuthBackoffTracker.shared.reportSuccess()
-            }
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
-            }
             logError("DashboardTaskRefreshService: Dashboard freshness sync failed", error: error)
         }
 
@@ -155,7 +145,6 @@ enum DashboardTaskRefreshService {
                 logError("DashboardTaskRefreshService: Exact task refresh failed for \(id)", error: error)
                 if case APIError.unauthorized = error {
                     hadAuthFailure = true
-                    AuthBackoffTracker.shared.reportAuthFailure()
                 }
             }
         }

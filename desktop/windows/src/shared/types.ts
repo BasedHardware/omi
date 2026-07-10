@@ -80,6 +80,8 @@ export type ListenStartArgs = {
   source: ListenSource
   /** Firebase ID token; main process attaches it as Authorization: Bearer <token>. */
   token: string
+  /** First eight hex chars of SHA-256 over a stable local install id. */
+  deviceIdHash: string
   /** BCP-47-ish language code for transcription (e.g. 'en', 'es'). */
   language: string
 }

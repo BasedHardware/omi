@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -23,11 +24,11 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
 
-def _stored_model(model):
+def _stored_model(model: Any) -> dict[str, Any]:
     return model.model_dump(mode="json")
 
 
-def _required_doc(db_client, path):
+def _required_doc(db_client: Any, path: str) -> dict[str, Any]:
     snapshot = db_client.document(path).get()
     if not snapshot.exists:
         raise AssertionError(f"missing expected Firestore document: {path}")
@@ -41,7 +42,7 @@ def main() -> int:
 
     uid = "memory-python-apply-emulator-user"
     collections = MemoryCollections(uid=uid)
-    db_client = firestore.Client(project=PROJECT_ID)
+    db_client: Any = firestore.Client(project=PROJECT_ID)
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=3, source_generation=5)
     evidence = MemoryEvidence(

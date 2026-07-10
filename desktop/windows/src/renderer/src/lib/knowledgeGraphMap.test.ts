@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mapGraphResponse, mapRebuildResponse } from './knowledgeGraphMap'
+import type { KnowledgeGraphResponse } from './omiApi.generated'
 
 describe('mapGraphResponse', () => {
   it('maps snake_case nodes and edges to camelCase', () => {
@@ -13,18 +14,18 @@ describe('mapGraphResponse', () => {
   })
 
   it('defaults missing arrays and node_type, and tolerates absent nodes/edges', () => {
-    const g = mapGraphResponse({ nodes: [{ id: 'n1', label: 'X' }] })
+    const g = mapGraphResponse({ nodes: [{ id: 'n1', label: 'X' }] } as unknown as KnowledgeGraphResponse)
     expect(g.nodes[0]).toEqual({ id: 'n1', label: 'X', nodeType: 'concept', aliases: [], memoryIds: [] })
     expect(g.edges).toEqual([])
   })
 
   it('falls back to node id when label is absent', () => {
-    const g = mapGraphResponse({ nodes: [{ id: 'n9' }] })
+    const g = mapGraphResponse({ nodes: [{ id: 'n9' }] } as unknown as KnowledgeGraphResponse)
     expect(g.nodes[0].label).toBe('n9')
   })
 
   it('defaults edge label to empty string when absent', () => {
-    const g = mapGraphResponse({ edges: [{ id: 'e1', source_id: 'n1', target_id: 'n2' }] })
+    const g = mapGraphResponse({ edges: [{ id: 'e1', source_id: 'n1', target_id: 'n2' }] } as unknown as KnowledgeGraphResponse)
     expect(g.edges[0].label).toBe('')
   })
 })

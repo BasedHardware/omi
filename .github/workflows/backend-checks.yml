@@ -1,0 +1,62 @@
+name: Backend Checks
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+concurrency:
+  group: backend-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      diff_base: ${{ steps.changes.outputs.diff_base }}
+      has_backend_async_gate: ${{ steps.changes.outputs.has_backend_async_gate }}
+      has_backend_runtime_env: ${{ steps.changes.outputs.has_backend_runtime_env }}
+      has_backend_static_contracts: ${{ steps.changes.outputs.has_backend_static_contracts }}
+      has_backend_workflow_contracts: ${{ steps.changes.outputs.has_backend_workflow_contracts }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  static-contracts:
+    name: Static Contracts
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_backend_static_contracts == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check backend runtime env manifest
+        if: needs.changes.outputs.has_backend_runtime_env == 'true'
+        run: |
+          python3 -m pip install -q pyyaml pytest
+          CLOUD_RUN_VPC_NETWORK=offline-check-network \
+          CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
+            backend/scripts/pre-deploy-check.sh
+
+      - name: Check backend async blockers
+        if: needs.changes.outputs.has_backend_async_gate == 'true'
+        run: |
+          python3 backend/scripts/scan_async_blockers.py \
+            --dirs backend/routers backend/utils \
+            --diff-base "${{ needs.changes.outputs.diff_base }}" \
+            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+
+      - name: Check workflow contracts
+        if: needs.changes.outputs.has_backend_workflow_contracts == 'true' || needs.changes.outputs.has_backend_async_gate == 'true'
+        run: python3 backend/scripts/check_workflow_contracts.py

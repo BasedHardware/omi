@@ -1,5 +1,6 @@
 {
     "@@locale": "es",
+    "sessionExpiredSignInAgain": "La sesión ha caducado — vuelve a iniciar sesión.",
     "appTitle": "Omi",
     "conversationTab": "Conversación",
     "transcriptTab": "Transcripción",
@@ -3055,7 +3056,7 @@
     "syncCustomSttWarningMessage": "Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.",
     "transcribeLaterTitle": "Transcribir después",
     "transcribeLaterDescription": "Graba el audio ahora y transcríbelo cuando quieras, en lugar de en directo. Las grabaciones se guardan en tu teléfono y luego las subes para crear conversaciones.",
-    "transcribeLaterNote": "De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.",
+    "transcribeLaterNote": "De momento funciona con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.",
     "transcribeLaterStorageFull": "Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente.",
     "unmute": "Reactivar audio",
     "newRecording": "Nueva grabación",
@@ -3105,5 +3106,43 @@
     "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto",
     "jumpToLatestMessage": "Ir al mensaje más reciente",
     "latest": "Más reciente",
-    "flashFirmware": "Flashear firmware"
+    "flashFirmware": "Flashear firmware",
+    "pendantRecordingTitle": "Grabando en el colgante",
+    "pendantRecordingNote": "Tu colgante graba por sí solo. Las grabaciones se sincronizan con tu teléfono mientras la app está abierta.",
+    "pendantSyncingRecordings": "Sincronizando grabaciones desde tu colgante…",
+    "pendantMinutesStored": "~{minutes} min almacenados",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar.",
+    "connectRayBanMeta": "Conectar Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Usa tus gafas Ray-Ban Meta como tu dispositivo de captura de Omi para conversaciones y contexto visual. Omi abrirá la app Meta AI para vincular tus gafas.",
+    "raybanMetaOpenMetaAI": "Conectar a través de Meta AI",
+    "raybanMetaWaitingForMetaAI": "Termina de conectar en la app Meta AI y luego vuelve aquí.",
+    "raybanMetaCheckAgain": "Comprobar de nuevo",
+    "raybanMetaAllowCamera": "Permitir la cámara en las gafas",
+    "raybanMetaCameraExplanation": "Omi usa la cámara de tus gafas para añadir fotos a tus conversaciones. Puedes omitir esto y usar solo audio.",
+    "raybanMetaSkipForNow": "Omitir por ahora",
+    "raybanMetaAudioOnlyTitle": "Modo solo audio de Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Esta versión de Omi puede usar el micrófono de tus gafas por Bluetooth. La captura de fotos requiere la versión para desarrolladores de Meta de Omi.",
+    "raybanMetaMusicPauseNote": "La música de tu teléfono se pausa mientras se usa el micrófono de las gafas.",
+    "raybanMetaContinue": "Continuar",
+    "raybanMetaCapturePhoto": "Capturar foto",
+    "raybanMetaPhotoRequested": "Foto solicitada: aparecerá en tu conversación.",
+    "raybanMetaMicrophoneReady": "Micrófono listo",
+    "raybanMetaImageCaptureReady": "Captura de imagen lista",
+    "raybanMetaImageCaptureUnavailable": "No disponible en modo solo audio",
+    "raybanMetaCamera": "Cámara",
+    "errorConnectingRayBanMeta": "Error al conectar con Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

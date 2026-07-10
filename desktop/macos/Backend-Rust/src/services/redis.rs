@@ -442,13 +442,27 @@ fn parse_python_reviews(raw: &str) -> Vec<RedisReview> {
         return reviews;
     }
 
-    // Fallback: parse Python dict format using regex
-    // Looking for 'score': <number> patterns
-    let score_regex = regex::Regex::new(r"'score':\s*(\d+)").unwrap();
-    for cap in score_regex.captures_iter(raw) {
-        if let Some(score_match) = cap.get(1) {
-            if let Ok(score) = score_match.as_str().parse::<i32>() {
-                reviews.push(RedisReview { score });
+    // Fallback: parse Python dict format using regex.
+    // Compile the constant pattern once per process (and log at most once on the
+    // impossible error path) instead of recompiling on every call.
+    static SCORE_REGEX: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let score_regex = SCORE_REGEX.get_or_init(|| match regex::Regex::new(r"'score':\s*(\d+)") {
+        Ok(re) => Some(re),
+        Err(error) => {
+            tracing::error!(
+                "Failed to compile Redis review score fallback regex: {}",
+                error
+            );
+            None
+        }
+    });
+
+    if let Some(score_regex) = score_regex {
+        for cap in score_regex.captures_iter(raw) {
+            if let Some(score_match) = cap.get(1) {
+                if let Ok(score) = score_match.as_str().parse::<i32>() {
+                    reviews.push(RedisReview { score });
+                }
             }
         }
     }

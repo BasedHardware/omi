@@ -10,6 +10,7 @@ on:
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  DEFAULT_DESKTOP_BACKEND_BASE_API_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
 
 concurrency:
   group: desktop-backend-auto-dev
@@ -45,15 +46,21 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
 
-      - name: Validate desktop OAuth base API URL
+      - name: Resolve desktop OAuth base API URL
+        id: desktop-base-api-url
         env:
           DESKTOP_BACKEND_BASE_API_URL: ${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}" ]; then
-            echo "DESKTOP_BACKEND_BASE_API_URL must be configured for desktop OAuth callbacks" >&2
+          BASE_API_URL="${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}"
+          if [ -z "$BASE_API_URL" ]; then
+            BASE_API_URL="$DEFAULT_DESKTOP_BACKEND_BASE_API_URL"
+          fi
+          if [ -z "$BASE_API_URL" ]; then
+            echo "Desktop OAuth BASE_API_URL could not be resolved" >&2
             exit 1
           fi
+          echo "base_api_url=$BASE_API_URL" >> "$GITHUB_OUTPUT"
 
       - name: Validate desktop Calendar API key secret
         env:
@@ -93,7 +100,7 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-            BASE_API_URL=${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
+            BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest

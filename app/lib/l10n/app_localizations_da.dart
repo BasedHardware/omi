@@ -9,6 +9,9 @@ class AppLocalizationsDa extends AppLocalizations {
   AppLocalizationsDa([String locale = 'da']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sessionen er udløbet — log ind igen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9325,7 +9328,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerer indtil videre med Omi-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
+      'Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9475,4 +9478,84 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Optager på vedhænget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Dit vedhæng optager af sig selv. Optagelser synkroniseres til din telefon, mens appen er åben.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserer optagelser fra dit vedhæng…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min gemt';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Vedhængets lager er næsten fuldt — hold appen åben for at synkronisere.';
+
+  @override
+  String get connectRayBanMeta => 'Forbind Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Brug dine Ray-Ban Meta-briller som din Omi-optageenhed til samtaler og visuel kontekst. Omi åbner Meta AI-appen for at forbinde dine briller.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Forbind via Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Fuldfør forbindelsen i Meta AI-appen, og kom så tilbage hertil.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tjek igen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Tillad kamera på briller';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi bruger dine brillers kamera til at føje billeder til dine samtaler. Du kan springe dette over og kun bruge lyd.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Spring over for nu';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta kun-lyd-tilstand';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Denne version af Omi kan bruge dine brillers mikrofon via Bluetooth. Billedoptagelse kræver Meta-udviklerversionen af Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Musik på din telefon sættes på pause, mens brillernes mikrofon er i brug.';
+
+  @override
+  String get raybanMetaContinue => 'Fortsæt';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Tag billede';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Billede anmodet — det vises i din samtale.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon klar';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Billedoptagelse klar';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Ikke tilgængelig i kun-lyd-tilstand';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Fejl ved forbindelse til Ray-Ban Meta: $error';
+  }
 }

@@ -7,9 +7,9 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from llm_gateway.gateway.credentials import CredentialContext, is_byok_failure_class
+from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
@@ -97,12 +97,7 @@ async def execute_chat_completion(
     # When the active route is in shadow/disabled rollout the LKG is already
     # the serving route — there is no separate LKG fallback to try.
     if serving_is_lkg:
-        if last_error is not None:
-            raise last_error
-        raise GatewayProviderFailureError(
-            'provider request failed',
-            failure_class=FailureClass.INVALID_CONFIG,
-        )
+        raise last_error
 
     if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
         try:
@@ -117,12 +112,7 @@ async def execute_chat_completion(
         except GatewayError as exc:
             last_error = exc
 
-    if last_error is not None:
-        raise last_error
-    raise GatewayProviderFailureError(
-        'provider request failed',
-        failure_class=FailureClass.INVALID_CONFIG,
-    )
+    raise last_error
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
@@ -210,7 +200,7 @@ async def _execute_route(
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             error = _unsupported_provider_error(provider_ref, credential_context)
-        elif route.credential_policy.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
+        elif credential_context.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
             provider_ref.provider
         ):
             error = GatewayCredentialFailureError(
@@ -227,8 +217,13 @@ async def _execute_route(
                 credential_context,
             )
             if error is None:
+                if response is None:
+                    raise GatewayProviderFailureError(
+                        'provider request failed',
+                        failure_class=FailureClass.INVALID_CONFIG,
+                    )
                 return _executor_result(
-                    response,  # type: ignore[arg-type]
+                    response,
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
@@ -284,7 +279,7 @@ def _provider_request(
     route: RouteArtifact | None = None,
 ) -> dict[str, Any]:
     route = route or selected_serving_route(resolved_route)
-    provider_request = {
+    provider_request: dict[str, Any] = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
         'stream': False,
@@ -299,7 +294,7 @@ def _provider_request(
 def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
     extra_body = provider_options.get('extra_body')
     if isinstance(extra_body, Mapping):
-        provider_request.update(dict(extra_body))
+        provider_request.update(dict(cast(Mapping[str, Any], extra_body)))
     for key, value in provider_options.items():
         if key == 'extra_body':
             continue
@@ -318,18 +313,21 @@ def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_bud
     if not isinstance(extra_body, dict):
         extra_body = {}
         provider_request['extra_body'] = extra_body
+    extra_body_typed = cast(dict[str, Any], extra_body)
 
-    google_options = extra_body.get('google')
+    google_options = extra_body_typed.get('google')
     if not isinstance(google_options, dict):
         google_options = {}
-        extra_body['google'] = google_options
+        extra_body_typed['google'] = google_options
+    google_options_typed = cast(dict[str, Any], google_options)
 
-    thinking_config = google_options.get('thinking_config')
+    thinking_config = google_options_typed.get('thinking_config')
     if not isinstance(thinking_config, dict):
         thinking_config = {}
-        google_options['thinking_config'] = thinking_config
+        google_options_typed['thinking_config'] = thinking_config
+    thinking_config_typed = cast(dict[str, Any], thinking_config)
 
-    thinking_config['thinking_budget'] = thinking_budget
+    thinking_config_typed['thinking_budget'] = thinking_budget
 
 
 def _executor_result(
@@ -357,6 +355,15 @@ def _executor_result(
 
 
 def _validate_credential_mode(route: RouteArtifact, credential_context: CredentialContext) -> None:
+    if (
+        credential_context.mode == CredentialMode.BYOK
+        and credential_context.source == CredentialSource.SERVICE_FORWARDED_BYOK
+    ):
+        if route.credential_policy.allow_byok_to_omi_paid_fallback:
+            raise GatewayInvalidRouteConfigError(
+                f'route {route.route_artifact_id} must not allow BYOK to Omi-paid fallback'
+            )
+        return
     if route.credential_policy.mode != credential_context.mode:
         raise GatewayInvalidRouteConfigError(
             f'route {route.route_artifact_id} credential mode does not match request context'

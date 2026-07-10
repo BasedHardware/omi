@@ -1,9 +1,15 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
 
-from models.memories import MemoryCategory, MemoryDB
+from models.memories import MemoryDB
+
+
+def _serialize_datetime(value: datetime) -> str:
+    if value.tzinfo is None:
+        return value.isoformat() + 'Z'
+    return value.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
 class ConversationTimestampRange(BaseModel):
@@ -53,6 +59,10 @@ class EmptyResponse(BaseModel):
     pass
 
 
+class IntegrationNotificationResponse(BaseModel):
+    status: str
+
+
 class ConversationCreateResponse(BaseModel):
     status: str
     conversation_id: str
@@ -86,8 +96,8 @@ class Event(BaseModel):
     duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
 
-    def as_dict_cleaned_dates(self):
-        event_dict = self.dict()
+    def as_dict_cleaned_dates(self) -> dict[str, Any]:
+        event_dict = self.model_dump()
         start_time = event_dict['start']
         if start_time.tzinfo is None:
             event_dict['start'] = start_time.isoformat() + 'Z'
@@ -101,8 +111,8 @@ class ConversationItemStructured(BaseModel):
     overview: str
     emoji: str = "🧠"
     category: str = "other"
-    action_items: List[ActionItem] = Field(default=[])
-    events: List[Event] = Field(default=[])
+    action_items: List[ActionItem] = Field(default_factory=list)
+    events: List[Event] = Field(default_factory=list)
 
 
 class ConversationItemGeolocation(BaseModel):
@@ -133,18 +143,11 @@ class ConversationItem(BaseModel):
     discarded: Optional[bool] = False
     app_id: Optional[str] = None
     language: Optional[str] = None
-    external_data: Optional[Dict] = None
+    external_data: Optional[Dict[str, Any]] = None
     geolocation: Optional[ConversationItemGeolocation] = None
     status: Optional[str] = None
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: (
-                v.isoformat() + 'Z'
-                if v.tzinfo is None
-                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-            )
-        }
+    model_config = ConfigDict(json_encoders={datetime: _serialize_datetime})
 
 
 class ConversationsResponse(BaseModel):
@@ -170,14 +173,7 @@ class TaskItem(BaseModel):
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: (
-                v.isoformat() + 'Z'
-                if v.tzinfo is None
-                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-            )
-        }
+    model_config = ConfigDict(json_encoders={datetime: _serialize_datetime})
 
 
 class TasksResponse(BaseModel):

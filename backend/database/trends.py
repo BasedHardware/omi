@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, cast
 
 from firebase_admin import firestore
 from google.api_core.retry import Retry
@@ -11,14 +11,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_trends_data() -> List[Dict]:
+def get_trends_data() -> List[Dict[str, Any]]:
     trends_ref = db.collection('trends')
     trends_docs = [doc for doc in trends_ref.stream(retry=Retry())]
-    trends_data = []
+    trends_data: List[Dict[str, Any]] = []
     for category in trends_docs:
         try:
-            category_data = category.to_dict()
-            if category_data['category'] not in [
+            raw_category: object = category.to_dict()
+            category_data: Dict[str, Any] = cast(Dict[str, Any], raw_category) if isinstance(raw_category, dict) else {}
+            if category_data.get('category') not in [
                 'ceo',
                 'company',
                 'software_product',
@@ -28,8 +29,12 @@ def get_trends_data() -> List[Dict]:
                 continue
 
             category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
-            topics_docs = [topic.to_dict() for topic in category_topics_ref.stream(retry=Retry())]
-            cleaned_topics = []
+            topics_docs: List[Dict[str, Any]] = []
+            for topic in category_topics_ref.stream(retry=Retry()):
+                raw_topic: object = topic.to_dict()
+                if isinstance(raw_topic, dict):
+                    topics_docs.append(cast(Dict[str, Any], raw_topic))
+            cleaned_topics: List[Dict[str, Any]] = []
             # A topic doc can be missing 'memory_ids'. save_trends writes the doc and its
             # memory_ids in two separate Firestore calls (set, then update with ArrayUnion),
             # so an interrupted or failed second write leaves a topic with no memory_ids field.
@@ -52,7 +57,7 @@ def get_trends_data() -> List[Dict]:
     return trends_data
 
 
-def save_trends(memory_id: str, trends: List[Trend]):
+def save_trends(memory_id: str, trends: List[Trend]) -> None:
     trends_coll_ref = db.collection('trends')
 
     for trend in trends:
@@ -63,7 +68,8 @@ def save_trends(memory_id: str, trends: List[Trend]):
         category_doc_ref = trends_coll_ref.document(category_id)
 
         category_doc_ref.set(
-            {"id": category_id, "category": category, "type": trend_type, "created_at": datetime.utcnow()}, merge=True
+            {"id": category_id, "category": category, "type": trend_type, "created_at": datetime.now(timezone.utc)},
+            merge=True,
         )
 
         topics_coll_ref = category_doc_ref.collection('topics')

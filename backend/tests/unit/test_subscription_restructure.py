@@ -22,6 +22,8 @@ import pytest
 from models.users import PlanLimits, PlanType, Subscription
 from testing.import_isolation import load_module_fresh, stub_modules
 
+pytestmark = pytest.mark.slow
+
 _BACKEND = Path(__file__).resolve().parents[2]
 _SUBSCRIPTION_PATH = os.path.join(str(_BACKEND), "utils", "subscription.py")
 

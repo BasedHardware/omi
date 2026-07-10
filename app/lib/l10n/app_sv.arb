@@ -1,5 +1,6 @@
 {
     "@@locale": "sv",
+    "sessionExpiredSignInAgain": "Sessionen har gått ut — logga in igen.",
     "appTitle": "Omi",
     "conversationTab": "Konversation",
     "transcriptTab": "Transkription",
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns.",
     "transcribeLaterTitle": "Transkribera senare",
     "transcribeLaterDescription": "Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.",
-    "transcribeLaterNote": "Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
+    "transcribeLaterNote": "Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
     "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.",
     "unmute": "Slå på ljud",
     "newRecording": "Ny inspelning",
@@ -3104,5 +3105,43 @@
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
     "latest": "Senaste",
-    "flashFirmware": "Installera firmware"
+    "flashFirmware": "Installera firmware",
+    "pendantRecordingTitle": "Spelar in på hänget",
+    "pendantRecordingNote": "Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.",
+    "pendantSyncingRecordings": "Synkroniserar inspelningar från ditt hänge…",
+    "pendantMinutesStored": "~{minutes} min lagrat",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera.",
+    "connectRayBanMeta": "Anslut Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Använd dina Ray-Ban Meta-glasögon som din Omi-inspelningsenhet för konversationer och visuell kontext. Omi öppnar Meta AI-appen för att länka dina glasögon.",
+    "raybanMetaOpenMetaAI": "Anslut via Meta AI",
+    "raybanMetaWaitingForMetaAI": "Slutför anslutningen i Meta AI-appen och kom sedan tillbaka hit.",
+    "raybanMetaCheckAgain": "Kontrollera igen",
+    "raybanMetaAllowCamera": "Tillåt kamera på glasögonen",
+    "raybanMetaCameraExplanation": "Omi använder dina glasögons kamera för att lägga till foton i dina konversationer. Du kan hoppa över detta och endast använda ljud.",
+    "raybanMetaSkipForNow": "Hoppa över för nu",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta läge med endast ljud",
+    "raybanMetaAudioOnlyExplanation": "Den här versionen av Omi kan använda dina glasögons mikrofon via Bluetooth. Fotografering kräver Meta-utvecklarversionen av Omi.",
+    "raybanMetaMusicPauseNote": "Musik på din telefon pausas medan glasögonens mikrofon används.",
+    "raybanMetaContinue": "Fortsätt",
+    "raybanMetaCapturePhoto": "Ta foto",
+    "raybanMetaPhotoRequested": "Foto begärt — det visas i din konversation.",
+    "raybanMetaMicrophoneReady": "Mikrofon redo",
+    "raybanMetaImageCaptureReady": "Bildtagning redo",
+    "raybanMetaImageCaptureUnavailable": "Inte tillgängligt i läge med endast ljud",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Fel vid anslutning till Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

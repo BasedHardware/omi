@@ -3,6 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, StrictInt
 
+from models.advice import Advice
+from models.shared import StatusResponse
 import database.advice as advice_db
 from utils.other import endpoints as auth
 
@@ -10,7 +12,7 @@ router = APIRouter()
 
 
 # ============================================================================
-# MODELS
+# REQUEST MODELS
 # ============================================================================
 
 
@@ -41,7 +43,7 @@ class AdviceFeedbackRequest(BaseModel):
 # ============================================================================
 
 
-@router.post('/v1/advice', tags=['advice'])
+@router.post('/v1/advice', tags=['advice'], response_model=Advice)
 def create_advice(
     request: CreateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -58,7 +60,7 @@ def create_advice(
     )
 
 
-@router.get('/v1/advice', tags=['advice'])
+@router.get('/v1/advice', tags=['advice'], response_model=list[Advice])
 def get_advice(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -69,7 +71,7 @@ def get_advice(
     return advice_db.get_advice(uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed)
 
 
-@router.patch('/v1/advice/{advice_id}', tags=['advice'])
+@router.patch('/v1/advice/{advice_id}', tags=['advice'], response_model=Advice)
 def update_advice(
     advice_id: str,
     request: UpdateAdviceRequest,
@@ -81,7 +83,7 @@ def update_advice(
     return result
 
 
-@router.delete('/v1/advice/{advice_id}', tags=['advice'])
+@router.delete('/v1/advice/{advice_id}', tags=['advice'], response_model=StatusResponse)
 def delete_advice(
     advice_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -90,7 +92,7 @@ def delete_advice(
     return {'status': 'ok'}
 
 
-@router.post('/v1/advice/mark-all-read', tags=['advice'])
+@router.post('/v1/advice/mark-all-read', tags=['advice'], response_model=StatusResponse)
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
     count = advice_db.mark_all_advice_read(uid)
     return {'status': f'marked {count} as read'}

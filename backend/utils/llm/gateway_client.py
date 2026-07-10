@@ -4,14 +4,14 @@ import json
 import os
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from pydantic import BaseModel, ValidationError
 
-from utils.llm.gateway_observability import record_gateway_request_result
+from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -19,6 +19,7 @@ LLM_GATEWAY_URL_ENV_VAR = 'OMI_LLM_GATEWAY_URL'
 DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+CHAT_AGENT_AUTO_LANE_ID = 'omi:auto:chat-agent'
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
@@ -27,6 +28,16 @@ CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
+JsonDict = dict[str, Any]
+JsonList = list[Any]
+
+
+def _as_json_dict(value: object) -> JsonDict | None:
+    return cast(JsonDict, value) if isinstance(value, dict) else None
+
+
+def _as_json_list(value: object) -> JsonList | None:
+    return cast(JsonList, value) if isinstance(value, list) else None
 
 
 def get_llm_gateway_base_url() -> str:
@@ -72,6 +83,7 @@ def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> N
     if not should_route_features_through_gateway():
         return
     if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
+        record_direct_exception_surface(surface=surface, reason='acknowledged')
         return
     raise RuntimeError(
         f'{surface} is a direct provider LLM surface and is blocked while '
@@ -125,11 +137,11 @@ def invoke_chat_structured_gateway(
         if not isinstance(decoded, Mapping):
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json_shape')
             return None
-        result = _validate_output_model(output_model, decoded)
+        result = _validate_output_model(output_model, cast(Mapping[str, object], decoded))
         record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
         return result
     except httpx.HTTPStatusError as exc:
-        reason = f'http_{exc.response.status_code}' if exc.response is not None else 'http_status'
+        reason = f'http_{exc.response.status_code}'
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
         return None
     except httpx.TimeoutException:
@@ -146,8 +158,8 @@ def invoke_chat_structured_gateway(
         return None
 
 
-def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str) -> None:
-    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason)
+def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str, mode: str | None = None) -> None:
+    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
 def _gateway_headers() -> dict[str, str]:
@@ -165,7 +177,7 @@ def llm_gateway_headers() -> dict[str, str]:
     return _gateway_headers()
 
 
-def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> dict:
+def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
     return {
         'model': CHAT_STRUCTURED_AUTO_LANE_ID,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -185,7 +197,7 @@ def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feat
     }
 
 
-def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
+def _strict_model_json_schema(output_model: type[BaseModel]) -> JsonDict:
     """Generate a strict-compatible JSON Schema for OpenAI Structured Outputs.
 
     OpenAI strict structured outputs require every object schema to disallow
@@ -199,35 +211,39 @@ def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
     return schema
 
 
-def _normalize_strict_schema(schema: dict) -> None:
+def _normalize_strict_schema(schema: JsonDict) -> None:
     """Recursively normalize a Pydantic JSON schema for strict provider output."""
-    if not isinstance(schema, dict):
-        return
     schema.pop('default', None)
     if schema.get('type') == 'object':
         schema['additionalProperties'] = False
-    properties = schema.get('properties')
-    if isinstance(properties, dict):
+    properties = _as_json_dict(schema.get('properties'))
+    if properties is not None:
         schema['required'] = list(properties.keys())
         for prop_schema in properties.values():
-            _normalize_strict_schema(prop_schema)
+            prop_schema_dict = _as_json_dict(prop_schema)
+            if prop_schema_dict is not None:
+                _normalize_strict_schema(prop_schema_dict)
     # Recurse into nested schemas under $defs, properties, items, etc.
     for key in ('$defs', 'definitions'):
-        defs = schema.get(key)
-        if isinstance(defs, dict):
+        defs = _as_json_dict(schema.get(key))
+        if defs is not None:
             for def_schema in defs.values():
-                _normalize_strict_schema(def_schema)
-    items = schema.get('items')
-    if isinstance(items, dict):
+                def_schema_dict = _as_json_dict(def_schema)
+                if def_schema_dict is not None:
+                    _normalize_strict_schema(def_schema_dict)
+    items = _as_json_dict(schema.get('items'))
+    if items is not None:
         _normalize_strict_schema(items)
     for ref_key in ('anyOf', 'oneOf', 'allOf'):
-        alternatives = schema.get(ref_key)
-        if isinstance(alternatives, list):
+        alternatives = _as_json_list(schema.get(ref_key))
+        if alternatives is not None:
             for alt_schema in alternatives:
-                _normalize_strict_schema(alt_schema)
+                alt_schema_dict = _as_json_dict(alt_schema)
+                if alt_schema_dict is not None:
+                    _normalize_strict_schema(alt_schema_dict)
 
 
-def _inline_ref_siblings(schema: dict) -> None:
+def _inline_ref_siblings(schema: JsonDict) -> None:
     """Inline local ``$ref`` schemas that carry sibling metadata.
 
     Pydantic emits enum fields as ``{"$ref": "#/$defs/Enum", "description": ...}``.
@@ -236,31 +252,32 @@ def _inline_ref_siblings(schema: dict) -> None:
     nested object refs are accepted and keep large schemas compact.
     """
 
-    definitions = schema.get('$defs') or schema.get('definitions') or {}
-    if not isinstance(definitions, dict):
-        definitions = {}
+    definitions = _as_json_dict(schema.get('$defs')) or _as_json_dict(schema.get('definitions')) or {}
 
-    def resolve_ref(ref: str) -> dict | None:
+    def resolve_ref(ref: str) -> JsonDict | None:
         prefix = '#/$defs/'
         if not ref.startswith(prefix):
             return None
-        target = definitions.get(ref.removeprefix(prefix))
-        return deepcopy(target) if isinstance(target, dict) else None
+        target = _as_json_dict(definitions.get(ref.removeprefix(prefix)))
+        return deepcopy(target) if target is not None else None
 
     def walk(node: object) -> None:
-        if isinstance(node, dict):
-            ref = node.get('$ref')
-            if isinstance(ref, str) and len(node) > 1:
+        node_dict = _as_json_dict(node)
+        if node_dict is not None:
+            ref = node_dict.get('$ref')
+            if isinstance(ref, str) and len(node_dict) > 1:
                 resolved = resolve_ref(ref)
                 if resolved is not None:
-                    siblings = {key: value for key, value in node.items() if key != '$ref'}
-                    node.clear()
-                    node.update(resolved)
-                    node.update(siblings)
-            for value in list(node.values()):
+                    siblings: JsonDict = {key: value for key, value in node_dict.items() if key != '$ref'}
+                    node_dict.clear()
+                    node_dict.update(resolved)
+                    node_dict.update(siblings)
+            for value in list(node_dict.values()):
                 walk(value)
-        elif isinstance(node, list):
-            for value in node:
+            return
+        node_list = _as_json_list(node)
+        if node_list is not None:
+            for value in node_list:
                 walk(value)
 
     walk(schema)
@@ -269,16 +286,19 @@ def _inline_ref_siblings(schema: dict) -> None:
 def _extract_choice_content(response_body: object) -> object:
     if not isinstance(response_body, Mapping):
         return None
-    choices = response_body.get('choices')
-    if not isinstance(choices, list) or not choices:
+    response_mapping = cast(Mapping[str, object], response_body)
+    choices = _as_json_list(response_mapping.get('choices'))
+    if choices is None or not choices:
         return None
     first_choice = choices[0]
     if not isinstance(first_choice, Mapping):
         return None
-    message = first_choice.get('message')
+    choice_mapping = cast(Mapping[str, object], first_choice)
+    message = choice_mapping.get('message')
     if not isinstance(message, Mapping):
         return None
-    return message.get('content')
+    message_mapping = cast(Mapping[str, object], message)
+    return message_mapping.get('content')
 
 
 def _validate_output_model(
@@ -318,4 +338,4 @@ def generate_image_via_gateway(
         body = response.json()
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
-    return body
+    return cast('Mapping[str, object]', body)

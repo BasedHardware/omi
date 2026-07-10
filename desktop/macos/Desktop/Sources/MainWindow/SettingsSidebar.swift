@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Data Model
 
@@ -265,6 +266,11 @@ struct SettingsSearchItem: Identifiable {
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
+    SettingsSearchItem(
+      name: "Screen Sharing in Chat",
+      subtitle: "Let Ask Omi capture your screen when you ask about it",
+      keywords: ["screenshot", "screen", "capture", "share screen", "vision", "see my screen"],
+      section: .floatingBar, icon: "camera.viewfinder", settingId: "floatingbar.screenshare"),
     SettingsSearchItem(
       name: "Voice Speed", subtitle: "Adjust the playback speed for voice replies",
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],

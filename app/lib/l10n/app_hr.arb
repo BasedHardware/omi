@@ -1,5 +1,6 @@
 {
     "@@locale": "hr",
+    "sessionExpiredSignInAgain": "Sesija je istekla — prijavite se ponovno.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.",
     "transcribeLaterTitle": "Transkribiraj poslije",
     "transcribeLaterDescription": "Snimaj zvuk odmah, a transkripciju pokreni naknadno umjesto uživo. Snimke se spremaju na tvoj telefon, a zatim ih prenosiš kako bi se stvorili razgovori.",
-    "transcribeLaterNote": "Za sada radi s Omi uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.",
+    "transcribeLaterNote": "Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.",
     "transcribeLaterStorageFull": "Telefonu ponestaje prostora pa je snimanje pauzirano. Oslobodi prostor ili prenesi snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novo snimanje",
@@ -10682,5 +10683,43 @@
     "deviceOnboardingIntroDuration": "Otprilike 1 minuta",
     "jumpToLatestMessage": "Idi na najnoviju poruku",
     "latest": "Najnovije",
-    "flashFirmware": "Instaliraj firmver"
+    "flashFirmware": "Instaliraj firmver",
+    "pendantRecordingTitle": "Snimanje na privjesku",
+    "pendantRecordingNote": "Tvoj privjesak snima samostalno. Snimke se sinkroniziraju s telefonom dok je aplikacija otvorena.",
+    "pendantSyncingRecordings": "Sinkronizacija snimaka s tvog privjeska…",
+    "pendantMinutesStored": "~{minutes} min pohranjeno",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pohrana privjeska gotovo je puna — drži aplikaciju otvorenom radi sinkronizacije.",
+    "connectRayBanMeta": "Poveži Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Koristite svoje Ray-Ban Meta naočale kao Omi uređaj za snimanje razgovora i vizualnog konteksta. Omi će otvoriti aplikaciju Meta AI za povezivanje vaših naočala.",
+    "raybanMetaOpenMetaAI": "Poveži putem Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dovršite povezivanje u aplikaciji Meta AI, a zatim se vratite ovamo.",
+    "raybanMetaCheckAgain": "Provjeri ponovno",
+    "raybanMetaAllowCamera": "Dopusti kameru na naočalama",
+    "raybanMetaCameraExplanation": "Omi koristi kameru vaših naočala za dodavanje fotografija u vaše razgovore. Ovaj korak možete preskočiti i koristiti samo zvuk.",
+    "raybanMetaSkipForNow": "Preskoči za sada",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta način rada samo sa zvukom",
+    "raybanMetaAudioOnlyExplanation": "Ova verzija Omija može koristiti mikrofon vaših naočala putem Bluetooth veze. Za snimanje fotografija potrebna je Meta razvojna verzija Omija.",
+    "raybanMetaMusicPauseNote": "Glazba na vašem telefonu pauzira se dok je mikrofon naočala u upotrebi.",
+    "raybanMetaContinue": "Nastavi",
+    "raybanMetaCapturePhoto": "Snimi fotografiju",
+    "raybanMetaPhotoRequested": "Fotografija zatražena — pojavit će se u vašem razgovoru.",
+    "raybanMetaMicrophoneReady": "Mikrofon spreman",
+    "raybanMetaImageCaptureReady": "Snimanje slike spremno",
+    "raybanMetaImageCaptureUnavailable": "Nedostupno u načinu rada samo sa zvukom",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Pogreška pri povezivanju s Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

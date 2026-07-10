@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// List view showing conversations grouped by date
 struct ConversationListView: View {

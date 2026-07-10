@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 /// A token that callers pass when the local user sends a message.
 /// This allows ChatMessagesView to distinguish genuine user sends from
 /// messages arriving via polling, sync, or other sources — without
@@ -33,6 +34,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Threaded down to `ToolCallsGroup`. Optional so existing callers
     /// don't need updating; ChatPage passes `chatProvider.stopAgent`.
     var onCancelTurn: (() -> Void)? = nil
+    /// Opens a spawned background-agent pill from a `spawn_agent` tool row.
+    /// Optional so task/sidebar chat callers that do not expose floating pills
+    /// keep the existing non-clickable tool-card behavior.
+    /// Completion reports whether the agent was resolved and presented.
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+    /// Opens via structured agent identity (session/run/pill) when available.
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -126,7 +134,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 22)
-            .textSelection(.enabled)
+            // Do not enable text selection on the whole stack. SelectionOverlay on every
+            // chrome Text (agent card headers, tool summaries, timestamps) can peg the
+            // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
             .background(scrollDetectors)
 
             // Invisible anchor lives OUTSIDE the LazyVStack so it is always
@@ -415,7 +425,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         onCitationTap?(citation)
                     },
                     isDuplicate: dupeIds.contains(message.id),
-                    onCancelTurn: onCancelTurn
+                    onCancelTurn: onCancelTurn,
+                    onOpenAgent: onOpenAgent,
+                    onOpenAgentRef: onOpenAgentRef
                 )
                 .id(message.id)
             }

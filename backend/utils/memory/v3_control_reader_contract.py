@@ -89,7 +89,7 @@ class V3ControlRouteDecision:
     requires_legacy_reader: bool
     http_status: int
     legacy_offset_behavior_preserved_outside_contract: bool = False
-    proof_flags: dict[str, bool] = field(default_factory=dict)
+    proof_flags: dict[str, bool] = field(default_factory=dict[str, bool])
 
 
 class V3ControlReader(Protocol):

@@ -2,6 +2,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+import OmiTheme
 
 extension SettingsContentView {
   var gmailReaderSubsection: some View {

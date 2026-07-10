@@ -270,10 +270,52 @@ async def test_openai_compatible_provider_rejects_oversized_response(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_openai_compatible_provider_keeps_byok_failure_visible(monkeypatch):
-    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+async def test_openai_compatible_provider_uses_byok_key_and_succeeds(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-paid-key')
+    seen_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'id': 'chatcmpl_byok',
+                'object': 'chat.completion',
+                'model': 'gpt-4.1-mini',
+                'choices': [{'message': {'role': 'assistant', 'content': '{}'}}],
+            },
+        )
+
     provider = OpenAICompatibleChatCompletionProvider(
-        http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    response = await provider.create_chat_completion(
+        {'model': 'gpt-4.1-mini', 'messages': [], 'stream': False},
+        provider_ref=ProviderRef(provider='openai', model='gpt-4.1-mini'),
+        credentials=build_byok_credential_context(ServiceCaller(name='backend'), {'openai': 'sk-test'}),
+        timeout_ms=8000,
+    )
+
+    assert response['id'] == 'chatcmpl_byok'
+    assert seen_requests[0].headers['authorization'] == 'Bearer sk-test'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('status_code', 'failure_class'),
+    [
+        (401, FailureClass.BYOK_AUTH),
+        (403, FailureClass.BYOK_AUTH),
+        (429, FailureClass.BYOK_RATE_LIMIT),
+    ],
+)
+async def test_openai_compatible_provider_maps_byok_auth_and_rate_limit(monkeypatch, status_code, failure_class):
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-paid-key')
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(status_code, text='denied'))
+        ),
     )
 
     with pytest.raises(ProviderFailure) as exc_info:
@@ -284,4 +326,4 @@ async def test_openai_compatible_provider_keeps_byok_failure_visible(monkeypatch
             timeout_ms=8000,
         )
 
-    assert exc_info.value.failure_class == FailureClass.BYOK_UNSUPPORTED_PROVIDER
+    assert exc_info.value.failure_class == failure_class

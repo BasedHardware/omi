@@ -18,7 +18,9 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
+from models.goal import GoalHistoryEntryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
     Conversation as OmiConversation,
@@ -90,6 +92,10 @@ router = APIRouter()
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
+
+
+class DeveloperSuccessResponse(BaseModel):
+    success: bool
 
 
 def _developer_request_ip(request: Request) -> Optional[str]:
@@ -286,6 +292,29 @@ class DeveloperMemory(BaseModel):
         return str(value)
 
 
+class DeveloperMemoryVectorItem(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: str
+    content: str = ''
+    category: Optional[str] = None
+    relevance_score: Optional[float] = None
+
+
+class DeveloperMemoryVectorPolicy(BaseModel):
+    consumer: str
+    app_has_default_memory_grant: bool
+    archive_capability: bool
+    raw_provenance_capability: bool
+
+
+class DeveloperMemoryVectorSearchResponse(BaseModel):
+    items: List[DeveloperMemoryVectorItem] = Field(default_factory=list)
+    returned_count: int
+    archive_default_visible: bool
+    policy: DeveloperMemoryVectorPolicy
+
+
 # Backward-compatible name used by unit tests and older docs.
 CleanerMemory = DeveloperMemory
 
@@ -435,7 +464,11 @@ def get_memories(
     return valid_memories
 
 
-@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+@router.get(
+    "/v1/dev/user/memories/vector/search",
+    tags=["developer"],
+    response_model=DeveloperMemoryVectorSearchResponse,
+)
 def search_memories_vector(
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     query: str = Query(..., min_length=1),
@@ -711,7 +744,12 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
+@router.delete(
+    "/v1/dev/user/memories/{memory_id}",
+    tags=["Memories"],
+    operation_id="deleteMemory",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
@@ -1054,6 +1092,7 @@ def create_action_items_batch(
     "/v1/dev/user/action-items/{action_item_id}",
     tags=["Action Items"],
     operation_id="deleteActionItem",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_action_item(
     action_item_id: str,
@@ -1730,7 +1769,7 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
+        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1767,7 +1806,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.dict())
+        conversations_db.upsert_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1867,6 +1906,7 @@ def create_conversation_from_segments(
     "/v1/dev/user/conversations/{conversation_id}",
     tags=["Conversations"],
     operation_id="deleteConversation",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_conversation_endpoint(
     conversation_id: str,
@@ -2121,7 +2161,12 @@ def update_goal_progress(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
+@router.get(
+    "/v1/dev/user/goals/{goal_id}/history",
+    tags=["Goals"],
+    operation_id="listGoalHistory",
+    response_model=List[GoalHistoryEntryResponse],
+)
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
@@ -2134,15 +2179,15 @@ def get_goal_history(
     - **days**: Number of days of history to return (max 365, default 30)
     """
     history = goals_db.get_goal_history(uid, goal_id, days)
-
-    for entry in history:
-        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
-            entry['recorded_at'] = entry['recorded_at'].isoformat()
-
-    return history
+    return [normalize_goal_history_entry(entry) for entry in history]
 
 
-@router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
+@router.delete(
+    "/v1/dev/user/goals/{goal_id}",
+    tags=["Goals"],
+    operation_id="deleteGoal",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_write),

@@ -1,5 +1,6 @@
 {
     "@@locale": "cs",
+    "sessionExpiredSignInAgain": "Platnost relace vypršela — přihlaste se znovu.",
     "appTitle": "Omi",
     "conversationTab": "Konverzace",
     "transcriptTab": "Přepis",
@@ -3023,7 +3024,7 @@
     "syncCustomSttWarningMessage": "Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.",
     "transcribeLaterTitle": "Přepsat později",
     "transcribeLaterDescription": "Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.",
-    "transcribeLaterNote": "Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
+    "transcribeLaterNote": "Zatím funguje se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
     "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.",
     "unmute": "Zapnout zvuk",
     "newRecording": "Nová nahrávka",
@@ -3073,5 +3074,43 @@
     "deviceOnboardingIntroDuration": "Přibližně 1 minuta",
     "jumpToLatestMessage": "Přejít na nejnovější zprávu",
     "latest": "Nejnovější",
-    "flashFirmware": "Nahrát firmware"
+    "flashFirmware": "Nahrát firmware",
+    "pendantRecordingTitle": "Nahrávání na přívěsku",
+    "pendantRecordingNote": "Váš přívěsek nahrává samostatně. Nahrávky se synchronizují s telefonem, dokud je aplikace otevřená.",
+    "pendantSyncingRecordings": "Synchronizace nahrávek z přívěsku…",
+    "pendantMinutesStored": "~{minutes} min uloženo",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace.",
+    "connectRayBanMeta": "Připojit Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Použijte své brýle Ray-Ban Meta jako záznamové zařízení Omi pro konverzace a vizuální kontext. Omi otevře aplikaci Meta AI pro propojení vašich brýlí.",
+    "raybanMetaOpenMetaAI": "Připojit přes Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokončete připojení v aplikaci Meta AI a poté se vraťte sem.",
+    "raybanMetaCheckAgain": "Zkontrolovat znovu",
+    "raybanMetaAllowCamera": "Povolit fotoaparát na brýlích",
+    "raybanMetaCameraExplanation": "Omi používá fotoaparát vašich brýlí k přidávání fotek do vašich konverzací. Toto můžete přeskočit a používat pouze zvuk.",
+    "raybanMetaSkipForNow": "Zatím přeskočit",
+    "raybanMetaAudioOnlyTitle": "Režim pouze zvuk pro Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Tato verze Omi umí používat mikrofon vašich brýlí přes Bluetooth. Pořizování fotek vyžaduje vývojářskou verzi Omi od Meta.",
+    "raybanMetaMusicPauseNote": "Hudba ve vašem telefonu se pozastaví, když se používá mikrofon brýlí.",
+    "raybanMetaContinue": "Pokračovat",
+    "raybanMetaCapturePhoto": "Pořídit fotku",
+    "raybanMetaPhotoRequested": "Fotka vyžádána — objeví se ve vaší konverzaci.",
+    "raybanMetaMicrophoneReady": "Mikrofon připraven",
+    "raybanMetaImageCaptureReady": "Zachytávání obrazu připraveno",
+    "raybanMetaImageCaptureUnavailable": "Nedostupné v režimu pouze zvuk",
+    "raybanMetaCamera": "Fotoaparát",
+    "errorConnectingRayBanMeta": "Chyba při připojování k Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

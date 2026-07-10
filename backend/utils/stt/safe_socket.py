@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from utils.stt.socket import STTSocket
 
@@ -56,11 +56,11 @@ class SafeDeepgramSocket(STTSocket):
 
     def __init__(
         self,
-        dg_connection,
+        dg_connection: Any,  # Deepgram SDK LiveClient (untyped)
         cfg: Optional[KeepaliveConfig] = None,
         clock: Callable[[], float] = time.monotonic,
     ):
-        self._conn = dg_connection
+        self._conn: Any = dg_connection  # Deepgram SDK LiveClient (untyped)
         self._cfg = cfg or KeepaliveConfig()
         self._clock = clock
         self._dg_dead = False

@@ -19,11 +19,11 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
   }
 
-  func testChatSpawnAgentRejectsVagueBriefsBeforeSpawning() async {
+  func testChatSpawnAgentRejectsEmptyObjectiveBeforeSpawning() async {
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(
       name: "spawn_agent",
-      arguments: ["brief": "Perform a new search for the user.", "title": "New Search"],
+      arguments: ["title": "New Search"],
       thoughtSignature: nil)
 
     let result = await ChatToolExecutor.execute(
@@ -31,11 +31,11 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
       originatingChatMode: .act,
       originatingClientScope: nil)
 
-    XCTAssertTrue(result.contains("Missing self-contained brief"))
+    XCTAssertTrue(result.contains("Missing objective"))
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
   }
 
-  func testChatSpawnAgentRoutesThroughDelegationExecutor() throws {
+  func testChatSpawnAgentRoutesThroughCoordinatorSpawn() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -43,7 +43,9 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
       .appendingPathComponent("Providers/ChatToolExecutor.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
+    XCTAssertTrue(source.contains("AgentPillsManager.shared.upsertSpawnedPill("))
+    XCTAssertTrue(source.contains("refreshProjectedPillsFromKernel"))
     XCTAssertFalse(source.contains("AgentPillsManager.shared.spawnFromUserQuery("))
   }
 }

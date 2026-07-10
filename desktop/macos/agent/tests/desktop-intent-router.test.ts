@@ -134,6 +134,29 @@ describe("desktop intent router", () => {
     expect(route.intent).toBe("delegate");
   });
 
+  it("does not resume same-surface chat sessions for explicit new delegated work", () => {
+    const route = routeDesktopIntent({
+      utterance: "ask an agent to build me a single page html iphone facts page",
+      surfaceKind: "main_chat",
+      nowMs: 10_000,
+      sessionCandidates: [
+        {
+          sessionId: "main-chat-session",
+          runId: "previous-run",
+          surfaceKind: "main_chat",
+          taskId: null,
+          status: "healthy",
+          relevance: 0.7,
+          lastActivityAtMs: 9_000,
+        },
+      ],
+    });
+
+    expect(route.intent).toBe("delegate");
+    expect(route.sessionId).toBeUndefined();
+    expect(route.runId).toBeUndefined();
+  });
+
   it("quick-answers status requests from coordinator state", () => {
     const route = routeDesktopIntent({
       utterance: "what's running right now?",

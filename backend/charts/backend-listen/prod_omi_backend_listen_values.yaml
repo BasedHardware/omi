@@ -82,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: DESKTOP_UPDATE_POINTERS_MODE
+    value: "primary"
+  - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
+    value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
   - name: GEMINI_API_KEY
@@ -101,15 +105,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
-  - name: OMI_LLM_GATEWAY_URL
-    value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "prod"
-  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
     value: "off"
   - name: MEMORY_ENABLED_USERS
@@ -440,6 +437,26 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+  - name: MCP_OAUTH_CLAUDE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_ID
+  - name: MCP_OAUTH_CLAUDE_CLIENT_NAME
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+  - name: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+  - name: MCP_OAUTH_CLIENTS_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLIENTS_JSON
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

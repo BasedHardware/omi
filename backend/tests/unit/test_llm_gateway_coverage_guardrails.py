@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
@@ -47,12 +48,15 @@ class DirectUse:
 
 DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
+    DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
+    DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
+    DirectUse('utils/llm/gateway_byok.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
@@ -66,7 +70,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
     'utils/other/chat_file.py',
-    'utils/retrieval/agentic.py',
     'routers/omni_relay.py',
 }
 
@@ -121,6 +124,7 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
         assert _inventory_file_exists(surface['code_path']), surface['code_path']
 
 
+@pytest.mark.slow
 def test_direct_provider_usage_stays_inside_approved_boundaries():
     detected = set()
     for path in BACKEND_DIR.rglob('*.py'):
@@ -167,6 +171,7 @@ def _is_skipped_path(rel: str) -> bool:
             'testing/',
             'pusher/',
             '.venv/',
+            'venv/',
             '.openapi-venv/',
         )
     )

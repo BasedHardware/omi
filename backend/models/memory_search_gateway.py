@@ -61,7 +61,7 @@ class HydratedSearchResult(BaseModel):
 class SearchGatewayResult(BaseModel):
     results: List[HydratedSearchResult] = Field(default_factory=list)
     decisions: Dict[str, SearchDecision] = Field(default_factory=dict)
-    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
 
 
 def hydrate_and_filter_vector_hits(

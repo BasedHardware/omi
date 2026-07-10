@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Insight View Model
 

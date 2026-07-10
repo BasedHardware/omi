@@ -1,8 +1,7 @@
 import json
-import os
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -17,7 +16,6 @@ from models.chat import Message, MessageSender, PageContext
 from models.conversation_enums import CategoryEnum
 from models.conversation_metadata import ConversationMetadata
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
@@ -27,6 +25,11 @@ from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
 
 
 def normalize_filter(value: str) -> str:
@@ -76,7 +79,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     with track_usage(uid, Features.CHAT):
-        return get_llm('chat_responses').invoke(prompt).content
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 # *********************************************
@@ -109,7 +112,7 @@ def requires_context(question: str) -> bool:
     {question}
     '''
     with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
-    response: RequiresContext = with_parser.invoke(prompt)
+    response = cast(RequiresContext, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -173,7 +176,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     Is this asking about the Omi/Friend app product itself?
     '''.replace('    ', '').strip()
     with_parser = get_llm('chat_extraction').with_structured_output(IsAnOmiQuestion)
-    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    response = cast(IsAnOmiQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -203,7 +206,7 @@ def retrieve_is_file_question(question: str) -> bool:
     '''
 
     with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
-    response: IsFileQuestion = with_parser.invoke(prompt)
+    response = cast(IsFileQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -227,7 +230,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     # print(prompt)
     # print(get_llm('chat_extraction').invoke(prompt).content)
     with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
-    response: DatesContext = with_parser.invoke(prompt)
+    response = cast(DatesContext, with_parser.invoke(prompt))
     return response.dates_range
 
 
@@ -236,7 +239,10 @@ class SummaryOutput(BaseModel):
 
 
 def chunk_extraction(
-    segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None, user_name: str = None
+    segments: List[TranscriptSegment],
+    topics: List[str],
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
 ) -> str:
     content = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     prompt = f'''
@@ -252,7 +258,7 @@ def chunk_extraction(
     Topics: {topics}
     '''
     with_parser = get_llm('chat_extraction').with_structured_output(SummaryOutput)
-    response: SummaryOutput = with_parser.invoke(prompt)
+    response = cast(SummaryOutput, with_parser.invoke(prompt))
     return response.summary
 
 
@@ -284,12 +290,14 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses').invoke(prompt).content
+    return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(
+    uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks: List[Any] = []
+) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -315,12 +323,12 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction').invoke(prompt).content
+    return _content_str(get_llm('chat_extraction').invoke(prompt))
 
 
-def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
+def answer_omi_question_stream(messages: List[Message], context: str, callbacks: List[Any]) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_qa_rag_prompt(
@@ -332,7 +340,7 @@ def _get_qa_rag_prompt(
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    _user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
@@ -422,6 +430,8 @@ CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user messa
 def get_user_timezone(uid: str) -> str:
     """Resolve the user's timezone, falling back to UTC when missing/invalid."""
     tz = notification_db.get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
     try:
         ZoneInfo(tz)
         return tz
@@ -454,10 +464,10 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
     )
 
 
-def _get_agentic_qa_prompt(
+def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by retrieval/agentic.py
     uid: str,
     app: Optional[App] = None,
-    messages: List[Message] = None,
+    messages: Optional[List[Message]] = None,
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
 ) -> str:
@@ -493,7 +503,7 @@ def _get_agentic_qa_prompt(
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
-        return app.persona_prompt or app.chat_prompt
+        return app.persona_prompt or app.chat_prompt or ''
 
     # Plugin-specific instructions for regular apps
     plugin_info = ""
@@ -525,7 +535,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
     user_goals = goals_db.get_user_goals(uid)
     goal_section = ""
     if user_goals:
-        goals_lines = []
+        goals_lines: List[str] = []
         for g in user_goals:
             g_title = g.get('title', '')
             g_current = g.get('current_value', 0)
@@ -809,7 +819,7 @@ Remember: Use tools strategically to provide the best possible answers. For ques
     return base_prompt.strip()
 
 
-def _get_agentic_qa_prompt_fallback(variables: dict) -> str:
+def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails
     """
     Fallback prompt template rendered with variables.
     Used when LangSmith prompt fetching fails.
@@ -890,7 +900,7 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return get_llm('chat_responses').invoke(prompt).content
+    return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def qa_rag_stream(
@@ -901,11 +911,11 @@ def qa_rag_stream(
     cited: Optional[bool] = False,
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
-    callbacks=[],
+    callbacks: List[Any] = [],
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 # **************************************************
@@ -940,8 +950,8 @@ def retrieve_memory_context_params(
 
     try:
         with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
-        response: TopicsContext = with_parser.invoke(prompt)
-        return response.topics
+        response = cast(TopicsContext, with_parser.invoke(prompt))
+        return [e.value if hasattr(e, 'value') else str(e) for e in response.topics]
     except Exception as e:
         logger.error(f'Error determining memory discard: {e}')
         return []
@@ -983,7 +993,7 @@ def obtain_emotional_message(
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.CHAT):
-        return get_llm('chat_extraction').invoke(prompt).content
+        return _content_str(get_llm('chat_extraction').invoke(prompt))
 
 
 # **********************************************
@@ -1099,15 +1109,21 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </date_in_term>
     '''.replace('    ', '').strip()
     # print(prompt)
-    question = get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
+    question = cast(
+        OutputQuestion, get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt)
+    ).question
     # print(question)
     return question
 
 
 def retrieve_metadata_fields_from_transcript(
-    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
-) -> ExtractedInformation:
-    context_parts = []
+    uid: str,
+    created_at: datetime,
+    transcript_segment: List[dict[str, Any]],
+    tz: str,
+    photos: Optional[List[ConversationPhoto]] = None,
+) -> dict[str, Any]:
+    context_parts: List[str] = []
     if transcript_segment:
         transcript = ''
         for segment in transcript_segment:
@@ -1147,8 +1163,9 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result: ExtractedInformation = (
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+            result = cast(
+                ExtractedInformation,
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
             )
     except Exception as e:
         logger.error(f'e {e}')
@@ -1183,8 +1200,8 @@ def retrieve_metadata_fields_from_transcript(
 
 
 def retrieve_metadata_from_message(
-    uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None
-) -> ExtractedInformation:
+    uid: str, created_at: datetime, message_text: str, tz: str, source_spec: Optional[str] = None
+) -> dict[str, Any]:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
@@ -1217,8 +1234,8 @@ def retrieve_metadata_from_message(
 
 
 def retrieve_metadata_from_text(
-    uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None
-) -> ExtractedInformation:
+    uid: str, created_at: datetime, text: str, tz: str, source_spec: Optional[str] = None
+) -> dict[str, Any]:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
@@ -1250,11 +1267,12 @@ def retrieve_metadata_from_text(
     return _process_extracted_metadata(uid, prompt)
 
 
-def _process_extracted_metadata(uid: str, prompt: str) -> dict:
+def _process_extracted_metadata(uid: str, prompt: str) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
-        result: ExtractedInformation = (
-            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+        result = cast(
+            ExtractedInformation,
+            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
         )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
@@ -1288,7 +1306,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     return metadata
 
 
-def select_structured_filters(question: str, filters_available: dict) -> dict:
+def select_structured_filters(question: str, filters_available: dict[str, Any]) -> dict[str, Any]:
     prompt = f'''
     Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
     Your task is to identify the correct fields that can be related to the question and can help answering.
@@ -1305,12 +1323,12 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     # print(prompt)
     with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
     try:
-        response: FiltersToUse = with_parser.invoke(prompt)
+        response = cast(FiltersToUse, with_parser.invoke(prompt))
         # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
-        return response.dict()
+        return response.model_dump()
     except ValidationError:
         return {}
 
@@ -1351,7 +1369,9 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     '''.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
+        return cast(
+            OutputQuestion, get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt)
+        ).question
 
 
 class OutputMessage(BaseModel):
@@ -1401,4 +1421,6 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt).message
+        return cast(
+            OutputMessage, get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt)
+        ).message

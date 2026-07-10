@@ -129,6 +129,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_conv = add("utils.llm.conversation_processing")
+    llm_conv_folder = add("utils.llm.conversation_folder")
+    llm_conv_folder.assign_conversation_to_folder = MagicMock()
     for attr in [
         "get_transcript_structure",
         "get_app_result",
@@ -206,6 +208,9 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
+
+    utils_cloud_tasks = add("utils.cloud_tasks")
+    utils_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
 
     utils_calendar_linking = add("utils.conversations.calendar_linking")
     utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)

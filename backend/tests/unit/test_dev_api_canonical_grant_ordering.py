@@ -83,6 +83,17 @@ _stubs = [
     'utils.llm.chat',
     'utils.llm.knowledge_graph',
 ]
+_stub_module_snapshot = {name: sys.modules.get(name) for name in _stubs}
+_stub_parent_attr_snapshot = {}
+for _stub_name in _stubs:
+    if '.' in _stub_name:
+        _parent_name, _child_name = _stub_name.rsplit('.', 1)
+        _parent = sys.modules.get(_parent_name)
+        if isinstance(_parent, ModuleType):
+            _stub_parent_attr_snapshot[_stub_name] = getattr(_parent, _child_name, None)
+        else:
+            _stub_parent_attr_snapshot[_stub_name] = None
+
 for _mod_name in _stubs:
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = _AutoMockModule(_mod_name)
@@ -182,6 +193,31 @@ from models.memories import MemoryCategory  # noqa: E402  (real model)
 import pytest  # noqa: E402
 
 _VALID_CATEGORY = next(iter(MemoryCategory)).value
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _restore_import_stubs():
+    yield
+    for name, original in _stub_module_snapshot.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+        if '.' not in name:
+            continue
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if not isinstance(parent, ModuleType):
+            continue
+        original_parent_attr = _stub_parent_attr_snapshot.get(name)
+        if original_parent_attr is None:
+            try:
+                delattr(parent, child_name)
+            except AttributeError:
+                pass
+        else:
+            setattr(parent, child_name, original_parent_attr)
+
 
 # Save originals so tests can mutate the module and restore after.
 _ORIG_AUTHORIZE = developer_module.authorize_memory_external_default_memory_read
@@ -305,7 +341,7 @@ def test_get_memories_allowed_grant_canonical_lists():
     from datetime import datetime, timezone
 
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    # MemoryService.read() returns List[MemoryDB]; the router calls .model_dump() on each
+    # MemoryService.read() returns List[MemoryDB]; the router calls .dict() on each
     from models.memories import MemoryDB
 
     canonical_memory = MemoryDB(

@@ -53,6 +53,26 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'metadata' not in provider.calls[0].request
 
 
+def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert provider.calls[0].credential_mode == 'byok'
+
+
 def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()

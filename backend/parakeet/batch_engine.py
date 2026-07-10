@@ -4,14 +4,17 @@ import os
 import time
 import wave as _wave
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
-    import soundfile as _sf
+    import soundfile as _sf_mod
 except ImportError:
-    _sf = None
+    _sf_mod = None
 
-from gpu_worker import GPUWorker, WorkType
+from gpu_worker import GPUWorker
+
+# soundfile ships without precise type stubs; alias as Any.
+_sf: Any = _sf_mod
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +23,7 @@ logger = logging.getLogger(__name__)
 class PendingRequest:
     audio_path: str
     timestamps: bool
-    future: asyncio.Future
+    future: asyncio.Future[Any]
     owns_file: bool = False
     submitted_at: float = field(default_factory=time.monotonic)
     duration_sec: Optional[float] = None
@@ -37,24 +40,24 @@ class BatchEngine:
         max_batch_size: int = 32,
         max_wait_seconds: float = 0.002,
         max_queue_depth: int = 4096,
-        on_batch_complete=None,
-        on_gpu_oom=None,
+        on_batch_complete: Optional[Callable[[List[float], float, int], None]] = None,
+        on_gpu_oom: Optional[Callable[[], None]] = None,
         vram_safety_factor: float = 0.8,
         vram_bytes_per_t2: float = 136.6,
         starvation_timeout_sec: float = 5.0,
         max_inflight: int = 2,
-    ):
+    ) -> None:
         self._gpu_worker = gpu_worker
         self._max_batch_size = max_batch_size
         self._max_wait_seconds = max_wait_seconds
         self._max_queue_depth = max_queue_depth
         self._max_inflight = max_inflight
-        self._pending: list[PendingRequest] = []
+        self._pending: List[PendingRequest] = []
         self._lock = asyncio.Lock()
-        self._flush_task: Optional[asyncio.Task] = None
+        self._flush_task: Optional[asyncio.Task[Any]] = None
         self._flush_pending = False
         self._batches_inflight = 0
-        self._inflight_tasks: set[asyncio.Task] = set()
+        self._inflight_tasks: Set[asyncio.Task[Any]] = set()
         self._inflight_sem: Optional[asyncio.Semaphore] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._shutting_down = False
@@ -67,7 +70,7 @@ class BatchEngine:
         self._vram_enabled = False
         self._attention_mode = "full"
         self._auto_threshold_sec = 300.0
-        self._metrics = {
+        self._metrics: Dict[str, int] = {
             "total_requests": 0,
             "total_batches": 0,
             "total_files": 0,
@@ -136,7 +139,7 @@ class BatchEngine:
             pass
         if _sf is not None:
             try:
-                info = _sf.info(path)
+                info: Any = _sf.info(path)
                 return info.duration
             except Exception:
                 pass
@@ -162,7 +165,7 @@ class BatchEngine:
             return req.duration_sec
         return self._auto_threshold_sec
 
-    async def submit(self, audio_path: str, timestamps: bool = True, owns_file: bool = False) -> dict:
+    async def submit(self, audio_path: str, timestamps: bool = True, owns_file: bool = False) -> Dict[str, Any]:
         enqueued = False
         duration = self._get_audio_duration(audio_path)
         try:
@@ -171,7 +174,7 @@ class BatchEngine:
                     self._metrics["rejected_requests"] += 1
                     raise QueueFullError(f"Queue depth {len(self._pending)} exceeds limit {self._max_queue_depth}")
 
-                future = self._loop.create_future()
+                future = cast(asyncio.AbstractEventLoop, self._loop).create_future()
                 self._pending.append(
                     PendingRequest(
                         audio_path=audio_path,
@@ -220,7 +223,7 @@ class BatchEngine:
         finally:
             self._flush_pending = False
 
-    def _form_vram_safe_batch(self, candidates: list[PendingRequest]) -> list[PendingRequest]:
+    def _form_vram_safe_batch(self, candidates: List[PendingRequest]) -> List[PendingRequest]:
         if not candidates or not self._vram_enabled:
             return candidates[: self._max_batch_size]
 
@@ -261,7 +264,8 @@ class BatchEngine:
         return sorted_candidates[:n]
 
     async def _flush_batch(self) -> None:
-        await self._inflight_sem.acquire()
+        sem = cast(asyncio.Semaphore, self._inflight_sem)
+        await sem.acquire()
         self._batches_inflight += 1
         try:
             self._try_init_vram()
@@ -303,20 +307,20 @@ class BatchEngine:
                         "batch_size": len(batch),
                         "durations": durations,
                     },
-                    self._loop,
+                    cast(asyncio.AbstractEventLoop, self._loop),
                 )
-                results = await gpu_future
+                results: Any = await gpu_future
                 inference_seconds = work_item.inference_seconds if work_item else 0.0
 
                 if self._on_batch_complete:
                     self._on_batch_complete(queue_durations, inference_seconds, len(batch))
 
-                if isinstance(results, list) and len(results) == len(batch):
-                    for req, result in zip(batch, results):
+                if isinstance(results, list) and len(cast(List[Any], results)) == len(batch):
+                    for req, result in zip(batch, cast(List[Any], results)):
                         if not req.future.done():
                             req.future.set_result(result)
                 else:
-                    items = results if isinstance(results, list) else [results]
+                    items: List[Any] = cast(List[Any], results if isinstance(results, list) else [results])
                     for i, req in enumerate(batch):
                         if not req.future.done():
                             result = items[i] if i < len(items) else {"text": ""}
@@ -330,7 +334,7 @@ class BatchEngine:
             except RuntimeError as exc:
                 if "CUDA out of memory" in str(exc) or "OutOfMemoryError" in type(exc).__name__:
                     is_oom = True
-                err = QueueFullError(str(exc)) if "GPU queue full" in str(exc) else exc
+                err: Exception = QueueFullError(str(exc)) if "GPU queue full" in str(exc) else exc
                 logger.error(f"Batch transcription failed: {exc}")
                 for req in batch:
                     if not req.future.done():
@@ -350,10 +354,10 @@ class BatchEngine:
                         _unlink_safe(req.audio_path)
         finally:
             self._batches_inflight -= 1
-            self._inflight_sem.release()
+            sem.release()
 
     @property
-    def metrics(self) -> dict:
+    def metrics(self) -> Dict[str, Any]:
         return {
             **self._metrics,
             "pending_requests": len(self._pending),

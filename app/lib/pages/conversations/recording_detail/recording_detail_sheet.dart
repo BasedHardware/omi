@@ -122,8 +122,10 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
                         Container(
                           width: 36,
                           height: 4,
-                          decoration:
-                              BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3C3C43),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                         const SizedBox(height: 18),
                         Row(
@@ -134,8 +136,11 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
                                 children: [
                                   Text(
                                     dateTimeFormat('dd MMM yyyy', rec.startedAt),
-                                    style:
-                                        const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
@@ -355,8 +360,10 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     final outcome = await provider.upload(rec);
     if (!mounted) return;
     switch (outcome) {
-      case LocalUploadOutcome.rateLimited:
+      case LocalUploadOutcome.fairUseLimited:
         AppSnackbar.showSnackbarError(context.l10n.fairUseBudgetExhausted, duration: const Duration(seconds: 4));
+      case LocalUploadOutcome.backendBusy:
+        AppSnackbar.showSnackbarError(context.l10n.msgUploadFileFailed, duration: const Duration(seconds: 4));
       case LocalUploadOutcome.failed:
         AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
       case LocalUploadOutcome.busy:

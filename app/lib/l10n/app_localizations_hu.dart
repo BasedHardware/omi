@@ -9,6 +9,9 @@ class AppLocalizationsHu extends AppLocalizations {
   AppLocalizationsHu([String locale = 'hu']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'A munkamenet lejárt — jelentkezz be újra.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9380,7 +9383,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9530,4 +9533,85 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Firmware flashelése';
+
+  @override
+  String get pendantRecordingTitle => 'Felvétel a medálon';
+
+  @override
+  String get pendantRecordingNote =>
+      'A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.';
+
+  @override
+  String get pendantSyncingRecordings => 'Felvételek szinkronizálása a medálodról…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes perc tárolva';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta csatlakoztatása';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Használja a Ray-Ban Meta szemüvegét Omi rögzítőeszközként beszélgetésekhez és vizuális kontextushoz. Az Omi megnyitja a Meta AI alkalmazást a szemüveg összekapcsolásához.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Csatlakozás a Meta AI-n keresztül';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Fejezze be a csatlakozást a Meta AI alkalmazásban, majd térjen vissza ide.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Ellenőrzés újra';
+
+  @override
+  String get raybanMetaAllowCamera => 'Kamera engedélyezése a szemüvegen';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Az Omi a szemüveg kameráját használja fényképek hozzáadásához a beszélgetésekhez. Ezt kihagyhatja, és csak hangot használhat.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Kihagyás egyelőre';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta csak hang mód';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Az Omi ezen verziója Bluetooth-on keresztül tudja használni a szemüveg mikrofonját. A fényképek rögzítéséhez az Omi Meta fejlesztői változata szükséges.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'A telefonon lévő zene szünetel, amíg a szemüveg mikrofonja használatban van.';
+
+  @override
+  String get raybanMetaContinue => 'Folytatás';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fénykép készítése';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fénykép kérve — meg fog jelenni a beszélgetésében.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon készen áll';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Képrögzítés készen áll';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nem érhető el csak hang módban';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Hiba a Ray-Ban Meta csatlakoztatásakor: $error';
+  }
 }

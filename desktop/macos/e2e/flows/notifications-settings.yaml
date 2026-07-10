@@ -1,0 +1,42 @@
+version: 2
+name: notifications-settings
+tier: 2
+description: Settings Notifications section snapshot and API update
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Notifications section
+    bridge.navigate:
+      target: settings
+      settingsSection: Notifications
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Notifications
+
+  - id: S2
+    name: Notifications snapshot
+    bridge.action:
+      name: settings_notifications_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Set notification frequency balanced
+    bridge.action:
+      name: set_notification_settings
+      params:
+        frequency: "3"
+    expect:
+      result.detail.saved: "true"
+      result.detail.frequency: "3"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

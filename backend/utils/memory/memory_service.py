@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -12,10 +12,10 @@ import database.vector_db as vector_db
 from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
-    _read_canonical_memory_item,
     delete_all_canonical_memories,
     delete_canonical_memory,
     memory_item_to_memorydb,
+    read_canonical_memory_item,
     read_canonical_memories,
     retract_conversation_sourced_memories,
     search_canonical_memories,
@@ -24,10 +24,9 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_visibility,
     update_canonical_memory_product_fields,
     update_canonical_memory_review,
-    write_canonical_extraction_memory,
     write_canonical_external_memory,
 )
-from utils.memory.required_promotion import required_promotion_payload
+from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
 from utils.memory.memory_system import MemorySystem
@@ -37,6 +36,9 @@ from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_paylo
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
+
+MemoryPayload = Dict[str, Any]
+McpSearchPayload = Dict[str, Any]
 
 
 class DeviceScopeNotSupportedError(ValueError):
@@ -53,13 +55,13 @@ class ExternalMemoryWriteContext:
     legacy_write_detail: Any = None
 
 
-def _require_legacy_write_guard(uid: str, db_client, *, consumer: str, operation: str) -> None:
+def _require_legacy_write_guard(uid: str, db_client: Any, *, consumer: str, operation: str) -> None:
     write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
 
-def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client) -> bool:
+def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client: Any) -> bool:
     decision = canonical_write_decision(uid, db_client=db_client)
     if decision.enabled:
         return True
@@ -71,7 +73,7 @@ def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client) -> boo
 def resolve_external_memory_write_context(
     uid: str,
     *,
-    db_client,
+    db_client: Any,
     memory_system: MemorySystem,
     consumer: str,
     operation: str,
@@ -117,13 +119,13 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
     return memory.model_copy(update={"memory_tier": None})
 
 
-def fetch_memory_dict(uid: str, memory_id: str, *, db_client) -> dict:
+def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
     """Fetch one memory by id with canonical/legacy routing and locked-memory paywall."""
     if canonical_read_enabled(uid, db_client=db_client):
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+        item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
+        return memory_item_to_memorydb(item).dict()
 
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
@@ -147,7 +149,7 @@ class MemorySearchMatch:
     score: float
 
 
-def _validate_memory_list(memories: List[dict]) -> List[MemoryDB]:
+def _validate_memory_list(memories: List[MemoryPayload]) -> List[MemoryDB]:
     valid_memories: List[MemoryDB] = []
     for memory in memories:
         memory = memory_api_payload(memory, MemoryApiExposure.LEGACY)
@@ -173,14 +175,25 @@ def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> Lis
     return _validate_memory_list(memories)
 
 
+def _memory_ids_and_scores(matches: List[MemoryPayload]) -> tuple[List[str], Dict[str, float]]:
+    memory_ids: List[str] = []
+    scores_by_id: Dict[str, float] = {}
+    for match in matches:
+        memory_id = match.get("memory_id")
+        if not isinstance(memory_id, str) or not memory_id:
+            continue
+        memory_ids.append(memory_id)
+        scores_by_id[memory_id] = float(match.get("score") or 0)
+    return memory_ids, scores_by_id
+
+
 def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
     capped_limit = max(1, min(limit, 20))
     matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=capped_limit)
     if not matches:
         return []
 
-    memory_ids = [match.get("memory_id") for match in matches if match.get("memory_id")]
-    scores_by_id = {match.get("memory_id"): float(match.get("score", 0) or 0) for match in matches}
+    memory_ids, scores_by_id = _memory_ids_and_scores(matches)
     if not memory_ids:
         return []
 
@@ -194,6 +207,8 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
     results: List[MemorySearchMatch] = []
     for memory_data in memories_data:
         memory_id = memory_data.get("id")
+        if not isinstance(memory_id, str):
+            continue
         try:
             memory_obj = _legacy_memorydb(memory_data)
         except ValidationError:
@@ -202,7 +217,7 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
     return results
 
 
-def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[dict]:
+def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
     """Legacy MCP search path: over-fetch, filter, RRF rerank (Wave 2 cf#1 parity)."""
     capped_limit = max(1, min(limit, 20))
     fetch_limit = min(capped_limit * 3, 60)
@@ -210,14 +225,17 @@ def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List
     if not matches:
         return []
 
-    memory_ids = [match.get("memory_id") for match in matches if match.get("memory_id")]
-    scores = {match.get("memory_id"): float(match.get("score", 0) or 0) for match in matches}
+    memory_ids, scores = _memory_ids_and_scores(matches)
     if not memory_ids:
         return []
 
-    docs = {memory.get("id"): memory for memory in memories_db.get_memories_by_ids(uid, memory_ids)}
+    docs: Dict[str, MemoryPayload] = {}
+    for memory in memories_db.get_memories_by_ids(uid, memory_ids):
+        memory_id = memory.get("id")
+        if isinstance(memory_id, str) and memory_id:
+            docs[memory_id] = memory
 
-    candidates = []
+    candidates: List[McpSearchPayload] = []
     for memory_id in memory_ids:
         memory = docs.get(memory_id)
         if not memory:
@@ -246,10 +264,12 @@ def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List
     ]
 
 
-def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5, db_client=None) -> List[dict]:
+def _canonical_search_memories_mcp(
+    uid: str, query: str, *, limit: int = 5, db_client: Any = None
+) -> List[McpSearchPayload]:
     capped_limit = max(1, min(limit, 20))
     items = search_canonical_memories(uid, query, limit=capped_limit, db_client=db_client)
-    formatted = []
+    formatted: List[McpSearchPayload] = []
     for rank, item in enumerate(items):
         formatted.append(
             {
@@ -270,6 +290,7 @@ class LegacyMemoryBackend:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         _reject_legacy_device_scope(device_scope_request)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
@@ -307,7 +328,7 @@ class LegacyMemoryBackend:
             update_data["category"] = category
         if update_data:
             memories_db.update_memory_fields(uid, memory_id, update_data)
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        return _legacy_memorydb(cast(MemoryPayload, memories_db.get_memory(uid, memory_id)))
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
         memories_db.save_memories(uid, [memory_write_payload(item, MemoryApiExposure.LEGACY) for item in items])
@@ -315,7 +336,7 @@ class LegacyMemoryBackend:
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         memories_db.edit_memory(uid, memory_id, content)
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        return _legacy_memorydb(cast(MemoryPayload, memories_db.get_memory(uid, memory_id)))
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         memories_db.change_memory_visibility(uid, memory_id, visibility)
@@ -328,7 +349,7 @@ class LegacyMemoryBackend:
 
 
 class CanonicalMemoryBackend:
-    def __init__(self, *, db_client=None):
+    def __init__(self, *, db_client: Any = None):
         self._db_client = db_client
 
     def read(
@@ -338,6 +359,7 @@ class CanonicalMemoryBackend:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         return read_canonical_memories(
             uid,
@@ -345,6 +367,7 @@ class CanonicalMemoryBackend:
             offset=offset,
             db_client=self._db_client,
             device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
         )
 
     def search(
@@ -406,7 +429,7 @@ class CanonicalMemoryBackend:
 
 
 class MemoryService:
-    def __init__(self, *, db_client=None):
+    def __init__(self, *, db_client: Any = None):
         self._db_client = db_client
         self._legacy = LegacyMemoryBackend()
         self._canonical = CanonicalMemoryBackend(db_client=db_client)
@@ -424,6 +447,7 @@ class MemoryService:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
         backend = self._canonical if canonical_read_enabled(uid, db_client=self._db_client) else self._legacy
         return backend.read(
@@ -431,6 +455,7 @@ class MemoryService:
             limit=limit,
             offset=offset,
             device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
         )
 
     def search(
@@ -449,7 +474,7 @@ class MemoryService:
             device_scope_request=device_scope_request,
         )
 
-    def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[dict]:
+    def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
         if canonical_read_enabled(uid, db_client=self._db_client):
             return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
@@ -530,17 +555,19 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vector: bool = True,
-        require_canonical_promotion: bool = False,
+        require_canonical_promotion: bool = True,
     ) -> MemoryDB:
-        """Create one external memory on canonical or legacy backend with side effects."""
+        """Create one external memory without changing the caller-facing API.
+
+        ``require_canonical_promotion`` remains accepted for compatibility, but
+        canonical external writes are always processed before durable admission.
+        """
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payload = memory_db.model_dump()
-            if require_canonical_promotion:
-                payload = required_promotion_payload(payload, source_surface=consumer)
+            payload = required_processing_payload(memory_db.model_dump(mode="python"), source_surface=consumer)
             committed_id = self._canonical.write(uid, payload)
-            item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
+            item = read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
             if item is not None:
                 return memory_item_to_memorydb(item)
             logger.error(
@@ -578,19 +605,20 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vectors: bool = True,
-        require_canonical_promotion: bool = False,
+        require_canonical_promotion: bool = True,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payloads = [memory.model_dump() for memory in memory_dbs]
-            if require_canonical_promotion:
-                payloads = [required_promotion_payload(payload, source_surface=consumer) for payload in payloads]
+            payloads = [
+                required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
+                for memory in memory_dbs
+            ]
             committed_ids = self._canonical.write_batch(uid, payloads)
             results: List[MemoryDB] = []
             for memory_id in committed_ids:
-                item = _read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+                item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
                 if item is not None:
                     results.append(memory_item_to_memorydb(item))
                 else:
@@ -696,4 +724,4 @@ class MemoryService:
                     uid,
                     memory_id,
                 )
-        return _legacy_memorydb(memories_db.get_memory(uid, memory_id))
+        return _legacy_memorydb(cast(MemoryPayload, memories_db.get_memory(uid, memory_id)))

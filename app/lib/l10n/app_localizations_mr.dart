@@ -9,6 +9,9 @@ class AppLocalizationsMr extends AppLocalizations {
   AppLocalizationsMr([String locale = 'mr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'सत्राची मुदत संपली — पुन्हा साइन इन करा.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9350,7 +9353,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'सध्या Omi डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+      'सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9499,4 +9502,84 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'फर्मवेअर फ्लॅश करा';
+
+  @override
+  String get pendantRecordingTitle => 'पेंडंटवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get pendantRecordingNote =>
+      'तुमचे पेंडंट स्वतःहून रेकॉर्ड करत आहे. अ‍ॅप उघडे असताना रेकॉर्डिंग तुमच्या फोनवर सिंक होतात.';
+
+  @override
+  String get pendantSyncingRecordings => 'तुमच्या पेंडंटवरून रेकॉर्डिंग सिंक होत आहेत…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes मिनिटे संग्रहित';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'पेंडंटचे स्टोरेज जवळजवळ भरले आहे — सिंकसाठी अ‍ॅप उघडे ठेवा.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta कनेक्ट करा';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'संभाषणे आणि दृश्य संदर्भासाठी आपले Ray-Ban Meta चष्मे आपले Omi कॅप्चर डिव्हाइस म्हणून वापरा. आपले चष्मे लिंक करण्यासाठी Omi Meta AI अ‍ॅप उघडेल.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI द्वारे कनेक्ट करा';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI अ‍ॅपमध्ये कनेक्ट करणे पूर्ण करा, नंतर येथे परत या.';
+
+  @override
+  String get raybanMetaCheckAgain => 'पुन्हा तपासा';
+
+  @override
+  String get raybanMetaAllowCamera => 'चष्म्यावरील कॅमेराला परवानगी द्या';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'आपल्या संभाषणांमध्ये फोटो जोडण्यासाठी Omi आपल्या चष्म्याचा कॅमेरा वापरतो. आपण हे वगळू शकता आणि फक्त ऑडिओ वापरू शकता.';
+
+  @override
+  String get raybanMetaSkipForNow => 'आत्तासाठी वगळा';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta फक्त-ऑडिओ मोड';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi ची ही आवृत्ती Bluetooth द्वारे आपल्या चष्म्याचा मायक्रोफोन वापरू शकते. फोटो कॅप्चरसाठी Omi ची Meta डेव्हलपर आवृत्ती आवश्यक आहे.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'चष्म्याचा मायक्रोफोन वापरात असताना आपल्या फोनवरील संगीत थांबते.';
+
+  @override
+  String get raybanMetaContinue => 'पुढे जा';
+
+  @override
+  String get raybanMetaCapturePhoto => 'फोटो काढा';
+
+  @override
+  String get raybanMetaPhotoRequested => 'फोटोची विनंती केली आहे — तो आपल्या संभाषणात दिसेल.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'मायक्रोफोन तयार आहे';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'प्रतिमा कॅप्चर तयार आहे';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'फक्त-ऑडिओ मोडमध्ये अनुपलब्ध';
+
+  @override
+  String get raybanMetaCamera => 'कॅमेरा';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta शी कनेक्ट करताना त्रुटी: $error';
+  }
 }
