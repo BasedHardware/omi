@@ -525,7 +525,7 @@ struct SettingsContentView: View {
       .animation(.easeInOut(duration: 0.15), value: selectedSection)
     }
     .onAppear {
-      if selectedSection == .aiChat {
+      if AppBuild.isProductionBundle && selectedSection == .aiChat {
         selectedSection = .advanced
       }
       loadBackendSettings()
@@ -550,7 +550,7 @@ struct SettingsContentView: View {
       isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
-      if newValue == .aiChat {
+      if AppBuild.isProductionBundle && newValue == .aiChat {
         selectedSection = .advanced
         return
       }
