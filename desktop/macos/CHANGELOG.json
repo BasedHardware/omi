@@ -2,6 +2,15 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.68",
+      "date": "2026-07-10",
+      "changes": [
+        "Made Home load instantly when returning from another page while keeping cached status isolated to the signed-in account",
+        "Fixed requests like “look it up” searching Omi history instead of the public web",
+        "Fixed rapid back-to-back push-to-talk so every spoken turn appears in chat and the reply keeps the full transcription context"
+      ]
+    },
+    {
       "version": "0.12.67",
       "date": "2026-07-10",
       "changes": [
