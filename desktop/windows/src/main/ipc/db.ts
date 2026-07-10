@@ -4,7 +4,7 @@ import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
-import { runMigrations } from './dbMigrations'
+import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import type {
   AppUsageRecord,
   ChatMessage,
@@ -43,14 +43,9 @@ function timed<T>(name: string, fn: () => T): T {
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
 
-// Add a column only if it doesn't already exist, so existing databases (which
-// predate the `kind`/`messages` columns) migrate forward without data loss.
-function ensureColumn(d: Database.Database, table: string, col: string, decl: string): void {
-  const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-  if (!cols.some((c) => c.name === col)) {
-    d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`)
-  }
-}
+// (ensureColumn — add a column only if missing, so existing databases migrate
+// forward without data loss — is dbMigrations.addColumnIfMissing, shared with
+// the versioned migrations so the idiom exists once.)
 
 // Drop a table whose on-disk schema predates the current one (detected by a
 // missing expected column), so the CREATE TABLE IF NOT EXISTS below can recreate

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { findSyncedMatches, hideSyncedLocals } from './conversationsReconcile'
+import { describe, expect, it, vi } from 'vitest'
+import { findSyncedMatches, hideSyncedLocals, reconcileSyncedLocals } from './conversationsReconcile'
 import type { LocalConversation, SyncSegment } from '../../../../shared/types'
 
 const SEGS: SyncSegment[] = [
@@ -42,6 +42,28 @@ describe('findSyncedMatches', () => {
     expect(
       findSyncedMatches([local({})], [{ id: 'other', started_at: '2026-07-10T11:00:00.000Z' }])
     ).toEqual([])
+  })
+})
+
+describe('reconcileSyncedLocals', () => {
+  const cloudTwin = {
+    id: 'cloud-9',
+    started_at: '2026-07-10T12:00:00.000Z',
+    finished_at: '2026-07-10T12:05:00.000Z'
+  }
+
+  it('adopts the twin: persists the done transition and reflects it in the returned rows', () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const out = reconcileSyncedLocals([local({ syncState: 'unconfirmed' })], [cloudTwin], persist)
+    expect(persist).toHaveBeenCalledWith('local-1', { syncState: 'done', cloudId: 'cloud-9', syncError: null })
+    expect(out[0]).toMatchObject({ syncState: 'done', cloudId: 'cloud-9' })
+  })
+
+  it('no matches → returns the input untouched, persists nothing', () => {
+    const persist = vi.fn()
+    const locals = [local({ syncState: 'local_only' })]
+    expect(reconcileSyncedLocals(locals, [cloudTwin], persist)).toBe(locals)
+    expect(persist).not.toHaveBeenCalled()
   })
 })
 

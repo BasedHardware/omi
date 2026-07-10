@@ -10,6 +10,7 @@
  * a large backlog syncs across multiple user-triggered runs — each row's outbox
  * state persists, which is what makes the whole thing resumable.
  */
+import { queueForSync } from './outbox'
 import { syncLocalConversation } from './conversationSync'
 import type { LocalConversation, SyncSegment } from '../../../../shared/types'
 
@@ -154,8 +155,9 @@ export async function runBackfill(
     failed: 0,
     capped: plan.postNow.length < candidates.length
   }
-  for (const id of plan.postNow) {
-    const c = byId.get(id)!
+  for (let i = 0; i < plan.postNow.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, BACKFILL_PACE_MS))
+    const c = byId.get(plan.postNow[i])!
     const segments = transcriptToSegments(c.transcript, Math.max(1, (c.endedAt - c.startedAt) / 1000))
     if (segments.length === 0) {
       progress.failed++
@@ -163,16 +165,13 @@ export async function runBackfill(
       continue
     }
     // Persist segments + queue the row BEFORE posting (resumable on crash/cap).
-    const queued: LocalConversation = { ...c, segments, syncState: 'pending' }
+    const queued = queueForSync(c, segments)
     await window.omi.insertLocalConversation(queued)
     recordPost(Date.now())
     const out = await syncLocalConversation(queued)
     if (out?.status === 'done') progress.synced++
     else progress.failed++
     onProgress?.({ ...progress })
-    if (id !== plan.postNow[plan.postNow.length - 1]) {
-      await new Promise((r) => setTimeout(r, BACKFILL_PACE_MS))
-    }
   }
   return progress
 }

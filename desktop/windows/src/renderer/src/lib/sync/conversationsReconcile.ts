@@ -4,7 +4,7 @@
  * marked done and hidden so the list never shows the same conversation twice.
  */
 import { findCloudMatch, type CloudConversationLite } from './outbox'
-import type { LocalConversation } from '../../../../shared/types'
+import type { ConversationSyncPatch, LocalConversation } from '../../../../shared/types'
 
 const MATCHABLE = new Set(['pending', 'posting', 'unconfirmed', 'failed'])
 
@@ -29,6 +29,30 @@ export function findSyncedMatches(
     if (match) out.push({ id: c.id, cloudId: match })
   }
   return out
+}
+
+/**
+ * Adopt cloud twins: compute the matches AND persist each 'done' transition
+ * (fire-and-forget through the injected persist — IPC → SQLite in the app),
+ * returning the locals with the adoption reflected. This is the only adoption
+ * write path besides syncConversation's own POST success, kept here so UI
+ * components never encode an outbox transition themselves.
+ */
+export function reconcileSyncedLocals(
+  locals: LocalConversation[],
+  cloud: CloudConversationLite[],
+  persist: (id: string, patch: ConversationSyncPatch) => Promise<void>
+): LocalConversation[] {
+  const matches = findSyncedMatches(locals, cloud)
+  if (matches.length === 0) return locals
+  const byId = new Map<string, string>()
+  for (const m of matches) {
+    byId.set(m.id, m.cloudId)
+    void persist(m.id, { syncState: 'done', cloudId: m.cloudId, syncError: null }).catch((e) =>
+      console.warn('sync reconcile persist failed:', e)
+    )
+  }
+  return locals.map((c) => (byId.has(c.id) ? { ...c, syncState: 'done', cloudId: byId.get(c.id)! } : c))
 }
 
 /**

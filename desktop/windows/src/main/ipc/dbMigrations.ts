@@ -41,7 +41,9 @@ function columnExists(d: MigrationDb, table: string, col: string): boolean {
   return cols.some((c) => c.name === col)
 }
 
-function addColumnIfMissing(d: MigrationDb, table: string, col: string, decl: string): void {
+/** Add a column only if it doesn't already exist. Exported for db.ts's legacy
+ * additive-baseline bootstrap so the idiom isn't duplicated there. */
+export function addColumnIfMissing(d: MigrationDb, table: string, col: string, decl: string): void {
   if (!columnExists(d, table, col)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`)
 }
 

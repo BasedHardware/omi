@@ -37,15 +37,7 @@ export function mergeLanes(mic: RetainedSegment[], system: RetainedSegment[]): S
     .filter((s) => s.text.trim().length > 0)
     .map((s) => toSyncSegment({ ...s, speaker: undefined }, false, (s.speaker_id ?? 0) + systemOffset))
 
-  // Stable merge of two already-chronological lists; mic wins ties so the
-  // user's words lead when both lanes land on the same instant.
-  const out: SyncSegment[] = []
-  let i = 0
-  let j = 0
-  while (i < micMapped.length || j < systemMapped.length) {
-    const takeMic =
-      j >= systemMapped.length || (i < micMapped.length && micMapped[i].start <= systemMapped[j].start)
-    out.push(takeMic ? micMapped[i++] : systemMapped[j++])
-  }
-  return out
+  // Chronological interleave. Array#sort is stable (ES2019), so with mic
+  // concatenated first the user's words lead when both lanes tie on an instant.
+  return [...micMapped, ...systemMapped].sort((a, b) => a.start - b.start)
 }

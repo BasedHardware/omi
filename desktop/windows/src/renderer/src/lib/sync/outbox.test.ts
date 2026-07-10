@@ -3,6 +3,7 @@ import {
   buildFromSegmentsRequest,
   canTransition,
   findCloudMatch,
+  queueForSync,
   syncConversation,
   type SyncDeps,
   type SyncableConversation
@@ -55,6 +56,15 @@ describe('canTransition (state machine)', () => {
     expect(canTransition('done', 'posting')).toBe(false) // done is terminal
     expect(canTransition('local_only', 'posting')).toBe(false) // must queue first
     expect(canTransition('unconfirmed', 'failed')).toBe(false)
+  })
+})
+
+describe('queueForSync', () => {
+  const base = { id: 'l1', startedAt: 0, endedAt: 60_000, transcript: 'You: hi', createdAt: 1 }
+
+  it('queues rows with segments as pending; segmentless rows stay local_only', () => {
+    expect(queueForSync(base, SEGMENTS)).toMatchObject({ syncState: 'pending', segments: SEGMENTS })
+    expect(queueForSync(base, [])).toMatchObject({ syncState: 'local_only', segments: [] })
   })
 })
 

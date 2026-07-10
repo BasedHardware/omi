@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   GanttChartSquare,
@@ -22,7 +22,7 @@ import {
   reconcilePending,
   type ConversationRow
 } from '../lib/pageCache'
-import { findSyncedMatches, hideSyncedLocals } from '../lib/sync/conversationsReconcile'
+import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
 import { retryUnsyncedConversations } from '../lib/sync/conversationSync'
 import { backfillCandidates, runBackfill, type BackfillProgress } from '../lib/sync/backfill'
 import type { CloudConversationLite } from '../lib/sync/outbox'
@@ -145,22 +145,12 @@ export function Conversations(): React.JSX.Element {
       setError(msg)
     }
     try {
-      let localRows = await window.omi.listLocalConversations()
       // Reconcile: rows still awaiting sync whose cloud twin has now appeared
       // (same started_at/finished_at we posted) are adopted as done — this is
       // what dissolves a "Sync pending" row into its cloud conversation.
-      const matches = findSyncedMatches(localRows, cloudLite)
-      if (matches.length > 0) {
-        const byId = new Map(matches.map((m) => [m.id, m.cloudId]))
-        for (const m of matches) {
-          void window.omi
-            .updateLocalConversationSync(m.id, { syncState: 'done', cloudId: m.cloudId, syncError: null })
-            .catch((e) => console.warn('sync reconcile persist failed:', e))
-        }
-        localRows = localRows.map((c) =>
-          byId.has(c.id) ? { ...c, syncState: 'done' as const, cloudId: byId.get(c.id)! } : c
-        )
-      }
+      const localRows = reconcileSyncedLocals(await window.omi.listLocalConversations(), cloudLite, (id, patch) =>
+        window.omi.updateLocalConversationSync(id, patch)
+      )
       setLocals(localRows)
       // Synced rows whose cloud twin is in this fetch are hidden (the cloud row
       // is the real one); if the cloud fetch failed the local copy stays visible.
@@ -225,13 +215,17 @@ export function Conversations(): React.JSX.Element {
     })
   }, [])
 
+  // Legacy local-only recordings eligible for backfill; recomputed only when
+  // the local set actually changes.
+  const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
+
   // One-time, user-confirmed backfill of pre-sync local recordings (paced to
   // stay under the from-segments rate limit; resumable across runs).
   const startBackfill = async (): Promise<void> => {
     if (backfillRunningRef.current) return
     backfillRunningRef.current = true
     setBackfillRunning(true)
-    setBackfill({ total: backfillCandidates(locals).length, synced: 0, failed: 0, capped: false })
+    setBackfill({ total: unsyncedPast, synced: 0, failed: 0, capped: false })
     try {
       const result = await runBackfill(locals, (p) => setBackfill({ ...p }))
       setBackfill(result)
@@ -244,8 +238,6 @@ export function Conversations(): React.JSX.Element {
       setBackfillRunning(false)
     }
   }
-
-  const unsyncedPast = backfillCandidates(locals).length
 
   const filtered = rows.filter((r) => {
     if (filter === 'chat' && r.localKind !== 'chat') return false

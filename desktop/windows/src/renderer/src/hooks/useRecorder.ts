@@ -5,6 +5,7 @@ import { startTranscription, type TranscriptionHandle } from '../lib/transcripti
 import { invalidateConversationsCache, refreshCloudConversations } from '../lib/pageCache'
 import { createSegmentStore, type SegmentStore } from '../lib/sync/segmentRetention'
 import { mergeLanes } from '../lib/sync/mergeLanes'
+import { queueForSync } from '../lib/sync/outbox'
 import { syncLocalConversation } from '../lib/sync/conversationSync'
 import type { CaptureSource, LocalConversation, TranscriptLine } from '../../../shared/types'
 
@@ -112,36 +113,42 @@ export function useRecorder(): UseRecorder {
     micStoreRef.current = withSystem ? createSegmentStore(sessionStart) : null
     systemStoreRef.current = withSystem ? createSegmentStore(sessionStart) : null
     try {
-      micRef.current = await startTranscription(
-        'mic',
-        {
-          onLine: (line) => {
-            setMicLines((prev) => [...prev, line])
-            setMicInterim('')
-          },
-          onInterim: setMicInterim,
-          onBackend: setMicBackend,
-          onError: (e) => console.error('Transcription (mic):', e),
-          onSegments: (segs) => micStoreRef.current?.add(segs, Date.now())
-        },
-        mode
-      )
-      if (withSystem) {
-        systemRef.current = await startTranscription(
-          'system',
+      // The two lanes are independent sockets — connect them concurrently so a
+      // screen-session start pays one handshake latency, not the sum of two.
+      const [mic, system] = await Promise.all([
+        startTranscription(
+          'mic',
           {
             onLine: (line) => {
-              setSystemLines((prev) => [...prev, line])
-              setSystemInterim('')
+              setMicLines((prev) => [...prev, line])
+              setMicInterim('')
             },
-            onInterim: setSystemInterim,
-            onBackend: setSystemBackend,
-            onError: (e) => console.error('Transcription (system):', e),
-            onSegments: (segs) => systemStoreRef.current?.add(segs, Date.now())
+            onInterim: setMicInterim,
+            onBackend: setMicBackend,
+            onError: (e) => console.error('Transcription (mic):', e),
+            onSegments: (segs) => micStoreRef.current?.add(segs, Date.now())
           },
           mode
-        )
-      }
+        ),
+        withSystem
+          ? startTranscription(
+              'system',
+              {
+                onLine: (line) => {
+                  setSystemLines((prev) => [...prev, line])
+                  setSystemInterim('')
+                },
+                onInterim: setSystemInterim,
+                onBackend: setSystemBackend,
+                onError: (e) => console.error('Transcription (system):', e),
+                onSegments: (segs) => systemStoreRef.current?.add(segs, Date.now())
+              },
+              mode
+            )
+          : Promise.resolve(null)
+      ])
+      micRef.current = mic
+      systemRef.current = system
     } catch (e) {
       micRef.current?.stop()
       micRef.current = null
@@ -214,15 +221,16 @@ export function useRecorder(): UseRecorder {
       // sync outbox BEFORE the POST — an offline/failed post stays visible as
       // "sync pending" and retries later (see lib/sync/outbox.ts).
       const segments = mergeLanes(micStoreRef.current?.list() ?? [], systemStoreRef.current?.list() ?? [])
-      const conversation: LocalConversation = {
-        id: session.conversationId,
-        startedAt: session.startedAt,
-        endedAt: session.endedAt,
-        transcript,
-        createdAt: Date.now(),
-        syncState: segments.length > 0 ? 'pending' : 'local_only',
+      const conversation: LocalConversation = queueForSync(
+        {
+          id: session.conversationId,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          transcript,
+          createdAt: Date.now()
+        },
         segments
-      }
+      )
       await window.omi.insertLocalConversation(conversation)
       invalidateConversationsCache()
       navigate(`/conversations/${session.conversationId}`, { replace: true })

@@ -26,9 +26,29 @@
  * Rate limit: from-segments allows 30/hour. One-off retries ride the normal
  * axios 429 backoff; bulk backfill is paced separately (see backfill.ts).
  */
-import type { ConversationSyncPatch, ConversationSyncState, SyncSegment } from '../../../../shared/types'
+import type {
+  ConversationSyncPatch,
+  ConversationSyncState,
+  LocalConversation,
+  SyncSegment
+} from '../../../../shared/types'
 
 export const FROM_SEGMENTS_PATH = '/v1/conversations/from-segments'
+
+/**
+ * The single place that decides whether a local row enters the sync pipeline:
+ * with segments it's queued ('pending' — persisted BEFORE any POST); without,
+ * there is nothing to sync and it stays a plain local row ('local_only').
+ * Both producers (useRecorder's session stop and backfill's transcript
+ * synthesis) go through here so the eligibility judgment can't fork.
+ */
+export function queueForSync(base: LocalConversation, segments: SyncSegment[]): LocalConversation {
+  return {
+    ...base,
+    segments,
+    syncState: segments.length > 0 ? 'pending' : 'local_only'
+  }
+}
 
 /** Legal outbox transitions (see the state chart on ConversationSyncState). */
 const TRANSITIONS: Record<ConversationSyncState, ConversationSyncState[]> = {
