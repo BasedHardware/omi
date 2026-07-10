@@ -24,8 +24,8 @@ complete only by the matching lease token after delivery or a terminal no-op. Ac
 and completion, and a late completion from an expired lease cannot resolve its replacement attempt. Failed
 delivery remains retryable through the bounded drain endpoint, including crash-after-commit and expired-lease
 recovery. Rejection and expiry are also idempotent
-terminal transitions. Task/workstream goal links and workstream Candidate acceptance fail closed until the
-workstream owner registers the Ticket 04 resolver.
+terminal transitions. Task/workstream goal links are resolved against the canonical workstream store, and
+workstream Candidate acceptance atomically creates its workstream and anchor task.
 
 The per-user universal-contract mode controls compatibility behavior:
 

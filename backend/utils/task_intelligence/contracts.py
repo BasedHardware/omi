@@ -44,6 +44,7 @@ REQUIRED_SOURCE_IDS = {
     'goal_ai_progress',
     'legacy_staged_promotion',
     'canonical_candidate_resolution',
+    'workstream_resolution',
 }
 ALLOWED_POLICY_CLASSES = {'direct_command', 'shared_capture_policy', 'compatibility_migration'}
 BACKEND_WRITER_METHODS = {

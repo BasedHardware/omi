@@ -71,6 +71,34 @@
       ]
     },
     {
+      "id": "goal_workstream_lifecycle",
+      "risk": "high",
+      "sources": [
+        "backend/database/goals.py",
+        "backend/database/workstreams.py",
+        "backend/database/action_items.py",
+        "backend/database/candidates.py",
+        "backend/routers/goals.py",
+        "backend/routers/workstreams.py",
+        "backend/models/goal.py",
+        "backend/models/workstream.py"
+      ],
+      "tests": [
+        "tests/unit/test_workstream_core.py",
+        "tests/unit/test_workstream_router_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "goal creation never implicitly changes another goal and focus overflow requires an explicit replacement",
+        "workstream Candidate and explicit-intent retries create exactly one workstream and anchor linkage",
+        "journal sequences and artifact versions are append-only and idempotent",
+        "goal lifecycle disposition never cascade-deletes tasks, workstreams, artifacts, or evidence",
+        "canonical writes are account-generation fenced and disabled in off or shadow mode",
+        "task goal and workstream relationships are validated in the same transaction as task mutation",
+        "task-goal migration receipts resume per-item outcomes and return stable reports"
+      ]
+    },
+    {
       "id": "desktop_update_channel_promotion",
       "risk": "high",
       "sources": [

@@ -40,7 +40,8 @@
                   "doc/developer/backend/StoringConversations",
                   "doc/developer/backend/transcription",
                   "doc/developer/backend/listen_pusher_pipeline",
-                  "doc/developer/backend/task_candidate_lifecycle"
+                  "doc/developer/backend/task_candidate_lifecycle",
+                  "doc/developer/backend/goal_workstream_lifecycle"
                 ],
                 "icon": "server"
               },

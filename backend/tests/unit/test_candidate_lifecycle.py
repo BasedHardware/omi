@@ -79,6 +79,17 @@ def fake_db(monkeypatch):
         'workflow_mode': 'read',
         'account_generation': 3,
     }
+    database.rows[('users', 'user-1', 'goals', 'goal-1')] = {
+        'id': 'goal-1',
+        'goal_id': 'goal-1',
+        'title': 'Goal 1',
+        'status': 'focused',
+        'is_active': True,
+    }
+    database.rows[('users', 'user-1', 'workstreams', 'workstream-1')] = {
+        'workstream_id': 'workstream-1',
+        'goal_id': 'goal-1',
+    }
 
     def transactional(function):
         def run(transaction):
@@ -91,6 +102,7 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
+    candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     yield database
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
@@ -516,6 +528,7 @@ def test_task_candidate_validates_final_existing_links_and_fences_races(fake_db,
     candidate_service.task_links.register_workstream_goal_resolver(
         lambda uid, workstream_id: 'goal-1' if workstream_id == 'workstream-1' else None
     )
+    candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     valid = candidates_db.create_candidate(
         'user-1',
         task_create_proposal(

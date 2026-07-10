@@ -15,6 +15,41 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 
 
+class TaskRelationshipConflictError(ValueError):
+    pass
+
+
+def validate_task_relationship_in_transaction(
+    uid: str,
+    *,
+    goal_id: Optional[str],
+    workstream_id: Optional[str],
+    transaction: Any,
+    firestore_client: Any = None,
+    allow_ended_goal: bool = False,
+) -> None:
+    """Final relationship check that participates in the caller's task-write transaction."""
+
+    client = firestore_client or db
+    user_ref = client.collection('users').document(uid)
+    if goal_id is not None:
+        goal_snapshot = user_ref.collection('goals').document(goal_id).get(transaction=transaction)
+        if not goal_snapshot.exists:
+            raise TaskRelationshipConflictError('goal does not exist')
+        goal = _typed_doc(goal_snapshot)
+        status = goal.get('status')
+        if not allow_ended_goal and (
+            status in {'achieved', 'abandoned'} or (status is None and goal.get('is_active') is False)
+        ):
+            raise TaskRelationshipConflictError('ended goal cannot receive new task links')
+    if workstream_id is not None:
+        workstream_snapshot = user_ref.collection('workstreams').document(workstream_id).get(transaction=transaction)
+        if not workstream_snapshot.exists:
+            raise TaskRelationshipConflictError('workstream does not exist')
+        if _typed_doc(workstream_snapshot).get('goal_id') != goal_id:
+            raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
+
+
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
 
@@ -199,6 +234,30 @@ def create_action_item(
     if idempotency_key:
         action_item_data['idempotency_key'] = idempotency_key
 
+    goal_id = action_item_data.get('goal_id')
+    workstream_id = action_item_data.get('workstream_id')
+    if goal_id is not None or workstream_id is not None:
+        if document_id is not None and not document_id:
+            raise ValueError('document_id must not be empty')
+        doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
+        transaction = db.transaction()
+
+        @firestore.transactional
+        def create_linked(write_transaction):
+            if document_id is not None and doc_ref.get(transaction=write_transaction).exists:
+                return document_id
+            validate_task_relationship_in_transaction(
+                uid,
+                goal_id=cast(Optional[str], goal_id),
+                workstream_id=cast(Optional[str], workstream_id),
+                transaction=write_transaction,
+                firestore_client=db,
+            )
+            write_transaction.set(doc_ref, action_item_data)
+            return doc_ref.id
+
+        return cast(str, create_linked(transaction))
+
     if document_id is not None:
         if not document_id:
             raise ValueError('document_id must not be empty')
@@ -237,8 +296,9 @@ def create_action_items_batch(
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    batch = db.batch()
     doc_refs: List[str] = []
+    prepared_items: List[Dict[str, Any]] = []
+    document_refs: List[Any] = []
 
     for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
@@ -255,10 +315,34 @@ def create_action_items_batch(
         doc_ref = (
             action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
         )
-        batch.set(doc_ref, action_item_data)
+        prepared_items.append(action_item_data)
+        document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
 
-    # Commit batch
+    if any(item.get('goal_id') is not None or item.get('workstream_id') is not None for item in prepared_items):
+        if len(prepared_items) > 200:
+            raise ValueError('linked action-item batches are limited to 200 items')
+        transaction = db.transaction()
+
+        @firestore.transactional
+        def create_linked_batch(write_transaction):
+            for item in prepared_items:
+                validate_task_relationship_in_transaction(
+                    uid,
+                    goal_id=cast(Optional[str], item.get('goal_id')),
+                    workstream_id=cast(Optional[str], item.get('workstream_id')),
+                    transaction=write_transaction,
+                    firestore_client=db,
+                )
+            for doc_ref, item in zip(document_refs, prepared_items):
+                write_transaction.set(doc_ref, item)
+            return doc_refs
+
+        return cast(List[str], create_linked_batch(transaction))
+
+    batch = db.batch()
+    for doc_ref, item in zip(document_refs, prepared_items):
+        batch.set(doc_ref, item)
     batch.commit()
 
     return doc_refs
@@ -516,6 +600,33 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
+
+    if 'goal_id' in update_data or 'workstream_id' in update_data:
+        transaction = db.transaction()
+        now = datetime.now(timezone.utc)
+
+        @firestore.transactional
+        def update_linked(write_transaction):
+            snapshot = action_item_ref.get(transaction=write_transaction)
+            if not snapshot.exists:
+                return False
+            current = _typed_doc(snapshot)
+            goal_id = update_data.get('goal_id') if 'goal_id' in update_data else current.get('goal_id')
+            workstream_id = (
+                update_data.get('workstream_id') if 'workstream_id' in update_data else current.get('workstream_id')
+            )
+            validate_task_relationship_in_transaction(
+                uid,
+                goal_id=cast(Optional[str], goal_id),
+                workstream_id=cast(Optional[str], workstream_id),
+                transaction=write_transaction,
+                firestore_client=db,
+                allow_ended_goal=(goal_id, workstream_id) == (current.get('goal_id'), current.get('workstream_id')),
+            )
+            write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
+            return True
+
+        return bool(update_linked(transaction))
 
     # Check if exists
     if not action_item_ref.get().exists:

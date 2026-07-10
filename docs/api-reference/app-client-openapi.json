@@ -1190,7 +1190,6 @@
         "type": "object"
       },
       "AdviceResponse": {
-        "description": "Response model for AI-generated goal advice.",
         "properties": {
           "advice": {
             "title": "Advice",
@@ -3538,6 +3537,236 @@
         "title": "AppleHealthSyncResponse",
         "type": "object"
       },
+      "ArtifactDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_event_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Evidence Event Ids",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "logical_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Logical Key",
+            "type": "string"
+          },
+          "source_run_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Run Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus",
+            "default": "draft"
+          },
+          "supersedes_artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Artifact Id"
+          },
+          "uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Uri",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logical_key",
+          "version",
+          "kind",
+          "uri",
+          "content_hash",
+          "artifact_id",
+          "workstream_id",
+          "created_at"
+        ],
+        "title": "ArtifactDescriptor",
+        "type": "object"
+      },
+      "ArtifactDescriptorCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "maxLength": 128,
+            "minLength": 16,
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "evidence_event_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Evidence Event Ids",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "logical_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Logical Key",
+            "type": "string"
+          },
+          "source_run_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Run Id"
+          },
+          "supersedes_artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Artifact Id"
+          },
+          "uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Uri",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "logical_key",
+          "version",
+          "kind",
+          "uri",
+          "content_hash"
+        ],
+        "title": "ArtifactDescriptorCreate",
+        "type": "object"
+      },
+      "ArtifactStatus": {
+        "enum": [
+          "draft",
+          "awaiting_review",
+          "approved",
+          "delivered",
+          "superseded"
+        ],
+        "title": "ArtifactStatus",
+        "type": "string"
+      },
+      "ArtifactStatusTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ArtifactStatusTransitionRequest",
+        "type": "object"
+      },
       "AsanaProjectsResponse": {
         "properties": {
           "projects": {
@@ -5784,6 +6013,102 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ContinuationCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Checkpoint Id",
+            "type": "string"
+          },
+          "context_summary": {
+            "maxLength": 4000,
+            "title": "Context Summary",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "last_event_sequence": {
+            "minimum": 0.0,
+            "title": "Last Event Sequence",
+            "type": "integer"
+          },
+          "runtime_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Runtime Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runtime_id",
+          "last_event_sequence",
+          "context_summary",
+          "checkpoint_id",
+          "workstream_id",
+          "updated_at"
+        ],
+        "title": "ContinuationCheckpoint",
+        "type": "object"
+      },
+      "ContinuationCheckpointUpsert": {
+        "additionalProperties": false,
+        "properties": {
+          "context_summary": {
+            "maxLength": 4000,
+            "title": "Context Summary",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "last_event_sequence": {
+            "minimum": 0.0,
+            "title": "Last Event Sequence",
+            "type": "integer"
+          },
+          "runtime_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Runtime Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runtime_id",
+          "last_event_sequence",
+          "context_summary"
+        ],
+        "title": "ContinuationCheckpointUpsert",
+        "type": "object"
+      },
       "Conversation": {
         "properties": {
           "app_id": {
@@ -6859,32 +7184,95 @@
       "CreateGoalRequest": {
         "properties": {
           "current_value": {
-            "default": 0,
-            "description": "Current progress value",
-            "title": "Current Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional current progress",
+            "title": "Current Value"
+          },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
           },
           "goal_type": {
-            "$ref": "#/components/schemas/routers__developer__GoalType",
-            "default": "scale",
-            "description": "Type of goal metric: boolean, scale, or numeric"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional metric type"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "max_value": {
-            "default": 10,
-            "description": "Maximum value of the scale",
-            "title": "Max Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional maximum scale value",
+            "title": "Max Value"
           },
           "min_value": {
-            "default": 0,
-            "description": "Minimum value of the scale",
-            "title": "Min Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional minimum scale value",
+            "title": "Min Value"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
-            "description": "Target value to achieve",
-            "title": "Target Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target value",
+            "title": "Target Value"
           },
           "title": {
             "description": "The goal title/description",
@@ -6904,11 +7292,22 @@
             ],
             "description": "Unit label (e.g., 'users', 'points')",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
-          "title",
-          "target_value"
+          "title"
         ],
         "title": "CreateGoalRequest",
         "type": "object"
@@ -8315,9 +8714,40 @@
             "title": "Current Value",
             "type": "number"
           },
+          "desired_outcome": {
+            "title": "Desired Outcome",
+            "type": "string"
+          },
+          "focus_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rank"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
           "goal_type": {
             "title": "Goal Type",
             "type": "string"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "id": {
             "title": "Id",
@@ -8331,9 +8761,34 @@
             "title": "Max Value",
             "type": "number"
           },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "min_value": {
             "title": "Min Value",
             "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
             "title": "Target Value",
@@ -8358,11 +8813,26 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
           "id",
+          "goal_id",
           "title",
+          "desired_outcome",
+          "status",
+          "source",
           "goal_type",
           "target_value",
           "current_value",
@@ -9844,63 +10314,151 @@
         "type": "object"
       },
       "GoalCreate": {
-        "description": "Model for creating a new goal.",
+        "additionalProperties": false,
+        "description": "Canonical create shape; legacy numeric fields remain accepted at this boundary.",
         "properties": {
           "current_value": {
-            "default": 0,
-            "description": "Current progress value",
-            "title": "Current Value",
-            "type": "number"
-          },
-          "goal_type": {
-            "$ref": "#/components/schemas/GoalType",
-            "default": "scale",
-            "description": "Type of goal metric"
-          },
-          "max_value": {
-            "default": 10,
-            "description": "Maximum value of the scale",
-            "title": "Max Value",
-            "type": "number"
-          },
-          "min_value": {
-            "default": 0,
-            "description": "Minimum value of the scale",
-            "title": "Min Value",
-            "type": "number"
-          },
-          "target_value": {
-            "description": "Target value to achieve",
-            "title": "Target Value",
-            "type": "number"
-          },
-          "title": {
-            "description": "The goal title/description",
-            "title": "Title",
-            "type": "string"
-          },
-          "unit": {
             "anyOf": [
               {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Value"
+          },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Unit label (e.g., 'users', 'points')",
+            "title": "Desired Outcome"
+          },
+          "goal_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
+          },
+          "max_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Value"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "min_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Value"
+          },
+          "source": {
+            "$ref": "#/components/schemas/GoalSource",
+            "default": "user"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus",
+            "default": "background"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "target_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Value"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
-          "title",
-          "target_value"
+          "title"
         ],
         "title": "GoalCreate",
         "type": "object"
       },
       "GoalDeleteResponse": {
-        "description": "Response model for deleting a goal.",
         "properties": {
           "deleted_id": {
             "title": "Deleted Id",
@@ -9918,8 +10476,78 @@
         "title": "GoalDeleteResponse",
         "type": "object"
       },
+      "GoalDetailProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "active_threads": {
+            "items": {
+              "$ref": "#/components/schemas/Workstream"
+            },
+            "title": "Active Threads",
+            "type": "array"
+          },
+          "goal": {
+            "$ref": "#/components/schemas/GoalResponse"
+          },
+          "progress_events": {
+            "items": {
+              "$ref": "#/components/schemas/GoalProgressEvent"
+            },
+            "title": "Progress Events",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal",
+          "active_threads",
+          "tasks",
+          "progress_events"
+        ],
+        "title": "GoalDetailProjection",
+        "type": "object"
+      },
+      "GoalFocusRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "focus_rank": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rank"
+          },
+          "replacement_goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Goal Id"
+          }
+        },
+        "title": "GoalFocusRequest",
+        "type": "object"
+      },
       "GoalHistoryEntryResponse": {
-        "description": "Response model for a goal progress history entry.",
         "properties": {
           "date": {
             "title": "Date",
@@ -9943,8 +10571,248 @@
         "title": "GoalHistoryEntryResponse",
         "type": "object"
       },
+      "GoalLifecycleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "relationship_disposition": {
+            "$ref": "#/components/schemas/GoalRelationshipDisposition"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus"
+          }
+        },
+        "required": [
+          "status",
+          "relationship_disposition"
+        ],
+        "title": "GoalLifecycleRequest",
+        "type": "object"
+      },
+      "GoalMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GoalType"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "type",
+          "current",
+          "target"
+        ],
+        "title": "GoalMetric",
+        "type": "object"
+      },
+      "GoalOriginWorkIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_task_description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Anchor Task Description",
+            "type": "string"
+          },
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "origin": {
+            "const": "goal",
+            "default": "goal",
+            "title": "Origin",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "title",
+          "objective",
+          "anchor_task_description"
+        ],
+        "title": "GoalOriginWorkIntent",
+        "type": "object"
+      },
+      "GoalProgressEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GoalProgressEventKind"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "goal_id",
+          "sequence",
+          "kind",
+          "summary",
+          "created_at"
+        ],
+        "title": "GoalProgressEvent",
+        "type": "object"
+      },
+      "GoalProgressEventCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GoalProgressEventKind"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "summary"
+        ],
+        "title": "GoalProgressEventCreate",
+        "type": "object"
+      },
+      "GoalProgressEventKind": {
+        "enum": [
+          "evidence",
+          "metric_update",
+          "milestone",
+          "status_change"
+        ],
+        "title": "GoalProgressEventKind",
+        "type": "string"
+      },
+      "GoalRelationshipDisposition": {
+        "enum": [
+          "retain",
+          "detach"
+        ],
+        "title": "GoalRelationshipDisposition",
+        "type": "string"
+      },
       "GoalResponse": {
-        "description": "Response model for a goal.",
+        "description": "Canonical response plus non-null aliases required by released clients.",
         "properties": {
           "advice": {
             "anyOf": [
@@ -9966,11 +10834,60 @@
             "title": "Current Value",
             "type": "number"
           },
+          "desired_outcome": {
+            "title": "Desired Outcome",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "focus_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rank"
+          },
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
           "goal_type": {
             "title": "Goal Type",
             "type": "string"
           },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
+          },
           "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Id",
             "type": "string"
           },
@@ -9978,13 +10895,41 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "latest_progress_sequence": {
+            "default": 0,
+            "title": "Latest Progress Sequence",
+            "type": "integer"
+          },
           "max_value": {
             "title": "Max Value",
             "type": "number"
           },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "min_value": {
             "title": "Min Value",
             "type": "number"
+          },
+          "source": {
+            "$ref": "#/components/schemas/GoalSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
             "title": "Target Value",
@@ -10009,25 +10954,59 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
           "id",
+          "goal_id",
           "title",
+          "desired_outcome",
+          "status",
+          "source",
+          "created_at",
+          "updated_at",
           "goal_type",
           "target_value",
           "current_value",
           "min_value",
           "max_value",
-          "is_active",
-          "created_at",
-          "updated_at"
+          "is_active"
         ],
         "title": "GoalResponse",
         "type": "object"
       },
+      "GoalSource": {
+        "enum": [
+          "user",
+          "ai_suggested",
+          "imported"
+        ],
+        "title": "GoalSource",
+        "type": "string"
+      },
+      "GoalStatus": {
+        "enum": [
+          "background",
+          "focused",
+          "paused",
+          "achieved",
+          "abandoned"
+        ],
+        "title": "GoalStatus",
+        "type": "string"
+      },
       "GoalSuggestionResponse": {
-        "description": "Response model for AI-generated goal suggestion.",
         "properties": {
           "reasoning": {
             "title": "Reasoning",
@@ -10066,7 +11045,6 @@
         "type": "object"
       },
       "GoalType": {
-        "description": "Types of goals supported.",
         "enum": [
           "boolean",
           "scale",
@@ -10076,8 +11054,13 @@
         "type": "string"
       },
       "GoalUpdate": {
-        "description": "Model for updating a goal.",
+        "additionalProperties": false,
         "properties": {
+          "clear_metric": {
+            "default": false,
+            "title": "Clear Metric",
+            "type": "boolean"
+          },
           "current_value": {
             "anyOf": [
               {
@@ -10088,6 +11071,30 @@
               }
             ],
             "title": "Current Value"
+          },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "max_value": {
             "anyOf": [
@@ -10100,6 +11107,16 @@
             ],
             "title": "Max Value"
           },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "min_value": {
             "anyOf": [
               {
@@ -10110,6 +11127,21 @@
               }
             ],
             "title": "Min Value"
+          },
+          "success_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criteria"
           },
           "target_value": {
             "anyOf": [
@@ -10125,6 +11157,8 @@
           "title": {
             "anyOf": [
               {
+                "maxLength": 500,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -10136,6 +11170,7 @@
           "unit": {
             "anyOf": [
               {
+                "maxLength": 64,
                 "type": "string"
               },
               {
@@ -10143,6 +11178,18 @@
               }
             ],
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "title": "GoalUpdate",
@@ -16365,6 +17412,83 @@
         "title": "TaskCreatePayload",
         "type": "object"
       },
+      "TaskGoalLinkImport": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "goal_id"
+        ],
+        "title": "TaskGoalLinkImport",
+        "type": "object"
+      },
+      "TaskGoalLinkImportReport": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "failure_task_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Failure Task Ids",
+            "type": "array"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "imported",
+          "unchanged",
+          "failed",
+          "failure_task_ids"
+        ],
+        "title": "TaskGoalLinkImportReport",
+        "type": "object"
+      },
+      "TaskGoalLinkImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TaskGoalLinkImport"
+            },
+            "maxItems": 500,
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "links"
+        ],
+        "title": "TaskGoalLinkImportRequest",
+        "type": "object"
+      },
       "TaskIntegrationData": {
         "description": "Data for a task integration connection",
         "properties": {
@@ -16598,6 +17722,53 @@
           "default_app"
         ],
         "title": "TaskIntegrationsResponse",
+        "type": "object"
+      },
+      "TaskOriginWorkIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "objective": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "origin": {
+            "const": "task",
+            "default": "task",
+            "title": "Origin",
+            "type": "string"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "TaskOriginWorkIntent",
         "type": "object"
       },
       "TaskOwner": {
@@ -17779,6 +18950,30 @@
             "description": "New progress value",
             "title": "Current Value"
           },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
+          },
           "max_value": {
             "anyOf": [
               {
@@ -17802,6 +18997,21 @@
             ],
             "description": "New minimum value",
             "title": "Min Value"
+          },
+          "success_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criteria"
           },
           "target_value": {
             "anyOf": [
@@ -17840,6 +19050,18 @@
             ],
             "description": "New unit label",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "title": "UpdateGoalRequest",
@@ -18731,6 +19953,161 @@
         "title": "WebhookType",
         "type": "string"
       },
+      "WorkIntentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "newly_created": {
+            "title": "Newly Created",
+            "type": "boolean"
+          },
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "workstream_id",
+          "task_id",
+          "newly_created",
+          "created_at"
+        ],
+        "title": "WorkIntentReceipt",
+        "type": "object"
+      },
+      "Workstream": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_state_summary": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Current State Summary",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "last_meaningful_progress_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Meaningful Progress At"
+          },
+          "latest_event_sequence": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Latest Event Sequence",
+            "type": "integer"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "objective": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkstreamStatus"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workstream_id",
+          "title",
+          "objective",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Workstream",
+        "type": "object"
+      },
       "WorkstreamCreateCandidate": {
         "additionalProperties": false,
         "properties": {
@@ -18814,6 +20191,159 @@
         "title": "WorkstreamCreateCandidate",
         "type": "object"
       },
+      "WorkstreamDetailProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactDescriptor"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "checkpoints": {
+            "items": {
+              "$ref": "#/components/schemas/ContinuationCheckpoint"
+            },
+            "title": "Checkpoints",
+            "type": "array"
+          },
+          "recent_events": {
+            "items": {
+              "$ref": "#/components/schemas/WorkstreamEvent"
+            },
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItemResponse"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "workstream": {
+            "$ref": "#/components/schemas/Workstream"
+          }
+        },
+        "required": [
+          "workstream",
+          "recent_events",
+          "tasks",
+          "artifacts",
+          "checkpoints"
+        ],
+        "title": "WorkstreamDetailProjection",
+        "type": "object"
+      },
+      "WorkstreamEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkstreamEventKind"
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/WorkstreamSensitivity"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "workstream_id",
+          "sequence",
+          "kind",
+          "summary",
+          "sensitivity",
+          "created_at"
+        ],
+        "title": "WorkstreamEvent",
+        "type": "object"
+      },
+      "WorkstreamEventCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkstreamEventKind"
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/WorkstreamSensitivity",
+            "default": "normal"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "summary"
+        ],
+        "title": "WorkstreamEventCreate",
+        "type": "object"
+      },
+      "WorkstreamEventKind": {
+        "enum": [
+          "user_note",
+          "conversation",
+          "message",
+          "screen_observation",
+          "task_change",
+          "decision",
+          "agent_update",
+          "artifact_version",
+          "external_update",
+          "system"
+        ],
+        "title": "WorkstreamEventKind",
+        "type": "string"
+      },
       "WorkstreamProposal": {
         "additionalProperties": false,
         "properties": {
@@ -18868,6 +20398,92 @@
         "title": "WorkstreamProposal",
         "type": "object"
       },
+      "WorkstreamSensitivity": {
+        "enum": [
+          "normal",
+          "sensitive",
+          "restricted"
+        ],
+        "title": "WorkstreamSensitivity",
+        "type": "string"
+      },
+      "WorkstreamStatus": {
+        "enum": [
+          "open",
+          "paused",
+          "completed",
+          "archived"
+        ],
+        "title": "WorkstreamStatus",
+        "type": "string"
+      },
+      "WorkstreamUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "current_state_summary": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current State Summary"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkstreamStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "WorkstreamUpdate",
+        "type": "object"
+      },
       "WrappedStatusResponse": {
         "properties": {
           "error": {
@@ -18920,15 +20536,6 @@
         ],
         "title": "WrappedStatusResponse",
         "type": "object"
-      },
-      "routers__developer__GoalType": {
-        "enum": [
-          "boolean",
-          "scale",
-          "numeric"
-        ],
-        "title": "GoalType",
-        "type": "string"
       },
       "routers__memories__BatchMemoriesRequest": {
         "properties": {
@@ -31046,7 +32653,7 @@
         ]
       },
       "post": {
-        "description": "Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)\n- **target_value**: Target value to achieve\n- **current_value**: Current progress (default: 0)\n- **min_value**: Minimum scale value (default: 0)\n- **max_value**: Maximum scale value (default: 10)\n- **unit**: Optional unit label (e.g., 'users', 'points')",
+        "description": "Create a durable goal. Metrics are optional and other goals are never changed implicitly.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)\n- **target_value**: Target value to achieve\n- **current_value**: Current progress (default: 0)\n- **min_value**: Minimum scale value (default: 0)\n- **max_value**: Maximum scale value (default: 10)\n- **unit**: Optional unit label (e.g., 'users', 'points')",
         "operationId": "createGoal",
         "requestBody": {
           "content": {
@@ -32741,7 +34348,7 @@
         ]
       },
       "post": {
-        "description": "Create a new goal. This will deactivate any existing active goal.",
+        "description": "Create a durable goal without changing any other goal's focus or lifecycle.",
         "operationId": "create_goal_v1_goals_post",
         "parameters": [
           {
@@ -32907,9 +34514,19 @@
     },
     "/v1/goals/all": {
       "get": {
-        "description": "Get all active goals for the user (up to 4).",
+        "description": "Get all active goals; canonical clients opt into ended history.",
         "operationId": "get_all_goals_v1_goals_all_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "include_ended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Ended",
+              "type": "boolean"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -33155,7 +34772,8 @@
     },
     "/v1/goals/{goal_id}": {
       "delete": {
-        "description": "Delete a goal.",
+        "deprecated": true,
+        "description": "Released compatibility route: soft-abandon and retain links. Use the lifecycle route for explicit disposition.",
         "operationId": "delete_goal_v1_goals__goal_id__delete",
         "parameters": [
           {
@@ -33431,6 +35049,320 @@
         ]
       }
     },
+    "/v1/goals/{goal_id}/detail": {
+      "get": {
+        "operationId": "get_goal_detail_v1_goals__goal_id__detail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalDetailProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Goal Detail",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/focus": {
+      "delete": {
+        "operationId": "unfocus_goal_v1_goals__goal_id__focus_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Unfocus Goal",
+        "tags": [
+          "goals"
+        ]
+      },
+      "post": {
+        "operationId": "focus_goal_v1_goals__goal_id__focus_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalFocusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Focus Goal",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/{goal_id}/history": {
       "get": {
         "description": "Get progress history for a goal.",
@@ -33537,6 +35469,123 @@
         ]
       }
     },
+    "/v1/goals/{goal_id}/lifecycle": {
+      "post": {
+        "operationId": "transition_goal_lifecycle_v1_goals__goal_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Transition Goal Lifecycle",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/{goal_id}/progress": {
       "patch": {
         "description": "Update the progress value of a goal.",
@@ -33633,6 +35682,226 @@
           }
         ],
         "summary": "Update Goal Progress",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/progress-events": {
+      "get": {
+        "operationId": "list_goal_progress_events_v1_goals__goal_id__progress_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalProgressEvent"
+                  },
+                  "title": "Response List Goal Progress Events V1 Goals  Goal Id  Progress Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Goal Progress Events",
+        "tags": [
+          "goals"
+        ]
+      },
+      "post": {
+        "operationId": "append_goal_progress_event_v1_goals__goal_id__progress_events_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalProgressEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalProgressEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Append Goal Progress Event",
         "tags": [
           "goals"
         ]
@@ -45552,6 +47821,1244 @@
         "summary": "Update Transcription Preferences Endpoint",
         "tags": [
           "v1"
+        ]
+      }
+    },
+    "/v1/work-intents": {
+      "post": {
+        "description": "Idempotent backend operation behind the “Work on this with Omi” affordance.",
+        "operationId": "resolve_work_intent_v1_work_intents_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "goal": "#/components/schemas/GoalOriginWorkIntent",
+                    "task": "#/components/schemas/TaskOriginWorkIntent"
+                  },
+                  "propertyName": "origin"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskOriginWorkIntent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GoalOriginWorkIntent"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkIntentReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Resolve Work Intent",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workflow-migrations/task-goal-links": {
+      "post": {
+        "operationId": "import_task_goal_links_v1_workflow_migrations_task_goal_links_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskGoalLinkImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGoalLinkImportReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Import Task Goal Links",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}": {
+      "get": {
+        "operationId": "get_workstream_detail_v1_workstreams__workstream_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkstreamDetailProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Workstream Detail",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "patch": {
+        "operationId": "update_workstream_v1_workstreams__workstream_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkstreamUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workstream"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Workstream",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}/artifacts": {
+      "get": {
+        "operationId": "list_artifact_descriptors_v1_workstreams__workstream_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactDescriptor"
+                  },
+                  "title": "Response List Artifact Descriptors V1 Workstreams  Workstream Id  Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Artifact Descriptors",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "operationId": "create_artifact_descriptor_v1_workstreams__workstream_id__artifacts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactDescriptorCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Artifact Descriptor",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}/artifacts/{artifact_id}/status": {
+      "patch": {
+        "operationId": "transition_artifact_status_v1_workstreams__workstream_id__artifacts__artifact_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactStatusTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Transition Artifact Status",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}/checkpoints": {
+      "get": {
+        "operationId": "list_continuation_checkpoints_v1_workstreams__workstream_id__checkpoints_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ContinuationCheckpoint"
+                  },
+                  "title": "Response List Continuation Checkpoints V1 Workstreams  Workstream Id  Checkpoints Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Continuation Checkpoints",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}/checkpoints/{runtime_id}": {
+      "put": {
+        "operationId": "upsert_continuation_checkpoint_v1_workstreams__workstream_id__checkpoints__runtime_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runtime_id",
+            "required": true,
+            "schema": {
+              "title": "Runtime Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinuationCheckpointUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinuationCheckpoint"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upsert Continuation Checkpoint",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/workstreams/{workstream_id}/events": {
+      "get": {
+        "operationId": "list_workstream_events_v1_workstreams__workstream_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkstreamEvent"
+                  },
+                  "title": "Response List Workstream Events V1 Workstreams  Workstream Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Workstream Events",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "operationId": "append_workstream_event_v1_workstreams__workstream_id__events_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workstream_id",
+            "required": true,
+            "schema": {
+              "title": "Workstream Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkstreamEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkstreamEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Append Workstream Event",
+        "tags": [
+          "tasks"
         ]
       }
     },

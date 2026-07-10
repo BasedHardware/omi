@@ -291,7 +291,10 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     action_item_data = request.storage_payload()
 
     idempotency_key = _content_idempotency_key(uid, request.description)
-    action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    try:
+        action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
@@ -446,7 +449,10 @@ def update_action_item(
         update_data['completed_at'] = None
 
     # Update the action item
-    success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    try:
+        success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
@@ -621,7 +627,10 @@ def create_action_items_batch(
         action_items_data.append(item.storage_payload())
 
     # Create batch
-    created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    try:
+        created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # Fetch created items and send FCM messages
     created_items = []

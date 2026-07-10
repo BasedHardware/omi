@@ -9,6 +9,7 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.action_items as action_items_db
 from database._client import db
 from models.action_item import TaskChangePayload, TaskCreatePayload, TaskStatus
 from models.candidate import (
@@ -316,6 +317,16 @@ def resolve_task_candidate(
             task_ref = _task_ref(uid, task_id)
             task_snapshot = task_ref.get(transaction=write_transaction)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
+            try:
+                action_items_db.validate_task_relationship_in_transaction(
+                    uid,
+                    goal_id=candidate.goal_id,
+                    workstream_id=candidate.workstream_id,
+                    transaction=write_transaction,
+                    firestore_client=db,
+                )
+            except action_items_db.TaskRelationshipConflictError as exc:
+                raise CandidateConflictError(str(exc)) from exc
             if task_snapshot.exists:
                 existing_task = _snapshot_dict(task_snapshot)
                 if existing_task.get('candidate_id') != candidate_id:
@@ -333,7 +344,22 @@ def resolve_task_candidate(
                 current_links = (current_task.get('goal_id'), current_task.get('workstream_id'))
                 if current_links != expected_task_links:
                     raise CandidateConflictError('task links changed while resolving Candidate')
-            write_transaction.update(task_ref, _task_update_storage(candidate, now=resolved_at))
+            task_patch = _task_update_storage(candidate, now=resolved_at)
+            final_goal_id = task_patch.get('goal_id', current_task.get('goal_id'))
+            final_workstream_id = task_patch.get('workstream_id', current_task.get('workstream_id'))
+            try:
+                action_items_db.validate_task_relationship_in_transaction(
+                    uid,
+                    goal_id=cast(Optional[str], final_goal_id),
+                    workstream_id=cast(Optional[str], final_workstream_id),
+                    transaction=write_transaction,
+                    firestore_client=db,
+                    allow_ended_goal=(final_goal_id, final_workstream_id)
+                    == (current_task.get('goal_id'), current_task.get('workstream_id')),
+                )
+            except action_items_db.TaskRelationshipConflictError as exc:
+                raise CandidateConflictError(str(exc)) from exc
+            write_transaction.update(task_ref, task_patch)
 
         candidate_patch = {
             'status': CandidateStatus.accepted.value,

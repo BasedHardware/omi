@@ -1,0 +1,46 @@
+---
+title: Goal and thread lifecycle
+description: Canonical goal focus, workstream journals, artifact versions, and relationship rules.
+---
+
+Goals are backend-owned durable outcomes in `users/{uid}/goals/{goal_id}`. A goal may be qualitative; `metric`
+is optional. Goal creation always starts outside the focus set and never changes another goal. At most five goals
+are focused by default. Focusing beyond that cap requires `replacement_goal_id`, and focus ranks are unique.
+Released numeric goal fields remain response aliases, while the canonical state is `status`, `focus_rank`, and
+the optional metric object. `/v1/goals/all` preserves its released active-goal default; canonical clients pass
+`include_ended=true` to retrieve the complete paused, achieved, and abandoned history without a hidden item cap.
+
+Goal progress is an append-only sequenced journal under `goals/{goal_id}/events`. Archiving, pausing, achieving,
+or abandoning a goal uses the canonical lifecycle endpoint with an explicit `retain` or `detach` relationship
+disposition. Neither disposition deletes tasks, workstreams, artifacts, events, or evidence. The released DELETE
+route is a deprecated compatibility projection that soft-abandons and retains links. Canonical callers use the
+lifecycle endpoint so `retain` versus `detach` is always explicit; the compatibility exception remains only until
+the released route is removed in the cleanup phase.
+
+Every new canonical goal/workstream mutation requires `Idempotency-Key` and `X-Account-Generation`. The backend
+checks the per-user workflow control inside the same transaction and permits product-state mutation only in
+`write` or `read`; `off`, `shadow`, and stale generations fail closed. Mutation receipts make retries stable.
+Released goal create/update/progress/delete routes remain the documented compatibility exception until their
+writers move to the universal contract.
+
+Workstreams are the internal domain object behind a task thread; there is intentionally no collection-level
+create or list API. Creation is restricted to the idempotent `/v1/work-intents` operation or accepted universal
+Candidates. Task-origin intent links the existing task. Goal-origin intent atomically creates one anchor task and
+one workstream. Repeating the same intent returns the same receipt, and invoking intent again on a linked task
+resolves its existing workstream.
+
+Each workstream stores only bounded state and an append-only sequenced event journal. Events carry the shared
+`EvidenceRef`; raw conversations, memories, screenshots, and transcripts are never copied into the journal.
+Device-local evidence requires `device_id`, remains a descriptor on other devices, and never invents execution
+state.
+
+Artifacts are immutable logical versions keyed by `logical_key` and `version`. A replacement cites its prior
+artifact and evidence events; the old descriptor remains inspectable as superseded. New versions always begin as
+drafts. The narrow status transition API advances only `draft → awaiting_review → approved → delivered`; it cannot
+mutate content/version fields or revive a superseded version. Continuation checkpoints are
+per-runtime minimized summaries pinned to a journal sequence. They describe resumable context only—the backend
+does not store local run, attempt, grant, or execution truth.
+
+The goal-detail and workstream-detail endpoints aggregate their task, journal, artifact, and checkpoint
+projections so clients do not issue per-row reads. Task/workstream goal equality is validated server-side, and
+the task-goal import seam only fills empty valid links; it never overwrites a conflicting relationship.

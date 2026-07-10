@@ -176,6 +176,15 @@
       "writer_anchors": [
         {"path": "backend/database/candidates.py", "symbol": "canonical_firestore.action_items", "discover": true}
       ]
+    },
+    {
+      "id": "workstream_resolution",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/database/workstreams.py", "backend/routers/workstreams.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/database/workstreams.py", "symbol": "canonical_firestore.action_items", "discover": true}
+      ]
     }
   ]
 }

@@ -118,6 +118,7 @@ def _mock_collection(query):
     col = MagicMock()
     col.where.return_value = query
     col.order_by.return_value = query
+    col.stream.side_effect = query.stream
     return col
 
 

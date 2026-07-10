@@ -210,15 +210,28 @@ def test_task_workstream_goal_invariant_fails_closed_until_ticket04_resolver():
         task_links.validate_task_links('user-1', goal_id='goal-1', workstream_id='workstream-1')
 
     task_links.register_workstream_goal_resolver(lambda uid, workstream_id: 'goal-1')
+    task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     task_links.validate_task_links('user-1', goal_id='goal-1', workstream_id='workstream-1')
     with pytest.raises(task_links.TaskLinkValidationError):
         task_links.validate_task_links('user-1', goal_id='goal-2', workstream_id='workstream-1')
     task_links.clear_workstream_goal_resolver()
 
 
+def test_task_goal_only_link_requires_an_existing_goal():
+    task_links.clear_workstream_goal_resolver()
+    task_links.register_workstream_goal_resolver(lambda uid, workstream_id: None)
+    task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
+
+    task_links.validate_task_links('user-1', goal_id='goal-1', workstream_id=None)
+    with pytest.raises(task_links.TaskLinkValidationError):
+        task_links.validate_task_links('user-1', goal_id='missing-goal', workstream_id=None)
+    task_links.clear_workstream_goal_resolver()
+
+
 def test_action_item_router_writes_shared_contract_and_preserves_old_response(monkeypatch):
     written = {}
     now = datetime(2026, 7, 9, tzinfo=timezone.utc)
+    task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args: None)
     monkeypatch.setattr(action_items_router.db_executor, 'submit', lambda *args: None)
     monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)

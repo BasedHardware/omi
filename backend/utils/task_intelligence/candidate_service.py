@@ -5,6 +5,7 @@ from typing import Optional, Protocol
 
 import database.action_items as action_items_db
 import database.candidates as candidates_db
+import database.workstreams as workstreams_db
 from models.candidate import (
     CandidateAction,
     CandidateCreate,
@@ -23,7 +24,7 @@ class WorkstreamCandidateResolver(Protocol):
     def __call__(self, uid: str, candidate: CandidateRecord, account_generation: int) -> CandidateResolutionReceipt: ...
 
 
-_workstream_resolver: Optional[WorkstreamCandidateResolver] = None
+_workstream_resolver: Optional[WorkstreamCandidateResolver] = workstreams_db.resolve_workstream_candidate
 
 
 def register_workstream_candidate_resolver(resolver: WorkstreamCandidateResolver) -> None:
@@ -153,7 +154,22 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
             raise candidates_db.WorkstreamCandidateResolverUnavailableError(
                 'Ticket 04 workstream resolver is not registered'
             )
-        return _workstream_resolver(uid, candidate, account_generation)
+        try:
+            receipt = _workstream_resolver(uid, candidate, account_generation)
+        except workstreams_db.WorkstreamNotFoundError as exc:
+            raise candidates_db.CandidateNotFoundError(candidate_id) from exc
+        except workstreams_db.WorkstreamGenerationMismatchError as exc:
+            raise candidates_db.CandidateGenerationMismatchError(candidate_id) from exc
+        except workstreams_db.WorkstreamConflictError as exc:
+            raise candidates_db.CandidateConflictError(str(exc)) from exc
+        if receipt.task_id:
+            _dispatch_task_integration(
+                uid,
+                candidate_id,
+                receipt.task_id,
+                account_generation=account_generation,
+            )
+        return receipt
 
     expected_task_links = None
     final_goal_id = candidate.goal_id
