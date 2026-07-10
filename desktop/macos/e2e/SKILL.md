@@ -239,7 +239,7 @@ automation port — read it from the app log (`DesktopAutomationBridge: listenin
 cd desktop/macos
 # record before-state, trigger the restart, then verify the reopened bundle
 ./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("before", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
-./scripts/omi-ctl action quit_and_reopen        # {restarting:true, bundle_id, relaunch_path}
+./scripts/omi-ctl action quit_and_reopen        # detail (all string values): {"restarting":"true", "bundle_id":…, "relaunch_path":…, "delay_ms":"400"}
 sleep 8                                          # terminate + relaunch + boot
 NEWPORT=$(grep -oE 'listening on http://127.0.0.1:[0-9]+' /private/tmp/omi-dev.log | tail -1 | grep -oE '[0-9]+$')
 OMI_AUTOMATION_PORT=$NEWPORT ./scripts/omi-ctl wait-ready | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
