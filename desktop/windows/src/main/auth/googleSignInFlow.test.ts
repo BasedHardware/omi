@@ -2,8 +2,10 @@
 // a fake "browser" (plain http GET back to the redirect_uri), and a mocked
 // token endpoint. No Electron, no network beyond 127.0.0.1.
 import { describe, it, expect, vi } from 'vitest'
+import { connect as netConnect } from 'node:net'
 import {
   startGoogleSignIn,
+  redactAuthorizeUrl,
   CANCELLED_MESSAGE,
   SUPERSEDED_MESSAGE,
   type GoogleSignInDeps
@@ -100,14 +102,36 @@ describe('startGoogleSignIn', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('surfaces a provider error from the callback', async () => {
+  it('surfaces a provider error that carries the matching state', async () => {
     const result = await startGoogleSignIn(
-      deps({ openExternal: browserThatRedirects(() => 'error=access_denied') })
+      deps({
+        openExternal: browserThatRedirects(
+          (_r, state) => `error=access_denied&state=${encodeURIComponent(state)}`
+        )
+      })
     )
     expect(result).toEqual({
       ok: false,
       error: 'Google authorization failed: access_denied'
     })
+  })
+
+  it('an error injection without the state cannot abort the pending flow', async () => {
+    const result = await startGoogleSignIn(
+      deps({
+        openExternal: async (url) => {
+          const u = new URL(url)
+          const redirectUri = u.searchParams.get('redirect_uri') as string
+          const state = u.searchParams.get('state') as string
+          // Stateless local injection first — must be treated as noise…
+          const inject = await fetch(`${redirectUri}?error=access_denied`)
+          expect(inject.status).toBe(404)
+          // …and the real callback still completes the flow afterwards.
+          await fetch(`${redirectUri}?code=OK&state=${encodeURIComponent(state)}`)
+        }
+      })
+    )
+    expect(result.ok).toBe(true)
   })
 
   it('times out as cancelled when the browser never comes back', async () => {
@@ -168,4 +192,104 @@ describe('startGoogleSignIn', () => {
     )
     expect(result).toEqual({ ok: false, error: 'Could not open the browser: no handler' })
   })
+
+  it('a replayed callback on the same connection after success is a 404, not a crash', async () => {
+    // Regression (audit M1): the request handler used to recompute
+    // server.address() per request — null once the server is closing — so a
+    // kept-alive replay of /callback after success threw a TypeError. Pipeline
+    // TWO identical code-carrying requests on ONE socket: the first settles the
+    // flow (and closes the server); the second is already in flight on the
+    // still-open connection and must get a plain 404 with no state change.
+    let transcript: Promise<string> = Promise.resolve('')
+    const result = await startGoogleSignIn(
+      deps({
+        openExternal: (url) => {
+          const u = new URL(url)
+          const r = new URL(u.searchParams.get('redirect_uri') as string)
+          const state = u.searchParams.get('state') as string
+          const path = `${r.pathname}?code=OK&state=${encodeURIComponent(state)}`
+          transcript = pipelinedRequests(Number(r.port), [path, path])
+        }
+      })
+    )
+    expect(result.ok).toBe(true) // first request won; replay changed nothing
+    const raw = await transcript
+    const statuses = [...raw.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((m) => m[1])
+    expect(statuses).toEqual(['200', '404'])
+  })
+
+  it('logs a redacted authorize URL (no full state or code_challenge on disk)', async () => {
+    const lines: string[] = []
+    let fullState = ''
+    let fullChallenge = ''
+    const result = await startGoogleSignIn(
+      deps({
+        log: (msg, extra) =>
+          lines.push(`${msg}${extra !== undefined ? JSON.stringify(extra) : ''}`),
+        openExternal: async (url) => {
+          const u = new URL(url)
+          fullState = u.searchParams.get('state') as string
+          fullChallenge = u.searchParams.get('code_challenge') as string
+          await browserThatRedirects((_r, state) => `code=OK&state=${encodeURIComponent(state)}`)(
+            url
+          )
+        }
+      })
+    )
+    expect(result.ok).toBe(true)
+    const joined = lines.join('\n')
+    expect(joined).toContain('authorize-url')
+    // The flow-id prefix (8 chars, = backend auth_flow_id) stays for correlation…
+    expect(joined).toContain(fullState.slice(0, 8))
+    // …but neither the state's nonce half nor the challenge may hit the log.
+    expect(joined).not.toContain(fullState.split('|')[1])
+    expect(joined).not.toContain(fullChallenge)
+  })
 })
+
+describe('redactAuthorizeUrl', () => {
+  it('truncates state and code_challenge to an 8-char prefix', () => {
+    const url =
+      'https://api.omi.me/v1/auth/authorize?provider=google&redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcallback' +
+      '&state=AAAABBBB%7Ccccccccccccccccccccccc&code_challenge=DDDDEEEEffffgggghhhhiiiijjjjkkkkllllmmmmnnn' +
+      '&code_challenge_method=S256'
+    const out = new URL(redactAuthorizeUrl(url))
+    expect(out.searchParams.get('state')).toBe('AAAABBBB…')
+    expect(out.searchParams.get('code_challenge')).toBe('DDDDEEEE…')
+    // Everything else is untouched.
+    expect(out.searchParams.get('provider')).toBe('google')
+    expect(out.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1/callback')
+    expect(out.searchParams.get('code_challenge_method')).toBe('S256')
+  })
+})
+
+/** Write several raw HTTP/1.1 requests back-to-back on one socket (pipelining)
+ *  and return the concatenated response bytes. Keeps the connection active so
+ *  server.close() (Node ≥19 closes IDLE connections) can't sidestep the replay. */
+function pipelinedRequests(port: number, paths: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const sock = netConnect(port, '127.0.0.1', () => {
+      for (const p of paths) {
+        sock.write(`GET ${p} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n`)
+      }
+    })
+    let buf = ''
+    const timer = setTimeout(() => {
+      sock.destroy()
+      resolve(buf)
+    }, 2000)
+    sock.on('data', (d) => {
+      buf += String(d)
+    })
+    sock.on('close', () => {
+      clearTimeout(timer)
+      resolve(buf)
+    })
+    // A reset AFTER the responses were read must not fail the test — resolve
+    // with whatever arrived; the assertions on the transcript decide.
+    sock.on('error', () => {
+      clearTimeout(timer)
+      resolve(buf)
+    })
+  })
+}

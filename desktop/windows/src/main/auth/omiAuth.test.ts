@@ -94,9 +94,23 @@ describe('parseLoopbackCallback', () => {
     expect(parseLoopbackCallback('/callback?code=abc', state).kind).toBe('error')
   })
 
-  it('surfaces provider errors', () => {
-    const out = parseLoopbackCallback('/callback?error=access_denied', state)
+  it('surfaces provider errors that carry the matching state', () => {
+    const out = parseLoopbackCallback(
+      `/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+      state
+    )
     expect(out).toEqual({ kind: 'error', message: 'Google authorization failed: access_denied' })
+  })
+
+  it('ignores error injections without the matching state (local-DoS guard)', () => {
+    // Any local process can hit 127.0.0.1 — without the state it must not be
+    // able to abort a pending sign-in or inject display text.
+    expect(parseLoopbackCallback('/callback?error=access_denied', state)).toEqual({
+      kind: 'ignore'
+    })
+    expect(parseLoopbackCallback('/callback?error=<b>evil</b>&state=WRONG', state)).toEqual({
+      kind: 'ignore'
+    })
   })
 })
 

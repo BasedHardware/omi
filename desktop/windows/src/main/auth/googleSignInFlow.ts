@@ -42,6 +42,19 @@ export type GoogleSignInDeps = {
 // one, so a stranded browser tab can't block a retry for five minutes.
 let activeCancel: ((message: string) => void) | null = null
 
+/** Truncate secrets in the authorize URL before it goes to a persistent log:
+ *  the full state would let a log reader complete a pending callback, and the
+ *  challenge is unnecessary noise. 8 chars keep debugging correlation (state's
+ *  first segment is the flow id the backend logs as auth_flow_id). */
+export function redactAuthorizeUrl(authorizeUrl: string): string {
+  const u = new URL(authorizeUrl)
+  for (const key of ['state', 'code_challenge']) {
+    const v = u.searchParams.get(key)
+    if (v) u.searchParams.set(key, `${v.slice(0, 8)}…`)
+  }
+  return u.toString()
+}
+
 /** Run the full sign-in flow. Never rejects — errors come back as {ok:false}. */
 export async function startGoogleSignIn(deps: GoogleSignInDeps): Promise<GoogleSignInResult> {
   activeCancel?.(SUPERSEDED_MESSAGE)
@@ -112,12 +125,25 @@ function runLoopback(args: {
     const cancel = (message: string): void => fail(new Error(message))
     activeCancel = cancel
 
+    // Captured once in the listen callback and closed over: server.address()
+    // returns null once the server is closing, and a kept-alive connection can
+    // still deliver requests after cleanup() — never recompute it per request.
+    let redirectUri = ''
     const server: Server = createServer((req, res) => {
+      // After the flow settles the server is closing, but a kept-alive
+      // connection can still replay the callback (F5 on the leftover tab):
+      // never re-enter flow logic — answer 404 and move on.
+      if (settled) {
+        res.writeHead(404).end()
+        return
+      }
       const outcome = parseLoopbackCallback(req.url ?? '', state)
       if (outcome.kind === 'ignore') {
         res.writeHead(404).end()
         return
       }
+      // 200 (not 4xx) for the human-facing error page is deliberate — the
+      // browser renders it either way (audit-accepted cosmetic).
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       if (outcome.kind === 'error') {
         res.end(errorHtml(outcome.message))
@@ -126,13 +152,12 @@ function runLoopback(args: {
         return
       }
       res.end(successHtml())
-      const addr = server.address() as AddressInfo
-      succeed({ code: outcome.code, redirectUri: `http://127.0.0.1:${addr.port}${CALLBACK_PATH}` })
+      succeed({ code: outcome.code, redirectUri })
     })
     server.on('error', fail)
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address() as AddressInfo
-      const redirectUri = `http://127.0.0.1:${addr.port}${CALLBACK_PATH}`
+      redirectUri = `http://127.0.0.1:${addr.port}${CALLBACK_PATH}`
       const authorizeUrl = buildAuthorizeUrl({
         apiBase: deps.apiBase,
         redirectUri,
@@ -141,8 +166,10 @@ function runLoopback(args: {
       })
       log('loopback listening, opening system browser', { redirectUri })
       // Stable single-line marker so harnesses (scripts/verify-oauth-flow.mjs)
-      // can grep the exact URL the browser was sent to.
-      log(`authorize-url ${authorizeUrl}`)
+      // can grep the URL the browser was sent to. Log hygiene: the on-disk log
+      // must not hold a usable state or the challenge — keep an 8-char prefix
+      // (state's prefix IS the flow id, matching the backend's auth_flow_id).
+      log(`authorize-url ${redactAuthorizeUrl(authorizeUrl)}`)
       timer = setTimeout(
         () => fail(new Error(CANCELLED_MESSAGE)),
         deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS

@@ -58,8 +58,18 @@ export function parseLoopbackCallback(rawUrl: string, expectedState: string): Lo
   const error = url.searchParams.get('error')
   const code = url.searchParams.get('code')
   if (!error && !code) return { kind: 'ignore' }
-  if (error) return { kind: 'error', message: `Google authorization failed: ${error}` }
-  if (url.searchParams.get('state') !== expectedState) {
+  const stateMatches = url.searchParams.get('state') === expectedState
+  if (error) {
+    // State-gate error callbacks too: anything on this machine can hit
+    // 127.0.0.1, and without the flow's state a stray local request must not
+    // be able to abort a pending sign-in or inject display text — noise, not
+    // a flow outcome.
+    if (!stateMatches) return { kind: 'ignore' }
+    return { kind: 'error', message: `Google authorization failed: ${error}` }
+  }
+  if (!stateMatches) {
+    // A CODE with the wrong state is a real CSRF signal — fail the flow loudly
+    // (macOS parity) rather than silently ignoring it.
     return { kind: 'error', message: 'Sign-in rejected: OAuth state mismatch' }
   }
   return { kind: 'code', code: code as string }
