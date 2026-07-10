@@ -1466,6 +1466,10 @@ class PushToTalkManager: ObservableObject {
     if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
       let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
       let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+      // Mirror the primary hub path: repeated dead-mic turns must trip capture
+      // recovery here too, otherwise users whose turns land on the buffered
+      // warm-wait path get recovery_action=none forever (issue #9081).
+      let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "buffered_hub",
         mode: finalizedMode,
@@ -1475,12 +1479,17 @@ class PushToTalkManager: ObservableObject {
         rms: rms,
         deviceDescription: dev,
         micPermissionGranted: hasMicPermission,
-        hubActive: true)
+        hubActive: true,
+        recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+        recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
       log(
         "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
           + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] — not committing")
       if let turnID = currentVoiceTurnID {
         _ = RealtimeHubController.shared.cancelTurn(turnID: turnID)
+      }
+      if attemptRecovery {
+        requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false)
       }
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
@@ -1501,6 +1510,7 @@ class PushToTalkManager: ObservableObject {
       transcribeBufferedWarmWaitAudio()
       return
     }
+    silentMicRecoveryPolicy.recordSuccessfulTurn()
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
@@ -1516,6 +1526,9 @@ class PushToTalkManager: ObservableObject {
     let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: audio)
     guard totalSec >= Self.minTurnAudioSeconds, voicedSec >= Self.minVoicedSeconds else {
       let (peak, rms) = Self.audioEnergy(pcm16k: audio)
+      // Same dead-mic recovery as the primary omni/batch path — the warm-wait
+      // fallback was previously the one silent-turn exit with no recovery (#9081).
+      let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "warm_wait_fallback",
         mode: finalizedMode,
@@ -1525,11 +1538,16 @@ class PushToTalkManager: ObservableObject {
         rms: rms,
         deviceDescription: audioCaptureService?.currentDeviceDescription,
         micPermissionGranted: hasMicPermission,
-        hubActive: false)
+        hubActive: false,
+        recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+        recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
       log(
         "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)")
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+      if attemptRecovery {
+        requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: true)
+      }
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.send(
           .finish(
@@ -1538,6 +1556,7 @@ class PushToTalkManager: ObservableObject {
       }
       return
     }
+    silentMicRecoveryPolicy.recordSuccessfulTurn()
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
     voiceTurnCoordinator.send(.transcriptionStarted(turnID: turnID))
