@@ -60,7 +60,8 @@
     "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@mediapipe/tasks-audio": "0.10.35"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
