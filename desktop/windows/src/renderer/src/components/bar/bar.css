@@ -1,0 +1,96 @@
+/* The top-edge bar window is TRANSPARENT (no DWM material) — the page paints
+   everything. The window is oversized and static; all motion is CSS/canvas. */
+html,
+body.bar-body {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* Root fills the window; clicks fall through except on the surface (main
+   toggles real hit-testing via bar:setInteractive as the cursor enters). */
+.bar-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Slide layer: enters from above the top edge. */
+.bar-slide {
+  transform: translateY(-110%);
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  will-change: transform;
+}
+.bar-slide.bar-slide-in {
+  transform: translateY(0);
+}
+.bar-slide.bar-slide-out {
+  transform: translateY(-110%);
+  transition: transform 180ms cubic-bezier(0.6, 0, 0.8, 0.4);
+}
+
+/* The morphing surface — ONE element interpolating pill ⇄ panel (size +
+   corner radius), never a crossfade between two components. Hugs the top edge
+   (no top radius: it reads as part of the screen edge, notch-like). */
+.bar-surface {
+  position: relative;
+  overflow: hidden;
+  background: rgba(12, 12, 12, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: none;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  transition:
+    width 260ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    height 260ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    border-radius 260ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  will-change: width, height;
+}
+.bar-surface.bar-surface-expanded {
+  border-radius: 0 0 22px 22px;
+}
+
+/* Content layers cross-dissolve INSIDE the single morphing surface. */
+.bar-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+.bar-content.bar-content-active {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 160ms ease 90ms;
+}
+
+/* Collapsed pill row. */
+.bar-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 10px;
+  height: 36px;
+  cursor: pointer;
+  user-select: none;
+}
+.bar-pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgb(212 212 212);
+}
+.bar-pill-state {
+  font-size: 10.5px;
+  color: rgb(115 115 115);
+}
+
+/* The expanded ask panel lays out at the overlay's original 480px and paints
+   at 0.7 — identical look to the old overlay surface. */
+.bar-zoom {
+  zoom: 0.7;
+  width: 480px;
+}

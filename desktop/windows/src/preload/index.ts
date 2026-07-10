@@ -3,6 +3,9 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   OmiBridgeApi,
   OmiOverlayApi,
+  OmiBarApi,
+  BarMode,
+  BarShowPayload,
   LocalConversation,
   ConversationSyncPatch,
   CaptureChoice,
@@ -225,7 +228,6 @@ const omiOverlay: OmiOverlayApi = {
   },
   hide: () => ipcRenderer.send('overlay:hide'),
   setEnabled: (enabled: boolean) => ipcRenderer.send('overlay:setEnabled', enabled),
-  setHeight: (px: number) => ipcRenderer.send('overlay:setHeight', px),
   focusMain: () => ipcRenderer.send('overlay:focusMain'),
   onActiveChange: (cb: (active: boolean) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, active: boolean): void => cb(active)
@@ -268,11 +270,44 @@ const omiOverlay: OmiOverlayApi = {
   }
 }
 
+const omiBar: OmiBarApi = {
+  ready: () => ipcRenderer.send('bar:ready'),
+  requestHide: () => ipcRenderer.send('bar:requestHide'),
+  expand: () => ipcRenderer.send('bar:expand'),
+  collapse: () => ipcRenderer.send('bar:collapse'),
+  setInteractive: (interactive: boolean) => ipcRenderer.send('bar:setInteractive', interactive),
+  stripEnter: () => ipcRenderer.send('bar:stripEnter'),
+  onShow: (cb: (p: BarShowPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: BarShowPayload): void => cb(p)
+    ipcRenderer.on('bar:show', listener)
+    return () => ipcRenderer.removeListener('bar:show', listener)
+  },
+  onMode: (cb: (mode: BarMode) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, mode: BarMode): void => cb(mode)
+    ipcRenderer.on('bar:mode', listener)
+    return () => ipcRenderer.removeListener('bar:mode', listener)
+  },
+  onWillHide: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('bar:willHide', listener)
+    return () => ipcRenderer.removeListener('bar:willHide', listener)
+  },
+  onPtt: (cb: (phase: 'down' | 'up') => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, phase: 'down' | 'up'): void => cb(phase)
+    ipcRenderer.on('bar:ptt', listener)
+    return () => ipcRenderer.removeListener('bar:ptt', listener)
+  },
+  getContentProtection: () => ipcRenderer.invoke('bar:getContentProtection'),
+  setContentProtection: (enabled: boolean) =>
+    ipcRenderer.invoke('bar:setContentProtection', enabled)
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('omi', omi)
     contextBridge.exposeInMainWorld('omiOverlay', omiOverlay)
+    contextBridge.exposeInMainWorld('omiBar', omiBar)
   } catch (error) {
     console.error(error)
   }
@@ -283,4 +318,6 @@ if (process.contextIsolated) {
   window.omi = omi
   // @ts-ignore (define in dts)
   window.omiOverlay = omiOverlay
+  // @ts-ignore (define in dts)
+  window.omiBar = omiBar
 }

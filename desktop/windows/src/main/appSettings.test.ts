@@ -56,6 +56,7 @@ describe('appSettings', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
+      hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false }
     })
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
@@ -64,6 +65,12 @@ describe('appSettings', () => {
       sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown
     ).toBe(false)
     expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+    // HUD capture-exclusion defaults ON and only an explicit false disables it.
+    expect(sanitizeAppSettings(null).hudContentProtection).toBe(true)
+    expect(sanitizeAppSettings({ hudContentProtection: false }).hudContentProtection).toBe(false)
+    expect(
+      sanitizeAppSettings({ hudContentProtection: 'nope' } as never).hudContentProtection
+    ).toBe(true)
   })
 
   it('meeting settings default to ask/2min and sanitize bad values', () => {

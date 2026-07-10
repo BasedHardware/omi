@@ -61,3 +61,7 @@ resources/win-ocr-helper/*.pdb
 src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
+
+# Orb harness artifacts (contact sheets, pixel dumps) — generated
+.orb-out/
+orb-harness/dist/

@@ -18,7 +18,7 @@ import { consumePendingRoute } from './lib/preferences'
 import { useOnboardingComplete } from './hooks/useOnboardingComplete'
 import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
-import { OverlayApp } from './components/overlay/OverlayApp'
+import { BarApp } from './components/bar/BarApp'
 import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
@@ -169,7 +169,8 @@ function App(): React.JSX.Element {
       {!IS_SECONDARY_WINDOW && <RecordHotkeyHost />}
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
-        <Route path="/overlay" element={<OverlayApp />} />
+        {/* The top-edge bar window (replaces the old floating overlay). */}
+        <Route path="/bar" element={<BarApp />} />
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />
