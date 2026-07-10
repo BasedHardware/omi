@@ -21,9 +21,10 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 # Build dependencies only (cached layer)
 RUN cargo build --release --locked && rm -rf src
 
-# Copy actual source code and templates
+# Copy actual source code, templates, and compile-time fixtures.
 COPY src ./src
 COPY templates ./templates
+COPY fixtures ./fixtures
 
 # Build the application
 RUN touch src/main.rs && cargo build --release --locked

@@ -4,9 +4,9 @@ Handles user goals with AI-powered suggestions and advice.
 """
 
 import uuid
-from typing import Optional, List
+from typing import Annotated, Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from database import goals as goals_db
@@ -22,13 +22,21 @@ from models.goal import (
     AdviceResponse,
     GoalCreate,
     GoalDeleteResponse,
+    GoalFocusRequest,
     GoalHistoryEntryResponse,
+    GoalLifecycleRequest,
+    GoalProgressEvent,
+    GoalProgressEventCreate,
     GoalResponse,
     GoalSuggestionResponse,
     GoalUpdate,
 )
+from models.workstream import GoalDetailProjection
+import database.workstreams as workstreams_db
 
 router = APIRouter()
+IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
+AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
 @router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
@@ -39,30 +47,163 @@ def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[
 
 
 @router.get('/v1/goals/all', tags=['goals'], response_model=List[GoalResponse])
-def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
-    """Get all active goals for the user (up to 4)."""
-    goals = goals_db.get_user_goals(uid, limit=4)
+def get_all_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+) -> List[dict]:
+    """Get all active goals; canonical clients opt into ended history."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
 
     return [normalize_goal_response(goal) for goal in goals]
 
 
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
-    """Create a new goal. This will deactivate any existing active goal."""
-    goal_data = {
-        'id': f"goal_{uuid.uuid4().hex[:12]}",
-        'title': goal.title,
-        'goal_type': goal.goal_type.value,
-        'target_value': goal.target_value,
-        'current_value': goal.current_value,
-        'min_value': goal.min_value,
-        'max_value': goal.max_value,
-        'unit': goal.unit,
-    }
+    """Create a durable goal without changing any other goal's focus or lifecycle."""
+    goal_data = goal.model_dump(mode='python', exclude_none=True)
+    goal_data['id'] = f"goal_{uuid.uuid4().hex[:12]}"
 
-    created_goal = goals_db.create_goal(uid, goal_data)
+    try:
+        created_goal = goals_db.create_goal(uid, goal_data)
+    except goals_db.GoalConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return normalize_goal_response(created_goal)
+
+
+@router.post('/v1/goals/canonical', tags=['goals'], response_model=GoalResponse)
+def create_canonical_goal(
+    goal: GoalCreate,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> dict:
+    """Create a generation-scoped canonical goal with safe retry semantics."""
+
+    try:
+        created_goal = goals_db.create_goal_idempotent(
+            uid,
+            goal.model_dump(mode='python', exclude_none=True),
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    return normalize_goal_response(created_goal)
+
+
+def _raise_goal_store_error(exc: Exception) -> None:
+    if isinstance(exc, goals_db.GoalNotFoundError):
+        raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise exc
+
+
+@router.post('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
+def focus_goal(
+    goal_id: str,
+    request: GoalFocusRequest,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> dict:
+    try:
+        goal = goals_db.focus_goal(
+            uid,
+            goal_id,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+            replacement_goal_id=request.replacement_goal_id,
+            focus_rank=request.focus_rank,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    return normalize_goal_response(goal)
+
+
+@router.delete('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
+def unfocus_goal(
+    goal_id: str,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> dict:
+    try:
+        return normalize_goal_response(
+            goals_db.unfocus_goal(
+                uid,
+                goal_id,
+                idempotency_key=idempotency_key,
+                account_generation=account_generation,
+            )
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+
+
+@router.post('/v1/goals/{goal_id}/lifecycle', tags=['goals'], response_model=GoalResponse)
+def transition_goal_lifecycle(
+    goal_id: str,
+    request: GoalLifecycleRequest,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> dict:
+    try:
+        goal = goals_db.transition_goal_lifecycle(
+            uid,
+            goal_id,
+            status=request.status,
+            relationship_disposition=request.relationship_disposition,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    return normalize_goal_response(goal)
+
+
+@router.get('/v1/goals/{goal_id}/detail', tags=['goals'], response_model=GoalDetailProjection)
+def get_goal_detail(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> GoalDetailProjection:
+    try:
+        return workstreams_db.get_goal_detail(uid, goal_id)
+    except workstreams_db.WorkstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Goal not found') from exc
+
+
+@router.post('/v1/goals/{goal_id}/progress-events', tags=['goals'], response_model=GoalProgressEvent)
+def append_goal_progress_event(
+    goal_id: str,
+    request: GoalProgressEventCreate,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> GoalProgressEvent:
+    try:
+        return goals_db.append_goal_progress_event(
+            uid,
+            goal_id,
+            request,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+
+
+@router.get('/v1/goals/{goal_id}/progress-events', tags=['goals'], response_model=list[GoalProgressEvent])
+def list_goal_progress_events(
+    goal_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    uid: str = Depends(auth.get_current_user_uid),
+) -> list[GoalProgressEvent]:
+    return goals_db.list_goal_progress_events(uid, goal_id, limit=limit)
 
 
 @router.patch('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
@@ -104,9 +245,9 @@ def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(au
     return [normalize_goal_history_entry(entry) for entry in history]
 
 
-@router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse)
+@router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse, deprecated=True)
 def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
-    """Delete a goal."""
+    """Released compatibility route: soft-abandon and retain links. Use the lifecycle route for explicit disposition."""
     success = goals_db.delete_goal(uid, goal_id)
 
     if not success:

@@ -117,6 +117,18 @@ OMI_SYNC_BACKFILL_DAILY_USED_MS = Gauge(
     'Current UTC-day processed speech milliseconds reserved by historical sync',
 )
 
+TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
+    'task_workstream_association_total',
+    'Canonical evidence association outcomes with bounded adjudication reasons',
+    ['outcome', 'reason'],
+)
+
+TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
+    'task_intelligence_attribution_total',
+    'Privacy-safe task intervention, feedback, and outcome events',
+    ['event', 'subject_kind', 'code'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',

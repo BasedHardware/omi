@@ -2164,10 +2164,12 @@
     ],
     "adapters": {
       "pi-mono": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       }
     }
   },
@@ -2557,10 +2559,12 @@
     ],
     "adapters": {
       "pi-mono": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       }
     }
   },
@@ -2733,10 +2737,12 @@
     ],
     "adapters": {
       "pi-mono": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": true,
+        "condition": "coordinatorOnly"
       }
     }
   },

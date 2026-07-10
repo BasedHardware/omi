@@ -11,11 +11,19 @@ must name the invariant they affect and update the matching guard test.
 - Authorize control operations from tool-supplied `ownerId` alone.
 - Allow more than one non-terminal attempt with execution authority per run.
 - Key request-scoped state by bare `requestId` under concurrent clients.
+- Treat backend workstream product state or another runtime's checkpoint as
+  authority for this runtime's run/attempt status.
+- Keep a local task Candidate in an independent review state after a canonical
+  backend receipt exists.
+- Select an adapter outside the session's persisted provider boundary.
+- Grant leaf workers agent-management tools or nested-agent authority.
+- Persist a successful run while a required control operation remains failed.
 
 ## Surfaces
 
 - Desktop TypeScript agent runtime (`desktop/macos/agent/src/runtime`)
 - Adapter bindings, control tools, request-scoped relay, startup reconciliation
+- Adapter credential scopes, session execution roles, and terminal control obligations
 
 ## Guard tests
 
@@ -26,6 +34,7 @@ Documented per-invariant in the canonical invariants doc, including:
 - `desktop/macos/agent/tests/adapter-binding.test.ts`
 - `desktop/macos/agent/tests/control-tools.test.ts`
 - `desktop/macos/agent/tests/sqlite-store.test.ts`
+- `desktop/macos/agent/tests/workstream-continuity.test.ts`
 
 ## Path globs
 

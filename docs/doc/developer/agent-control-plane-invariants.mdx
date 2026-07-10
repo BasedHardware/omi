@@ -40,6 +40,21 @@ Guard surface:
 - `run-attempt-lifecycle.test.ts` and `adapter-binding.test.ts` cover stale
   binding retry, compatibility changes, and request-scoped MCP env stripping.
 
+### Workstream identity is the reusable task-work boundary
+
+For durable task work, the kernel resolves `surface_kind=workstream`,
+`external_ref_kind=workstream`, and `external_ref_id=<workstream_id>`. All task
+views linked to that workstream reuse one local conversation per owner/runtime.
+Task IDs may remain compatibility surface mappings during migration, but they
+do not own independent agent continuity.
+
+Guard surface:
+
+- `surface_conversations` and the existing session external-reference index are
+  the only binding mechanism; there is no parallel workstream binding store.
+- `workstream-continuity.test.ts` covers reuse, task-session migration, and
+  shared artifact history.
+
 ## Authority
 
 ### Owner authority comes from active Omi context
@@ -154,6 +169,54 @@ Guard surface:
 - `runtime-adapter.test.ts` verifies production expectations and ticketed known
   limitations.
 
+### Adapter credential scope is explicit and inherited
+
+Every production adapter declares `managed_cloud` or `local_user` in
+`ADAPTER_CAPABILITY_MATRIX`. Sessions persist a provider boundary when the
+kernel creates them. Managed sessions may select only managed-cloud adapters;
+local-user sessions are pinned to the exact selected local adapter. Missing
+adapter arguments inherit that boundary, while unknown adapters fail closed.
+
+Guard surface:
+
+- `execution-policy.ts` is the shared resolver used by control tools and the
+  kernel run-acceptance path.
+- `runtime-adapter.test.ts`, `execution-policy.test.ts`, and
+  `control-tools.test.ts` exhaust production declarations and managed routing.
+
+### Execution role owns agent-management authority
+
+Sessions persist `coordinator` or `leaf`. Background, delegated, and floating
+pill sessions are created as leaves. Leaf tool projections omit agent creation
+and continuation tools, while the control relay and kernel independently reject
+stale or forged calls for every leaf-restricted tool (including
+`send_agent_message`). The relay loads the caller's persisted policy by session
+id with an owner check and fails closed when that lookup cannot complete;
+surface-derived role exists only in the creation/legacy migration boundary.
+Persisted kernel state is authoritative afterward. `spawnBackgroundAgent`
+requires a coordinator caller session or an explicit trusted-user spawn.
+
+Guard surface:
+
+- `omi-tool-manifest.test.ts` verifies leaf capability projection.
+- `control-tools.test.ts` verifies server denial for every nested creation and
+  continuation entry point, plus kernel spawn authority checks.
+- `sqlite-store.test.ts` verifies role and provider-boundary persistence.
+
+### Required control failures cannot become successful runs
+
+Required spawn, delegate, and continuation operations remain unresolved after
+failure until the same logical operation succeeds. Transport correlation and
+adapter-selection fields do not define logical identity, so a corrected retry
+can resolve the obligation; an unrelated successful operation cannot.
+
+Guard surface:
+
+- `pi-mono-adapter.test.ts` covers terminal failure, matching retry success,
+  and unrelated-success denial.
+- The kernel remains the only component that persists run and attempt terminal
+  state; adapter outcomes are inputs to that transition, not an alternate store.
+
 ## Persistence
 
 Lifecycle state transitions and their durable events should commit in the same
@@ -163,3 +226,37 @@ they persist both a state transition and an event row.
 Startup reconciliation must be deterministic and idempotent. Re-running it
 should either no-op or strictly refine stale interrupted state without producing
 duplicate recovery dispatches.
+
+### Product continuity never imports execution authority
+
+Workstream context packets and continuation checkpoints contain bounded product
+summaries, selected events, task state, artifact heads, and provenance. They do
+not copy adapter transcripts or import another runtime's run/attempt status.
+Each runtime establishes its own binding and remains authoritative for its local
+execution state.
+
+Checkpoint freshness is the backend workstream journal's canonical event
+sequence, never the local kernel `events.event_seq`. Upserts are monotonic and
+import persists an expiring product-context packet for restart. Provenance uses
+the canonical typed `EvidenceRef` contract, including device-local scope rules;
+device-local or sensitive evidence cannot be exported without a resolved,
+export-specific dispatch. Export replaces sensitive source content with its
+redacted representation and removes source-runtime dispatch state before a
+target runtime can import it.
+
+Local task Candidates are outbox records until backend delivery. Delivery uses
+a stable idempotency key and stores a bounded receipt; after receipt, local state
+is `forwarded` or a projection of canonical resolution and must not remain in a
+local review queue.
+
+Pre-contract Candidate rows migrate as `blocked`. Reconciliation must supply
+the current account generation before an eligible pending row can enter the
+outbox; historical accepted, rejected, or expired rows remain non-deliverable.
+Creation and resolution receipts are bounded and retained separately.
+
+Guard surface:
+
+- `workstream-continuity.test.ts` covers bounded context, cross-runtime
+  checkpoints, Candidate retry/receipt/projection, and rank-free open-loop
+  snapshots.
+- `sqlite-store.test.ts` covers interrupted-delivery startup reconciliation.

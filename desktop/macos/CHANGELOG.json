@@ -2,6 +2,19 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.69",
+      "date": "2026-07-10",
+      "changes": [
+        "Improved task capture so suggestions stay quiet, retry safely, and keep working when task notifications are off",
+        "Added a quiet Suggested review lane with simple feedback and clear task provenance",
+        "Background agents now stay on Omi's managed cloud route and operate as leaf workers. Explicit User Claude sign-in uses a validated, bounded reconnect flow, and failed agent-control actions show as failures instead of misleading completion. Stalled tool calls now stop before a chat can hang for three minutes.",
+        "Made What Matters Now refresh with relevant Mac context while keeping proactive task alerts opt-in, rate-limited, and privacy-bounded",
+        "Added persistent task threads that keep shared context, cited draft history, and agent progress across related tasks and restarts",
+        "Clarified task interruption settings, task chat empty state, evidence labels, and attribution analytics for What Matters Now and Suggested",
+        "Added a calm What Matters Now dashboard and richer goal focus and history controls"
+      ]
+    },
+    {
       "version": "0.12.68",
       "date": "2026-07-10",
       "changes": [

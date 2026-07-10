@@ -9,6 +9,16 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("projects agent-management tools out of leaf worker contexts", () => {
+    for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+      const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });
+      expect(names).not.toContain("spawn_agent");
+      expect(names).not.toContain("spawn_background_agent");
+      expect(names).not.toContain("run_agent_and_wait");
+      expect(names).not.toContain("send_agent_message");
+    }
+  });
+
   it("has unique canonical names", () => {
     const names = omiToolManifest.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);

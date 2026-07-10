@@ -1508,19 +1508,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
       }
 
-      let schedulerDelay = max(
-        0,
-        StartupWarmupPolicy.recurringTaskSchedulerInitialDelay
-          - StartupWarmupPolicy.transcriptionRetryRecoveryDelay
-      )
-      if schedulerDelay > 0 {
-        try? await Task.sleep(nanoseconds: UInt64(schedulerDelay * 1_000_000_000))
-      }
-      guard !Task.isCancelled else { return }
-
-      await MainActor.run {
-        RecurringTaskScheduler.shared.start()
-      }
+      // Legacy recurring-task investigations silently started agent work and
+      // could create durable continuity without an explicit user action. Keep
+      // the compatibility service stopped; contextual resurfacing owns future
+      // proactive entry points without silently launching work.
     }
   }
 

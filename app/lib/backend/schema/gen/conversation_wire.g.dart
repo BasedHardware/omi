@@ -87,44 +87,72 @@ class GeneratedTranscriptSegment {
 }
 
 class GeneratedActionItem {
+  final String? candidateAction;
+  final double? captureConfidence;
+  final String? captureKind;
+  final String? captureOwner;
   final bool completed;
   final DateTime? completedAt;
+  final bool? concreteDeliverable;
   final String? conversationId;
   final DateTime? createdAt;
   final String description;
   final DateTime? dueAt;
+  final double? ownershipConfidence;
+  final String? targetTaskId;
   final DateTime? updatedAt;
 
   const GeneratedActionItem({
+    this.candidateAction,
+    this.captureConfidence,
+    this.captureKind,
+    this.captureOwner,
     this.completed = false,
     this.completedAt,
+    this.concreteDeliverable,
     this.conversationId,
     this.createdAt,
     required this.description,
     this.dueAt,
+    this.ownershipConfidence,
+    this.targetTaskId,
     this.updatedAt,
   });
 
   factory GeneratedActionItem.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItem(
+      candidateAction: _readFieldValue<String>(_readField(json, const ["candidate_action"]), "candidate_action", _readString, requiredField: false, nullable: true),
+      captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
+      captureKind: _readFieldValue<String>(_readField(json, const ["capture_kind"]), "capture_kind", _readString, requiredField: false, nullable: true),
+      captureOwner: _readFieldValue<String>(_readField(json, const ["capture_owner"]), "capture_owner", _readString, requiredField: false, nullable: true),
       completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: false, defaultValue: false), "completed"),
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
+      concreteDeliverable: _readFieldValue<bool>(_readField(json, const ["concrete_deliverable"]), "concrete_deliverable", _readBool, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
+      ownershipConfidence: _readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: false, nullable: true),
+      targetTaskId: _readFieldValue<String>(_readField(json, const ["target_task_id"]), "target_task_id", _readString, requiredField: false, nullable: true),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'candidate_action': candidateAction,
+      'capture_confidence': captureConfidence,
+      'capture_kind': captureKind,
+      'capture_owner': captureOwner,
       'completed': completed,
       'completed_at': completedAt?.toUtc().toIso8601String(),
+      'concrete_deliverable': concreteDeliverable,
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),
+      'ownership_confidence': ownershipConfidence,
+      'target_task_id': targetTaskId,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
     };
   }
