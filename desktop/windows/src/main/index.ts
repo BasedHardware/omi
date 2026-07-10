@@ -55,22 +55,23 @@ import { initAutoUpdater } from './updater'
 import { registerRecordShortcut, setRecordAccelerator, getRecordShortcut } from './shortcuts'
 import { getAppSettings, setAppSettings } from './appSettings'
 
-// Crash/error reporting must init before anything else can throw. No-op unless a
-// DSN is configured; only enabled for packaged builds (see sentry.ts).
-initSentry()
+// THE main window — single module-level owner. Everything that outlives the
+// whenReady scope (tray menu, updater, shortcuts, second-instance handoff,
+// activate) reads through this variable so a re-created window can never leave
+// a consumer bound to a destroyed instance.
+let mainWindow: BrowserWindow | null = null
 
-// The main window, hoisted so the tray, updater, second-instance handoff, and
-// lifecycle IPC can all reach it. Assigned once in whenReady (the local
-// `mainWindow` there is the non-null instance; this mirrors it for external use).
-let mainWindowRef: BrowserWindow | null = null
+function withMainWindow(fn: (win: BrowserWindow) => void): void {
+  if (mainWindow && !mainWindow.isDestroyed()) fn(mainWindow)
+}
 
-/** Surface the main window: create if missing, un-minimize, show, focus. */
+/** Surface the main window: un-minimize, show, focus. */
 function surfaceMainWindow(): void {
-  const win = mainWindowRef
-  if (!win || win.isDestroyed()) return
-  if (win.isMinimized()) win.restore()
-  win.show()
-  win.focus()
+  withMainWindow((win) => {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
 }
 
 // Tray-only start: when launched at login with --hidden, create the window but
@@ -187,6 +188,11 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
 // harness's --user-data-dir) each get their own lock instead of contending.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
+
+// Crash/error reporting. After the lock check so the throwaway second-launch
+// process doesn't pay SDK setup; no-op unless a DSN is configured, and only
+// enabled for packaged builds (see sentry.ts).
+if (gotSingleInstanceLock) initSentry()
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -459,35 +465,38 @@ app.whenReady().then(async () => {
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
 
-  const mainWindow = createWindow()
-  mainWindowRef = mainWindow
+  // `win` is this launch's instance for one-shot wiring below (ready-to-show,
+  // bench); long-lived consumers read the module-level `mainWindow` instead.
+  const win = (mainWindow = createWindow())
 
   // System tray: the app's anchor while windows are hidden. Reflects listening
   // state (renderer reports via tray:state), toggles the window, and owns Quit.
+  // Every dep reads through the module-level ref (never a captured instance) so
+  // the tray keeps working if the window is ever re-created.
   createTray({
     showMainWindow: surfaceMainWindow,
-    hideMainWindow: () => mainWindow.hide(),
-    isMainWindowVisible: () => mainWindow.isVisible() && !mainWindow.isMinimized(),
-    toggleListening: () => mainWindow.webContents.send('tray:toggle-listening'),
+    hideMainWindow: () => withMainWindow((win) => win.hide()),
+    isMainWindowVisible: () =>
+      !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized(),
+    toggleListening: () => withMainWindow((win) => win.webContents.send('tray:toggle-listening')),
     openSettings: () => {
       surfaceMainWindow()
-      mainWindow.webContents.send('tray:open-settings')
+      withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
     quit: quitApp
   })
 
   // Auto-update (packaged builds only; see updater.ts). Never crashes the app.
-  initAutoUpdater(() => mainWindowRef)
+  initAutoUpdater(() => mainWindow)
 
-  // E2E hook (only when OMI_E2E=1; never in prod): expose a couple of
-  // main-process facts the lifecycle harness asserts via electronApp.evaluate.
+  // E2E hook (only when OMI_E2E=1; never in prod): expose the main-process facts
+  // the lifecycle harness asserts via electronApp.evaluate.
   if (process.env.OMI_E2E === '1') {
     ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
       trayCreated: true,
       // The harness must target the MAIN window — getAllWindows() also returns
       // the insight toast / overlay, which have different close semantics.
-      mainWindowId: mainWindow.id,
-      isQuitting: () => isQuitting()
+      mainWindowId: mainWindow.id
     }
   }
 
@@ -496,7 +505,7 @@ app.whenReady().then(async () => {
   // capture/OCR/retention loops, screen-source prewarm) runs AFTER first paint
   // instead of delaying the window from appearing. None are needed before the UI
   // is up; their IPC handlers are already registered above.
-  mainWindow.once('ready-to-show', () => {
+  win.once('ready-to-show', () => {
     // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
     startForegroundMonitor()
     // Track the last non-Omi foreground window so the automation planner snapshots
@@ -531,9 +540,7 @@ app.whenReady().then(async () => {
   // to the front.
   const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
     surfaceMainWindow()
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('recorder:hotkey', 'mic')
-    }
+    withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
   })
   if (!recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
@@ -594,7 +601,7 @@ app.whenReady().then(async () => {
       }
       ipcMain.on('perf:mark', onMark)
     })
-    mainWindow.webContents.once('did-finish-load', async () => {
+    win.webContents.once('did-finish-load', async () => {
       // Animation bench: just wait for the renderer probe's jank summary, record
       // it, and quit. We deliberately DON'T run the DB/IPC workload here — its
       // main-thread + IPC traffic would land during the recording window and
@@ -642,7 +649,7 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) mainWindowRef = createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 
