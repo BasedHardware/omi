@@ -136,10 +136,16 @@ function RecordHotkeyRow(): React.JSX.Element {
   return (
     <SettingRow
       icon={Keyboard}
-      dot={!registered ? 'warn' : undefined}
       title="Record hotkey"
       subtitle="Global shortcut to start and stop recording."
       keywords="hotkey shortcut record accelerator keybinding rebind"
+      note={
+        (error || !registered) && (
+          <p className="text-xs text-amber-300">
+            {error ?? 'This shortcut is held by another app — pick a different one.'}
+          </p>
+        )
+      }
       control={
         <div className="flex items-center gap-2">
           {recording ? (
@@ -167,19 +173,13 @@ function RecordHotkeyRow(): React.JSX.Element {
               setRecording(true)
             }}
             disabled={recording}
-            className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/15 disabled:opacity-40"
+            className="ml-1 rounded-md border border-white/15 px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/10 disabled:opacity-40"
           >
             {recording ? 'Recording…' : 'Rebind'}
           </button>
         </div>
       }
-    >
-      {(error || !registered) && (
-        <p className="text-xs text-amber-400">
-          {error ?? 'This shortcut is held by another app — pick a different one.'}
-        </p>
-      )}
-    </SettingRow>
+    />
   )
 }
 
@@ -197,7 +197,6 @@ function UpdateReadyRow(): React.JSX.Element | null {
   return (
     <SettingRow
       icon={Download}
-      dot="on"
       title="Update ready"
       subtitle={`Version ${version} is ready. Restart Omi to apply it.`}
       keywords="update upgrade restart version release"
