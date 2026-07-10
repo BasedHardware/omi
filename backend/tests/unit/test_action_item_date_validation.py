@@ -260,6 +260,12 @@ def _real_resolve_display_tz(tz):
 
 _render_stub.resolve_display_tz = _real_resolve_display_tz
 
+# Stub utils.llm.conversation_folder
+folder_mod = _stub_module("utils.llm.conversation_folder")
+folder_mod.FolderAssignment = MagicMock()
+folder_mod.assign_conversation_to_folder = MagicMock()
+folder_mod.build_folders_context = MagicMock()
+
 # Stub utils.retrieval.agentic
 import contextvars
 
@@ -669,6 +675,50 @@ class TestExtractActionItemsPostValidation:
         assert len(result) == 1
         # At exact boundary, strict < means it should NOT be cleared
         assert result[0].due_at is not None
+
+    def test_extract_action_items_passes_user_name_to_prompt(self):
+        """extract_action_items should accept user_name and ground prompt instructions on it."""
+        from models.structured_extraction import ActionItemsExtraction
+
+        mock_response = ActionItemsExtraction(action_items=[])
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+        mock_chain.__or__ = MagicMock(return_value=mock_chain)
+
+        conv_proc = conversation_processing
+
+        mock_llm = MagicMock()
+        mock_llm.bind.return_value = mock_llm
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
+            conv_proc, 'PydanticOutputParser'
+        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+
+            mock_parser = MagicMock()
+            mock_parser.get_format_instructions.return_value = "format"
+            mock_parser_cls.return_value = mock_parser
+
+            mock_prompt = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt_cls.from_messages.return_value = mock_prompt
+
+            conv_proc.extract_action_items(
+                transcript="Test transcript",
+                started_at=datetime(2025, 6, 1, 10, 0, tzinfo=timezone.utc),
+                language_code="en",
+                tz="UTC",
+                user_name="Soham",
+            )
+
+        # 1. Assert that the prompt template was constructed with user_name variable placeholders
+        called_messages = mock_prompt_cls.from_messages.call_args[0][0]
+        instructions_template = called_messages[0][1]
+        assert "{user_name}" in instructions_template
+
+        # 2. Assert that user_name is passed in the invoke payload
+        invoke_args = mock_chain.invoke.call_args[0][0]
+        assert 'user_name' in invoke_args
+        assert invoke_args['user_name'] == "Soham"
 
 
 class TestActionItemTimezoneConversion:

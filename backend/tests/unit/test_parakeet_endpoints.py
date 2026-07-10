@@ -237,6 +237,55 @@ class TestV2TranscribeEndpoint:
         )
         assert resp.status_code == 503
 
+    def test_v2_speaker_constraints_query_parameters(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+
+        with patch("main.transcribe_file_v2") as mock_v2:
+            mock_v2.return_value = {
+                "text": "v2 result",
+                "segments": [{"text": "v2 result", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}],
+                "detected_language": "en",
+            }
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe?min_speakers=2&max_speakers=5&num_speakers=3",
+                files={"file": ("test.wav", b"fake", "audio/wav")},
+                data={"diarize": "true"},
+            )
+
+        assert resp.status_code == 200
+        mock_v2.assert_called_once()
+        _, kwargs = mock_v2.call_args
+        assert kwargs.get("min_speakers") == 2
+        assert kwargs.get("max_speakers") == 5
+        assert kwargs.get("num_speakers") == 3
+
+    def test_v2_validation_invalid_speaker_values(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe?min_speakers=0",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true"},
+        )
+        assert resp.status_code == 422
+
+    def test_v2_validation_conflicting_speaker_constraints(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe?min_speakers=5&max_speakers=2",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true"},
+        )
+        assert resp.status_code == 422
+        assert "min_speakers cannot be greater than max_speakers" in resp.json()["detail"]
+
 
 def _make_wav_bytes(duration_s=2.0, sample_rate=16000, channels=1, sampwidth=2):
     buf = io.BytesIO()

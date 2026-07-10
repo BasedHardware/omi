@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
-from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
@@ -232,7 +232,12 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
+    min_speakers: Optional[int] = Query(None, gt=0),
+    max_speakers: Optional[int] = Query(None, gt=0),
+    num_speakers: Optional[int] = Query(None, gt=0),
 ) -> JSONResponse | Dict[str, Any]:
+    if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
+        raise HTTPException(status_code=422, detail="min_speakers cannot be greater than max_speakers")
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
@@ -264,14 +269,36 @@ async def transcribe_v2(
                 Dict[str, Any],
                 await loop.run_in_executor(
                     _diarize_pool,
-                    cast(Any, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)),
+                    cast(
+                        Any,
+                        functools.partial(
+                            transcribe_file_v2,
+                            file_path,
+                            gpu_result=gpu_result,
+                            diarize=diarize,
+                            min_speakers=min_speakers,
+                            max_speakers=max_speakers,
+                            num_speakers=num_speakers,
+                        ),
+                    ),
                 ),
             )
         else:
             result = cast(
                 Dict[str, Any],
                 await loop.run_in_executor(
-                    _diarize_pool, cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize))
+                    _diarize_pool,
+                    cast(
+                        Any,
+                        functools.partial(
+                            transcribe_file_v2,
+                            file_path,
+                            diarize=diarize,
+                            min_speakers=min_speakers,
+                            max_speakers=max_speakers,
+                            num_speakers=num_speakers,
+                        ),
+                    ),
                 ),
             )
         return result

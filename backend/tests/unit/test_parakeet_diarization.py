@@ -101,3 +101,83 @@ def test_slice_pcm_bounds():
     assert len(sock._slice_pcm(pcm, 0.0, 0.5)) == 16000  # 0.5s -> 8000 samples * 2 bytes
     assert sock._slice_pcm(pcm, 0.9, 0.1) == b''  # inverted window -> empty
     assert len(sock._slice_pcm(pcm, 0.5, 99.0)) == 16000  # clamps to buffer end
+
+
+def test_diarize_stability_and_constraints(monkeypatch, tmp_path):
+    from parakeet.transcribe import _diarize_segments
+    import parakeet.transcribe as transcribe
+
+    # Create a dummy audio file
+    dummy_file = tmp_path / "dummy.wav"
+    dummy_file.write_bytes(b"dummy wav data")
+
+    # Mocks
+    monkeypatch.setattr(transcribe, "SPEAKER_EMBEDDING_URL", "http://fake")
+    monkeypatch.setattr(transcribe, "_extract_segment_wav", lambda wav, start, end: b"d" * 1000)
+
+    # We want to pass specific embeddings.
+    # We create 6 embeddings: 2 for Speaker A, 2 for Speaker B, 2 for Speaker C.
+    rng = np.random.default_rng(42)
+
+    def _unit_vec(dim, noise=0.01):
+        v = np.zeros((1, 256), dtype=np.float32)
+        v[0, dim] = 1.0
+        return v + noise * rng.standard_normal((1, 256)).astype(np.float32)
+
+    emb_s0_1 = _unit_vec(0)
+    emb_s0_2 = _unit_vec(0)
+    emb_s1_1 = _unit_vec(1)
+    emb_s1_2 = _unit_vec(1)
+    emb_s2_1 = _unit_vec(2)
+    emb_s2_2 = _unit_vec(2)
+
+    # Let's shuffle their order in the sequence to test clustering stability.
+    embeddings_sequence = [emb_s0_1, emb_s1_1, emb_s2_1, emb_s0_2, emb_s1_2, emb_s2_2]
+
+    emb_idx = 0
+
+    def fake_get_embedding(wav):
+        nonlocal emb_idx
+        if emb_idx < len(embeddings_sequence):
+            res = embeddings_sequence[emb_idx]
+            emb_idx += 1
+            return res
+        return None
+
+    monkeypatch.setattr(transcribe, "_get_embedding", fake_get_embedding)
+
+    # Segments
+    base = {
+        "text": "test",
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": "s1"},
+            {"start": 1.0, "end": 2.0, "text": "s2"},
+            {"start": 2.0, "end": 3.0, "text": "s3"},
+            {"start": 3.0, "end": 4.0, "text": "s4"},
+            {"start": 4.0, "end": 5.0, "text": "s5"},
+            {"start": 5.0, "end": 6.0, "text": "s6"},
+        ],
+    }
+
+    # Running clustering twice on the same segments produces identical speaker assignments
+    import copy
+
+    base1 = copy.deepcopy(base)
+    emb_idx = 0
+    res1 = _diarize_segments(str(dummy_file), base1)
+    speakers1 = [seg["speaker"] for seg in res1["segments"]]
+
+    base2 = copy.deepcopy(base)
+    emb_idx = 0
+    res2 = _diarize_segments(str(dummy_file), base2)
+    speakers2 = [seg["speaker"] for seg in res2["segments"]]
+
+    assert speakers1 == speakers2, "Clustering assignments differ between identical runs"
+
+    # Passing num_speakers=3 generates exactly 3 unique speaker labels
+    base3 = copy.deepcopy(base)
+    emb_idx = 0
+    res3 = _diarize_segments(str(dummy_file), base3, num_speakers=3)
+    speakers3 = [seg["speaker"] for seg in res3["segments"]]
+    unique_speakers3 = set(speakers3)
+    assert len(unique_speakers3) == 3, f"Expected exactly 3 unique speakers, got: {unique_speakers3}"

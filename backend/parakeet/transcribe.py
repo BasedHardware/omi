@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUnknownVariableType]  # langdetect ships partial type info
 from langdetect.lang_detect_exception import LangDetectException
-from speaker_math import cosine_distance
+from scipy.cluster.hierarchy import linkage, fcluster
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,12 @@ def _transcribe_via_gpu_worker(file_path: str) -> Dict[str, Any]:
 
 
 def transcribe_file_v2(
-    file_path: str, gpu_result: Optional[Dict[str, Any]] = None, diarize: bool = True
+    file_path: str,
+    gpu_result: Optional[Dict[str, Any]] = None,
+    diarize: bool = True,
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+    num_speakers: Optional[int] = None,
 ) -> Dict[str, Any]:
     if gpu_result is not None:
         base: Dict[str, Any] = _transcribe_from_gpu_result(gpu_result)
@@ -182,7 +187,13 @@ def transcribe_file_v2(
         base = transcribe_file(file_path)
 
     if diarize:
-        base = _diarize_segments(file_path, base)
+        base = _diarize_segments(
+            file_path,
+            base,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers,
+            num_speakers=num_speakers,
+        )
     else:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
@@ -242,7 +253,13 @@ def _transcribe_nim(file_path: str) -> Dict[str, Any]:
         raise
 
 
-def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
+def _diarize_segments(
+    file_path: str,
+    base: Dict[str, Any],
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+    num_speakers: Optional[int] = None,
+) -> Dict[str, Any]:
     if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
@@ -251,45 +268,95 @@ def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
-    centroids: List[Any] = []
-    counts: List[int] = []
+    valid_indices = []
+    embeddings = []
 
-    for seg in base["segments"]:
+    for idx, seg in enumerate(base["segments"]):
         seg_dur = seg["end"] - seg["start"]
         if seg_dur < MIN_SEGMENT_DURATION:
-            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
             continue
 
         try:
             seg_wav = _extract_segment_wav(audio_bytes, seg["start"], seg["end"])
             if len(seg_wav) < 1000:
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
                 continue
 
             emb = _get_embedding(seg_wav)
-            if emb is None:
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
-                continue
-
-            best_i, best_dist = -1, 1e9
-            for i, c in enumerate(centroids):
-                d = cosine_distance(emb, c)
-                if d < best_dist:
-                    best_i, best_dist = i, d
-
-            if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
-                n = counts[best_i]
-                centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
-                counts[best_i] = n + 1
-                seg["speaker"] = f"SPEAKER_{best_i}"
-            else:
-                centroids.append(emb)
-                counts.append(1)
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}"
-
+            if emb is not None:
+                emb_squeezed = np.squeeze(emb)
+                if emb_squeezed.ndim == 1 and np.isfinite(emb_squeezed).all() and len(emb_squeezed) > 0:
+                    if not embeddings or emb_squeezed.shape == embeddings[0].shape:
+                        embeddings.append(emb_squeezed)
+                        valid_indices.append(idx)
         except Exception as e:
-            logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {e}")
-            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+            logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {type(e).__name__}")
+
+    del audio_bytes
+
+    if not embeddings:
+        for seg in base["segments"]:
+            seg["speaker"] = "SPEAKER_0"
+        return base
+
+    if len(embeddings) == 1:
+        for seg in base["segments"]:
+            seg["speaker"] = "SPEAKER_0"
+        return base
+
+    try:
+        X = np.vstack(embeddings)
+        Z = linkage(X, method='average', metric='cosine')
+
+        if num_speakers is not None:
+            if min_speakers is not None or max_speakers is not None:
+                logger.warning(
+                    'num_speakers=%d overrides min_speakers/max_speakers — range constraints ignored',
+                    num_speakers,
+                )
+            n_clust = min(num_speakers, len(embeddings))
+            labels = fcluster(Z, t=n_clust, criterion='maxclust')
+        else:
+            labels = fcluster(Z, t=SPEAKER_MATCH_THRESHOLD, criterion='distance')
+            num_clusters = len(np.unique(labels))
+            if min_speakers is not None and num_clusters < min_speakers:
+                n_clust = min(min_speakers, len(embeddings))
+                labels = fcluster(Z, t=n_clust, criterion='maxclust')
+            elif max_speakers is not None and num_clusters > max_speakers:
+                n_clust = max_speakers
+                labels = fcluster(Z, t=n_clust, criterion='maxclust')
+
+        unique_labels = sorted(list(set(labels)))
+        label_map = {old: new for new, old in enumerate(unique_labels)}
+        mapped_labels = [label_map[l] for l in labels]
+
+        valid_labels = {}
+        for idx, label in zip(valid_indices, mapped_labels):
+            valid_labels[idx] = label
+
+        def get_center(s):
+            return (s["start"] + s["end"]) / 2.0
+
+        assigned_labels = {}
+        for j in range(len(base["segments"])):
+            if j in valid_labels:
+                assigned_labels[j] = valid_labels[j]
+            else:
+                center_j = get_center(base["segments"][j])
+                closest_idx = min(valid_indices, key=lambda v: abs(get_center(base["segments"][v]) - center_j))
+                assigned_labels[j] = valid_labels[closest_idx]
+
+        for j, seg in enumerate(base["segments"]):
+            seg["speaker"] = f"SPEAKER_{assigned_labels[j]}"
+
+        valid_labels.clear()
+        assigned_labels.clear()
+    except Exception as e:
+        logger.error(f"Global Agglomerative Hierarchical Clustering failed, falling back to SPEAKER_0: {e}")
+        for seg in base["segments"]:
+            seg["speaker"] = "SPEAKER_0"
+    finally:
+        embeddings.clear()
+        valid_indices.clear()
 
     return base
 
