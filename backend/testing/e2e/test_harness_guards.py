@@ -59,7 +59,7 @@ def test_backend_storage_client_is_fake_after_app_import(client):
     from fakes.storage import FakeStorageClient
     import utils.other.storage as storage_helpers
 
-    assert isinstance(storage_helpers.storage_client, FakeStorageClient)
+    assert isinstance(storage_helpers._get_storage_client(), FakeStorageClient)
 
 
 def test_backend_database_globals_are_fake_after_app_import(client, fake_firestore, fake_redis):

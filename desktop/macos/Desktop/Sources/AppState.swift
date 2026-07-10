@@ -4,6 +4,32 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+enum SystemAudioPermissionStatus: String {
+  case unknown
+  case granted
+  case denied
+  case unsupported
+
+  /// Map a capture-start failure to an honest permission status. A TCC denial
+  /// manifests as the tap failing to create or the device failing to start;
+  /// format/converter/aggregate failures are provably NOT permission problems
+  /// and must not claim a denial.
+  @available(macOS 14.4, *)
+  static func classify(captureError error: Error) -> SystemAudioPermissionStatus {
+    guard let captureError = error as? SystemAudioCaptureService.SystemAudioCaptureError else {
+      return .unknown
+    }
+    switch captureError {
+    case .tapCreationFailed, .deviceStartFailed:
+      return .denied
+    case .aggregateDeviceFailed, .ioProcCreationFailed, .formatError, .converterCreationFailed:
+      return .unknown
+    case .unsupportedOS:
+      return .unsupported
+    }
+  }
+}
+
 /// Translation from backend (e.g., Japanese speech translated to English)
 struct SegmentTranslation: Identifiable {
   var id: String { lang }
@@ -68,10 +94,14 @@ enum DesktopConversationMatchPolicy {
 
   static func shouldBindConversationSession(
     incomingBackendId: String,
+    expectedBackendId: String? = nil,
     activeBackendId: String?,
     ignoredRotatedBackendIds: Set<String>
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
+    if let expectedBackendId, !expectedBackendId.isEmpty, incomingBackendId != expectedBackendId {
+      return false
+    }
     if let activeBackendId, !activeBackendId.isEmpty {
       return incomingBackendId == activeBackendId
     }
@@ -79,6 +109,19 @@ enum DesktopConversationMatchPolicy {
       return false
     }
     return true
+  }
+
+  /// Identified listen sessions may only consume lifecycle events produced by
+  /// their own recording. Older backend versions omit `recording_session_id`,
+  /// so the matching conversation id remains the compatibility proof.
+  static func lifecycleEventBelongsToRecording(
+    memoryId: String,
+    recordingSessionId: String?,
+    expectedBackendId: String?
+  ) -> Bool {
+    guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
+    guard memoryId == expectedBackendId else { return false }
+    return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
   static func canCompleteBoundBackendConversation(
@@ -146,6 +189,7 @@ class AppState: ObservableObject {
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
   @Published var hasSystemAudioPermission = false
+  @Published var systemAudioPermissionStatus: SystemAudioPermissionStatus = .unknown
   @Published var isSystemAudioSupported = false
 
   // Audio source (microphone or BLE device)
@@ -180,7 +224,7 @@ class AppState: ObservableObject {
   @Published var conversationsError: String? = nil
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
-  var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
+  let conversationRepository = ConversationRepository()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -194,7 +238,9 @@ class AppState: ObservableObject {
   // People (speaker voice profiles)
   @Published var people: [Person] = []
   var peopleById: [String: Person] {
-    Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+    // Last-write-wins: the API can return duplicate person ids; uniqueKeysWithValues
+    // would trap on a collision and crash the render path (same class as the fixed #6506).
+    Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
   }
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
@@ -272,6 +318,7 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
   var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
@@ -290,11 +337,7 @@ class AppState: ObservableObject {
     get { servicesCoordinator.localSystemService }
     set { servicesCoordinator.localSystemService = newValue }
   }
-  var useLocalSTT = false
-  var sttFallbackInProgress = false
-  var forceCloudSTTForSession = false
-  var forceLocalSTTForSession = false
-  var sttCloudFallbackTried = false
+  var sttSession = STTSessionState()
 
   static let isAppleSilicon: Bool = {
     var value: Int32 = 0
@@ -323,10 +366,16 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
+  var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
+  /// The UUID created by desktop before opening an identified `/v4/listen` stream.
+  /// In the current compatible protocol it is also the backend conversation id.
+  var currentClientConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []
   var finishedSessionId: Int64?
+  var finishedClientConversationId: String?
   var finishedRecordingStartTime: Date?
 
   var willTerminateObserver: NSObjectProtocol? {
@@ -381,6 +430,18 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    conversationRepository.onSnapshot = { [weak self] snapshot in
+      guard let self else { return }
+      self.conversations = snapshot.conversations
+      self.isLoadingConversations = snapshot.isLoading
+      self.conversationsError = snapshot.error
+      if self.hasActiveConversationFilters {
+        self.filteredConversationsCount = snapshot.count
+      } else {
+        self.totalConversationsCount = snapshot.count
+        self.filteredConversationsCount = nil
+      }
+    }
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
     // it before any backend call has a chance to refresh state — but never for
@@ -662,6 +723,16 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted (automation bridge) to open the inline chat on the redesigned Home
+  static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
+  /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
+  static let homeStageToggleConnect = Notification.Name("homeStageToggleConnect")
+  /// Posted (automation bridge) to collapse the redesigned Home back to the hub
+  static let homeStageClose = Notification.Name("homeStageClose")
+  /// Posted (automation bridge) to send a query through the Home ask bar. userInfo["query"] = text.
+  static let homeStageAsk = Notification.Name("homeStageAsk")
+  /// Posted (automation bridge) to stage a file in the Home ask bar. userInfo["path"] = file path.
+  static let homeStageAttach = Notification.Name("homeStageAttach")
   /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
   static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings

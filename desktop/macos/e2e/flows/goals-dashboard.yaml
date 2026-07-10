@@ -1,0 +1,50 @@
+version: 2
+name: goals-dashboard
+tier: 2
+description: Hermetic dashboard goals create + snapshot via bridge actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/GoalsWidget.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/GoalStorage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Baseline goals snapshot
+    bridge.action:
+      name: goals_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Create hermetic test goal
+    bridge.action:
+      name: create_test_goal
+      params:
+        title: "[[MARKER:goals-dashboard]] harness goal"
+        targetValue: "10"
+        currentValue: "2"
+    expect:
+      result.detail.created: "true"
+
+  - id: S4
+    name: Goals snapshot after create
+    bridge.action:
+      name: goals_snapshot
+    expect:
+      ok: true
+
+  - id: S5
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

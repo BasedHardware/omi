@@ -177,10 +177,18 @@ def test_query_default_product_memory_items_applies_product_filter_before_matchi
         "automatic", [stale_short, archive, fresh_short, long_term], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW
     )
 
-    assert [result["memory_id"] for result in results] == ["fresh-short", "long-term"]
-    assert {result["tier"] for result in results} == {"short_term", "long_term"}
+    assert [result["memory_id"] for result in results] == ["long-term"]
+    assert {result["tier"] for result in results} == {"long_term"}
     assert results[0]["memory_layer"] == "product_memory"
     assert results[0]["agent_use"] == "default_access_memory"
+
+
+def test_query_default_product_memory_items_excludes_pending_raw_text():
+    pending = _product_item("pending-short", "Unprocessed plugin text must not reach chat.")
+
+    results = query_default_product_memory_items("plugin", [pending], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW)
+
+    assert results == []
 
 
 def test_query_default_product_memory_items_keeps_processed_short_term_visible():
@@ -240,7 +248,11 @@ def test_query_archive_product_memory_items_is_explicit_and_capability_gated():
         processing_state=ProcessingState.processed,
         expires_at=None,
     )
-    fresh_short = _product_item("fresh-short", "User prefers Rust settings.")
+    fresh_short = _product_item(
+        "fresh-short",
+        "User prefers Rust settings.",
+        processing_state=ProcessingState.processed,
+    )
 
     default_results = query_default_product_memory_items(
         "Rust", [archive, fresh_short], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW

@@ -1,0 +1,78 @@
+# Deprecated legacy allowlist for module-scope sys.modules mutation in backend tests.
+# Transitional bridge only (.coordination/test-isolation/PLAN.md). SHRINK only.
+#
+# The 6 entries in group (1) were reintroduced by the origin/main merge (main's
+# versions differ from this branch's migration). Re-migrate them next.
+#
+# The 52 entries in group (2) were surfaced by the P1 hardening of
+# check_module_stub_pollution.py, which fixed a blind spot: the old checker only
+# inspected direct tree.body statements, so module-scope sys.modules writes
+# wrapped in top-level for/if/try/with blocks (the common
+# `for mod in [...]: sys.modules[mod] = MagicMock()` stub pattern) were never
+# detected. These files were therefore never migrated. They are pre-existing
+# incomplete migrations, not regressions. Migrate them to sanctioned seams
+# (monkeypatch.setattr / FastAPI dependency_overrides / stub_modules in fixture
+# scope) and remove from this list.
+
+# --- (1) merge-casualty files ---
+backend/tests/unit/test_async_webhooks.py
+backend/tests/unit/test_delete_account_purge_storage.py
+backend/tests/unit/test_llm_usage_db.py
+backend/tests/unit/test_mcp_api_key_auth_context.py
+backend/tests/unit/test_memory_ledger.py
+backend/tests/unit/test_vector_repair_outbox_worker.py
+
+# --- (2) surfaced by P1 control-flow-descent fix (loop/conditional-wrapped writes) ---
+backend/tests/services/users/test_account_deletion.py
+backend/tests/services/users/test_data_export.py
+backend/tests/unit/test_action_items_conversation_list_malformed.py
+backend/tests/unit/test_action_items_timezone.py
+backend/tests/unit/test_app_visibility_cache_invalidation.py
+backend/tests/unit/test_async_app_integrations.py
+backend/tests/unit/test_async_realtime_integrations_offload.py
+backend/tests/unit/test_auth_redirect_uri.py
+backend/tests/unit/test_claim_deletion_wipe_txn.py
+backend/tests/unit/test_conversation_hybrid_search.py
+backend/tests/unit/test_conversation_redact_enrich.py
+backend/tests/unit/test_conversation_render_factory.py
+backend/tests/unit/test_conversation_source_unknown.py
+backend/tests/unit/test_conversation_structure_timezone.py
+backend/tests/unit/test_conversations_to_string.py
+backend/tests/unit/test_daily_notification_timezone_selection.py
+backend/tests/unit/test_daily_summary_race_condition.py
+backend/tests/unit/test_dev_api_action_items_poison.py
+backend/tests/unit/test_dev_api_canonical_grant_ordering.py
+backend/tests/unit/test_dev_api_conversations_poison.py
+backend/tests/unit/test_dev_api_folder_filters.py
+backend/tests/unit/test_dev_api_memories_pagination.py
+backend/tests/unit/test_developer_from_segments_idempotency.py
+backend/tests/unit/test_fair_use_flagged_limit_clamp.py
+backend/tests/unit/test_firestore_read_ops_cache.py
+backend/tests/unit/test_import_job_status_detail_enum.py
+backend/tests/unit/test_import_jobs_malformed.py
+backend/tests/unit/test_integration_malformed_records.py
+backend/tests/unit/test_llm_provider_plugin_structure.py
+backend/tests/unit/test_lock_bypass_fixes.py
+backend/tests/unit/test_mcp_action_item_writes.py
+backend/tests/unit/test_mcp_client_tool_result.py
+backend/tests/unit/test_mcp_conversations_poison.py
+backend/tests/unit/test_mcp_data_endpoints.py
+backend/tests/unit/test_mcp_profile_contact.py
+backend/tests/unit/test_mcp_search_conversations_poison.py
+backend/tests/unit/test_memories_batch.py
+backend/tests/unit/test_memories_pagination_clamp.py
+backend/tests/unit/test_memory_imports.py
+backend/tests/unit/test_new_usage_tracking_gaps.py
+backend/tests/unit/test_oauth_callback_uid_guard.py
+backend/tests/unit/test_omi_qos_tiers.py
+backend/tests/unit/test_realtime_integrations_usage_tracking.py
+backend/tests/unit/test_resample_pcm_divzero.py
+backend/tests/unit/test_speech_profile_wav_decode.py
+backend/tests/unit/test_sync_file_paths_filename_none.py
+backend/tests/unit/test_sync_opus_decode.py
+backend/tests/unit/test_sync_pcm_decode.py
+backend/tests/unit/test_translation_cost_optimization.py
+backend/tests/unit/test_translation_optimization.py
+backend/tests/unit/test_users_webhook_url_validation.py
+backend/tests/unit/test_vertex_ai_system_role.py
+backend/tests/unit/test_voice_message_filename_none.py

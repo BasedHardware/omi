@@ -3,14 +3,14 @@ from __future__ import annotations
 from collections import defaultdict
 import json
 import logging
-import os
 import re
-from typing import Iterable, Literal, Any, Callable
+from typing import Iterable, Literal, Any, Callable, TypedDict, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_openai import ChatOpenAI
 from models.transcript_segment import TranscriptSegment
 from pydantic import BaseModel, Field
+from utils.llm.clients import get_llm
+from utils.llm.model_config import get_model, get_provider
 from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.adapters.typed_extraction_prompt import (
     TYPED_PREDICATES,
@@ -20,6 +20,7 @@ from utils.memory_ingestion.adapters.typed_extraction_prompt import (
 from utils.memory_ingestion.ids import StableIdFactory
 from utils.memory_ingestion.models import (
     ActorDescriptor,
+    ConfidenceLabel,
     EntityRef,
     EvidenceSpan,
     ExtractionMetadata,
@@ -31,6 +32,7 @@ from utils.memory_ingestion.models import (
     RawContextEvent,
     SensitivityClassification,
     TemporalScope,
+    UncertaintyReason,
 )
 from utils.memory_ingestion.pipeline import MemoryModelClient
 from utils.memory_ingestion.source_routing import route_source
@@ -43,21 +45,24 @@ def _model_dump(obj: Any) -> Any:
     if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
     if isinstance(obj, dict):
-        return {str(k): _model_dump(v) for k, v in obj.items()}
+        pairs: Iterable[tuple[object, object]] = cast(Iterable[tuple[object, object]], obj.items())
+        return {str(k): _model_dump(v) for k, v in pairs}
     if isinstance(obj, (list, tuple, set)):
-        return [_model_dump(v) for v in obj]
+        items: Iterable[object] = cast(Iterable[object], obj)
+        return [_model_dump(v) for v in items]
     if hasattr(obj, "model_dump"):
         try:
             return obj.model_dump(mode="json")
         except Exception:
             try:
-                return obj.model_dump()
+                return obj.dict()
             except Exception:
                 pass
     if hasattr(obj, "content") and obj.__class__.__name__.endswith("Message"):
         return str(getattr(obj, "content", ""))
     if hasattr(obj, "__dict__"):
-        return {str(k): _model_dump(v) for k, v in vars(obj).items() if not k.startswith("_")}
+        attrs = cast(dict[str, Any], vars(obj))
+        return {str(k): _model_dump(v) for k, v in attrs.items() if not k.startswith("_")}
     return str(obj)
 
 
@@ -86,7 +91,7 @@ class ProductionLikeMemory(BaseModel):
 
 
 class ProductionLikeMemories(BaseModel):
-    facts: list[ProductionLikeMemory] = Field(default_factory=list, max_items=2)
+    facts: list[ProductionLikeMemory] = Field(default_factory=list, max_length=2)
 
 
 class HighRecallProductionLikeMemories(BaseModel):
@@ -97,7 +102,7 @@ class HighRecallProductionLikeMemories(BaseModel):
 
 
 # Build a Literal type from TYPED_PREDICATES so Pydantic validates at parse time.
-_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]  # type: ignore[misc]
+_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]
 
 
 class TypedProductionLikeMemory(ProductionLikeMemory):
@@ -112,7 +117,7 @@ class TypedProductionLikeMemory(ProductionLikeMemory):
             "Leave null only when the subject is truly ambiguous."
         ),
     )
-    predicate: _PredicateLiteral | None = Field(
+    predicate: str | None = Field(
         default=None,
         description=(
             "EXACTLY ONE predicate from the fixed vocabulary. "
@@ -139,7 +144,7 @@ class TypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
         default_factory=list,
         description="All memory-worthy facts from the conversation, as typed propositions.",
-        max_items=6,
+        max_length=6,
     )
 
 
@@ -150,7 +155,7 @@ class VoiceRecallTypedProductionLikeMemories(BaseModel):
             "All memory-worthy voice facts from the selected claim-dense spans. "
             "Preserve user, speaker, project, organization, and tool subjects explicitly."
         ),
-        max_items=10,
+        max_length=10,
     )
 
 
@@ -304,7 +309,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         object=FrameObject(
                             object_type="literal",
                             value=memory.content,
-                            confidence=calibration["confidence"],
+                            confidence=cast(ConfidenceLabel, calibration["confidence"]),
                         ),
                         arguments=_frame_arguments(memory.arguments, calibration["confidence"]),
                         canonical_text=memory.content,
@@ -319,9 +324,10 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         importance="high",
                         evidence=evidence,
                         source_event_ids=source_events,
-                        confidence=calibration["confidence"],
-                        uncertainty_reasons=sorted(
-                            set(calibration["uncertainty_reasons"]) | set(_model_uncertainty_reasons(memory))
+                        confidence=cast(ConfidenceLabel, calibration["confidence"]),
+                        uncertainty_reasons=cast(
+                            list[UncertaintyReason],
+                            sorted(set(calibration["uncertainty_reasons"]) | set(_model_uncertainty_reasons(memory))),
                         ),
                         extraction=ExtractionMetadata(
                             extractor="omi_production_memory_extractor",
@@ -368,7 +374,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         return "utils.prompts.extract_memories_prompt"
 
     def _extraction_notes(self) -> list[str]:
-        notes = []
+        notes: list[str] = []
         if self.high_recall:
             notes.append("high_recall")
         if self.typed:
@@ -442,7 +448,7 @@ def _extract_memories_with_production_prompt(
             + ("\n\n" + _VOICE_RECALL_EXTRA_GUIDANCE if is_voice_recall_route else "")
         ),  # v4: source-aware
     }
-    prompt_value = prompt.invoke(prompt_inputs)
+    prompt_value = prompt.invoke(prompt_inputs)  # type: ignore[reportUnknownMemberType]
     raw_response = None
     parsed_response = None
     max_attempts = max(1, retry_attempts + 1)
@@ -532,7 +538,7 @@ def _validated_predicate(memory: ProductionLikeMemory) -> str | None:
     to the generic 'related_to' fallback.
     """
     raw = memory.predicate
-    if not raw or not isinstance(raw, str):
+    if not raw:
         return None
     raw_stripped = raw.strip()
 
@@ -714,7 +720,7 @@ def _resolve_predicate(memory: ProductionLikeMemory) -> str:
 
 
 def _model_uncertainty_reasons(memory: ProductionLikeMemory) -> list[str]:
-    reasons = []
+    reasons: list[str] = []
     for reason in memory.uncertainty_reasons or []:
         normalized = _UNCERTAINTY_REASON_ALIASES.get(reason, reason)
         if normalized in _KNOWN_UNCERTAINTY_REASONS:
@@ -724,19 +730,25 @@ def _model_uncertainty_reasons(memory: ProductionLikeMemory) -> list[str]:
 
 def _frame_arguments(arguments: dict[str, object], confidence: str) -> dict[str, FrameObject]:
     return {
-        str(key): FrameObject(object_type="literal", value=_frame_argument_value(value), confidence=confidence)
+        str(key): FrameObject(
+            object_type="literal", value=_frame_argument_value(value), confidence=cast(ConfidenceLabel, confidence)
+        )
         for key, value in (arguments or {}).items()
         if value is not None and value != ""
     }
 
 
-def _frame_argument_value(value: object) -> object:
+def _frame_argument_value(value: object) -> str | int | float | bool | dict[str, Any] | None:
     if isinstance(value, list):
-        return ", ".join(str(item) for item in value)
+        items = cast(Iterable[object], value)
+        return ", ".join(str(item) for item in items)
     if isinstance(value, tuple):
-        return ", ".join(str(item) for item in value)
-    if isinstance(value, (str, int, float, bool, dict)) or value is None:
+        items = cast(Iterable[object], value)
+        return ", ".join(str(item) for item in items)
+    if isinstance(value, (str, int, float, bool)) or value is None:
         return value
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
     return json.dumps(value, sort_keys=True, default=str)
 
 
@@ -756,7 +768,7 @@ def _frame_modality(memory: ProductionLikeMemory) -> Modality:
     return Modality(kind="asserted")
 
 
-def _frame_polarity(memory: ProductionLikeMemory) -> str:
+def _frame_polarity(memory: ProductionLikeMemory) -> Literal["negative", "neutral"]:
     """Expose explicit stopped/negated state changes for conflict routing and scoring."""
     return "negative" if _resolve_predicate(memory) == "is_no_longer_true" else "neutral"
 
@@ -764,19 +776,15 @@ def _frame_polarity(memory: ProductionLikeMemory) -> str:
 _memory_llm_logged = False  # module-level flag: has the LLM endpoint been logged?
 
 
-def _memory_llm(temperature: float = 0.0):
+def _memory_llm(temperature: float | None = 0.0):
     global _memory_llm_logged
-    model = os.environ.get("OMI_MEMORY_PIPELINE_MODEL", "gpt-4.1-mini")
-    base_url = os.environ.get("OPENAI_BASE_URL", "")
     # Log resolved endpoint once for debuggability — catches credential mismatches early
     if not _memory_llm_logged:
-        url_preview = base_url or "(default OpenAI)"
-        print(f"[pipeline-llm] model={model}  base_url={url_preview}")
+        print(f"[pipeline-llm] feature=memories route={get_provider('memories')}/{get_model('memories')}")
         _memory_llm_logged = True
-    kwargs: dict = dict(model=model, temperature=temperature, request_timeout=120, max_retries=1)
-    if base_url:
-        kwargs["base_url"] = base_url
-    return ChatOpenAI(**kwargs)
+    if temperature is not None:
+        return get_llm("memories").bind(temperature=temperature)
+    return get_llm("memories")
 
 
 def _language_instruction(language: str | None) -> str:
@@ -785,7 +793,13 @@ def _language_instruction(language: str | None) -> str:
     return "Write all extracted memories/learnings in English."
 
 
-def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> dict:
+class _CalibrationResult(TypedDict):
+    confidence: str
+    uncertainty_reasons: list[str]
+    sensitivity: SensitivityClassification
+
+
+def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> _CalibrationResult:
     text = memory.content.casefold()
     confidence = "medium"
     uncertainty_reasons: list[str] = []
@@ -891,7 +905,7 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         "uncertainty_reasons": sorted(set(uncertainty_reasons)),
         "sensitivity": SensitivityClassification(
             level=sensitivity_level,
-            categories=categories,
+            categories=cast(Any, categories),
             auto_store_allowed=not review_required,
             review_required=review_required,
         ),
@@ -1128,32 +1142,6 @@ def _has_health_signal(text: str) -> bool:
     return any(term in text for term in terms)
 
 
-def _has_named_entities(text: str) -> bool:
-    """Check if text contains likely named entities (proper nouns, places, organizations).
-
-    Uses simple heuristics: capitalized words that aren't sentence-starters,
-    plus known patterns like multi-word capitalized sequences.
-    """
-    import re
-
-    # Look for capitalized words not at start of sentence
-    # Patterns like "John", "Paris", "Google", "Monday", etc.
-    mid_sentence_capitalized = re.findall(r'(?:^|\.\s+|\!\s+|\?\s+)\s*([A-Z][a-z]+)\b', text)  # sentence starts
-    all_capitalized = re.findall(r'\b([A-Z][a-z]{2,})\b', text)
-    # Named entities are capitalized words beyond sentence starters
-    non_start_capitalized = [w for w in all_capitalized if w not in set(mid_sentence_capitalized)]
-    if len(non_start_capitalized) >= 1:
-        return True
-    # Also check for common entity patterns (dates, places with prepositions)
-    entity_patterns = re.findall(
-        r'\b(?:in|at|on|from|to)\s+[A-Z][a-z]+|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
-        r'|(?:January|February|March|April|May|June|July|August|September|October|November|December)'
-        r'|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}',
-        text,
-    )
-    return len(entity_patterns) >= 1
-
-
 _EVIDENCE_STOPWORDS = {
     "a",
     "about",
@@ -1184,23 +1172,6 @@ _EVIDENCE_STOPWORDS = {
     "we",
     "with",
 }
-
-
-def _find_supporting_quote(
-    memory_content: str,
-    events: list[RawContextEvent],
-    *,
-    quote_anchor: str | None = None,
-) -> str | None:
-    """Return the source quote that best supports the memory content."""
-    if quote_anchor and _quote_anchor_is_supported(quote_anchor, events):
-        return quote_anchor.strip()
-    if not events:
-        return None
-    best_event = max(events, key=lambda e: _evidence_overlap_count(memory_content, e.text or ""))
-    if best_event.text:
-        return best_event.text
-    return events[0].text or None
 
 
 def _find_supporting_quote_for_event(
@@ -1290,7 +1261,7 @@ def _meaningful_words(text: str) -> set[str]:
 
 
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
-    grouped = defaultdict(list)
+    grouped: defaultdict[str, list[RawContextEvent]] = defaultdict(list)
     for event in events:
         conversation_id = event.source_ref.conversation_id or "offline"
         grouped[conversation_id].append(event)
@@ -1298,7 +1269,7 @@ def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[Raw
         grouped[conversation_id] = sorted(
             grouped_events,
             key=lambda event: (
-                (event.start_at or event.end_at).timestamp() if (event.start_at or event.end_at) else 0.0,
+                event.start_at.timestamp() if event.start_at else (event.end_at.timestamp() if event.end_at else 0.0),
                 event.order or 0,
                 event.event_id,
             ),
@@ -1370,17 +1341,11 @@ def _actor_subject(actor: ActorDescriptor | None):
     )
 
 
-def _category_value(category) -> str:
+def _category_value(category: Any) -> str:
     return getattr(category, "value", str(category))
 
 
-def _frame_type(category) -> str:
+def _frame_type(category: Any) -> Literal["interest", "personal_fact"]:
     if _category_value(category) == "interesting":
         return "interest"
     return "personal_fact"
-
-
-def _predicate(category) -> str:
-    if _category_value(category) == "interesting":
-        return "learned"
-    return "related_to"

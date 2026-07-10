@@ -34,7 +34,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     PlatformManager.instance.analytics.subscriptionCancelFlowStarted();
   }
 
-  static const _reasons = [
+  static final _reasons = [
     _Reason('too_expensive', FontAwesomeIcons.wallet),
     _Reason('not_using_enough', FontAwesomeIcons.clock),
     _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
@@ -499,7 +499,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     );
   }
 
-  Widget _featureRow(IconData icon, String text) {
+  Widget _featureRow(FaIconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -533,6 +533,6 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
 
 class _Reason {
   final String key;
-  final IconData icon;
+  final FaIconData icon;
   const _Reason(this.key, this.icon);
 }

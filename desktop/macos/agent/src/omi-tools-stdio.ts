@@ -19,6 +19,7 @@ import {
   toolManifestEntry,
   toolsForAdapter,
 } from "./runtime/omi-tool-manifest.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -42,13 +43,9 @@ function logErr(msg: string): void {
   process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
 }
 
-function envProtocolVersion(): 2 | undefined {
-  return process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined;
-}
-
 function activeOmiContext(): Record<string, unknown> {
   const envBase = {
-    protocolVersion: envProtocolVersion(),
+    protocolVersion: PROTOCOL_VERSION,
     adapterId: process.env.OMI_ADAPTER_ID,
   };
   if (process.env.OMI_CONTEXT_FILE) {
@@ -75,17 +72,15 @@ function activeOmiContext(): Record<string, unknown> {
   }
   return {
     ...envBase,
-    ...(envProtocolVersion() === 2
-      ? {}
-      : {
-          requestId: process.env.OMI_REQUEST_ID,
-          clientId: process.env.OMI_CLIENT_ID,
-          sessionId: process.env.OMI_SESSION_ID,
-          runId: process.env.OMI_RUN_ID,
-          attemptId: process.env.OMI_ATTEMPT_ID,
-          adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
-          legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
-        }),
+    requestId: process.env.OMI_REQUEST_ID,
+    clientId: process.env.OMI_CLIENT_ID,
+    sessionId: process.env.OMI_SESSION_ID,
+    runId: process.env.OMI_RUN_ID,
+    attemptId: process.env.OMI_ATTEMPT_ID,
+    surfaceKind: process.env.OMI_SURFACE_KIND,
+    externalRefKind: process.env.OMI_EXTERNAL_REF_KIND,
+    externalRefId: process.env.OMI_EXTERNAL_REF_ID,
+    adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
   };
 }
 
@@ -153,8 +148,8 @@ async function requestSwiftTool(
   }
 
   const context = activeOmiContext();
-  if (context.protocolVersion === 2 && (context.contextError || !context.requestId || !context.clientId)) {
-    return `Error: missing active Omi request context for v2 tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
+  if (context.contextError || !context.requestId || !context.clientId) {
+    return `Error: missing active Omi request context for tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
   }
 
   return new Promise<string>((resolve) => {
@@ -173,13 +168,14 @@ async function requestSwiftTool(
 // --- MCP tool definitions ---
 
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
+const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
 
 // Tool order is owned by the canonical manifest projection.
-const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
 const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
-const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
 
 // --- JSON-RPC handling ---
 
@@ -293,33 +289,6 @@ async function handleJsonRpc(
       } else if (toolName === "get_daily_recap") {
         const daysAgo = (args.days_ago as number) ?? 1;
         const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "get_task_agent_status") {
-        const result = await requestSwiftTool("get_task_agent_status", {});
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "spawn_agent") {
-        const result = await requestSwiftTool("spawn_agent", args);
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "manage_agent_pills") {
-        const result = await requestSwiftTool("manage_agent_pills", args);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",

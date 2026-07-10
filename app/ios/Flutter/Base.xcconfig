@@ -1,1 +1,6 @@
 APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12
+
+// Ray-Ban Meta (Meta Wearables DAT) credentials — optional, git-ignored.
+// Copy RayBanMetaCredentials.xcconfig.template to RayBanMetaCredentials.xcconfig
+// and fill in values from https://wearables.developer.meta.com
+#include? "RayBanMetaCredentials.xcconfig"

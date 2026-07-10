@@ -29,6 +29,14 @@ type Session = {
 
 const sessions = new Map<string, Session>()
 
+export function buildListenHeaders(token: string, deviceIdHash: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'windows',
+    'X-Device-Id-Hash': deviceIdHash
+  }
+}
+
 function emit(ownerId: number, msg: ListenMessage): void {
   const wc = webContents.fromId(ownerId)
   if (wc && !wc.isDestroyed()) {
@@ -40,7 +48,11 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   const existing = sessions.get(args.sessionId)
   if (existing) {
     // Already running — caller bug. Tear the old one down to avoid leaks.
-    try { existing.ws.close() } catch { /* ignore */ }
+    try {
+      existing.ws.close()
+    } catch {
+      /* ignore */
+    }
     sessions.delete(args.sessionId)
   }
   // Decode (not verify) the JWT to derive the uid for the query param; the
@@ -60,7 +72,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   const base = buildEndpoint(args.language)
   const url = uid ? `${base}&uid=${encodeURIComponent(uid)}` : base
   const ws = new WebSocket(url, {
-    headers: { Authorization: `Bearer ${args.token}` }
+    headers: buildListenHeaders(args.token, args.deviceIdHash)
   })
   ws.binaryType = 'arraybuffer'
   const session: Session = { ws, ownerId: owner.id, source: args.source, closed: false }
@@ -128,7 +140,11 @@ function stopSession(sessionId: string): void {
   if (!s) return
   s.closed = true
   sessions.delete(sessionId)
-  try { s.ws.close() } catch { /* ignore */ }
+  try {
+    s.ws.close()
+  } catch {
+    /* ignore */
+  }
 }
 
 export function registerOmiListenHandlers(): void {

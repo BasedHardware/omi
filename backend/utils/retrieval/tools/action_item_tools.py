@@ -2,11 +2,11 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone, tzinfo
+from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.action_items as action_items_db
@@ -30,7 +30,7 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
-def _format_local(dt, display_tz, tz_label: str) -> str:
+def _format_local(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
     """Render a stored timestamp in the user's local timezone with a tz label.
 
     Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
@@ -51,7 +51,7 @@ MAX_ACTION_ITEMS_FOR_LLM = 200
 MAX_RESULT_CHARS = 60000
 
 
-def _cap_action_items_for_llm(items: list):
+def _cap_action_items_for_llm(items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
     """Keep at most ``MAX_ACTION_ITEMS_FOR_LLM`` action items for the chat model.
 
     Items arrive in the order the database returned them, so this keeps the first ones. Returns
@@ -95,7 +95,7 @@ def get_action_items_tool(
     end_date: Optional[str] = None,
     due_start_date: Optional[str] = None,
     due_end_date: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve the user's action items (tasks, to-dos) with optional filters.
@@ -157,31 +157,34 @@ def get_action_items_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 get_action_items_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            config = None
+            cfg = None
 
     # Safely access config
     try:
-        if config is None:
+        if cfg is None:
             logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
-        if 'configurable' not in config:
+        if 'configurable' not in cfg:
             logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(config.keys()) if config else 'None'}"
+                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
             )
             return "Error: Configuration format invalid"
 
-        uid = config['configurable'].get('user_id')
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
         if not uid:
             logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(config['configurable'].keys()) if config.get('configurable') else 'None'}"
+                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
             )
             return "Error: User ID not found in configuration"
 
@@ -192,9 +195,6 @@ def get_action_items_tool(
 
         traceback.print_exc()
         return f"Error: Configuration error - {str(config_error)}"
-
-    # Get safety guard from config if available
-    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap at 500 per call
     if limit > 500:
@@ -252,7 +252,7 @@ def get_action_items_tool(
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date} - {str(e)}"
 
     # Get action items
-    action_items = []
+    action_items: List[Dict[str, Any]] = []
     try:
         logger.info(f"🔍 Calling action_items_db.get_action_items with:")
         logger.info(f"   uid: {uid}")
@@ -363,7 +363,7 @@ def create_action_item_tool(
     description: str,
     due_at: Optional[str] = None,
     conversation_id: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Create a new action item (task/to-do) for the user.
@@ -399,22 +399,25 @@ def create_action_item_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 create_action_item_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ create_action_item_tool - config not found in context variable")
-            config = None
+            cfg = None
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ create_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ create_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -425,9 +428,8 @@ def create_action_item_tool(
     # Validate description
     if not description or not description.strip():
         return "Error: Description is required to create an action item."
-
     # Prepare action item data
-    action_item_data = {
+    action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
         'conversation_id': conversation_id,
@@ -512,7 +514,7 @@ def update_action_item_tool(
     completed: Optional[bool] = None,
     description: Optional[str] = None,
     due_at: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Update an action item's status, description, or due date.
@@ -551,22 +553,25 @@ def update_action_item_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 update_action_item_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ update_action_item_tool - config not found in context variable")
-            config = None
+            cfg = None
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ update_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ update_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -580,8 +585,8 @@ def update_action_item_tool(
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
 
     # Prepare update data
-    update_data = {}
-    changes = []
+    update_data: Dict[str, Any] = {}
+    changes: List[str] = []
 
     if completed is not None:
         update_data['completed'] = completed
@@ -632,6 +637,8 @@ def update_action_item_tool(
 
         # Get updated item for confirmation
         updated_item = action_items_db.get_action_item(uid, action_item_id)
+        if not updated_item:
+            return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
 

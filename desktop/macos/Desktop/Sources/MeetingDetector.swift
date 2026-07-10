@@ -15,11 +15,15 @@ final class MeetingDetector {
 
     /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
     private(set) var isMeetingActive: Bool = false
+    /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
+    /// means "unknown", not "no meeting".
+    private(set) var hasObservedState: Bool = false
 
     private let pollInterval: TimeInterval
     private let offGracePeriod: TimeInterval
     private let isMeetingNow: () -> Bool
     private let now: () -> Date
+    private let onInitialStateObserved: () -> Void
     private let onChange: (Bool) -> Void
 
     private var timer: Timer?
@@ -35,6 +39,7 @@ final class MeetingDetector {
     ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
     ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
     ///   - now: clock (injectable for tests).
+    ///   - onInitialStateObserved: called on the main actor once the first async probe completes.
     ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
     init(
         pollInterval: TimeInterval = 4.0,
@@ -44,12 +49,14 @@ final class MeetingDetector {
             return ConferencingApps.browserCallWindowPresent()
         },
         now: @escaping () -> Date = { Date() },
+        onInitialStateObserved: @escaping () -> Void = {},
         onChange: @escaping (Bool) -> Void
     ) {
         self.pollInterval = pollInterval
         self.offGracePeriod = offGracePeriod
         self.isMeetingNow = isMeetingNow
         self.now = now
+        self.onInitialStateObserved = onInitialStateObserved
         self.onChange = onChange
     }
 
@@ -113,6 +120,9 @@ final class MeetingDetector {
     /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
     /// driven by the poll timer and workspace notifications via `tick()`.
     func applyDetected(_ detected: Bool) {
+        let hadObservedState = hasObservedState
+        hasObservedState = true
+
         if detected {
             // Meeting present: cancel any pending-off and ensure we're active.
             pendingOffDeadline = nil
@@ -130,6 +140,10 @@ final class MeetingDetector {
         } else {
             // Already inactive and still no meeting.
             pendingOffDeadline = nil
+        }
+
+        if !hadObservedState {
+            onInitialStateObserved()
         }
     }
 

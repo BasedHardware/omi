@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import timezone
+from typing import Any, Dict, List, Optional, cast
 
 from database._client import db as default_db_client
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
@@ -37,7 +37,22 @@ _REQUIRED_SCHEMA_FIELDS = {
 }
 
 
-def _typesense_client():
+Payload = Dict[str, Any]
+
+
+def _payload_or_empty(value: object) -> Payload:
+    return cast(Payload, value) if isinstance(value, dict) else {}
+
+
+def _payload_list(value: object) -> List[Payload]:
+    return (
+        [cast(Payload, item) for item in cast(List[object], value) if isinstance(item, dict)]
+        if isinstance(value, list)
+        else []
+    )
+
+
+def _typesense_client() -> Any:
     from utils.conversations.search import client
 
     return client
@@ -62,18 +77,19 @@ def is_indexable_long_term_atom(item: MemoryItem) -> bool:
         item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and item.processing_state == ProcessingState.processed
+        and (item.promotion or {}).get("user_review") is not False
         and bool((item.content or "").strip())
     )
 
 
-def user_allows_atom_keyword_index(uid: str, *, db_client=None) -> bool:
+def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
     """Canonical cohort + conversation-Typesense-compatible data protection."""
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return False
     client = db_client if db_client is not None else default_db_client
-    user_doc = client.document(f"users/{uid}").get()
-    user_data = user_doc.to_dict() if getattr(user_doc, "exists", False) else {}
-    return (user_data or {}).get("data_protection_level", "enhanced") != "e2ee"
+    user_doc: Any = client.document(f"users/{uid}").get()
+    user_data = _payload_or_empty(user_doc.to_dict() if getattr(user_doc, "exists", False) else {})
+    return user_data.get("data_protection_level", "enhanced") != "e2ee"
 
 
 def _created_at_epoch(item: MemoryItem) -> int:
@@ -89,17 +105,16 @@ def _entity_terms_for_item(item: MemoryItem) -> str:
     subject_entity_id = getattr(item, "subject_entity_id", None)
     if isinstance(subject_entity_id, str) and subject_entity_id.strip():
         terms.append(subject_entity_id.strip())
-    arguments = getattr(item, "arguments", None) or {}
-    if isinstance(arguments, dict):
-        terms.extend(str(value).strip() for value in arguments.values() if str(value).strip())
-    promotion = item.promotion or {}
+    arguments = _payload_or_empty(getattr(item, "arguments", None))
+    terms.extend(str(value).strip() for value in arguments.values() if str(value).strip())
+    promotion = _payload_or_empty(item.promotion)
     for key in ("entity", "entity_name", "subject"):
         value = promotion.get(key)
         if isinstance(value, str) and value.strip():
             terms.append(value.strip())
     aliases = promotion.get("aliases")
     if isinstance(aliases, list):
-        terms.extend(str(alias).strip() for alias in aliases if str(alias).strip())
+        terms.extend(str(alias).strip() for alias in cast(List[object], aliases) if str(alias).strip())
     return " ".join(dict.fromkeys(terms))
 
 
@@ -107,7 +122,7 @@ def _predicate_for_item(item: MemoryItem) -> str:
     predicate = getattr(item, "predicate", None)
     if isinstance(predicate, str) and predicate.strip():
         return predicate.strip()
-    promotion = item.promotion or {}
+    promotion = _payload_or_empty(item.promotion)
     promotion_predicate = promotion.get("predicate")
     return promotion_predicate.strip() if isinstance(promotion_predicate, str) else ""
 
@@ -138,7 +153,7 @@ def ensure_memories_collection() -> None:
     """Create the canonical atom Typesense collection when missing (idempotent)."""
     collection_name = memories_collection_name()
     try:
-        schema = _typesense_client().collections[collection_name].retrieve()
+        schema = _payload_or_empty(_typesense_client().collections[collection_name].retrieve())
     except Exception:
         schema = {
             "name": collection_name,
@@ -159,7 +174,7 @@ def ensure_memories_collection() -> None:
         _typesense_client().collections.create(schema)
         return
 
-    actual_fields = {field.get("name") for field in schema.get("fields", [])}
+    actual_fields = {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
     missing = sorted(_REQUIRED_SCHEMA_FIELDS - actual_fields)
     if missing:
         raise RuntimeError(
@@ -168,7 +183,7 @@ def ensure_memories_collection() -> None:
         )
 
 
-def upsert_atom_keyword_doc(item: MemoryItem, *, db_client=None) -> bool:
+def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     """Upsert one long-term atom when indexable; no-op otherwise."""
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
         return False
@@ -189,7 +204,7 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client=None) -> bool:
         return False
 
 
-def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> None:
+def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) -> None:
     """Remove one keyword doc. Canonical-gated; legacy users are no-ops."""
     if not user_allows_atom_keyword_index(uid, db_client=db_client):
         return
@@ -201,12 +216,14 @@ def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> None
         logger.warning("delete_atom_keyword_doc failed uid=%s memory_id=%s: %s", uid, memory_id, exc)
 
 
-def purge_user_atom_keyword_index(uid: str, *, db_client=None, force: bool = False) -> int:
+def purge_user_atom_keyword_index(
+    uid: str, *, db_client: Any = None, force: bool = False, raise_on_failure: bool = False
+) -> int:
     """Delete all keyword docs for a canonical user. Returns deleted count when available."""
     if not force and not user_allows_atom_keyword_index(uid, db_client=db_client):
         return 0
     try:
-        result = (
+        result = _payload_or_empty(
             _typesense_client()
             .collections[memories_collection_name()]
             .documents.delete({"filter_by": f"userId:={uid}"})
@@ -214,10 +231,12 @@ def purge_user_atom_keyword_index(uid: str, *, db_client=None, force: bool = Fal
         return int(result.get("num_deleted") or 0)
     except Exception as exc:
         logger.warning("purge_user_atom_keyword_index failed uid=%s: %s", uid, exc)
+        if raise_on_failure:
+            raise
         return 0
 
 
-def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client=None) -> bool:
+def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client: Any = None) -> bool:
     """Index or purge one atom based on its current authoritative state."""
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
         return True
@@ -232,9 +251,9 @@ def keyword_search_memory_ids(
     query: str,
     *,
     limit: int = 5,
-    start_date: int = None,
-    end_date: int = None,
-    db_client=None,
+    start_date: Optional[int] = None,
+    end_date: Optional[int] = None,
+    db_client: Any = None,
 ) -> List[str]:
     """Typesense keyword search returning memory ids for hybrid retrieval.
 
@@ -262,20 +281,22 @@ def keyword_search_memory_ids(
             "per_page": max(1, min(limit, 60)),
             "page": 1,
         }
-        results = _typesense_client().collections[memories_collection_name()].documents.search(search_parameters)
+        results = _payload_or_empty(
+            _typesense_client().collections[memories_collection_name()].documents.search(search_parameters)
+        )
         memory_ids: List[str] = []
-        for hit in results.get("hits", []):
-            doc = hit.get("document") or {}
+        for hit in _payload_list(results.get("hits")):
+            doc = _payload_or_empty(hit.get("document"))
             memory_id = doc.get("memory_id") or doc.get("id")
             if memory_id:
-                memory_ids.append(memory_id)
+                memory_ids.append(str(memory_id))
         return memory_ids
     except Exception as exc:
         logger.warning("keyword_search_memory_ids failed uid=%s, falling back to vector-only: %s", uid, exc)
         return []
 
 
-def rebuild_atom_keyword_index(uid: str, *, db_client=None) -> AtomKeywordRebuildReport:
+def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywordRebuildReport:
     """Rebuild the keyword index for one user from the canonical store (idempotent)."""
     client = db_client if db_client is not None else default_db_client
     if not user_allows_atom_keyword_index(uid, db_client=client):

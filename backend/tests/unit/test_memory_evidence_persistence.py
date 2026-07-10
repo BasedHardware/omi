@@ -1,61 +1,8 @@
 """Offline tests for memory evidence persistence helpers."""
 
-import os
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_test_secret_key_for_unit_tests_only_000000000000000000')
-
-
-class _FakeQuery:
-    DESCENDING = 'DESCENDING'
-
-
-class _FakeDB:
-    def collection(self, *args, **kwargs):
-        return MagicMock()
-
-    def transaction(self):
-        return MagicMock()
-
-
-def _transactional(func):
-    return func
-
-
-google_stub = sys.modules.setdefault('google', types.ModuleType('google'))
-cloud_stub = sys.modules.setdefault('google.cloud', types.ModuleType('google.cloud'))
-
-firestore_stub = sys.modules.setdefault('google.cloud.firestore', types.ModuleType('google.cloud.firestore'))
-firestore_stub.Query = _FakeQuery
-cloud_stub.firestore = firestore_stub
-google_stub.cloud = cloud_stub
-
-firestore_v1_stub = sys.modules.setdefault('google.cloud.firestore_v1', types.ModuleType('google.cloud.firestore_v1'))
-firestore_v1_stub.FieldFilter = MagicMock
-firestore_v1_stub.transactional = _transactional
-
-if 'database._client' not in sys.modules:
-    client_stub = types.ModuleType('database._client')
-    client_stub.db = _FakeDB()
-    client_stub.get_firestore_client = lambda: client_stub.db
-    client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
-    sys.modules['database._client'] = client_stub
-else:
-    sys.modules['database._client'].db = getattr(sys.modules['database._client'], 'db', _FakeDB())
-
-for mod_name in ['database.users', 'database.redis_db']:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
-
-encryption_stub = types.ModuleType('utils.encryption')
-encryption_stub.encrypt = lambda data, uid: f"encrypted:{uid}:{data}"
-encryption_stub.decrypt = lambda data, uid: data.removeprefix(f"encrypted:{uid}:")
-sys.modules['utils.encryption'] = encryption_stub
-
-from database import memories as memories_db  # noqa: E402
+from database import memories as memories_db
 
 
 def _memory(evidence, *, content='memory', created_at=None, level='standard'):

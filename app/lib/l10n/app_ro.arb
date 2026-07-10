@@ -1,5 +1,6 @@
 {
     "@@locale": "ro",
+    "sessionExpiredSignInAgain": "Sesiunea a expirat — autentifică-te din nou.",
     "appTitle": "Omi",
     "conversationTab": "Conversație",
     "transcriptTab": "Transcriere",
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.",
     "transcribeLaterTitle": "Transcrie mai târziu",
     "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
-    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
+    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
     "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
     "unmute": "Reactivează sunetul",
     "newRecording": "Înregistrare nouă",
@@ -3103,5 +3104,44 @@
     "deviceOnboardingIntroSubtitle": "Un tur rapid și practic prin tot ce poate face Omi-ul tău.",
     "deviceOnboardingIntroDuration": "Aproximativ 1 minut",
     "jumpToLatestMessage": "Sari la cel mai recent mesaj",
-    "latest": "Recent"
+    "latest": "Recent",
+    "flashFirmware": "Instalați firmware-ul",
+    "pendantRecordingTitle": "Înregistrare pe pandantiv",
+    "pendantRecordingNote": "Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.",
+    "pendantSyncingRecordings": "Se sincronizează înregistrările de pe pandantivul tău…",
+    "pendantMinutesStored": "~{minutes} min stocat(e)",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare.",
+    "connectRayBanMeta": "Conectează Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Folosește ochelarii Ray-Ban Meta ca dispozitiv de captură Omi pentru conversații și context vizual. Omi va deschide aplicația Meta AI pentru a-ți conecta ochelarii.",
+    "raybanMetaOpenMetaAI": "Conectează prin Meta AI",
+    "raybanMetaWaitingForMetaAI": "Finalizează conectarea în aplicația Meta AI, apoi revino aici.",
+    "raybanMetaCheckAgain": "Verifică din nou",
+    "raybanMetaAllowCamera": "Permite camera pe ochelari",
+    "raybanMetaCameraExplanation": "Omi folosește camera ochelarilor tăi pentru a adăuga fotografii la conversațiile tale. Poți sări peste acest pas și folosi doar audio.",
+    "raybanMetaSkipForNow": "Omite deocamdată",
+    "raybanMetaAudioOnlyTitle": "Mod doar audio Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Această versiune de Omi poate folosi microfonul ochelarilor tăi prin Bluetooth. Captura de fotografii necesită versiunea Omi pentru dezvoltatori Meta.",
+    "raybanMetaMusicPauseNote": "Muzica de pe telefonul tău se întrerupe cât timp este utilizat microfonul ochelarilor.",
+    "raybanMetaContinue": "Continuă",
+    "raybanMetaCapturePhoto": "Fă o fotografie",
+    "raybanMetaPhotoRequested": "Fotografie solicitată — va apărea în conversația ta.",
+    "raybanMetaMicrophoneReady": "Microfon pregătit",
+    "raybanMetaImageCaptureReady": "Captură de imagine pregătită",
+    "raybanMetaImageCaptureUnavailable": "Indisponibil în modul doar audio",
+    "raybanMetaCamera": "Cameră",
+    "errorConnectingRayBanMeta": "Eroare la conectarea la Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

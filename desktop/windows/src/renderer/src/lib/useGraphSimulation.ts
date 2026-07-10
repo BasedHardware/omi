@@ -253,11 +253,13 @@ export class GraphSimulation {
 
   // Advance one tick per render frame, but only while the layout is still warm.
   // Once alpha decays the layout is settled and ticking stops (no idle CPU).
-  settleFrame(): void {
+  settleFrame(): boolean {
     if (this.sim.alpha() > 0.01) {
       this.sim.tick(1)
       this.clampPositions()
+      return this.sim.alpha() > 0.01
     }
+    return false
   }
 
   // Live simulation node (positions mutate in place each tick). The renderer
@@ -378,6 +380,7 @@ export function useGraphSimulation(
   centerNodeId?: string
 ): { nodes: NodePosition[]; sim: GraphSimulation; reduced: boolean } {
   const simRef = useRef<GraphSimulation>(undefined)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId)
   const reducedRef = useRef(
     typeof window !== 'undefined' &&
@@ -394,6 +397,7 @@ export function useGraphSimulation(
     setNodes(sim.getPositions())
   }, [graph])
 
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   return { nodes, sim: simRef.current, reduced: reducedRef.current }
 }
 

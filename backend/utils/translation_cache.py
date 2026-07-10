@@ -55,7 +55,7 @@ class TranscriptSegmentLanguageCache:
             return False
 
         if not text:
-            return was_in_target_language is not False
+            return True
 
         # Use free local langdetect only (no paid API calls)
         # target_language should already be base-normalized (e.g. "en" not "en-US")

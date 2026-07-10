@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from config.memory_rollout import MemoryRolloutMode
 from models.memory_search_gateway import SearchMode
-from models.product_memory import MemoryTier
+from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
     VectorCandidateResult as _VectorCandidateResult,
@@ -133,7 +133,7 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
     external_batch = '.create_external_memory_batch('
     guard_call = 'guard_legacy_memory_write('
-    legacy_write = 'memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])'
+    legacy_write = 'memory_write_payload(memory, MemoryApiExposure.LEGACY)'
     vector_write = 'upsert_memory_vectors_batch('
     assert pin_call in route_source
     assert categorization in route_source
@@ -411,6 +411,28 @@ def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale
     assert all((item['archive_default_visible'] is False for item in results))
     assert all((item['policy']['consumer'] == 'developer_api' for item in results))
     assert all((item['policy']['archive_capability'] is False for item in results))
+
+
+def test_developer_default_memory_adapter_excludes_pending_admission_text():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    pending = _memory_item(
+        'pending-explicit',
+        now=now,
+        content='coffee pending explicit memory',
+        processing_state=ProcessingState.pending,
+    )
+    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+    decision = read_default_read_rollout(
+        uid='u1',
+        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
+        consumer='developer_api',
+    )
+
+    result = search_memory_default_developer_memories(
+        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=decision, now=now
+    )
+
+    assert result.memories == []
 
 
 def test_developer_default_memory_response_shape_marks_compatibility_defaults_without_silent_fabrication():

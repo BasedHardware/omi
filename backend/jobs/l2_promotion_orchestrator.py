@@ -17,19 +17,11 @@ class L1PromotionCandidateStore(Protocol):
     ) -> List[Dict[str, Any]]: ...
 
 
-@dataclass(frozen=True)
-class L2PromotionOrchestratorConfig:
-    whitelisted_uids: set[str] = field(default_factory=set)
-    mode: str = 'forward'
-    enable_backfill: bool = False
-    per_user_limit: Optional[int] = None
-    selector: PromotionSelectorConfig = field(default_factory=PromotionSelectorConfig)
+CandidateFetcher = Callable[[str, str, Optional[int]], Iterable[L1PromotionCandidate | Dict[str, Any]]]
 
-    def __post_init__(self):
-        if self.mode not in {'forward', 'backfill'}:
-            raise ValueError('mode must be forward or backfill')
-        if self.mode == 'backfill' and not self.enable_backfill:
-            raise ValueError('backfill mode requires enable_backfill=True')
+
+def _empty_uid_set() -> set[str]:
+    return set()
 
 
 @dataclass(frozen=True)
@@ -44,13 +36,25 @@ class L2PromotionOrchestratorReport:
         return len(self.work_items)
 
 
-CandidateFetcher = Callable[[str, str, Optional[int]], Iterable[L1PromotionCandidate | Dict[str, Any]]]
+@dataclass(frozen=True)
+class L2PromotionOrchestratorConfig:
+    whitelisted_uids: set[str] = field(default_factory=_empty_uid_set)
+    mode: str = 'forward'
+    enable_backfill: bool = False
+    per_user_limit: Optional[int] = None
+    selector: PromotionSelectorConfig = field(default_factory=PromotionSelectorConfig)
+
+    def __post_init__(self) -> None:
+        if self.mode not in {'forward', 'backfill'}:
+            raise ValueError('mode must be forward or backfill')
+        if self.mode == 'backfill' and not self.enable_backfill:
+            raise ValueError('backfill mode requires enable_backfill=True')
 
 
 def _fetch_candidates_from_store(
     store: L1PromotionCandidateStore,
 ) -> CandidateFetcher:
-    def fetch(uid: str, mode: str, limit: Optional[int]):
+    def fetch(uid: str, mode: str, limit: Optional[int]) -> Iterable[L1PromotionCandidate | Dict[str, Any]]:
         return store.list_l1_promotion_candidates(uid, mode=mode, limit=limit)
 
     return fetch

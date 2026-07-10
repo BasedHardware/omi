@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_consolidation import ConsolidationReport
 from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
+from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
 from utils.memory.memory_system import MemorySystem
 from utils.memory.short_term_promotion import (
     CanonicalShortTermLifecycleReport,
@@ -27,6 +29,18 @@ from utils.memory.short_term_promotion import (
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _refresh_short_term_promotion_runtime():
+    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
+    globals().update(
+        {
+            "CanonicalShortTermLifecycleReport": short_term_promotion.CanonicalShortTermLifecycleReport,
+            "ShortTermPromotionReport": short_term_promotion.ShortTermPromotionReport,
+            "run_canonical_short_term_maintenance": short_term_promotion.run_canonical_short_term_maintenance,
+        }
+    )
+
+
 def test_maintenance_runs_consolidation_before_promotion():
     call_order: list[str] = []
     uid = "uid-maint-order"
@@ -35,6 +49,13 @@ def test_maintenance_runs_consolidation_before_promotion():
         patch(
             "utils.memory.short_term_promotion.resolve_memory_system",
             return_value=MemorySystem.CANONICAL,
+        ),
+        patch(
+            "utils.memory.short_term_promotion.run_required_memory_processing",
+            side_effect=lambda *args, **kwargs: (
+                call_order.append("required_processing"),
+                RequiredMemoryProcessingReport(uid=uid),
+            )[1],
         ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
@@ -60,7 +81,7 @@ def test_maintenance_runs_consolidation_before_promotion():
     ):
         run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-order-test")
 
-    assert call_order == ["lifecycle", "consolidation", "promotion"]
+    assert call_order == ["required_processing", "lifecycle", "consolidation", "promotion"]
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] == {"mem_a"}
 
 
@@ -69,6 +90,10 @@ def test_maintenance_defers_promotion_when_consolidation_watermark_blocked():
 
     with (
         patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.run_required_memory_processing",
+            return_value=RequiredMemoryProcessingReport(uid=uid),
+        ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
@@ -97,6 +122,10 @@ def test_maintenance_no_promotion_gate_when_consolidation_not_due():
 
     with (
         patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.run_required_memory_processing",
+            return_value=RequiredMemoryProcessingReport(uid=uid),
+        ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
             return_value=CanonicalShortTermLifecycleReport(uid=uid),
@@ -158,6 +187,10 @@ def test_partial_apply_pass_does_not_promote_stale_or_survivor():
 
     with (
         patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.run_required_memory_processing",
+            return_value=RequiredMemoryProcessingReport(uid=uid),
+        ),
         patch(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
             return_value=CanonicalShortTermLifecycleReport(uid=uid),

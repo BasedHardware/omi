@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from typing import Any, Dict, List, cast
 
 import argparse
 import json
 import os
-import sys
 import time
 
 import httpx
@@ -117,20 +117,20 @@ def main() -> int:
                 'strict': True,
                 'schema': {
                     'type': 'object',
-                    'properties': {'requires_context': {'type': 'boolean'}},
-                    'required': ['requires_context'],
+                    'properties': {'value': {'type': 'boolean'}},
+                    'required': ['value'],
                     'additionalProperties': False,
                 },
             },
         },
-        'metadata': {'omi_feature': 'chat_extraction.requires_context.smoke'},
+        'metadata': {'omi_feature': 'chat_extraction.requires_context'},
     }
 
     with httpx.Client(timeout=20.0) as client:
         _get_ready(client, base_url, headers)
         response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
         _raise_for_status(response, '/v1/chat/completions')
-        body = response.json()
+        body: Dict[str, Any] = cast(Dict[str, Any], response.json())
         if args.check_metrics:
             metrics_token = (args.metrics_token or os.environ.get('METRICS_SECRET') or '').strip()
             if not metrics_token:
@@ -138,7 +138,9 @@ def main() -> int:
                 return 2
             _assert_success_metric(client, base_url, metrics_token)
 
-    content = (body.get('choices') or [{}])[0].get('message', {}).get('content')
+    choices: List[Dict[str, Any]] = cast(List[Dict[str, Any]], body.get('choices') or [{}])
+    message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message', {}))
+    content = message.get('content')
     if not isinstance(content, str):
         print('ERROR: response did not contain choices[0].message.content')
         return 1
@@ -147,8 +149,8 @@ def main() -> int:
     except ValueError:
         print('ERROR: response content was not JSON')
         return 1
-    if not isinstance(decoded.get('requires_context'), bool):
-        print('ERROR: response JSON did not contain boolean requires_context')
+    if not isinstance(decoded.get('value'), bool):
+        print('ERROR: response JSON did not contain boolean value')
         return 1
     print('LLM gateway smoke passed')
     return 0

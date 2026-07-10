@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from utils.memory_ingestion.rollout import (
     benchmark_rows_from_pipeline_outputs,
@@ -61,12 +61,12 @@ def _read_json_or_jsonl(path: Path) -> list[dict[str, Any]]:
     if not text:
         return []
     if text.startswith("["):
-        return json.loads(text)
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
+        return cast(list[dict[str, Any]], json.loads(text))
+    return [cast(dict[str, Any], json.loads(line)) for line in text.splitlines() if line.strip()]
 
 
 def _read_example_id_map(path: Path) -> dict[str, str]:
-    mapping = {}
+    mapping: dict[str, str] = {}
     for line in path.read_text().splitlines():
         if not line.strip():
             continue

@@ -1,11 +1,11 @@
 import Foundation
 
 /// Deterministic, local "Do it for me" for agent frameworks that store their
-/// memory/config locally (OpenClaw, Hermes). Delegating to the in-app agent
-/// proved unreliable (it doesn't reliably fire a file-write tool), so we wire
-/// the Omi memory bank ourselves using each agent's native durable surface.
+/// memory/config locally. Delegating setup to the in-app agent is slower and
+/// less reliable than using each tool's native durable surface directly.
 enum MemoryBankConnector {
   static let marker = "omi-memory-bank"
+  private static let claudeCodeBackupRetentionLimit = 5
   private static var mcpURL: String { MemoryExportDestination.mcpServerURL }
 
   enum ConnectError: LocalizedError {
@@ -21,7 +21,12 @@ enum MemoryBankConnector {
 
   /// Whether this destination connects via a local file write here.
   static func handles(_ destination: MemoryExportDestination) -> Bool {
-    destination == .openclaw || destination == .hermes
+    switch destination {
+    case .claudeCode, .codex, .openclaw, .hermes:
+      return true
+    case .notion, .obsidian, .chatgpt, .claude, .gemini, .agents:
+      return false
+    }
   }
 
   /// Performs the write. Returns a short user-facing success line. Throws
@@ -29,6 +34,8 @@ enum MemoryBankConnector {
   @discardableResult
   static func connect(_ destination: MemoryExportDestination, key: String) throws -> String {
     switch destination {
+    case .claudeCode: return try connectClaudeCode(key: key)
+    case .codex: return try connectCodex(key: key)
     case .openclaw: return try connectOpenClaw(key: key)
     case .hermes: return try connectHermes(key: key)
     default: throw ConnectError.notInstalled("\(destination.title) is not a local memory-bank target.")
@@ -36,10 +43,141 @@ enum MemoryBankConnector {
   }
 
   static var homeOverrideForTesting: URL?
+  static var claudeCLIPathOverrideForTesting: String?
+  static var codexCLIPathOverrideForTesting: String?
   static var openClawCLIPathOverrideForTesting: String?
   static var processTimeoutSecondsForTesting: TimeInterval?
   private static var home: URL { homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser }
   private static var processTimeoutSeconds: TimeInterval { processTimeoutSecondsForTesting ?? 20 }
+
+  // MARK: - Claude Code (~/.claude.json mcpServers)
+
+  private static func connectClaudeCode(key: String) throws -> String {
+    let fm = FileManager.default
+    let config = home.appendingPathComponent(".claude.json")
+    let settings = home.appendingPathComponent(".claude/settings.json")
+    let hasInstallEvidence =
+      fm.fileExists(atPath: config.path)
+      || fm.fileExists(atPath: settings.path)
+      || executablePath(named: "claude", override: claudeCLIPathOverrideForTesting) != nil
+    guard hasInstallEvidence else {
+      throw ConnectError.notInstalled(
+        "Claude Code is not installed. Install it, then try again.")
+    }
+
+    var root: [String: Any] = [:]
+    if fm.fileExists(atPath: config.path) {
+      guard
+        let data = try? Data(contentsOf: config),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        throw ConnectError.invalidConfig(
+          "Claude Code settings are invalid. Fix \(displayPath(for: config)), then try again.")
+      }
+      root = json
+    }
+
+    let server = claudeCodeMCPServer(key: key)
+    var servers = root["mcpServers"] as? [String: Any] ?? [:]
+    if let existing = servers["omi-memory"] as? [String: Any],
+      NSDictionary(dictionary: existing).isEqual(to: server)
+    {
+      return "Claude Code is already connected."
+    }
+
+    try backupClaudeCodeConfigIfNeeded(config)
+    servers["omi-memory"] = server
+    root["mcpServers"] = servers
+    let data = try JSONSerialization.data(
+      withJSONObject: root,
+      options: [.prettyPrinted, .withoutEscapingSlashes])
+    try data.write(to: config, options: [.atomic])
+
+    guard MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: key) else {
+      throw ConnectError.invalidConfig(
+        "Claude Code settings were updated, but Omi could not verify the connection.")
+    }
+    return "Claude Code is now connected."
+  }
+
+  private static func claudeCodeMCPServer(key: String) -> [String: Any] {
+    [
+      "type": "http",
+      "url": mcpURL,
+      "headers": [
+        "Authorization": "Bearer \(key)"
+      ],
+    ]
+  }
+
+  private static func backupClaudeCodeConfigIfNeeded(_ config: URL) throws {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: config.path) else { return }
+    let backupDir = home.appendingPathComponent(".claude/backups", isDirectory: true)
+    try fm.createDirectory(at: backupDir, withIntermediateDirectories: true, attributes: nil)
+    let backup = backupDir.appendingPathComponent(
+      ".claude.json.backup.\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString)")
+    try fm.copyItem(at: config, to: backup)
+    try pruneClaudeCodeBackups(
+      in: backupDir,
+      keepingMostRecent: Self.claudeCodeBackupRetentionLimit)
+  }
+
+  private static func pruneClaudeCodeBackups(
+    in backupDir: URL,
+    keepingMostRecent limit: Int
+  ) throws {
+    guard limit >= 0 else { return }
+    let backups = try FileManager.default
+      .contentsOfDirectory(
+        at: backupDir,
+        includingPropertiesForKeys: nil)
+      .filter { $0.lastPathComponent.hasPrefix(".claude.json.backup.") }
+      .sorted { lhs, rhs in
+        backupTimestamp(lhs) > backupTimestamp(rhs)
+      }
+    for backup in backups.dropFirst(limit) {
+      try FileManager.default.removeItem(at: backup)
+    }
+  }
+
+  private static func backupTimestamp(_ url: URL) -> Int64 {
+    let prefix = ".claude.json.backup."
+    let suffix = url.lastPathComponent.dropFirst(prefix.count)
+    let timestamp = suffix.split(separator: "-", maxSplits: 1).first ?? ""
+    return Int64(timestamp) ?? 0
+  }
+
+  // MARK: - Codex (~/.codex/config.toml)
+
+  private static func connectCodex(key: String) throws -> String {
+    guard let cliPath = executablePath(named: "codex", override: codexCLIPathOverrideForTesting) else {
+      throw ConnectError.notInstalled(
+        "Codex is not available. Install Codex or add the codex command to PATH, then try again.")
+    }
+
+    let codexHome = home.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: true, attributes: nil)
+    do {
+      _ = try runProcess(
+        executable: cliPath,
+        arguments: [
+          "mcp", "add", "omi-memory", "--",
+          "npx", "-y", "mcp-remote", mcpURL,
+          "--header", "Authorization: Bearer \(key)",
+        ],
+        environment: processEnvironment(extra: ["CODEX_HOME": codexHome.path]))
+    } catch {
+      throw ConnectError.invalidConfig(
+        "Codex rejected the connection update: \(sanitizeCommandError(error.localizedDescription))")
+    }
+
+    guard MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: key) else {
+      throw ConnectError.invalidConfig(
+        "Codex was updated, but Omi could not verify the connection.")
+    }
+    return "Codex is now connected."
+  }
 
   // MARK: - OpenClaw (mcp.servers + workspace SOUL.md)
 
@@ -62,14 +200,29 @@ enum MemoryBankConnector {
     }
 
     let alreadyWired = try ensureOpenClawMCPConfig(configURL: config, key: key, cliPath: cliPath)
+    try reloadOpenClawMCP(cliPath: cliPath, configURL: config)
     let noteAdded = try ensureOpenClawSoulNote(workspace: workspace)
 
     if alreadyWired {
       return noteAdded
-        ? "OpenClaw already had the Omi MCP — added the 'search Omi first' note to \(displayPath(for: workspace.appendingPathComponent("SOUL.md")))."
-        : "OpenClaw already connected — Omi MCP in openclaw.json, note in SOUL.md."
+        ? "OpenClaw is now connected."
+        : "OpenClaw is already connected."
     }
-    return "Connected OpenClaw — added the Omi MCP to openclaw.json and a 'search Omi first' note to SOUL.md."
+    return "OpenClaw is now connected."
+  }
+
+  private static func reloadOpenClawMCP(cliPath: String, configURL: URL) throws {
+    do {
+      _ = try runOpenClawCLI(
+        cliPath: cliPath,
+        configURL: configURL,
+        arguments: ["mcp", "reload"]
+      )
+    } catch {
+      let message = sanitizeCommandError(error.localizedDescription)
+      throw ConnectError.invalidConfig(
+        "OpenClaw MCP config was updated, but OpenClaw rejected MCP reload for \(displayPath(for: configURL)): \(message)")
+    }
   }
 
   private static func openClawConfiguredWorkspace(configURL: URL, cliPath: String) -> URL? {
@@ -126,8 +279,9 @@ enum MemoryBankConnector {
       )
       return false
     } catch {
+      let message = sanitizeCommandError(error.localizedDescription)
       throw ConnectError.invalidConfig(
-        "OpenClaw rejected MCP config update for \(displayPath(for: configURL)): \(error.localizedDescription)")
+        "OpenClaw rejected the connection update: \(message)")
     }
   }
 
@@ -140,28 +294,138 @@ enum MemoryBankConnector {
     if let override = openClawCLIPathOverrideForTesting {
       return override.isEmpty ? nil : override
     }
-    let candidates = [
-      home.appendingPathComponent(".hermes/node/bin/openclaw").path,
-      "/opt/homebrew/bin/openclaw",
-      "/usr/local/bin/openclaw",
-    ]
+    return executablePath(named: "openclaw", override: nil)
+  }
+
+  private static func executablePath(named command: String, override: String?) -> String? {
+    if let override {
+      return override.isEmpty ? nil : override
+    }
+    let candidates = commonExecutableDirs().map { ($0 as NSString).appendingPathComponent(command) }
     if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
       return path
     }
-    return try? runShell(["-lc", "command -v openclaw"]).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    return try? runShell(["-lc", "command -v \(shellQuote(command))"]).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
       .nilIfEmpty
   }
 
   private static func runOpenClawCLI(cliPath: String, configURL: URL, arguments: [String]) throws -> CommandOutput {
-    try runProcess(
-      executable: cliPath,
-      arguments: arguments,
-      environment: ["OPENCLAW_CONFIG_PATH": configURL.path]
+    let command = openClawCommand(cliPath: cliPath)
+    return try runProcess(
+      executable: command.executable,
+      arguments: command.argumentsPrefix + arguments,
+      environment: openClawEnvironment(cliPath: cliPath, configURL: configURL)
     )
+  }
+
+  private struct OpenClawCommand {
+    let executable: String
+    let argumentsPrefix: [String]
+  }
+
+  private static func openClawCommand(cliPath: String, fileManager: FileManager = .default) -> OpenClawCommand {
+    let nodePath = ((cliPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath), launcherUsesNode(cliPath: cliPath) {
+      return OpenClawCommand(executable: nodePath, argumentsPrefix: [cliPath])
+    }
+    return OpenClawCommand(executable: cliPath, argumentsPrefix: [])
+  }
+
+  private static func launcherUsesNode(cliPath: String) -> Bool {
+    guard let handle = FileHandle(forReadingAtPath: cliPath) else {
+      return false
+    }
+    defer { try? handle.close() }
+    guard
+      let data = try? handle.read(upToCount: 512),
+      let prefix = String(data: data, encoding: .utf8)
+    else {
+      return false
+    }
+    let firstLine = prefix.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+    return firstLine.hasPrefix("#!") && firstLine.contains("node")
+  }
+
+  private static func openClawEnvironment(cliPath: String, configURL: URL) -> [String: String] {
+    let cliDir = (cliPath as NSString).deletingLastPathComponent
+    return processEnvironment(extra: [
+      "OPENCLAW_CONFIG_PATH": configURL.path,
+      "PATH": mergedPath(pathPrefix: [cliDir] + commonExecutableDirs() + systemExecutableDirs()),
+    ])
+  }
+
+  private static func processEnvironment(extra: [String: String]) -> [String: String] {
+    var environment = ProcessInfo.processInfo.environment
+    environment["PATH"] = extra["PATH"] ?? mergedPath(pathPrefix: commonExecutableDirs() + systemExecutableDirs())
+    for (key, value) in extra where key != "PATH" {
+      environment[key] = value
+    }
+    return environment
+  }
+
+  private static func mergedPath(pathPrefix: [String]) -> String {
+    let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    return (pathPrefix + existingPath.split(separator: ":").map(String.init))
+      .reduce(into: [String]()) { elements, item in
+        if !item.isEmpty && !elements.contains(item) {
+          elements.append(item)
+        }
+      }
+      .joined(separator: ":")
   }
 
   private static func runShell(_ arguments: [String]) throws -> CommandOutput {
     try runProcess(executable: "/bin/zsh", arguments: arguments, environment: [:])
+  }
+
+  private static func commonExecutableDirs() -> [String] {
+    let homePath = home.path
+    let userDirs = [
+      "\(homePath)/.hermes/node/bin",
+      "\(homePath)/.local/bin",
+      "\(homePath)/.volta/bin",
+      "\(homePath)/.asdf/shims",
+      "\(homePath)/.bun/bin",
+      "\(homePath)/Library/pnpm",
+      "\(homePath)/.npm-global/bin",
+      "\(homePath)/.node_modules_global/bin",
+    ]
+    let globalDirs = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let managedNodeDirs = [
+      "\(homePath)/.nvm/versions/node",
+      "\(homePath)/.fnm/node-versions",
+      "\(homePath)/.local/share/fnm/node-versions",
+      "\(homePath)/.nodenv/versions",
+      "\(homePath)/.asdf/installs/nodejs",
+    ].flatMap(nodeInstallBinDirs(root:))
+    return uniquePaths(userDirs + managedNodeDirs + globalDirs + ["/opt/local/bin"])
+  }
+
+  private static func systemExecutableDirs() -> [String] {
+    ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+  }
+
+  private static func nodeInstallBinDirs(root: String) -> [String] {
+    let fm = FileManager.default
+    guard let versions = try? fm.contentsOfDirectory(atPath: root) else { return [] }
+    return versions.compactMap { version in
+      let versionDir = (root as NSString).appendingPathComponent(version)
+      let directBin = (versionDir as NSString).appendingPathComponent("bin")
+      if fm.fileExists(atPath: directBin) { return directBin }
+      let installationBin = (versionDir as NSString).appendingPathComponent("installation/bin")
+      if fm.fileExists(atPath: installationBin) { return installationBin }
+      return nil
+    }
+  }
+
+  private static func uniquePaths(_ paths: [String]) -> [String] {
+    paths.reduce(into: [String]()) { result, path in
+      guard !path.isEmpty, !result.contains(path) else { return }
+      result.append(path)
+    }
   }
 
   private static func runProcess(
@@ -196,7 +460,7 @@ enum MemoryBankConnector {
     [
       "enabled": true,
       "url": mcpURL,
-      "transport": "sse",
+      "transport": "streamable-http",
       "headers": [
         "Authorization": "Bearer \(key)"
       ],
@@ -204,10 +468,42 @@ enum MemoryBankConnector {
   }
 
   private static func normalizedPath(_ raw: String) -> URL? {
-    let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    var path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if
+      path.count >= 2,
+      let first = path.first,
+      let last = path.last,
+      (first == "\"" && last == "\"") || (first == "'" && last == "'")
+    {
+      path = String(path.dropFirst().dropLast())
+    }
     guard !path.isEmpty else { return nil }
-    let expanded = path.replacingOccurrences(of: "~", with: home.path, options: .anchored)
+    let expanded = path
+      .replacingOccurrences(of: "~", with: home.path, options: .anchored)
+      .replacingOccurrences(of: "${HOME}", with: home.path)
+      .replacingOccurrences(of: "$HOME", with: home.path)
     return URL(fileURLWithPath: expanded)
+  }
+
+  private static func sanitizeCommandError(_ message: String) -> String {
+    let patterns = [
+      #"Authorization\\?":\\?"Bearer [^"\\\s}]+"#,
+      #"Authorization:\s*Bearer\s+[^\s"'}]+"#,
+      #"Bearer\s+[A-Za-z0-9._~+/=-]+"#,
+    ]
+    var sanitized = message
+    for pattern in patterns {
+      sanitized = sanitized.replacingOccurrences(
+        of: pattern,
+        with: "Authorization: Bearer [redacted]",
+        options: .regularExpression
+      )
+    }
+    return sanitized
+  }
+
+  private static func shellQuote(_ value: String) -> String {
+    "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
   @discardableResult
@@ -236,7 +532,7 @@ enum MemoryBankConnector {
     """
     <!-- \(marker) -->
     ## OMI memory (search FIRST)
-    Omi is your memory bank. Before any task, search Omi memory first for context, then save durable new facts back to it. The `omi-memory` MCP server is configured for you — use it.
+    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations`, `omi-memory__get_daily_summaries`, or `omi-memory__get_screen_activity` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
     <!-- /\(marker) -->
     """
   }
@@ -267,10 +563,10 @@ enum MemoryBankConnector {
 
     if alreadyWired {
       return noteAdded
-        ? "Hermes already had the Omi MCP — added the 'search Omi first' note to SOUL.md."
-        : "Hermes already connected — Omi MCP in config.yaml, note in SOUL.md."
+        ? "Hermes is now connected."
+        : "Hermes is already connected."
     }
-    return "Connected Hermes — added the Omi MCP to config.yaml and a 'search Omi first' note to SOUL.md."
+    return "Hermes is now connected."
   }
 
   private static func hermesInstallIsPresent(hermesDir: URL, fileManager fm: FileManager) -> Bool {

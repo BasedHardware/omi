@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, cast
 
 
 class MemoryReadGateBlock(str, Enum):
@@ -60,19 +61,21 @@ class EnrolledMemoryReadGateResult:
     grant_denied: bool = False
 
 
-def extract_consumer_grants(data: dict, consumer: str) -> ConsumerGrantSnapshot:
+def extract_consumer_grants(data: dict[str, Any], consumer: str) -> ConsumerGrantSnapshot:
     """Resolve per-consumer default-memory and archive grants from control state."""
 
     grants = data.get('grants')
     if not isinstance(grants, dict):
         return ConsumerGrantSnapshot(default_memory=False, archive_capability=False)
-    consumer_grants = grants.get(consumer)
+    grant_map = cast(dict[str, Any], grants)
+    consumer_grants = grant_map.get(consumer)
     if not isinstance(consumer_grants, dict):
         return ConsumerGrantSnapshot(default_memory=False, archive_capability=False)
-    default_memory = consumer_grants.get('default_memory') is True
-    if 'archive' not in consumer_grants:
+    consumer_grant_map = cast(dict[str, Any], consumer_grants)
+    default_memory = consumer_grant_map.get('default_memory') is True
+    if 'archive' not in consumer_grant_map:
         return ConsumerGrantSnapshot(default_memory=default_memory, archive_capability=False)
-    archive_capability = consumer_grants.get('archive')
+    archive_capability = consumer_grant_map.get('archive')
     if not isinstance(archive_capability, bool):
         return ConsumerGrantSnapshot(default_memory=default_memory, archive_capability=None)
     return ConsumerGrantSnapshot(default_memory=default_memory, archive_capability=archive_capability)

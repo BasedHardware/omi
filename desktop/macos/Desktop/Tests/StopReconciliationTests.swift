@@ -342,6 +342,48 @@ final class StopReconciliationTests: XCTestCase {
         ))
     }
 
+    func testClientIdentifiedSessionRejectsStaleConversationBinding() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "stale-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionAcceptsExactConversationBinding() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "recording-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testLifecycleEventRejectsStaleRecordingIdentity() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "stale-conversation",
+            recordingSessionId: "stale-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsExactRecordingIdentity() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: "recording-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsLegacyEventWhenConversationIdStillMatches() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: nil,
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
     func testActiveBackendConversationIdRejectsDifferentRollover() {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "rolled-over-conversation",

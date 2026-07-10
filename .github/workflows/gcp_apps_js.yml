@@ -46,8 +46,8 @@ jobs:
           DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
           IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
           docker build \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG -f plugins/apps-js/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG
+            -t "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" -f plugins/apps-js/Dockerfile .
+          docker push "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}"
           echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
@@ -76,6 +76,15 @@ jobs:
             DECK_APP_ID=DECK_APP_ID:latest
             DECK_APP_SECRET=DECK_APP_SECRET:latest
             SLIDESGPT_API_KEY=SLIDESGPT_API_KEY:latest
+
+      - name: Verify Cloud Run rollout
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service ${{ env.SERVICE }}
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.59",
+  "date": "2026-07-09",
+  "changes": [
+    "Fixed named-bundle auth seed so local test apps no longer show a login-keychain password prompt on launch"
+  ]
+}

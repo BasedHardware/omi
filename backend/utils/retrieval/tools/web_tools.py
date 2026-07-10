@@ -8,9 +8,10 @@ import json
 import re
 import logging
 from html.parser import HTMLParser
+from typing import Any, Dict, List, Set, Tuple, cast
 from urllib.parse import urlparse, urljoin
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 from utils.http_client import get_web_fetch_client
 from utils.log_sanitizer import sanitize
@@ -57,8 +58,8 @@ def _extract_meta_tags(html: str) -> str:
     These are set even on fully JS-rendered pages (needed for SEO/social sharing)
     and live inside <head>, which the HTML stripper skips entirely.
     """
-    lines = []
-    seen: set = set()
+    lines: List[str] = []
+    seen: Set[str] = set()
 
     def add(label: str, value: str) -> None:
         value = value.strip()
@@ -104,29 +105,40 @@ def _extract_json_ld(html: str) -> str:
     pattern = re.compile(
         r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE
     )
-    lines = []
+    lines: List[str] = []
     for match in pattern.finditer(html):
         try:
-            data = json.loads(match.group(1))
+            loaded: Any = json.loads(match.group(1))
         except (json.JSONDecodeError, ValueError):
             continue
 
-        if isinstance(data, list):
-            items = data
+        items: List[Any]
+        if isinstance(loaded, list):
+            items = cast(List[Any], loaded)
         else:
-            items = [data]
+            items = [loaded]
 
         for item in items:
             if not isinstance(item, dict):
                 continue
+            entry: Dict[str, Any] = cast(Dict[str, Any], item)
             for key, label in _JSON_LD_FIELDS:
-                val = item.get(key)
+                val = entry.get(key)
                 if not val:
                     continue
                 if isinstance(val, dict):
-                    val = val.get('name') or val.get('@id') or str(val)
+                    vd: Dict[str, Any] = cast(Dict[str, Any], val)
+                    val = vd.get('name') or vd.get('@id') or str(vd)
                 elif isinstance(val, list):
-                    val = ', '.join(str(v.get('name', v) if isinstance(v, dict) else v) for v in val[:3])
+                    vl: List[Any] = cast(List[Any], val)
+                    parts: List[str] = []
+                    for v in vl[:3]:
+                        if isinstance(v, dict):
+                            vdict: Dict[str, Any] = cast(Dict[str, Any], v)
+                            parts.append(str(vdict.get('name', v)))
+                        else:
+                            parts.append(str(v))
+                    val = ', '.join(parts)
                 lines.append(f'{label}: {val}')
 
     return '\n'.join(lines)
@@ -153,22 +165,22 @@ async def _hostname_is_public(hostname: str) -> bool:
 
 
 class _TextExtractor(HTMLParser):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._skip_depth = 0
-        self.chunks = []
+        self.chunks: List[str] = []
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: Any) -> None:
         if tag in _SKIP_TAGS:
             self._skip_depth += 1
         elif tag in _BLOCK_TAGS and self._skip_depth == 0 and self.chunks:
             self.chunks.append('\n')
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if tag in _SKIP_TAGS and self._skip_depth > 0:
             self._skip_depth -= 1
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self._skip_depth == 0:
             text = data.strip()
             if text:
@@ -193,7 +205,7 @@ def _html_to_text(html: str) -> str:
     return '\n\n'.join(parts)
 
 
-async def _fetch_page(url: str, headers: dict) -> tuple[int, str, str]:
+async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]:
     """
     Fetch *url* with SSRF guard, manual redirect following, and a body-size cap.
     Returns (status_code, content_type, body_text).
@@ -230,7 +242,7 @@ async def _fetch_page(url: str, headers: dict) -> tuple[int, str, str]:
                 if cl_header and int(cl_header) > _MAX_BODY_BYTES:
                     return status, content_type, ''
 
-                chunks = []
+                chunks: List[bytes] = []
                 total = 0
                 async for chunk in response.aiter_bytes(chunk_size=8192):
                     total += len(chunk)
@@ -272,7 +284,7 @@ async def fetch_url_tool(url: str) -> str:
     if not url.startswith(('http://', 'https://')):
         return 'Error: URL must start with http:// or https://'
 
-    headers = {
+    headers: Dict[str, str] = {
         'User-Agent': 'Mozilla/5.0 (compatible; Omi-AI-Bot/1.0)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
         'Accept-Language': 'en-US,en;q=0.5',

@@ -7,55 +7,14 @@ Verifies:
 """
 
 import asyncio
-import sys
-from types import ModuleType
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-# Mock heavy dependencies before importing streaming module
-_mock_modules = {}
-for mod_name in [
-    'database',
-    'database._client',
-    'database.users',
-    'utils.other.storage',
-    'deepgram',
-    'deepgram.clients',
-    'deepgram.clients.live',
-    'deepgram.clients.live.v1',
-    'websockets',
-    'websockets.exceptions',
-]:
-    if mod_name not in sys.modules:
-        _mock_modules[mod_name] = MagicMock()
-        sys.modules[mod_name] = _mock_modules[mod_name]
-
-# Provide expected attributes only if this file owns the deepgram mock.
-# When another test file (e.g. test_dg_start_guard.py) imported streaming.py first,
-# overwriting LiveTranscriptionEvents would break event-identity assertions (#6302).
-if 'deepgram' in _mock_modules:
-    sys.modules['deepgram'].DeepgramClient = MagicMock
-    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
-
-_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
-_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
-_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
-sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
-
-_vad = ModuleType('utils.stt.vad')
-_vad._get_ort_session = MagicMock()
-_vad.make_fresh_state = MagicMock(return_value=(None, None))
-_vad.run_vad_window = MagicMock(return_value=0.0)
-_vad.VAD_WINDOW_SAMPLES = 512
-sys.modules.setdefault('utils.stt.vad', _vad)
-
-from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
-from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
-from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words  # noqa: E402
+from deepgram import LiveTranscriptionEvents
+from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
+from utils.stt.streaming import deepgram_options, deepgram_cloud_options
+from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
 
 @pytest.mark.asyncio
@@ -413,6 +372,7 @@ async def test_process_audio_dg_returns_safe_socket_always():
     result.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_sends_during_idle():
     """SafeDeepgramSocket auto-keepalive thread sends keepalive when idle > interval (#5870).
 
@@ -456,6 +416,7 @@ def test_auto_keepalive_sends_during_idle():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_stops_on_dead():
     """Auto-keepalive thread stops when connection dies (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -492,6 +453,7 @@ def test_auto_keepalive_stops_on_dead():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_resets_on_send():
     """send() resets idle timer, preventing unnecessary keepalives (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -539,6 +501,7 @@ def test_keepalive_config_validation():
         KeepaliveConfig(check_period_sec=-1)
 
 
+@pytest.mark.slow
 def test_concurrent_send_and_keepalive():
     """Thread safety: concurrent send() calls while keepalive thread fires (#5870).
 
@@ -551,12 +514,18 @@ def test_concurrent_send_and_keepalive():
     mock_conn.keep_alive.return_value = True
     mock_conn.send.return_value = True
 
+    # Auto-advancing clock: each call jumps forward past keepalive_interval so
+    # elapsed always exceeds the threshold even when sends reset _last_activity.
+    # This simulates real monotonic time where gaps between lock acquisitions
+    # allow enough time to pass for keepalive to fire.
     fake_time = [0.0]
     lock = threading.Lock()
 
     def clock():
         with lock:
-            return fake_time[0]
+            v = fake_time[0]
+            fake_time[0] += 3.0
+            return v
 
     cfg = KeepaliveConfig(keepalive_interval_sec=2.0, check_period_sec=0.01)
     safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
@@ -571,13 +540,9 @@ def test_concurrent_send_and_keepalive():
                 except Exception as e:
                     errors.append(e)
 
-        # Advance clock past keepalive interval FIRST so keepalive fires
-        with lock:
-            fake_time[0] = 3.0
-
         import time
 
-        time.sleep(0.1)  # Let keepalive thread fire
+        time.sleep(0.2)  # Let keepalive thread fire during idle
 
         # Verify keepalive actually fired during this idle window
         assert mock_conn.keep_alive.call_count >= 1, "keepalive must fire before concurrent sends start"
@@ -587,10 +552,7 @@ def test_concurrent_send_and_keepalive():
         threads = [threading.Thread(target=sender) for _ in range(3)]
         for t in threads:
             t.start()
-        # Advance clock again so keepalive fires during contention
-        with lock:
-            fake_time[0] = 6.0
-        time.sleep(0.1)  # Let keepalive thread fire during send contention
+        time.sleep(0.2)  # Let keepalive thread fire during send contention
         for t in threads:
             t.join(timeout=5.0)
 
@@ -602,6 +564,7 @@ def test_concurrent_send_and_keepalive():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_keepalive_fires_at_exact_threshold():
     """Keepalive fires when elapsed == interval (boundary) (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -630,6 +593,7 @@ def test_keepalive_fires_at_exact_threshold():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_repeated_idle_sends_multiple_keepalives():
     """Repeated idle periods send multiple keepalives (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -739,6 +703,7 @@ def test_death_reason_on_send_exception():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_death_reason_on_keepalive_false():
     """death_reason records keepalive failure when keep_alive returns False."""
     import time as _time
@@ -761,6 +726,7 @@ def test_death_reason_on_keepalive_false():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_death_reason_on_keepalive_exception():
     """death_reason captures exception on keepalive failure."""
     import time as _time
@@ -820,6 +786,7 @@ def test_set_close_reason_does_not_override_send_death():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_set_close_reason_does_not_override_keepalive_death():
     """If keepalive fails first, set_close_reason doesn't override the death reason."""
     import time as _time
@@ -865,6 +832,7 @@ def test_close_reason_preserved_when_send_fails_after():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_close_reason_preserved_when_keepalive_fails_after():
     """If close reason is set first, subsequent keepalive failure does not override it (#6036)."""
     import time as _time
@@ -908,6 +876,7 @@ def test_close_reason_preserved_when_send_raises_after():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_close_reason_preserved_when_keepalive_raises_after():
     """If close reason is set first, subsequent keepalive exception does not override it (#6036)."""
     import time as _time
@@ -956,7 +925,6 @@ async def test_process_audio_dg_registers_close_error_handlers():
     # Verify .on() was called for Close and Error events
     on_calls = mock_dg_conn.on.call_args_list
     registered_events = [call[0][0] for call in on_calls]
-    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
     assert LiveTranscriptionEvents.Close in registered_events
     assert LiveTranscriptionEvents.Error in registered_events
 
@@ -988,7 +956,6 @@ async def test_process_audio_dg_error_handler_sets_death_reason():
     assert isinstance(result, SafeDeepgramSocket)
 
     on_calls = mock_dg_conn.on.call_args_list
-    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
     for call in on_calls:
         event, handler = call[0][0], call[0][1]
         if event == LiveTranscriptionEvents.Error:

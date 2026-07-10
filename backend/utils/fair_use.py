@@ -6,17 +6,17 @@ detects soft-cap violations, triggers LLM classification,
 and manages graduated enforcement (warning → throttle → restrict).
 """
 
-import asyncio
 import logging
 import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
-from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
+from models.fair_use import SoftCapTrigger
 from utils.subscription import has_transcription_credits, is_paid_plan
 from utils.executors import db_executor, run_blocking
 
@@ -25,26 +25,30 @@ from utils.executors import db_executor, run_blocking
 #   which raises openai.OpenAIError if OPENAI_API_KEY is not set.
 # send_notification: imports firebase_admin.messaging which requires Firebase app init.
 # Both are only called in async runtime paths, never at import time.
-_classify_user_purpose = None
-_send_notification = None
+_classify_user_purpose: Optional[Callable[..., Any]] = None
+_send_notification: Optional[Callable[..., Any]] = None
 
 
-def _get_classify_user_purpose():
+def _get_classify_user_purpose() -> Callable[..., Any]:
     global _classify_user_purpose
-    if _classify_user_purpose is None:
+    cached: Optional[Callable[..., Any]] = _classify_user_purpose
+    if cached is None:
         from utils.llm.fair_use_classifier import classify_user_purpose
 
-        _classify_user_purpose = classify_user_purpose
-    return _classify_user_purpose
+        cached = classify_user_purpose
+        _classify_user_purpose = cached
+    return cached
 
 
-def _get_send_notification():
+def _get_send_notification() -> Callable[..., Any]:
     global _send_notification
-    if _send_notification is None:
+    cached: Optional[Callable[..., Any]] = _send_notification
+    if cached is None:
         from utils.notifications import send_notification
 
-        _send_notification = send_notification
-    return _send_notification
+        cached = send_notification
+        _send_notification = cached
+    return cached
 
 
 logger = logging.getLogger(__name__)
@@ -153,12 +157,12 @@ def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None
         logger.error(f'fair_use: Redis error recording speech for {uid}: {e}')
 
 
-def get_rolling_speech_ms(uid: str) -> dict:
+def get_rolling_speech_ms(uid: str) -> Dict[str, Any]:
     """Get speech totals for rolling windows: daily (24h), 3-day (72h), weekly (168h).
 
     Returns dict with keys: daily_ms, three_day_ms, weekly_ms.
     """
-    result = {'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    result: Dict[str, Any] = {'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     if not FAIR_USE_ENABLED:
         return result
 
@@ -204,7 +208,7 @@ def get_rolling_speech_ms(uid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def check_soft_caps(uid: str, speech_totals: dict = None) -> list:
+def check_soft_caps(uid: str, speech_totals: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Check if user exceeds any rolling speech cap.
 
     Args:
@@ -222,7 +226,7 @@ def check_soft_caps(uid: str, speech_totals: dict = None) -> list:
         return []
 
     speech = speech_totals if speech_totals is not None else get_rolling_speech_ms(uid)
-    triggered = []
+    triggered: List[Dict[str, Any]] = []
 
     if speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS:
         triggered.append(
@@ -303,7 +307,9 @@ def is_free_credits_exhausted(uid: str) -> bool:
         return False
 
 
-def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict = None) -> dict:
+def escalate_enforcement(
+    uid: str, triggered_caps: List[Dict[str, Any]], classifier_result: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Escalate enforcement based on violations and classifier result.
 
     Used for both abuse detection (LLM classifier) and free-exhausted users (#6083).
@@ -343,9 +349,9 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
 
     # Apply stage changes
     if new_stage != current_stage:
-        update = {
+        update: Dict[str, Any] = {
             'stage': new_stage,
-            'last_violation_at': datetime.utcnow(),
+            'last_violation_at': datetime.now(timezone.utc),
             'last_classifier_score': misuse_score,
             'last_classifier_type': usage_type,
             'violation_count_7d': counts['violation_count_7d'],
@@ -353,16 +359,16 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         }
 
         if new_stage == 'throttle':
-            update['throttle_until'] = datetime.utcnow() + timedelta(days=7)
+            update['throttle_until'] = datetime.now(timezone.utc) + timedelta(days=7)
         elif new_stage == 'restrict':
-            update['restrict_until'] = datetime.utcnow() + timedelta(days=30)
+            update['restrict_until'] = datetime.now(timezone.utc) + timedelta(days=30)
 
         fair_use_db.update_fair_use_state(uid, update)
         invalidate_enforcement_cache(uid)
 
     # Record the event (create_fair_use_event auto-generates a case_ref)
     speech = get_rolling_speech_ms(uid)
-    event_data = {
+    event_data: Dict[str, Any] = {
         'session_id': '',
         'trigger': triggered_caps[0]['trigger'].value if triggered_caps else 'daily',
         'window_speech_ms': speech,
@@ -427,7 +433,7 @@ def clear_fair_use_on_upgrade(uid: str) -> bool:
             'throttle_until': None,
             'restrict_until': None,
             'cleared_by': 'subscription_upgrade',
-            'cleared_at': datetime.utcnow(),
+            'cleared_at': datetime.now(timezone.utc),
         },
     )
     invalidate_enforcement_cache(uid)
@@ -435,19 +441,42 @@ def clear_fair_use_on_upgrade(uid: str) -> bool:
     return True
 
 
-def _as_naive_utc(dt: datetime) -> datetime:
-    """Normalize a datetime to naive UTC for comparisons with datetime.utcnow()."""
-    if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+def _as_utc(dt: datetime) -> datetime:
+    """Normalize a datetime to aware UTC for comparisons with datetime.now(timezone.utc)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
-def _retry_after_seconds_from_restrict_until(restrict_until) -> int | None:
+def _retry_after_seconds_from_restrict_until(restrict_until: Any) -> int | None:
     if not isinstance(restrict_until, datetime):
         return None
-    restrict_until = _as_naive_utc(restrict_until)
-    seconds = int((restrict_until - datetime.utcnow()).total_seconds())
+    restrict_until = _as_utc(restrict_until)
+    seconds = int((restrict_until - datetime.now(timezone.utc)).total_seconds())
     return max(seconds, 1) if seconds > 0 else None
+
+
+def normalize_expired_restriction_state(
+    uid: str, state: Dict[str, Any], *, now: datetime | None = None
+) -> Dict[str, Any]:
+    """Return effective state, persisting the existing restrict→throttle expiry transition."""
+    normalized_state = dict(state)
+    if normalized_state.get('stage', 'none') != 'restrict':
+        return normalized_state
+
+    restrict_until_raw = normalized_state.get('restrict_until')
+    if not isinstance(restrict_until_raw, datetime):
+        return normalized_state
+
+    restrict_until = _as_utc(restrict_until_raw)
+    effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+    if effective_now <= restrict_until:
+        return normalized_state
+
+    fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
+    invalidate_enforcement_cache(uid)
+    normalized_state.update({'stage': 'throttle', 'restrict_until': None})
+    return normalized_state
 
 
 def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
@@ -459,26 +488,17 @@ def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
 
     # Single Firestore read — get_enforcement_stage uses cache, but we need
     # restrict_until too, so read the full state once and check stage from it.
-    state = fair_use_db.get_fair_use_state(uid)
+    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
     stage = state.get('stage', 'none')
     if stage != 'restrict':
         return False, None
 
-    # Check if restriction has expired
     restrict_until = state.get('restrict_until')
-    if restrict_until and isinstance(restrict_until, datetime):
-        # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
-        restrict_until = _as_naive_utc(restrict_until)
-        if datetime.utcnow() > restrict_until:
-            # Restriction expired, reset to throttle
-            fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
-            invalidate_enforcement_cache(uid)
-            return False, None
 
     # Check if speech is over hard cap
     speech = get_rolling_speech_ms(uid)
     # In restrict mode, enforce the soft caps as hard caps
-    restricted = (
+    restricted: bool = bool(
         speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS
         or speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS
         or speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS
@@ -507,7 +527,7 @@ def get_hard_restriction_retry_after_seconds(uid: str) -> int | None:
 
 def _dg_budget_key(uid: str) -> str:
     """Redis key for daily DG budget counter. Auto-expires at end of UTC day."""
-    day = datetime.utcnow().strftime('%Y%m%d')
+    day = datetime.now(timezone.utc).strftime('%Y%m%d')
     return f'fair_use:dg_budget:{uid}:{day}'
 
 
@@ -520,7 +540,7 @@ def record_dg_usage_ms(uid: str, ms: int) -> None:
         pipe = redis_client.pipeline(transaction=False)
         pipe.incrby(key, ms)
         # TTL = seconds until next midnight UTC + 1h buffer
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = int((tomorrow - now).total_seconds())
         pipe.expire(key, seconds_until_midnight + 3600)
@@ -529,13 +549,13 @@ def record_dg_usage_ms(uid: str, ms: int) -> None:
         logger.error(f'fair_use: Redis error recording DG usage for {uid}: {e}')
 
 
-def get_dg_budget_status(uid: str) -> dict:
+def get_dg_budget_status(uid: str) -> Dict[str, Any]:
     """Get the DG budget status for a user.
 
     Returns dict with: daily_limit_ms, used_ms, remaining_ms, exhausted, resets_at.
     """
     limit = FAIR_USE_RESTRICT_DAILY_DG_MS
-    result = {
+    result: Dict[str, Any] = {
         'daily_limit_ms': limit,
         'used_ms': 0,
         'remaining_ms': limit,
@@ -551,7 +571,7 @@ def get_dg_budget_status(uid: str) -> dict:
         used_ms = int(used) if used else 0
         remaining = max(0, limit - used_ms)
         # Next midnight UTC
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         result['used_ms'] = used_ms
         result['remaining_ms'] = remaining
@@ -585,7 +605,7 @@ def is_dg_budget_exhausted(uid: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_id: str = '') -> None:
+async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, Any]], session_id: str = '') -> None:
     """Check if we should run the LLM classifier and handle enforcement.
 
     Uses a Redis lock to prevent concurrent runs for the same user.
