@@ -18,6 +18,14 @@
 // I/O names or state shape differ, this wrapper must be updated to match — the copy
 // script pins the source, so a version bump is the trigger to re-check here.
 import * as ort from 'onnxruntime-web/wasm'
+// Vite-transformed URLs for the ort loader pair. In DEV, vite REFUSES to serve
+// /public files as ES module imports ("should not be imported from source
+// code"), and ort dynamically import()s its .mjs loader from wasmPaths — so the
+// self-hosted /vad/ path only works in production builds. These ?url imports
+// give dev-servable module URLs; production keeps /vad/ (the build-emitted
+// duplicate wasm is stripped by the drop-duplicate-ort-wasm vite plugin).
+import ortMjsUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.mjs?url'
+import ortWasmUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.wasm?url'
 
 /** v5 runs on 512-sample (32ms @16kHz) frames. */
 export const SILERO_FRAME_SAMPLES = 512
@@ -35,7 +43,9 @@ let runLock: Promise<unknown> = Promise.resolve()
 function loadSession(): Promise<ort.InferenceSession> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
-      ort.env.wasm.wasmPaths = '/vad/'
+      ort.env.wasm.wasmPaths = import.meta.env.DEV
+        ? { mjs: ortMjsUrl, wasm: ortWasmUrl }
+        : '/vad/'
       ort.env.wasm.numThreads = 1 // single-threaded → no COOP/COEP cross-origin isolation needed
       ort.env.logLevel = 'error'
       const res = await fetch(MODEL_URL)
