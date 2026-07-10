@@ -26,15 +26,24 @@
     "test:watch": "vitest",
     "fixtures:audio": "node scripts/gen-audio-fixtures.mjs",
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
-    "test:e2e:ptt": "node scripts/run-ptt-e2e.mjs",
+    "test:e2e:ptt": "node scripts/run-live-e2e.mjs src/main/ipc/pttTranscribe.e2e.test.ts",
+    "test:e2e:conv-sync": "node scripts/run-live-e2e.mjs src/renderer/src/lib/sync/convSync.e2e.test.ts",
     "test:e2e:voice-smoke": "node scripts/run-voice-smoke.mjs",
     "voice:loop-check": "node scripts/run-voice-loop-check.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
+    "test:e2e:bar": "node scripts/run-bar-e2e.mjs",
+    "orb:sheet": "node scripts/orb/contact-sheet.mjs",
+    "orb:check": "node scripts/orb/check-invariants.mjs && node scripts/orb/check-motion.mjs",
+    "orb:throttle": "node scripts/orb/check-throttle.mjs",
+    "verify:oauth-contract": "node scripts/verify-oauth-contract.mjs",
+    "verify:oauth-flow": "node scripts/verify-oauth-flow.mjs",
     "vad:playback": "node scripts/run-vad-playback.mjs",
     "soak": "node scripts/run-soak.mjs",
     "soak:verify": "node scripts/soak-verify.mjs",
     "bench": "node scripts/bench/run.mjs",
-    "bench:anim": "node scripts/bench/anim.mjs"
+    "bench:anim": "node scripts/bench/anim.mjs",
+    "test:e2e:meeting": "node scripts/run-meeting-e2e.mjs",
+    "test:e2e:meeting-live": "node scripts/run-meeting-live.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -64,7 +73,8 @@
     "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@mediapipe/tasks-audio": "0.10.35"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

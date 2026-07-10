@@ -17,6 +17,9 @@ importers:
       '@google/genai':
         specifier: ^2.11.0
         version: 2.11.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
+      '@mediapipe/tasks-audio':
+        specifier: 0.10.35
+        version: 0.10.35
       '@openai/agents-realtime':
         specifier: ^0.13.1
         version: 0.13.1(zod@4.4.3)
@@ -1163,6 +1166,9 @@ packages:
   '@malept/flatpak-bundler@0.4.0':
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
+
+  '@mediapipe/tasks-audio@0.10.35':
+    resolution: {integrity: sha512-oPo87QnkPXYFnEqRsUd/yrO//nXacCLrg5tz2oedsbqYx7Anf8XlMLQYN0glUr64Fua/CfzZWPssbq/Dt12lAw==}
 
   '@mediapipe/tasks-vision@0.10.17':
     resolution: {integrity: sha512-CZWV/q6TTe8ta61cZXjfnnHsfWIdFhms03M9T7Cnd5y2mdpylJM0rF1qRq+wsQVRMLz1OYPVEBU9ph2Bx8cxrg==}
@@ -6096,6 +6102,8 @@ snapshots:
       tmp-promise: 3.0.3
     transitivePeerDependencies:
       - supports-color
+
+  '@mediapipe/tasks-audio@0.10.35': {}
 
   '@mediapipe/tasks-vision@0.10.17': {}
 

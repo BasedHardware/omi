@@ -59,10 +59,10 @@ vi.mock('electron', () => ({
 import { registerOmiListenHandlers } from './omiListen'
 
 const ipc = {
-  start: (sessionId: string, ownerId = 1) =>
+  start: (sessionId: string, ownerId = 1, mode = 'ptt') =>
     h.ipcHandlers.get('omi-listen:start')!(
       { sender: { id: ownerId } },
-      { sessionId, token: 'tok', language: 'en', source: 'mic', mode: 'ptt' }
+      { sessionId, token: 'tok', language: 'en', source: 'mic', mode }
     ),
   feed: (sessionId: string, bytes: number) =>
     h.ipcHandlers.get('omi-listen:feed')!(null, sessionId, new ArrayBuffer(bytes)),
@@ -127,5 +127,22 @@ describe('PTT stream lane', () => {
     const first = lastWs()
     ipc.start('win2-hold', 12)
     expect(first.readyState).toBe(h.FakeWebSocket.CONNECTING)
+  })
+
+  it('a new PTT hold never kills a same-window screen-session lane (mode transcribe)', () => {
+    // Screen lanes ride the same transcribe-stream endpoint but must survive PTT
+    // holds — the supersede sweep matches mode === 'ptt' only.
+    ipc.start('screen-mic', 21, 'transcribe')
+    const screenLane = lastWs()
+    ipc.start('hold-x', 21, 'ptt')
+    expect(screenLane.readyState).toBe(h.FakeWebSocket.CONNECTING)
+  })
+
+  it('finalize works for transcribe (screen-lane) sessions on an OPEN socket', () => {
+    ipc.start('screen-sys', 22, 'transcribe')
+    const ws = lastWs()
+    ws.simulateOpen()
+    ipc.finalize('screen-sys')
+    expect(ws.sent).toContain('finalize')
   })
 })

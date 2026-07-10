@@ -16,12 +16,27 @@ import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
+import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
 import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
 import { startForegroundMonitor } from './usage/foregroundMonitor'
-import { getOverlayWindow, toggleOverlay } from './overlay/window'
+import {
+  registerBarIpc,
+  startBarStrips,
+  destroyBar,
+  handleSummonPress,
+  setSummonGestureAccelerator,
+  setBarEnabled,
+  setPeekWatchSuspended,
+  getBarWindow,
+  getStripDiagnostics,
+  isBarInteractive,
+  isBarVisible,
+  showBar,
+  hideBar
+} from './bar/window'
 import {
   registerOverlayShortcut,
   unregisterOverlayShortcut,
@@ -35,6 +50,8 @@ import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
 import { createInsightToastWindow } from './insight/toastWindow'
+import { registerMeetingHandlers } from './ipc/meeting'
+import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { automationBridge } from './automation/bridge'
 import {
@@ -208,7 +225,9 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  updateLocalConversationTitle
+  updateLocalConversationTitle,
+  updateLocalConversationSync,
+  claimConversationForPosting
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -282,27 +301,11 @@ function createWindow(): BrowserWindow {
   })
   perfMark('window:created')
 
-  // Allow Firebase + Google OAuth popups to open as real Electron windows so
-  // signInWithPopup() can postMessage back to the opener. Everything else
-  // routes to the system browser.
+  // Everything window.open()ed routes to the system browser — there is no
+  // embedded OAuth popup anymore (Google blocks webview OAuth; sign-in runs the
+  // backend PKCE flow in the system browser via src/main/ipc/auth.ts).
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const url = details.url
-    const isOAuth =
-      url.startsWith('https://accounts.google.com/') ||
-      url.startsWith('https://based-hardware.firebaseapp.com/') ||
-      url.includes('/__/auth/') ||
-      url.includes('firebaseapp.com/__/auth')
-    if (isOAuth) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 480,
-          height: 720,
-          autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true }
-        }
-      }
-    }
     // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
@@ -452,6 +455,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
+  ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
+    updateLocalConversationSync(id, patch)
+  )
+  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
+    claimConversationForPosting(id, resetAttempts)
+  )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
@@ -465,6 +474,21 @@ app.whenReady().then(async () => {
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
   registerKgHandlers()
+  // Google sign-in (system browser + loopback). On success, surface the main
+  // window OVER the browser: Windows blocks background apps from stealing
+  // foreground focus, so a plain show()/focus() only flashes the taskbar —
+  // briefly forcing always-on-top makes the surface actually happen (same
+  // trick as integrations/oauth.ts focusOmi).
+  registerAuthHandlers(() => {
+    withMainWindow((win) => {
+      if (win.isMinimized()) win.restore()
+      win.setAlwaysOnTop(true)
+      win.show()
+      win.focus()
+      win.setAlwaysOnTop(false)
+    })
+    app.focus({ steal: true })
+  })
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
@@ -480,6 +504,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerMeetingHandlers()
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -551,7 +576,36 @@ app.whenReady().then(async () => {
           })
         }
         stopTestListenSession('e2e-vad-playback')
-      }
+      },
+      // Bar harness: drive reveal paths without the global hotkey / edge strip
+      // (the harness asserts focus behavior + takes screenshots).
+      barShow: (mode: 'peek' | 'expanded' | 'ptt', reveal?: 'strip' | 'summon' | 'ptt') => {
+        setBarEnabled(true) // the hermetic harness has no onboarding to enable it
+        showBar(mode, reveal ?? (mode === 'peek' ? 'strip' : 'summon'))
+      },
+      barEnable: () => setBarEnabled(true),
+      barStrips: () => getStripDiagnostics(),
+      // Screenshot capture on a live desktop: the cursor is outside the peek
+      // footprint, so the retract watchdog would hide the bar mid-capture.
+      barHoldPeekOpen: (hold: boolean) => setPeekWatchSuspended(!!hold),
+      barHide: () => hideBar(),
+      barSummonFire: () => handleSummonPress(),
+      barState: () => {
+        const win = getBarWindow()
+        return {
+          exists: !!win && !win.isDestroyed(),
+          visible: isBarVisible(),
+          focused: !!win && !win.isDestroyed() && win.isFocused(),
+          focusable: !!win && !win.isDestroyed() && win.isFocusable(),
+          // Real hit-testing state: must be false right after ANY present —
+          // only the cursor entering the visible surface enables it.
+          interactive: isBarInteractive(),
+          id: win && !win.isDestroyed() ? win.id : null
+        }
+      },
+      // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
+      // phase, so the toast + capture wiring is drivable without real Zoom.
+      meeting: meetingDebug()
     }
   }
 
@@ -586,15 +640,26 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Top-edge reveal: 1px trigger strips on every display (zero polling while
+    // idle) + display tracking + fullscreen suppression.
+    startBarStrips()
+    // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
+    // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
+    // the machine latched silent.
+    startMeetingMonitor({ getCaptureWc })
   })
 
-  // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
-  // first summon (so it inherits the already signed-in Firebase session).
+  // Bar (replaces the old floating overlay): wire IPC + the global summon
+  // shortcut. The shortcut callback feeds the gesture machine (auto-repeat
+  // fires group into ONE gesture: tap toggles the expanded bar, a physical
+  // hold is push-to-talk — the "bar flaps while holding the hotkey" fix).
   registerOverlayHandlers(surfaceMainWindow)
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, toggleOverlay)
+  registerBarIpc()
+  setSummonGestureAccelerator(OVERLAY_ACCELERATOR)
+  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, handleSummonPress)
   if (!shortcutOk) {
     console.warn(
-      '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
+      '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
     )
   }
 
@@ -753,9 +818,9 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  stopMeetingMonitor()
   destroyTray()
-  const overlay = getOverlayWindow()
-  if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  destroyBar()
   const capture = getCaptureWindow()
   if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()

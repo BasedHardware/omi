@@ -33,4 +33,16 @@ describe('buildListenEndpoint', () => {
     expect(buildListenEndpoint('conversation', 'es')).toContain('language=es')
     expect(buildListenEndpoint('ptt', '')).toContain('language=en')
   })
+
+  it('transcribe mode (screen lanes) rides the same transcription-only endpoint as ptt', () => {
+    // The coalescing race: two same-uid /v4/listen sockets split/bleed via a racy
+    // user-global Redis pointer, so screen lanes must NEVER hit /v4/listen. They
+    // stream transcription-only and the conversation is created client-side on
+    // stop via POST /v1/conversations/from-segments.
+    const url = buildListenEndpoint('transcribe', 'en')
+    expect(url).toBe(buildListenEndpoint('ptt', 'en'))
+    expect(url).toContain('/v2/voice-message/transcribe-stream')
+    expect(url).toContain('codec=linear16')
+    expect(url).not.toContain('/v4/listen')
+  })
 })

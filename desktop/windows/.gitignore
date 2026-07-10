@@ -44,7 +44,9 @@ desktop.ini
 #Personal files
 .agents/
 .vscode/
-docs/
+# docs/ holds personal notes, EXCEPT explicitly re-included design docs
+docs/*
+!docs/conversation-sync.md
 skills-lock.json
 
 # Visual brainstorming companion
@@ -59,3 +61,7 @@ resources/win-ocr-helper/*.pdb
 src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
+
+# Orb harness artifacts (contact sheets, pixel dumps) — generated
+.orb-out/
+orb-harness/dist/

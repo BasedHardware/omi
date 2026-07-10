@@ -552,6 +552,7 @@ async def execute_agentic_chat_stream(
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -562,7 +563,7 @@ async def execute_agentic_chat_stream(
     tz = get_user_timezone(uid)
 
     # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz)
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz, platform=platform)
 
     # Get prompt metadata for tracing/versioning
     prompt_name, prompt_commit, prompt_source = None, None, None

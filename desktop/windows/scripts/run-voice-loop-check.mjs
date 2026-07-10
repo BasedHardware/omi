@@ -160,7 +160,7 @@ async function findMainWindow(app) {
   for (let i = 0; i < 40; i++) {
     const page = app
       .windows()
-      .find((w) => !/#\/(capture|overlay|insight-toast)/.test(w.url()) && w.url() !== 'about:blank')
+      .find((w) => !/#\/(capture|overlay|bar|insight-toast|meeting-toast)/.test(w.url()) && w.url() !== 'about:blank')
     if (page) return page
     await new Promise((r) => setTimeout(r, 500))
   }
