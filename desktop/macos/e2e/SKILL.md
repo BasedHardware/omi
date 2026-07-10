@@ -233,19 +233,43 @@ The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen
 calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
 `quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
 `reset_onboarding`), delayed so the action's HTTP response flushes before the process
-terminates. Because the relaunch is `open <bundle>`, the reopened app derives its own
-automation port — read it from the app log (`DesktopAutomationBridge: listening on …`).
+terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
+`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
+app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+`OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
+
+Two traps make a naive `wait-ready` lie, so the recipe below guards against both:
+- **Wait for a *new* listener pid.** `quit_and_reopen` returns immediately and only
+  schedules the restart ~`delay_ms` later; the pre-quit process is still alive and
+  answering for ~1s. Poll until the pid *listening on the port* differs from the one
+  you captured before, or you'll assert the OLD process's state (false PASS). Track the
+  listener via `lsof -tiTCP:$PORT -sTCP:LISTEN`, not `pgrep` — a `pgrep -f` pattern also
+  matches the shell running this recipe.
+- **Poll with *fresh* `omi-ctl` calls.** The relaunch is a fresh process, so it mints a
+  new bridge auth token and writes it to the same port-keyed token file. A single
+  long-lived `omi-ctl` process caches the token from its first read, so it would keep
+  presenting the *stale* token and 401 forever (false FAIL). Each `./scripts/omi-ctl`
+  invocation is a fresh process that re-reads the token file — so loop over separate
+  calls, don't reuse one `wait-ready`.
 ```bash
 cd desktop/macos
-# record before-state, trigger the restart, then verify the reopened bundle
+export OMI_AUTOMATION_PORT=47894           # whatever port you launched the bundle with
+BEFORE_PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
 ./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("before", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
-./scripts/omi-ctl action quit_and_reopen        # detail (all string values): {"restarting":"true", "bundle_id":…, "relaunch_path":…, "delay_ms":"400"}
-sleep 8                                          # terminate + relaunch + boot
-NEWPORT=$(grep -oE 'listening on http://127.0.0.1:[0-9]+' /private/tmp/omi-dev.log | tail -1 | grep -oE '[0-9]+$')
-OMI_AUTOMATION_PORT=$NEWPORT ./scripts/omi-ctl wait-ready | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
-#   assert: same bundleIdentifier, isSignedIn=true, hasCompletedOnboarding=true (session intact)
+./scripts/omi-ctl action quit_and_reopen        # detail: {"restarting":"true", "bundle_id":…, "relaunch_path":…, "delay_ms":"400"}
+# wait for the OLD listener to be replaced by a NEW one on the SAME port (fresh omi-ctl each try)
+for i in $(seq 1 60); do
+  PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$PID" ] && [ "$PID" != "$BEFORE_PID" ] && ./scripts/omi-ctl state >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"], d["bridgePort"])'
+#   assert: same bundleIdentifier, isSignedIn=true, hasCompletedOnboarding=true, bridgePort=47894 (session intact, SAME port)
+# the reopened process's own argv carries the re-passed port (proves the fix):
+#   ps -o command= -p "$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN | head -1)"  → …/Omi Computer --automation-port=47894
 ```
-Hermetic ratchet: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`.
+Hermetic ratchets: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`
+and `--filter RestartRelaunchCommandTests` (non-prod relaunch re-passes the port as argv).
 
 ### The full loop
 ```bash
