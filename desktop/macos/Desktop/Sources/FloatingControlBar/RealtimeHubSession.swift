@@ -51,6 +51,20 @@ struct RealtimeHubEventIdentity: Equatable, Sendable {
   let responseID: VoiceResponseID
 }
 
+enum GeminiRealtimeEventOwnership {
+  /// Gemini input-transcription messages do not include a provider item ID. Once
+  /// A has completed, receiving an event while B is active on the same socket is
+  /// ambiguous and must be dropped instead of mutating B's transcript.
+  static func inputIdentity(
+    active: RealtimeHubEventIdentity?,
+    completed: RealtimeHubEventIdentity?
+  ) -> RealtimeHubEventIdentity? {
+    guard let completed else { return active }
+    guard active == nil || active == completed else { return nil }
+    return completed
+  }
+}
+
 private struct PendingOpenAIResponseIdentity {
   let identity: RealtimeHubEventIdentity
   var canceled: Bool
@@ -118,6 +132,7 @@ final class RealtimeHubSession: NSObject {
   private var isOpen = false
   private var terminated = false
   private var activeEventIdentity: RealtimeHubEventIdentity?
+  private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
   private var pendingAudio: [Data] = []
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
@@ -239,6 +254,8 @@ final class RealtimeHubSession: NSObject {
       self.openAIPendingInputIdentities.removeAll()
       self.openAIInputItemIdentities.removeAll()
       self.geminiResponsePending = false
+      self.activeEventIdentity = nil
+      self.completedGeminiEventIdentity = nil
     }
   }
 
@@ -538,6 +555,7 @@ final class RealtimeHubSession: NSObject {
       self.pendingCommit = false
       self.pendingActivityStart = false
       self.activeEventIdentity = nil
+      self.completedGeminiEventIdentity = nil
       switch self.provider {
       case .openai:
         self.pendingOpenAIToolCallIds.removeAll()
@@ -1137,7 +1155,14 @@ final class RealtimeHubSession: NSObject {
     // interrupt the server's still-open turn. We finish on turnComplete (below), which
     // arrives when the audio actually completes.
     if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
-      emitTranscript(t, isFinal: false)
+      if let identity = GeminiRealtimeEventOwnership.inputIdentity(
+        active: activeEventIdentity,
+        completed: completedGeminiEventIdentity)
+      {
+        emitTranscript(t, isFinal: false, identity: identity)
+      } else {
+        log("\(tag): dropping ambiguous Gemini input transcription across turn boundary")
+      }
     }
     if let ot = sc["outputTranscription"] as? [String: Any], let t = ot["text"] as? String {
       emitText(t, isFinal: false)  // the spoken reply's text, for logging / the bubble
@@ -1163,8 +1188,9 @@ final class RealtimeHubSession: NSObject {
       // can't prematurely end the live turn.
       if geminiResponsePending {
         geminiResponsePending = false
+        completedGeminiEventIdentity = activeEventIdentity
         emitText("", isFinal: true)
-        finishTurn()
+        finishTurn(identity: completedGeminiEventIdentity)
       }
     }
   }

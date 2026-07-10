@@ -108,32 +108,47 @@ final class KernelTurnProjection {
 
   func recordSurfaceTurn(
     surface: AgentSurfaceReference,
+    ownerID: String? = nil,
     userText: String,
     assistantText: String,
     origin: String = "realtime_voice",
     interrupted: Bool = false,
     idempotencyKey: String? = nil
-  ) async {
-    guard let host, await host.ensureBridgeStartedForKernel() else { return }
-    guard let client else { return }
-    await client.recordSurfaceTurn(
-      surface: surface,
-      userText: userText,
-      assistantText: assistantText,
-      origin: origin,
-      interrupted: interrupted,
-      idempotencyKey: idempotencyKey
-    )
+  ) async -> Bool {
+    guard let host, await host.ensureBridgeStartedForKernel() else { return false }
+    guard let client else { return false }
+    do {
+      return try await client.recordSurfaceTurn(
+        surface: surface,
+        ownerID: ownerID,
+        userText: userText,
+        assistantText: assistantText,
+        origin: origin,
+        interrupted: interrupted,
+        idempotencyKey: idempotencyKey
+      )
+    } catch {
+      log("KernelTurnProjection: surface turn persistence failed: \(error.localizedDescription)")
+      return false
+    }
   }
 
   func fetchVoiceSeedContext(surface: AgentSurfaceReference) async -> String {
-    guard let host, await host.ensureBridgeStartedForKernel() else { return "" }
-    guard let client else { return "" }
+    await fetchVoiceSeedSnapshot(surface: surface).context
+  }
+
+  func fetchVoiceSeedSnapshot(
+    surface: AgentSurfaceReference
+  ) async -> AgentRuntimeProcess.VoiceSeedContextResult {
+    let empty = AgentRuntimeProcess.VoiceSeedContextResult(
+      conversationId: "", context: "", idempotencyKeys: [])
+    guard let host, await host.ensureBridgeStartedForKernel() else { return empty }
+    guard let client else { return empty }
     do {
-      return try await client.getVoiceSeedContext(surface: surface).context
+      return try await client.getVoiceSeedContext(surface: surface)
     } catch {
       log("KernelTurnProjection: voice seed fetch failed: \(error.localizedDescription)")
-      return ""
+      return empty
     }
   }
 
