@@ -29,6 +29,7 @@ import {
   setSummonGestureAccelerator,
   setBarEnabled,
   getBarWindow,
+  getStripDiagnostics,
   isBarVisible,
   showBar,
   hideBar
@@ -570,6 +571,7 @@ app.whenReady().then(async () => {
         showBar(mode, reveal ?? (mode === 'peek' ? 'strip' : 'summon'))
       },
       barEnable: () => setBarEnabled(true),
+      barStrips: () => getStripDiagnostics(),
       barHide: () => hideBar(),
       barSummonFire: () => handleSummonPress(),
       barState: () => {

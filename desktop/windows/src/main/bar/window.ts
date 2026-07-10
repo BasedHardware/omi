@@ -342,6 +342,10 @@ function createStrip(display: Electron.Display): BrowserWindow {
     skipTaskbar: true,
     focusable: false,
     hasShadow: false,
+    // No WS_THICKFRAME: a sizing frame imposes an OS minimum window size that
+    // would silently inflate the 1px strip.
+    thickFrame: false,
+    minHeight: 0,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -405,6 +409,19 @@ export function startBarStrips(): void {
       }
     })
   })
+}
+
+/** Diagnostics for the E2E harness: strips vs displays, with real bounds. */
+export function getStripDiagnostics(): {
+  displays: number
+  strips: { id: number; bounds: Electron.Rectangle; visible: boolean }[]
+} {
+  return {
+    displays: screen.getAllDisplays().length,
+    strips: [...strips.values()]
+      .filter((w) => !w.isDestroyed())
+      .map((w) => ({ id: w.id, bounds: w.getBounds(), visible: w.isVisible() }))
+  }
 }
 
 // --- IPC ----------------------------------------------------------------------
