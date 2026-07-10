@@ -163,18 +163,19 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
         return True
 
     sync_router = sys.modules["routers.sync"]
+    sync_pipeline = sys.modules["utils.sync.pipeline"]
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
-    monkeypatch.setattr(sync_router, "decode_files_to_wav", fake_decode_files_to_wav)
-    monkeypatch.setattr(sync_router, "retrieve_vad_segments", fake_retrieve_vad_segments)
-    monkeypatch.setattr(sync_router, "get_wav_duration", lambda path: 2.0)
-    monkeypatch.setattr(sync_router, "process_segment", fake_process_segment)
-    monkeypatch.setattr(sync_router, "_reprocess_merged_conversations", lambda uid, response: None)
-    monkeypatch.setattr(sync_router, "build_person_embeddings_cache", lambda uid: {})
+    monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
+    monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
+    monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 2.0)
+    monkeypatch.setattr(sync_pipeline, "process_segment", fake_process_segment)
+    monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response: None)
+    monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_router, "get_hard_restriction_status", lambda uid: (False, None))
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
     monkeypatch.setattr(sync_router, "is_cloud_tasks_dispatch_enabled", lambda: False)
     monkeypatch.setattr(sync_router, "has_byok_keys", lambda: False)
-    monkeypatch.setattr(sync_router, "FAIR_USE_ENABLED", False)
+    monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
 
     response = client.post(
         "/v2/sync-local-files",

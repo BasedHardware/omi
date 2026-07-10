@@ -130,6 +130,20 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(assignBody.contains("conversationId == \"latest\""))
   }
 
+  func testSetConversationStarredUsesRepositoryMutationOnce() throws {
+    let source = try bridgeSource()
+    let body = try actionBody(named: "set_conversation_starred", in: source)
+    XCTAssertTrue(body.contains("conversationRepository.setStarred"))
+    XCTAssertFalse(
+      body.contains("APIClient.shared.setConversationStarred"),
+      "the automation action must not bypass the repository and issue a duplicate PATCH"
+    )
+    XCTAssertFalse(
+      body.contains("AppState.current?.setConversationStarred"),
+      "the app-state helper performs its own repository mutation"
+    )
+  }
+
   func testTranscriptionLanguageActionsPersistViaAPI() throws {
     let source = try bridgeSource()
     let setBody = try actionBody(named: "set_transcription_language", in: source)

@@ -2275,11 +2275,11 @@ final class DesktopAutomationActionRegistry {
         resolvedConversationId = conversationId
       }
       let starred = boolParam(params["starred"], default: true)
-      if let appState = AppState.current {
-        await appState.setConversationStarred(resolvedConversationId, starred: starred)
-      } else {
-        try await APIClient.shared.setConversationStarred(id: resolvedConversationId, starred: starred)
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
       }
+      try await appState.conversationRepository.setStarred(
+        id: resolvedConversationId, starred: starred)
       return [
         "conversation_id": resolvedConversationId,
         "starred": starred ? "true" : "false",

@@ -299,7 +299,7 @@ class TestSyncRouterStructure:
         assert 'is_cloud_tasks_dispatch_enabled() and not has_byok_keys()' in source
 
     def test_pipeline_reraises_in_task_mode(self):
-        source = self._read(os.path.join('routers', 'sync.py'))
+        source = self._read(os.path.join('utils', 'sync', 'pipeline.py'))
         assert 'task_mode: bool = False' in source
         # Catch-all must re-raise in task mode so the handler controls retry
         assert 'if task_mode:' in source
@@ -396,7 +396,6 @@ def _load_sync_router_for_fast_path():
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.request_validation',
-        'utils.sync',
         'utils.sync.files',
         'utils.sync.playback',
         'utils.speaker_assignment',
@@ -447,6 +446,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
     sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+    sync_pkg = types.ModuleType('utils.sync')
+    sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
+    sys.modules['utils.sync'] = sync_pkg
+    sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
     sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
     sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=True)
@@ -497,6 +501,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
     sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
     spec = importlib.util.spec_from_file_location(
         'sync_post_enqueue_cleanup',
         os.path.join(BACKEND_DIR, 'routers', 'sync.py'),
@@ -554,6 +559,7 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
         module.enqueue_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -578,6 +584,7 @@ async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch
         module.enqueue_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -643,6 +650,7 @@ async def test_sync_dispatch_enqueue_failed_records_degraded_inline(monkeypatch)
         assert pipeline_call.kwargs.get('name', '').startswith('sync_pipeline:')
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -677,6 +685,7 @@ async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
         module.enqueue_sync_job.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -711,6 +720,7 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
         module.enqueue_sync_job.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
