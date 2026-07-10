@@ -117,6 +117,25 @@ def schema_to_ts(schema: Any) -> str:
     return result
 
 
+def is_plain_object_type_literal(ts_type: str) -> bool:
+    """Return True when ts_type is a single `{ ... }` object literal.
+
+    Top-level unions/intersections (e.g. oneOf/anyOf results, or `{...} | null`)
+    cannot be expressed as `interface` and must use `type`.
+    """
+    if not ts_type.startswith('{'):
+        return False
+    depth = 0
+    for index, char in enumerate(ts_type):
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return index == len(ts_type) - 1
+    return False
+
+
 def object_schema_to_ts(schema: dict[str, Any]) -> str:
     properties = schema.get('properties')
     additional = schema.get('additionalProperties')
@@ -351,8 +370,9 @@ def generate(spec: dict[str, Any], source_label: str) -> str:
     for schema_name in sorted(schemas):
         ts_name = ts_identifier(schema_name)
         ts_type = schema_to_ts(schemas[schema_name])
-        declaration = 'interface' if ts_type.startswith('{\n') else 'type'
-        if declaration == 'interface':
+        # Interfaces can only declare a single object shape. Unions/intersections
+        # (oneOf/anyOf/allOf, nullable object wrappers) must be `export type`.
+        if is_plain_object_type_literal(ts_type):
             lines.append(f'export interface {ts_name} {ts_type}')
         else:
             lines.append(f'export type {ts_name} = {ts_type};')

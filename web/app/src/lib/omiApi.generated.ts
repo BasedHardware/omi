@@ -795,7 +795,7 @@ export interface CandidateMigrationRequest {
   limit?: number;
 }
 
-export interface CandidateRecord {
+export type CandidateRecord = {
   proposed_action?: "create";
   subject_kind?: "task";
   task_change: TaskCreatePayload;
@@ -837,7 +837,7 @@ export interface CandidateRecord {
   task_change?: null;
   task_id?: null;
   workstream_proposal: WorkstreamProposal_Output;
-}
+};
 
 export interface CandidateResolutionReceipt {
   candidate_id: string;

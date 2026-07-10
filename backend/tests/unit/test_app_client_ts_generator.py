@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from scripts import generate_ts_openapi_types
@@ -93,3 +94,47 @@ def test_typescript_generator_handles_refs_nullability_and_additional_properties
     assert 'nested: Nested;' in generated
     assert 'tags?: Array<string>;' in generated
     assert 'metadata?: Record<string, number>;' in generated
+
+
+def test_typescript_generator_emits_type_for_object_unions():
+    spec = {
+        'components': {
+            'schemas': {
+                'CandidateRecord': {
+                    'oneOf': [
+                        {
+                            'type': 'object',
+                            'properties': {
+                                'proposed_action': {'const': 'create'},
+                                'task_id': {'type': 'null'},
+                            },
+                        },
+                        {
+                            'type': 'object',
+                            'properties': {
+                                'proposed_action': {'const': 'update'},
+                                'task_id': {'type': 'string'},
+                            },
+                            'required': ['task_id'],
+                        },
+                    ]
+                },
+                'NullableObject': {
+                    'anyOf': [
+                        {'type': 'object', 'properties': {'ok': {'type': 'boolean'}}, 'required': ['ok']},
+                        {'type': 'null'},
+                    ]
+                },
+            }
+        },
+        'paths': {},
+    }
+
+    generated = generate_ts_openapi_types.generate(spec, 'test-openapi.json')
+
+    assert 'export type CandidateRecord =' in generated
+    assert 'export interface CandidateRecord' not in generated
+    assert '} | {' in generated
+    assert 'export type NullableObject =' in generated
+    assert 'export interface NullableObject' not in generated
+    assert re.search(r'export type CandidateRecord = \{[\s\S]*?\} \| \{', generated)

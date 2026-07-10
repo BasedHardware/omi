@@ -414,7 +414,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   var categoryColor: String {
     guard let category = category else { return "gray" }
     switch category {
-    case "feature": return "purple"
+    case "feature": return "gray"
     case "bug": return "red"
     case "code": return "blue"
     case "work": return "orange"
