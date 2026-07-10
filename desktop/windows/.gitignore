@@ -44,7 +44,9 @@ desktop.ini
 #Personal files
 .agents/
 .vscode/
-docs/
+# docs/ holds personal notes, EXCEPT explicitly re-included design docs
+docs/*
+!docs/conversation-sync.md
 skills-lock.json
 
 # Visual brainstorming companion

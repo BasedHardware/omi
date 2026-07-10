@@ -21,6 +21,7 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import iconPath from '../../../resources/icon.png?asset'
 import { rendererBaseUrl } from '../rendererServer'
 import { isQuitting } from '../lifecycle'
 import {
@@ -92,6 +93,10 @@ export function createBarWindow(): BrowserWindow {
     skipTaskbar: true,
     focusable: false,
     hasShadow: false,
+    // Frameless + skipTaskbar, but still set the app icon so Alt-Tab/system
+    // listings never show the default Electron icon (ported from the OAuth
+    // window-icon fix that landed on the old overlay window upstream).
+    icon: iconPath,
     // Transparent windows have no DWM material; the renderer paints the bar
     // surface itself (dark, rounded — understated).
     webPreferences: {

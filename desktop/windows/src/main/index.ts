@@ -16,6 +16,7 @@ import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
+import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
@@ -49,6 +50,8 @@ import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
 import { createInsightToastWindow } from './insight/toastWindow'
+import { registerMeetingHandlers } from './ipc/meeting'
+import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { automationBridge } from './automation/bridge'
 import {
@@ -222,7 +225,9 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  updateLocalConversationTitle
+  updateLocalConversationTitle,
+  updateLocalConversationSync,
+  claimConversationForPosting
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -296,27 +301,11 @@ function createWindow(): BrowserWindow {
   })
   perfMark('window:created')
 
-  // Allow Firebase + Google OAuth popups to open as real Electron windows so
-  // signInWithPopup() can postMessage back to the opener. Everything else
-  // routes to the system browser.
+  // Everything window.open()ed routes to the system browser — there is no
+  // embedded OAuth popup anymore (Google blocks webview OAuth; sign-in runs the
+  // backend PKCE flow in the system browser via src/main/ipc/auth.ts).
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const url = details.url
-    const isOAuth =
-      url.startsWith('https://accounts.google.com/') ||
-      url.startsWith('https://based-hardware.firebaseapp.com/') ||
-      url.includes('/__/auth/') ||
-      url.includes('firebaseapp.com/__/auth')
-    if (isOAuth) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 480,
-          height: 720,
-          autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true }
-        }
-      }
-    }
     // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
@@ -466,6 +455,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
+  ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
+    updateLocalConversationSync(id, patch)
+  )
+  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
+    claimConversationForPosting(id, resetAttempts)
+  )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
@@ -479,6 +474,21 @@ app.whenReady().then(async () => {
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
   registerKgHandlers()
+  // Google sign-in (system browser + loopback). On success, surface the main
+  // window OVER the browser: Windows blocks background apps from stealing
+  // foreground focus, so a plain show()/focus() only flashes the taskbar —
+  // briefly forcing always-on-top makes the surface actually happen (same
+  // trick as integrations/oauth.ts focusOmi).
+  registerAuthHandlers(() => {
+    withMainWindow((win) => {
+      if (win.isMinimized()) win.restore()
+      win.setAlwaysOnTop(true)
+      win.show()
+      win.focus()
+      win.setAlwaysOnTop(false)
+    })
+    app.focus({ steal: true })
+  })
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
@@ -494,6 +504,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerMeetingHandlers()
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -591,7 +602,10 @@ app.whenReady().then(async () => {
           interactive: isBarInteractive(),
           id: win && !win.isDestroyed() ? win.id : null
         }
-      }
+      },
+      // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
+      // phase, so the toast + capture wiring is drivable without real Zoom.
+      meeting: meetingDebug()
     }
   }
 
@@ -629,6 +643,10 @@ app.whenReady().then(async () => {
     // Top-edge reveal: 1px trigger strips on every display (zero polling while
     // idle) + display tracking + fullscreen suppression.
     startBarStrips()
+    // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
+    // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
+    // the machine latched silent.
+    startMeetingMonitor({ getCaptureWc })
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
@@ -800,6 +818,7 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  stopMeetingMonitor()
   destroyTray()
   destroyBar()
   const capture = getCaptureWindow()

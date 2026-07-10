@@ -4,9 +4,12 @@ import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
+import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import type {
   AppUsageRecord,
   ChatMessage,
+  ConversationSyncPatch,
+  ConversationSyncState,
   FileIndexDigest,
   IndexedAppRecord,
   IndexedFileRecord,
@@ -20,6 +23,7 @@ import type {
   OnboardingGraphNode,
   OnboardingGraphEdge,
   RewindFrame,
+  SyncSegment,
   UsageCategory
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
@@ -39,14 +43,9 @@ function timed<T>(name: string, fn: () => T): T {
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
 
-// Add a column only if it doesn't already exist, so existing databases (which
-// predate the `kind`/`messages` columns) migrate forward without data loss.
-function ensureColumn(d: Database.Database, table: string, col: string, decl: string): void {
-  const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-  if (!cols.some((c) => c.name === col)) {
-    d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`)
-  }
-}
+// (ensureColumn — add a column only if missing, so existing databases migrate
+// forward without data loss — is dbMigrations.addColumnIfMissing, shared with
+// the versioned migrations so the idiom exists once.)
 
 // Drop a table whose on-disk schema predates the current one (detected by a
 // missing expected column), so the CREATE TABLE IF NOT EXISTS below can recreate
@@ -195,6 +194,9 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // Versioned migrations (PRAGMA user_version) — everything beyond the additive
+  // baseline above. Ordered + exactly-once; see dbMigrations.ts.
+  runMigrations(db)
   return db
 }
 
@@ -207,6 +209,30 @@ type LocalConversationRow = {
   kind: string | null
   messages: string | null
   title: string | null
+  syncState: string | null
+  segmentsJson: string | null
+  cloudId: string | null
+  syncAttempts: number | null
+  syncError: string | null
+}
+
+const SYNC_STATES: ConversationSyncState[] = [
+  'local_only',
+  'pending',
+  'posting',
+  'done',
+  'failed',
+  'unconfirmed'
+]
+
+function parseSegments(json: string | null): SyncSegment[] | null {
+  if (!json) return null
+  try {
+    const v = JSON.parse(json)
+    return Array.isArray(v) ? (v as SyncSegment[]) : null
+  } catch {
+    return null
+  }
 }
 
 function mapLocalConversation(row: LocalConversationRow): LocalConversation {
@@ -218,17 +244,27 @@ function mapLocalConversation(row: LocalConversationRow): LocalConversation {
     createdAt: row.createdAt,
     kind: row.kind === 'chat' ? 'chat' : 'recording',
     messages: row.messages ? (JSON.parse(row.messages) as ChatMessage[]) : undefined,
-    title: row.title ?? null
+    title: row.title ?? null,
+    syncState: SYNC_STATES.includes(row.syncState as ConversationSyncState)
+      ? (row.syncState as ConversationSyncState)
+      : 'local_only',
+    // Tolerate a corrupt segments blob: one bad row must not throw and break the
+    // whole listLocalConversations() read.
+    segments: parseSegments(row.segmentsJson),
+    cloudId: row.cloudId ?? null,
+    syncAttempts: row.syncAttempts ?? 0,
+    syncError: row.syncError ?? null
   }
 }
 
 const LOCAL_CONVERSATION_COLUMNS =
-  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, title'
+  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, title, ' +
+  'sync_state AS syncState, segments_json AS segmentsJson, cloud_id AS cloudId, sync_attempts AS syncAttempts, sync_error AS syncError'
 
 export function insertLocalConversation(c: LocalConversation): void {
   get()
     .prepare(
-      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title, sync_state, segments_json, cloud_id, sync_attempts, sync_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .run(
       c.id,
@@ -238,8 +274,57 @@ export function insertLocalConversation(c: LocalConversation): void {
       c.createdAt,
       c.kind ?? 'recording',
       c.messages ? JSON.stringify(c.messages) : null,
-      c.title ?? null
+      c.title ?? null,
+      c.syncState ?? 'local_only',
+      c.segments && c.segments.length > 0 ? JSON.stringify(c.segments) : null,
+      c.cloudId ?? null,
+      c.syncAttempts ?? 0,
+      c.syncError ?? null
     )
+}
+
+/** Persist an outbox transition (see ConversationSyncState / lib/sync/outbox.ts).
+ *  cloudId/syncError only change when present in the patch; incrementAttempts
+ *  bumps the counter atomically with the state write. */
+export function updateLocalConversationSync(id: string, patch: ConversationSyncPatch): void {
+  const sets = ['sync_state = ?']
+  const params: unknown[] = [patch.syncState]
+  if (patch.cloudId !== undefined) {
+    sets.push('cloud_id = ?')
+    params.push(patch.cloudId)
+  }
+  if (patch.syncError !== undefined) {
+    sets.push('sync_error = ?')
+    params.push(patch.syncError)
+  }
+  if (patch.incrementAttempts) sets.push('sync_attempts = sync_attempts + 1')
+  params.push(id)
+  get()
+    .prepare(`UPDATE local_conversation SET ${sets.join(', ')} WHERE id = ?`)
+    .run(...params)
+}
+
+/**
+ * Atomically claim a row for POSTing: flip it to 'posting' (and bump attempts)
+ * ONLY if it is still in a claimable state. Returns true iff this call won the
+ * claim. This is the compare-and-swap that makes the pending→posting transition
+ * safe against a stale-snapshot second driver (e.g. the Conversations retry pass
+ * running with a row it read before an earlier sync moved it on): the loser sees
+ * `changes === 0` and backs off instead of re-POSTing (which prod would
+ * duplicate, since it ignores client_session_id). 'posting' is intentionally
+ * excluded — a row already posting is owned by a live driver; a genuinely
+ * crash-orphaned 'posting' row is first recovered to 'unconfirmed' (which IS
+ * claimable) by the caller. Optionally resets sync_attempts (manual re-sync).
+ */
+export function claimConversationForPosting(id: string, resetAttempts = false): boolean {
+  const attemptsExpr = resetAttempts ? '1' : 'sync_attempts + 1'
+  const r = get()
+    .prepare(
+      `UPDATE local_conversation SET sync_state = 'posting', sync_attempts = ${attemptsExpr}
+         WHERE id = ? AND sync_state IN ('pending', 'failed', 'unconfirmed')`
+    )
+    .run(id)
+  return r.changes > 0
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {
