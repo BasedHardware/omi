@@ -160,6 +160,10 @@ final class AgentRuntimeStatusStore: ObservableObject {
     projectionsBySurface[surface.key]
   }
 
+  func projection(forRunID runID: String) -> AgentRunProjection? {
+    projectionByRunId[runID]
+  }
+
   /// Rehydrates visible status from a kernel snapshot after app/runtime restart.
   /// The kernel remains authoritative; this never manufactures a Swift run.
   func restoreKernelProjection(

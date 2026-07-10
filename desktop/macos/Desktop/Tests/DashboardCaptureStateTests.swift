@@ -190,10 +190,19 @@ final class DashboardCaptureStateTests: XCTestCase {
         let method = try methodBody(named: "refreshHomeStatusData", in: source)
 
         XCTAssertTrue(source.contains("@State private var lastHomeStatusRefreshAt = Date.distantPast"))
-        XCTAssertTrue(normalizedSource.contains("syncCaptureState() reportHomeAutomationMode() Task { await refreshHomeStatusData(force: true) }"))
         XCTAssertTrue(
             normalizedSource.contains(
-                "viewModel.refreshGoals() appState.checkAllPermissions() syncCaptureState() Task { await refreshHomeStatusData(force: false) }"
+                "syncCaptureState() reportHomeAutomationMode() intelligenceStore.setRecommendationActionHandler"
+            )
+        )
+        XCTAssertTrue(
+            normalizedSource.contains(
+                "Task { await intelligenceStore.load() } Task { await refreshHomeStatusData(force: true) }"
+            )
+        )
+        XCTAssertTrue(
+            normalizedSource.contains(
+                "viewModel.refreshGoals() Task { await intelligenceStore.load() } appState.checkAllPermissions() syncCaptureState() Task { await refreshHomeStatusData(force: false) }"
             )
         )
         XCTAssertTrue(method.contains("PollingConfig.shouldAllowActivationRefresh"))

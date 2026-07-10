@@ -6018,7 +6018,10 @@
           "app",
           "person",
           "document",
-          "meeting"
+          "meeting",
+          "free_time",
+          "dependency",
+          "agent"
         ],
         "title": "ContextMatchSignal",
         "type": "string"

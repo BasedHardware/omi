@@ -6,7 +6,6 @@ import Foundation
 actor TaskPromotionService {
     static let shared = TaskPromotionService()
 
-    private let targetCount = 5
     private let promotionDebounceInterval: TimeInterval = 30
     private var safetyTimer: Task<Void, Never>?
     private var isPromoting = false
@@ -47,10 +46,6 @@ actor TaskPromotionService {
         }
     }
 
-    private func legacyTaskNotificationEnabled() async -> Bool {
-        await TaskLegacyEffectGate.live.isAllowed(.notification)
-    }
-
     func stop() {
         safetyTimer?.cancel()
         safetyTimer = nil
@@ -77,7 +72,7 @@ actor TaskPromotionService {
     /// (either cap reached or no staged tasks available).
     /// Returns the list of promoted tasks so callers can insert them directly.
     @discardableResult
-    func promoteIfNeeded(shouldNotify: Bool = true, bypassDebounce: Bool = false) async -> [TaskActionItem] {
+    func promoteIfNeeded(bypassDebounce: Bool = false) async -> [TaskActionItem] {
         guard await legacyPromotionEnabled() else { return [] }
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
@@ -92,11 +87,8 @@ actor TaskPromotionService {
         defer { isPromoting = false }
 
         var promotedTasks: [TaskActionItem] = []
-        // Promote at most one task per trigger. Bursting up to targetCount
-        // promotions in a single fire posted up to 5 "New task" notifications
-        // back-to-back, which users perceived as spam. The 5-minute safety
-        // timer + on-complete/on-delete events naturally fill the user's
-        // task list one item at a time.
+        // Promote at most one task per trigger. The safety timer plus explicit
+        // task lifecycle events naturally fill the compatibility list quietly.
         let maxIterations = 1
 
         for _ in 0..<maxIterations {
@@ -122,27 +114,6 @@ actor TaskPromotionService {
                         log("TaskPromotion: Failed to sync promoted task locally: \(error)")
                     }
 
-                    // Send notification for the promoted task
-                    let notificationsEnabled = await MainActor.run {
-                        TaskAssistantSettings.shared.notificationsEnabled
-                    }
-                    let modeAllowsNotification = await legacyTaskNotificationEnabled()
-                    if shouldNotify && notificationsEnabled && modeAllowsNotification {
-                        let message = "New task: \(promotedTask.description)"
-                        let context = Self.buildNotificationContext(from: promotedTask)
-                        await MainActor.run {
-                            // Tasks bypass the ambient frequency throttle — they're explicit
-                            // commitments the user agreed to, not background chatter. A user on
-                            // Balanced (1/10min) still wants to see every real task land.
-                            NotificationService.shared.sendNotification(
-                                title: "Task",
-                                message: message,
-                                assistantId: "task",
-                                context: context,
-                                respectFrequency: false
-                            )
-                        }
-                    }
                 } else {
                     let reason = response.reason ?? "cap reached or no staged tasks"
                     log("TaskPromotion: No more promotions — \(reason)")
@@ -162,52 +133,5 @@ actor TaskPromotionService {
             }
         }
         return promotedTasks
-    }
-
-    // MARK: - Notification Context
-
-    /// Build a `FloatingBarNotificationContext` so the floating bar follow-up chat
-    /// can explain exactly which task the notification was about, rather than guessing
-    /// from recent conversation history.
-    private static func buildNotificationContext(from task: TaskActionItem) -> FloatingBarNotificationContext {
-        let sourceApp = Self.parseSourceApp(from: task.metadata)
-        let reasoning = Self.buildReasoning(from: task)
-        return FloatingBarNotificationContext(
-            sourceTitle: "Task",
-            assistantId: "task",
-            sourceApp: sourceApp,
-            windowTitle: nil,
-            contextSummary: task.contextSummary,
-            currentActivity: task.currentActivity,
-            reasoning: reasoning,
-            detail: task.description
-        )
-    }
-
-    private static func parseSourceApp(from metadataJson: String?) -> String? {
-        guard let json = metadataJson,
-              let data = json.data(using: .utf8),
-              let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        let app = parsed["source_app"] as? String
-        return (app?.isEmpty == false) ? app : nil
-    }
-
-    private static func buildReasoning(from task: TaskActionItem) -> String? {
-        var parts: [String] = []
-        if let priority = task.priority, !priority.isEmpty {
-            parts.append("priority=\(priority)")
-        }
-        if let category = task.category, !category.isEmpty {
-            parts.append("category=\(category)")
-        }
-        if let dueAt = task.dueAt {
-            let formatter = ISO8601DateFormatter()
-            parts.append("due=\(formatter.string(from: dueAt))")
-        }
-        if let source = task.source, !source.isEmpty {
-            parts.append("source=\(source)")
-        }
-        return parts.isEmpty ? nil : "Promoted from staged tasks (" + parts.joined(separator: ", ") + ")"
     }
 }

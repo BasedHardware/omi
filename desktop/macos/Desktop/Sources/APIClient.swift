@@ -2991,6 +2991,30 @@ extension APIClient {
     return try await get("v1/what-matters-now\(suffix)")
   }
 
+  func replaceTaskContextSnapshot(
+    _ snapshot: OmiAPI.NormalizedContextSnapshot
+  ) async throws -> OmiAPI.SnapshotReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/context-snapshot",
+      method: "PUT",
+      body: snapshot,
+      idempotencyKey: nil,
+      accountGeneration: nil
+    )
+  }
+
+  func evaluateWhatMattersNow(
+    _ request: OmiAPI.EvaluationRequest
+  ) async throws -> OmiAPI.WhatMattersNowProjection {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/what-matters-now/evaluate",
+      method: "POST",
+      body: request,
+      idempotencyKey: nil,
+      accountGeneration: nil
+    )
+  }
+
   func getCanonicalGoals(includeEnded: Bool = true) async throws -> [OmiAPI.GoalResponse] {
     try await get("v1/goals/all?include_ended=\(includeEnded ? "true" : "false")")
   }

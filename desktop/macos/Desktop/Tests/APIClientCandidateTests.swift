@@ -219,6 +219,58 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertEqual(request.method, "GET")
   }
 
+  func testContextSnapshotUsesBoundedPutWithoutRawContext() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    let snapshot = OmiAPI.NormalizedContextSnapshot(
+      deviceId: "device-hash",
+      expiresAt: "2027-01-15T08:05:00Z",
+      generatedAt: "2027-01-15T08:00:00Z",
+      matches: [
+        OmiAPI.NormalizedContextMatch(
+          signals: [.app, .person],
+          subjectId: "workstream-1",
+          subjectKind: .workstream
+        )
+      ],
+      schemaVersion: 1,
+      snapshotId: "context-1"
+    )
+
+    _ = try? await client.replaceTaskContextSnapshot(snapshot)
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/task-intelligence/context-snapshot")
+    XCTAssertEqual(request.method, "PUT")
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.body)) as? [String: Any])
+    XCTAssertEqual(json["snapshot_id"] as? String, "context-1")
+    XCTAssertNil(json["window_title"])
+    XCTAssertNil(json["raw_context"])
+    XCTAssertNil(json["screenshot"])
+  }
+
+  func testContextReevaluationUsesMaterialHintWithoutMutationHeaders() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    _ = try? await client.evaluateWhatMattersNow(
+      OmiAPI.EvaluationRequest(deviceId: "device-hash", materialHint: "ctx:abc123")
+    )
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/what-matters-now/evaluate")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertNil(request.headers["X-Account-Generation"])
+    XCTAssertNil(request.headers["Idempotency-Key"])
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.body)) as? [String: Any])
+    XCTAssertEqual(json["device_id"] as? String, "device-hash")
+    XCTAssertEqual(json["material_hint"] as? String, "ctx:abc123")
+  }
+
   func testGoalFocusSendsExplicitReplacementAndCanonicalMutationHeaders() async throws {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [CandidateURLCapture.self]

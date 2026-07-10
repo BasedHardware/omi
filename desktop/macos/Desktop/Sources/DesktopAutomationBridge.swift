@@ -672,6 +672,242 @@ final class DesktopAutomationActionRegistry {
       return ["outcome": ScreenCapturePolicy.evaluate(facts).rawValue]
     }
 
+    register(
+      name: "configure_contextual_task_interruptions",
+      summary: "Configure the non-production contextual task interruption gate",
+      params: [
+        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
+        "task_notifications_enabled",
+      ]
+    ) { params in
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.userOptedIn = boolParam(params["enabled"], default: false)
+      configuration.shippedCohortsEnabled = boolParam(
+        params["shipped_cohorts_enabled"], default: false)
+      configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
+      configuration.minimumSpacing = TimeInterval(max(
+        0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(max(
+        0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(max(
+        0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      if params["notifications_enabled"] != nil {
+        UserDefaults.standard.set(
+          boolParam(params["notifications_enabled"], default: false),
+          forKey: NotificationService.masterEnabledDefaultsKey
+        )
+      }
+      if params["frequency"] != nil {
+        UserDefaults.standard.set(
+          max(0, min(5, intParam(params["frequency"], default: 0))),
+          forKey: NotificationService.frequencyDefaultsKey
+        )
+      }
+      if params["task_notifications_enabled"] != nil {
+        TaskAssistantSettings.shared.notificationsEnabled = boolParam(
+          params["task_notifications_enabled"], default: false)
+      }
+      return [
+        "enabled": configuration.userOptedIn ? "true" : "false",
+        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
+        "cohort": ProactiveTaskCohort.current.rawValue,
+      ]
+    }
+
+    register(
+      name: "probe_contextual_task_interruption",
+      summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
+      params: ["can_wait", "expires_in_seconds"]
+    ) { params in
+      let nonce = UUID().uuidString.lowercased()
+      let trace = NotificationService.shared.sendContextualTaskInterruption(
+        TaskInterruptionCandidate(
+          recommendationID: "automation:\(nonce)",
+          interventionID: "automation-intervention:\(nonce)",
+          dedupeKey: "automation-dedupe:\(nonce)",
+          headline: "Review a relevant update",
+          whyNow: "The linked context changed materially.",
+          recommendedAction: "Review update",
+          expiresAt: Date().addingTimeInterval(TimeInterval(
+            intParam(params["expires_in_seconds"], default: 300))),
+          canWait: boolParam(params["can_wait"], default: false)
+        )
+      )
+      return [
+        "reason": trace.reason.rawValue,
+        "cohort": trace.cohort.rawValue,
+        "dedupe_hash": trace.dedupeHash,
+        "intervention_id": trace.interventionID,
+      ]
+    }
+
+    register(
+      name: "set_contextual_task_focus",
+      summary: "Set deterministic focus suppression for contextual task interruptions",
+      params: ["suppressed"]
+    ) { params in
+      let suppressed = boolParam(params["suppressed"], default: true)
+      UserDefaults.standard.set(
+        suppressed, forKey: ProactiveTaskInterruptionSettings.focusSuppressedKey)
+      return ["suppressed": suppressed ? "true" : "false"]
+    }
+
+    register(
+      name: "observe_task_context",
+      summary: "Submit a normalized task-context event and optionally flush re-evaluation",
+      params: [
+        "kind", "reference", "subject_kind", "subject_id", "workstream_id", "urgency", "flush",
+      ]
+    ) { params in
+      guard let kind = TaskContextEventKind(rawValue: params["kind"] ?? "app_window") else {
+        throw DesktopAutomationActionError.invalidParams("kind is invalid")
+      }
+      guard let reference = params["reference"], !reference.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("reference is required")
+      }
+      let subject: TaskContextSubject?
+      if let subjectID = params["subject_id"], !subjectID.isEmpty,
+        let kind = OmiAPI.RecommendationSubjectKind(rawValue: params["subject_kind"] ?? "task")
+      {
+        subject = TaskContextSubject(
+          kind: kind,
+          id: subjectID,
+          workstreamID: params["workstream_id"]?.isEmpty == false ? params["workstream_id"] : nil
+        )
+      } else {
+        subject = nil
+      }
+      guard let event = TaskLocalContextEvent.normalized(
+        kind: kind,
+        rawReference: reference,
+        subject: subject,
+        urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
+      ) else {
+        throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
+      }
+      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      await TaskContextualResurfacingService.shared.observe(matched)
+      let shouldFlush = boolParam(params["flush"], default: true)
+      if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
+      return [
+        "reference_hash": matched.referenceHash,
+        "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
+        "flushed": shouldFlush ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "prepare_task_artifact_fixture",
+      summary: "Persist an allowlisted prepared artifact through the workstream kernel",
+      params: ["workstream_id", "logical_key", "kind", "content", "execution_ready", "grant_id"]
+    ) { params in
+      guard let workstreamID = params["workstream_id"], !workstreamID.isEmpty,
+        let logicalKey = params["logical_key"], !logicalKey.isEmpty,
+        let kind = params["kind"], !kind.isEmpty,
+        let content = params["content"], !content.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams(
+          "workstream_id, logical_key, kind, and content are required")
+      }
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.allowedPreparationKinds.insert(kind)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      let referenceDigest = SHA256.hash(data: Data("automation-preparation:\(logicalKey)".utf8))
+        .map { String(format: "%02x", $0) }.joined()
+      let evidence = OmiAPI.EvidenceRef(
+        deviceId: ClientDeviceService.shared.clientDeviceId,
+        excerptHash: "sha256:\(referenceDigest)",
+        id: "sha256:\(referenceDigest)",
+        kind: .local_screen,
+        scope: .device_local,
+        version: "automation-preparation.v1"
+      )
+      let grantID: String
+      if let supplied = params["grant_id"], !supplied.isEmpty {
+        grantID = supplied
+      } else {
+        func object(_ raw: String) throws -> [String: Any] {
+          guard let data = raw.data(using: .utf8),
+            let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+          else { throw DesktopAutomationActionError.invalidParams("kernel returned invalid JSON") }
+          return value
+        }
+        let prepared = try object(try await TaskChatRuntime.controlTool(
+          name: "prepare_workstream_continuity",
+          input: ["workstreamId": workstreamID, "taskIds": []]
+        ))
+        guard let session = prepared["session"] as? [String: Any],
+          let sessionID = session["agentSessionId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel session unavailable") }
+        let capability = "desktop.workstream.artifact.prepare"
+        let operation = "prepare_artifact"
+        let resource = "workstream:\(workstreamID)"
+        let expiry = Int(Date().addingTimeInterval(5 * 60).timeIntervalSince1970 * 1_000)
+        let dispatch = try object(try await TaskChatRuntime.controlTool(
+          name: "create_desktop_dispatch",
+          input: [
+            "kind": "approval",
+            "priority": 1,
+            "title": "Automation prepared artifact fixture",
+            "decisionPrompt": "Authorize this non-production artifact fixture?",
+            "sourceSessionId": sessionID,
+            "capability": capability,
+            "operation": operation,
+            "resourceRef": resource,
+            "payload": ["automation_fixture": true],
+            "expiresAtMs": expiry,
+          ]
+        ))
+        guard let dispatchObject = dispatch["dispatch"] as? [String: Any],
+          let dispatchID = dispatchObject["dispatchId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel dispatch unavailable") }
+        let resolved = try object(try await TaskChatRuntime.controlTool(
+          name: "resolve_desktop_dispatch",
+          input: [
+            "dispatchId": dispatchID,
+            "status": "resolved",
+            "resolvedBy": "desktop_automation",
+            "resolution": ["decision": "allow"],
+            "grant": [
+              "sessionId": sessionID,
+              "capability": capability,
+              "operation": operation,
+              "resourcePattern": resource,
+              "effect": "allow",
+              "source": "user",
+              "expiresAtMs": expiry,
+            ],
+          ]
+        ))
+        guard let grant = resolved["grant"] as? [String: Any],
+          let createdGrantID = grant["grantId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel grant unavailable") }
+        grantID = createdGrantID
+      }
+      let artifact = try await KernelPreparedArtifactBridge().prepare(
+        ProactiveTaskArtifactProposal(
+          workstreamID: workstreamID,
+          logicalKey: logicalKey,
+          kind: kind,
+          content: Data(content.utf8),
+          evidenceRefs: [evidence],
+          executionReady: boolParam(params["execution_ready"], default: true),
+          coordinatorGrantID: grantID
+        ),
+        configuration: configuration
+      )
+      return [
+        "prepared": artifact == nil ? "false" : "true",
+        "version": artifact.map { "\($0.version)" } ?? "",
+        "content_hash": artifact?.contentHash ?? "",
+        "file": artifact?.fileURL.path ?? "",
+        "supersedes_artifact_id": artifact?.supersedesArtifactID ?? "",
+        "delivery_count": artifact.map { "\($0.deliveryIDs.count)" } ?? "0",
+      ]
+    }
+
     // Runs the exact service + outcome mapping the ChatGPT/Claude import
     // sheets use, so harnesses can assert outcome copy without driving the
     // TextEditor. Writes real memories on success, like the sheet would.

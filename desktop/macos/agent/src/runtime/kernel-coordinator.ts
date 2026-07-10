@@ -142,6 +142,7 @@ import {
   importWorkstreamContinuationCheckpoint,
   migrateTaskSessionsToWorkstreams,
   persistWorkstreamArtifactVersion,
+  persistAuthorizedPreparedArtifact,
   persistWorkstreamContextPacket,
   projectWorkstreamContinuity,
   projectCanonicalCandidateResolution,
@@ -150,6 +151,7 @@ import {
   resolveWorkstreamSession,
   type CanonicalCandidateTransport,
   type PersistWorkstreamArtifactVersionInput,
+  type PersistAuthorizedPreparedArtifactInput,
   type PersistWorkstreamContextInput,
   type TaskSessionMigrationReport,
   type WorkstreamContinuationCheckpoint,
@@ -169,6 +171,10 @@ export class AgentRuntimeKernel extends KernelSessions {
 
   persistWorkstreamArtifactVersion(input: PersistWorkstreamArtifactVersionInput) {
     return persistWorkstreamArtifactVersion(this.store, input);
+  }
+
+  persistAuthorizedPreparedArtifact(input: PersistAuthorizedPreparedArtifactInput) {
+    return persistAuthorizedPreparedArtifact(this.store, input);
   }
 
   projectWorkstreamContinuity(input: { ownerId: string; workstreamId: string; nowMs?: number }) {

@@ -114,6 +114,10 @@ export interface PersistWorkstreamArtifactVersionInput extends WorkstreamSession
   nowMs?: number;
 }
 
+export interface PersistAuthorizedPreparedArtifactInput extends PersistWorkstreamArtifactVersionInput {
+  grantId: string;
+}
+
 export interface WorkstreamArtifactVersion {
   logicalKey: string;
   version: number;
@@ -296,6 +300,38 @@ export function persistWorkstreamContextPacket(
     for (const accessLog of built.accessLogs) store.insertDesktopContextAccessLog(accessLog);
   });
   return built;
+}
+
+export function persistAuthorizedPreparedArtifact(
+  store: AgentStore,
+  input: PersistAuthorizedPreparedArtifactInput,
+): WorkstreamArtifactVersion {
+  const session = resolveWorkstreamSession(store, input);
+  const now = input.nowMs ?? Date.now();
+  const grant = store.getOptionalRow(
+    `SELECT g.grant_id, g.session_id, g.capability, g.operation, g.resource_pattern,
+            g.effect, g.expires_at_ms, g.revoked_at_ms, s.owner_id
+       FROM grants g
+       JOIN sessions s ON s.session_id = g.session_id
+      WHERE g.grant_id = ?`,
+    [input.grantId],
+  );
+  if (!grant || grant.owner_id !== input.ownerId) {
+    throw new Error("Prepared artifact grant was not found for owner");
+  }
+  if (
+    grant.session_id !== session.agentSessionId
+    || grant.effect !== "allow"
+    || grant.capability !== "desktop.workstream.artifact.prepare"
+    || grant.operation !== "prepare_artifact"
+    || grant.resource_pattern !== `workstream:${input.workstreamId}`
+    || grant.revoked_at_ms != null
+    || typeof grant.expires_at_ms !== "number"
+    || grant.expires_at_ms <= now
+  ) {
+    throw new Error("Prepared artifact grant is invalid, expired, or out of scope");
+  }
+  return persistWorkstreamArtifactVersion(store, input);
 }
 
 export function persistWorkstreamArtifactVersion(

@@ -127,6 +127,82 @@ describe("agent control tools", () => {
     ).count).toBe(1);
   });
 
+  it("persists prepared artifacts only with a scoped live grant and without replacing context", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const context = ownerContext(kernel);
+    const prepared = parseToolResult(await handleAgentControlToolCall(context, "prepare_workstream_continuity", {
+      workstreamId: "workstream-prepared",
+      taskIds: [],
+    }));
+    const sessionId = (prepared.session as { agentSessionId: string }).agentSessionId;
+    const capability = "desktop.workstream.artifact.prepare";
+    const operation = "prepare_artifact";
+    const resourceRef = "workstream:workstream-prepared";
+    const expiresAtMs = Date.now() + 60_000;
+    const created = parseToolResult(await handleAgentControlToolCall(context, "create_desktop_dispatch", {
+      kind: "approval",
+      priority: 1,
+      title: "Prepare artifact",
+      decisionPrompt: "Allow this prepared artifact?",
+      sourceSessionId: sessionId,
+      capability,
+      operation,
+      resourceRef,
+      expiresAtMs,
+    }));
+    const dispatchId = (created.dispatch as { dispatchId: string }).dispatchId;
+    const resolved = parseToolResult(await handleAgentControlToolCall(
+      trustedOwnerContext(kernel),
+      "resolve_desktop_dispatch",
+      {
+        dispatchId,
+        status: "resolved",
+        resolution: { decision: "allow" },
+        grant: {
+          sessionId,
+          capability,
+          operation,
+          resourcePattern: resourceRef,
+          effect: "allow",
+          source: "user",
+          expiresAtMs,
+        },
+      },
+    ));
+    const grantId = (resolved.grant as { grantId: string }).grantId;
+    const input = {
+      workstreamId: "workstream-prepared",
+      logicalKey: "investor-email",
+      evidenceRefs: [{
+        kind: "local_screen",
+        id: "sha256:evidence",
+        scope: "device_local",
+        device_id: "device-1",
+      }],
+      kind: "email_draft",
+      uri: "file:///tmp/investor-email.artifact",
+      contentHash: "sha256:1234567890abcdef",
+      sourceArtifactId: "prepared-source-1",
+      grantId,
+    };
+    const persisted = parseToolResult(
+      await handleAgentControlToolCall(context, "persist_prepared_workstream_artifact", input),
+    );
+    const rejected = parseToolResult(await handleAgentControlToolCall(
+      context,
+      "persist_prepared_workstream_artifact",
+      { ...input, sourceArtifactId: "prepared-source-2", grantId: "grant_missing" },
+    ));
+
+    expect(persisted.ok, JSON.stringify(persisted)).toBe(true);
+    expect((persisted.artifactVersion as { version: number }).version).toBe(1);
+    expect((persisted.deliveries as unknown[])).toHaveLength(1);
+    expect(rejected.ok).toBe(false);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM workstream_continuation_checkpoints").count).toBe(0);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM desktop_context_packets").count).toBe(0);
+    store.close();
+  });
+
   it("owns schemas and definitions for the first kernel-backed tools", () => {
     expect(agentControlToolDefinitions.map((tool) => tool.name)).toEqual([
       "list_agent_sessions",

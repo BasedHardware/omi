@@ -547,6 +547,17 @@ def test_context_contract_rejects_raw_local_payload_and_ttl_over_one_hour(monkey
         )
 
 
+def test_context_contract_accepts_every_normalized_resurfacing_signal():
+    expected = {'app', 'person', 'document', 'meeting', 'free_time', 'dependency', 'agent'}
+    for signal in sorted(expected):
+        match = NormalizedContextMatch(
+            subject_kind=RecommendationSubjectKind.workstream,
+            subject_id='workstream-1',
+            signals=[signal],
+        )
+        assert {value.value for value in match.signals} == {signal}
+
+
 def test_open_loop_subjects_are_device_scoped_actionable_and_expiring():
     loop = OpenLoopDescriptor(
         loop_id='loop-1',

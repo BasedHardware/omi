@@ -42,6 +42,9 @@ class ContextMatchSignal(str, Enum):
     person = 'person'
     document = 'document'
     meeting = 'meeting'
+    free_time = 'free_time'
+    dependency = 'dependency'
+    agent = 'agent'
 
 
 class OpenLoopKind(str, Enum):

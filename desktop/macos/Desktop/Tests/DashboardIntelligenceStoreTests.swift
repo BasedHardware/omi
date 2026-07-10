@@ -14,6 +14,56 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     XCTAssertNil(store.error)
   }
 
+  func testContextProjectionRefreshesDashboardWithoutConsultingNotificationSettings() {
+    let defaults = UserDefaults.standard
+    let previousMaster = defaults.object(forKey: NotificationService.masterEnabledDefaultsKey)
+    let previousFrequency = defaults.object(forKey: NotificationService.frequencyDefaultsKey)
+    defer {
+      if let previousMaster { defaults.set(previousMaster, forKey: NotificationService.masterEnabledDefaultsKey) }
+      else { defaults.removeObject(forKey: NotificationService.masterEnabledDefaultsKey) }
+      if let previousFrequency { defaults.set(previousFrequency, forKey: NotificationService.frequencyDefaultsKey) }
+      else { defaults.removeObject(forKey: NotificationService.frequencyDefaultsKey) }
+    }
+    defaults.set(false, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(0, forKey: NotificationService.frequencyDefaultsKey)
+    let store = DashboardIntelligenceStore(
+      client: FakeDashboardIntelligenceClient(),
+      outboxStore: MemoryDashboardOutbox(),
+      now: { Date(timeIntervalSince1970: 1_800_000_000) }
+    )
+
+    store.applyContextProjection(projection(items: [recommendation(id: "context-task")]))
+
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["context-task"])
+  }
+
+  func testNotificationRecommendationRouteUsesExistingDashboardDestination() async {
+    let api = FakeDashboardIntelligenceClient()
+    let store = DashboardIntelligenceStore(
+      client: api,
+      outboxStore: MemoryDashboardOutbox(),
+      now: { Date(timeIntervalSince1970: 1_800_000_000) }
+    )
+    store.applyContextProjection(projection(items: [recommendation(
+      id: "artifact-1",
+      kind: .artifact,
+      destinationWorkstreamID: "workstream-existing"
+    )]))
+    var openedDestination: DashboardRecommendationDestination?
+    store.setRecommendationActionHandler { recommendation in
+      openedDestination = recommendation.destination
+      return true
+    }
+
+    let opened = await store.openRecommendation(id: "output-v1:dedupe-artifact-1")
+
+    XCTAssertTrue(opened)
+    XCTAssertEqual(
+      openedDestination,
+      .thread(workstreamID: "workstream-existing", taskID: nil)
+    )
+  }
+
   func testProjectionCapsAtThreeAndKeepsStableIdentityUntilOutputChanges() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: (1...4).map { recommendation(id: "task-\($0)") })

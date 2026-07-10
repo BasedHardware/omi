@@ -34,6 +34,11 @@ struct TaskKernelPrepareReceipt: Decodable {
   let deliveries: [TaskKernelDelivery]
 }
 
+struct TaskKernelPreparedArtifactReceipt: Decodable {
+  let artifactVersion: TaskKernelArtifactVersion
+  let deliveries: [TaskKernelDelivery]
+}
+
 struct TaskKernelContinuityProjection: Decodable {
   let agentSessionId: String?
   let artifactVersions: [TaskKernelArtifactVersion]
@@ -176,6 +181,46 @@ enum TaskWorkstreamContinuity {
     return TaskKernelContinuityReceipt(
       artifactVersions: response.artifactVersions,
       checkpoint: response.checkpoint,
+      deliveries: response.deliveries
+    )
+  }
+
+  /// Persists a policy-approved proactive payload through the same kernel
+  /// session, version, checkpoint, and delivery authority as agent output.
+  static func persistPreparedArtifact(
+    workstreamId: String,
+    logicalKey: String,
+    kind: String,
+    fileURL: URL,
+    contentHash: String,
+    evidenceRefs: [OmiAPI.EvidenceRef],
+    grantId: String,
+    control: Control = { name, input in
+      try await TaskChatRuntime.controlTool(name: name, input: input)
+    }
+  ) async throws -> TaskKernelPreparedArtifactReceipt {
+    guard !evidenceRefs.isEmpty else { throw TaskWorkstreamContinuityError.missingRevisionEvidence }
+    let input: [String: Any] = [
+      "workstreamId": workstreamId,
+      "logicalKey": logicalKey,
+      "evidenceRefs": try jsonArray(evidenceRefs),
+      "kind": kind,
+      "uri": fileURL.absoluteString,
+      "contentHash": contentHash,
+      "sourceArtifactId": "proactive-prepared:\(contentHash)",
+      "grantId": grantId,
+    ]
+    let raw = try await control("persist_prepared_workstream_artifact", input)
+    guard let data = raw.data(using: .utf8) else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
+    struct Response: Decodable {
+      let ok: Bool
+      let artifactVersion: TaskKernelArtifactVersion
+      let deliveries: [TaskKernelDelivery]
+    }
+    let response = try JSONDecoder().decode(Response.self, from: data)
+    guard response.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
+    return TaskKernelPreparedArtifactReceipt(
+      artifactVersion: response.artifactVersion,
       deliveries: response.deliveries
     )
   }

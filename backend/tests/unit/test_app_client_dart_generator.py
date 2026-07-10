@@ -432,6 +432,10 @@ def test_task_intelligence_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedGoalUpdate {' in generated
     assert 'final GeneratedPatchField<String> desiredOutcome;' in generated
     assert 'final GeneratedPatchField<DateTime> nextReviewAt;' in generated
+    assert 'class GeneratedContextMatchSignal {' in generated
+    assert 'static const dependency = GeneratedContextMatchSignal._("dependency");' in generated
+    assert 'factory GeneratedContextMatchSignal.fromJson(dynamic value)' in generated
+    assert '_readValueList(value, GeneratedContextMatchSignal.fromJson)' in generated
     action_items_generated = ACTION_ITEMS_FOLDERS_DART_PATH.read_text()
     assert 'class GeneratedActionItemCreateRequest' in action_items_generated
     assert 'class GeneratedActionItemUpdateRequest' in action_items_generated

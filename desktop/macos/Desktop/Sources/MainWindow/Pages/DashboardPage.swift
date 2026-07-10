@@ -472,6 +472,11 @@ struct DashboardPage: View {
             intelligenceStore.registerAutomationActions()
             Task { await intelligenceStore.load() }
             Task { await refreshHomeStatusData(force: true) }
+            Task {
+                if let recommendationID = ContextualTaskNavigationRouter.shared.consume() {
+                    _ = await intelligenceStore.openRecommendation(id: recommendationID)
+                }
+            }
         }
         .onDisappear {
             intelligenceStore.setRecommendationActionHandler(nil)
@@ -485,6 +490,17 @@ struct DashboardPage: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .whatMattersNowContextDidRefresh)) { notification in
+            guard let projection = notification.object as? OmiAPI.WhatMattersNowProjection else { return }
+            intelligenceStore.applyContextProjection(projection)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openWhatMattersNowRecommendation)) { notification in
+            guard let recommendationID = notification.userInfo?[
+                TaskContextualResurfacingService.recommendationIDUserInfoKey
+            ] as? String else { return }
+            guard ContextualTaskNavigationRouter.shared.consume(requestedID: recommendationID) != nil else { return }
+            Task { _ = await intelligenceStore.openRecommendation(id: recommendationID) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
             syncCaptureState()

@@ -206,6 +206,36 @@ final class DashboardIntelligenceStore: ObservableObject {
     }
   }
 
+  /// Apply a context-triggered canonical projection without coupling dashboard
+  /// eligibility to notification settings or interruption policy.
+  func applyContextProjection(_ projection: OmiAPI.WhatMattersNowProjection) {
+    recommendations = Self.project(projection, now: now())
+    error = nil
+  }
+
+  @discardableResult
+  func openRecommendation(id: String) async -> Bool {
+    if !recommendations.contains(where: { $0.id == id }) {
+      await load()
+    }
+    guard let recommendation = recommendations.first(where: { $0.id == id }),
+      let recommendationActionHandler
+    else {
+      error = "This review target is no longer available."
+      return false
+    }
+    let opened = await recommendationActionHandler(recommendation)
+    if opened {
+      TaskContextSubjectMatcher.shared.bindRecentContext(to: TaskContextSubject(
+        kind: recommendation.subjectKind,
+        id: recommendation.subjectID,
+        workstreamID: Self.destinationWorkstreamID(recommendation.destination)
+      ))
+      await recordPrimaryAction(recommendation)
+    }
+    return opened
+  }
+
   func loadGoalDetail(goalID: String) async {
     do {
       selectedGoalDetail = try await client.getCanonicalGoalDetail(goalID: goalID)
@@ -506,19 +536,16 @@ final class DashboardIntelligenceStore: ObservableObject {
       guard let recommendationID = params["recommendation_id"], !recommendationID.isEmpty else {
         return ["error": "recommendation_id is required"]
       }
-      guard let recommendation = self.recommendations.first(where: { $0.id == recommendationID }) else {
-        return ["success": "false", "error": "recommendation not found"]
-      }
-      guard let handler = self.recommendationActionHandler else {
-        return ["success": "false", "error": "dashboard recommendation router unavailable"]
-      }
-      let opened = await handler(recommendation)
-      if opened { await self.recordPrimaryAction(recommendation) }
+      if !self.recommendations.contains(where: { $0.id == recommendationID }) { await self.load() }
+      let recommendation = self.recommendations.first(where: { $0.id == recommendationID })
+      let opened = await self.openRecommendation(id: recommendationID)
       return [
         "success": opened ? "true" : "false",
-        "subject_kind": recommendation.subjectKind.rawValue,
-        "subject_id": recommendation.subjectID,
-        "destination": Self.automationDestination(recommendation.destination),
+        "subject_kind": recommendation?.subjectKind.rawValue ?? "",
+        "subject_id": recommendation?.subjectID ?? "",
+        "destination": recommendation.map {
+          Self.automationDestination($0.destination)
+        } ?? "",
         "error": self.error ?? "",
       ]
     }
@@ -553,6 +580,14 @@ final class DashboardIntelligenceStore: ObservableObject {
     case .task(let taskID, let workstreamID): return "task:\(taskID):\(workstreamID ?? "")"
     case .thread(let workstreamID, let taskID): return "thread:\(workstreamID):\(taskID ?? "")"
     case .unavailable: return "unavailable"
+    }
+  }
+
+  private static func destinationWorkstreamID(_ destination: DashboardRecommendationDestination) -> String? {
+    switch destination {
+    case .task(_, let workstreamID): return workstreamID
+    case .thread(let workstreamID, _): return workstreamID
+    case .suggested, .unavailable: return nil
     }
   }
 }

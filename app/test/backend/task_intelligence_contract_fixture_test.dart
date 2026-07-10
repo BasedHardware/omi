@@ -158,4 +158,17 @@ void main() {
     });
     expect(checkpoint.toJson()['last_event_sequence'], 3);
   });
+
+  test('normalized context signals decode and round trip as string values', () {
+    const values = ['person', 'app', 'document', 'meeting', 'free_time', 'dependency', 'agent'];
+    final match = intelligence.GeneratedNormalizedContextMatch.fromJson({
+      'signals': values,
+      'subject_id': 'workstream-1',
+      'subject_kind': 'workstream',
+    });
+
+    expect(match.signals.map((signal) => signal.value).toList(), values);
+    expect(match.toJson()['signals'], values);
+    expect(match.subjectKind.value, 'workstream');
+  });
 }

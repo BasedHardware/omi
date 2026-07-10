@@ -944,7 +944,7 @@ export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
 }
 
-export type ContextMatchSignal = "app" | "person" | "document" | "meeting";
+export type ContextMatchSignal = "app" | "person" | "document" | "meeting" | "free_time" | "dependency" | "agent";
 
 export interface ContinuationCheckpoint {
   checkpoint_id: string;

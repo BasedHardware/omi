@@ -717,6 +717,10 @@ class AnalyticsManager {
     PostHogManager.shared.taskIntelligenceAttribution(event)
   }
 
+  func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+    PostHogManager.shared.proactiveTaskGateEvaluated(trace)
+  }
+
   func taskPromoted(taskCount: Int) {
     PostHogManager.shared.taskPromoted(taskCount: taskCount)
   }

@@ -331,6 +331,18 @@ const persistWorkstreamContinuitySchema = strictObject({
   ttlMs: z.coerce.number().int().positive().max(7 * 24 * 60 * 60 * 1_000).default(7 * 24 * 60 * 60 * 1_000),
 });
 
+const persistPreparedWorkstreamArtifactSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  workstreamId: z.string().min(1),
+  logicalKey: z.string().min(1).max(256),
+  evidenceRefs: z.array(evidenceRefSchema).min(1).max(20),
+  kind: z.string().min(1),
+  uri: z.string().min(1),
+  contentHash: z.string().min(16),
+  sourceArtifactId: z.string().min(1),
+  grantId: z.string().min(1),
+});
+
 const resolveWorkstreamContinuityDeliverySchema = strictObject({
   ownerId: z.string().min(1).optional(),
   deliveryId: z.string().min(1),
@@ -365,6 +377,7 @@ export const agentControlToolSchemas = {
   set_desktop_attention_override: setDesktopAttentionOverrideSchema,
   prepare_workstream_continuity: prepareWorkstreamContinuitySchema,
   persist_workstream_continuity: persistWorkstreamContinuitySchema,
+  persist_prepared_workstream_artifact: persistPreparedWorkstreamArtifactSchema,
   resolve_workstream_continuity_delivery: resolveWorkstreamContinuityDeliverySchema,
   project_workstream_continuity: projectWorkstreamContinuitySchema,
 } as const;
@@ -374,6 +387,7 @@ export type AgentControlToolName = keyof typeof agentControlToolSchemas;
 export const INTERNAL_AGENT_CONTROL_TOOL_NAMES = [
   "prepare_workstream_continuity",
   "persist_workstream_continuity",
+  "persist_prepared_workstream_artifact",
   "resolve_workstream_continuity_delivery",
   "project_workstream_continuity",
 ] as const satisfies readonly AgentControlToolName[];
@@ -1049,6 +1063,60 @@ export async function handleAgentControlToolCall(
           deliveries: [...artifactDeliveries, checkpointDelivery]
             .filter((delivery) => delivery.deliveryStatus !== "delivered" && delivery.deliveryStatus !== "cancelled")
             .map(serializeContinuityDelivery),
+        });
+      }
+      case "persist_prepared_workstream_artifact": {
+        const parsed = agentControlToolSchemas.persist_prepared_workstream_artifact.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const version = context.kernel.persistAuthorizedPreparedArtifact({
+          ownerId,
+          workstreamId: parsed.workstreamId,
+          logicalKey: parsed.logicalKey,
+          evidenceRefs: parsed.evidenceRefs as EvidenceRef[],
+          sourceArtifactId: parsed.sourceArtifactId,
+          grantId: parsed.grantId,
+          artifact: {
+            kind: parsed.kind,
+            role: "result",
+            uri: parsed.uri,
+            contentHash: parsed.contentHash,
+            metadataJson: JSON.stringify({ status: "awaiting_review" }),
+          },
+        });
+        const delivery = context.kernel.queueArtifactDelivery({
+          deliveryId: `artifactDelivery:workstream:${parsed.workstreamId}:${parsed.sourceArtifactId}`,
+          artifactId: version.artifact.artifactId,
+          ownerId,
+          sourceSessionId: version.artifact.sessionId,
+          sourceRunId: version.artifact.runId,
+          sourceAttemptId: version.artifact.attemptId,
+          intendedSurface: "canonical_workstream",
+          targetKind: "task_chat",
+          targetRef: parsed.workstreamId,
+          contentHash: parsed.contentHash,
+          receiptJson: JSON.stringify({
+            kind: "artifact_descriptor",
+            sourceArtifactId: parsed.sourceArtifactId,
+            logicalKey: version.logicalKey,
+            artifactKind: version.artifact.kind,
+            uri: version.artifact.uri,
+            contentHash: parsed.contentHash,
+            sourceRunId: version.artifact.runId,
+            evidenceRefs: version.evidenceRefs,
+          }),
+        });
+        return stringifyToolResult({
+          artifactVersion: {
+            sourceArtifactId: parsed.sourceArtifactId,
+            logicalKey: version.logicalKey,
+            version: version.version,
+            supersedesArtifactId: version.supersedesArtifactId,
+            evidenceRefs: version.evidenceRefs,
+            artifact: serializeArtifact(version.artifact),
+          },
+          deliveries: delivery.deliveryStatus === "delivered" || delivery.deliveryStatus === "cancelled"
+            ? []
+            : [serializeContinuityDelivery(delivery)],
         });
       }
       case "resolve_workstream_continuity_delivery": {

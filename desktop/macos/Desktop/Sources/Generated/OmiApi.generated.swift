@@ -1221,6 +1221,9 @@ public enum OmiAPI {
     case person
     case document
     case meeting
+    case free_time
+    case dependency
+    case agent
     case _unknown = "__unknown__"
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()

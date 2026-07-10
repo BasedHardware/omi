@@ -1759,13 +1759,13 @@ class GeneratedFeedbackCreate {
 
   factory GeneratedFeedbackCreate.fromJson(Map<String, dynamic> json) {
     return GeneratedFeedbackCreate(
-      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackAction.fromJson), requiredField: true, nullable: false), "action"),
+      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", GeneratedTaskIntelligenceFeedbackAction.fromJson, requiredField: true, nullable: false), "action"),
       contextSnapshotHash: _readFieldValue<String>(_readField(json, const ["context_snapshot_hash"]), "context_snapshot_hash", _readString, requiredField: false, nullable: true),
       interventionId: _readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: false, nullable: true),
       laterUntil: _readFieldValue<DateTime>(_readField(json, const ["later_until"]), "later_until", _readDateTime, requiredField: false, nullable: true),
-      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackReason.fromJson), requiredField: false, nullable: true),
+      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", GeneratedTaskIntelligenceFeedbackReason.fromJson, requiredField: false, nullable: true),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -1815,7 +1815,7 @@ class GeneratedFeedbackRecord {
 
   factory GeneratedFeedbackRecord.fromJson(Map<String, dynamic> json) {
     return GeneratedFeedbackRecord(
-      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackAction.fromJson), requiredField: true, nullable: false), "action"),
+      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", GeneratedTaskIntelligenceFeedbackAction.fromJson, requiredField: true, nullable: false), "action"),
       attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
       contextSnapshotHash: _readFieldValue<String>(_readField(json, const ["context_snapshot_hash"]), "context_snapshot_hash", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
@@ -1825,9 +1825,9 @@ class GeneratedFeedbackRecord {
       laterUntil: _readFieldValue<DateTime>(_readField(json, const ["later_until"]), "later_until", _readDateTime, requiredField: false, nullable: true),
       proposedCompletion: _required(_readFieldValue<bool>(_readField(json, const ["proposed_completion"]), "proposed_completion", _readBool, requiredField: false, nullable: false, defaultValue: false), "proposed_completion"),
       proposedCompletionCandidateId: _readFieldValue<String>(_readField(json, const ["proposed_completion_candidate_id"]), "proposed_completion_candidate_id", _readString, requiredField: false, nullable: true),
-      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackReason.fromJson), requiredField: false, nullable: true),
+      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", GeneratedTaskIntelligenceFeedbackReason.fromJson, requiredField: false, nullable: true),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -1873,8 +1873,8 @@ class GeneratedInterventionCreate {
       evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
-      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", (value) => _readObject(value, GeneratedInterventionSurface.fromJson), requiredField: true, nullable: false), "surface"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
+      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", GeneratedInterventionSurface.fromJson, requiredField: true, nullable: false), "surface"),
     );
   }
 
@@ -1922,8 +1922,8 @@ class GeneratedInterventionRecord {
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
       interventionId: _required(_readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: true, nullable: false), "intervention_id"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
-      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", (value) => _readObject(value, GeneratedInterventionSurface.fromJson), requiredField: true, nullable: false), "surface"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
+      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", GeneratedInterventionSurface.fromJson, requiredField: true, nullable: false), "surface"),
     );
   }
 
@@ -1958,9 +1958,9 @@ class GeneratedOutcomeCreate {
   factory GeneratedOutcomeCreate.fromJson(Map<String, dynamic> json) {
     return GeneratedOutcomeCreate(
       attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
-      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", (value) => _readObject(value, GeneratedTaskIntelligenceOutcomeCode.fromJson), requiredField: true, nullable: false), "outcome_code"),
+      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", GeneratedTaskIntelligenceOutcomeCode.fromJson, requiredField: true, nullable: false), "outcome_code"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -1995,10 +1995,10 @@ class GeneratedOutcomeRecord {
     return GeneratedOutcomeRecord(
       attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
       occurredAt: _required(_readFieldValue<DateTime>(_readField(json, const ["occurred_at"]), "occurred_at", _readDateTime, requiredField: true, nullable: false), "occurred_at"),
-      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", (value) => _readObject(value, GeneratedTaskIntelligenceOutcomeCode.fromJson), requiredField: true, nullable: false), "outcome_code"),
+      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", GeneratedTaskIntelligenceOutcomeCode.fromJson, requiredField: true, nullable: false), "outcome_code"),
       outcomeId: _required(_readFieldValue<String>(_readField(json, const ["outcome_id"]), "outcome_id", _readString, requiredField: true, nullable: false), "outcome_id"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -2215,14 +2215,14 @@ class GeneratedRecommendation {
       evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
       feedbackSubjectId: _required(_readFieldValue<String>(_readField(json, const ["feedback_subject_id"]), "feedback_subject_id", _readString, requiredField: true, nullable: false), "feedback_subject_id"),
-      feedbackSubjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["feedback_subject_kind"]), "feedback_subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "feedback_subject_kind"),
+      feedbackSubjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["feedback_subject_kind"]), "feedback_subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "feedback_subject_kind"),
       goalOrWorkstreamLabel: _readFieldValue<String>(_readField(json, const ["goal_or_workstream_label"]), "goal_or_workstream_label", _readString, requiredField: false, nullable: true),
       headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
       interventionId: _required(_readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: true, nullable: false), "intervention_id"),
       outputVersion: _required(_readFieldValue<String>(_readField(json, const ["output_version"]), "output_version", _readString, requiredField: true, nullable: false), "output_version"),
       recommendedAction: _required(_readFieldValue<String>(_readField(json, const ["recommended_action"]), "recommended_action", _readString, requiredField: true, nullable: false), "recommended_action"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedRecommendationSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
       whyNow: _required(_readFieldValue<String>(_readField(json, const ["why_now"]), "why_now", _readString, requiredField: true, nullable: false), "why_now"),
     );
   }
@@ -2251,19 +2251,43 @@ class GeneratedRecommendation {
 }
 
 class GeneratedRecommendationSubjectKind {
+  final String value;
 
-  const GeneratedRecommendationSubjectKind({
-  });
+  const GeneratedRecommendationSubjectKind._(this.value);
+  static const candidate = GeneratedRecommendationSubjectKind._("candidate");
+  static const task = GeneratedRecommendationSubjectKind._("task");
+  static const workstream = GeneratedRecommendationSubjectKind._("workstream");
+  static const artifact = GeneratedRecommendationSubjectKind._("artifact");
+  static const decision = GeneratedRecommendationSubjectKind._("decision");
+  static const agentOpenLoop = GeneratedRecommendationSubjectKind._("agent_open_loop");
 
-  factory GeneratedRecommendationSubjectKind.fromJson(Map<String, dynamic> json) {
-    return GeneratedRecommendationSubjectKind(
-    );
+  factory GeneratedRecommendationSubjectKind.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid RecommendationSubjectKind: expected string');
+    }
+    switch (value) {
+      case "candidate": return candidate;
+      case "task": return task;
+      case "workstream": return workstream;
+      case "artifact": return artifact;
+      case "decision": return decision;
+      case "agent_open_loop": return agentOpenLoop;
+      default:
+        throw FormatException('Invalid RecommendationSubjectKind: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedRecommendationSubjectKind && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedDeterministicFacts {
@@ -2286,7 +2310,7 @@ class GeneratedDeterministicFacts {
   factory GeneratedDeterministicFacts.fromJson(Map<String, dynamic> json) {
     return GeneratedDeterministicFacts(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
-      contextMatchSignals: _readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["context_match_signals"]), "context_match_signals", (value) => _readObjectList(value, GeneratedContextMatchSignal.fromJson), requiredField: false, nullable: true),
+      contextMatchSignals: _readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["context_match_signals"]), "context_match_signals", (value) => _readValueList(value, GeneratedContextMatchSignal.fromJson), requiredField: false, nullable: true),
       daysToDue: _readFieldValue<double>(_readField(json, const ["days_to_due"]), "days_to_due", _readDouble, requiredField: false, nullable: true),
       focusedGoalLinked: _required(_readFieldValue<bool>(_readField(json, const ["focused_goal_linked"]), "focused_goal_linked", _readBool, requiredField: false, nullable: false, defaultValue: false), "focused_goal_linked"),
       hasConcreteNextAction: _required(_readFieldValue<bool>(_readField(json, const ["has_concrete_next_action"]), "has_concrete_next_action", _readBool, requiredField: true, nullable: false), "has_concrete_next_action"),
@@ -2396,7 +2420,7 @@ class GeneratedDecisionRecord {
       reasonCodes: _required(_readFieldValue<List<String>>(_readField(json, const ["reason_codes"]), "reason_codes", _readStringList, requiredField: true, nullable: false), "reason_codes"),
       shortlistIds: _required(_readFieldValue<List<String>>(_readField(json, const ["shortlist_ids"]), "shortlist_ids", _readStringList, requiredField: true, nullable: false), "shortlist_ids"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedRecommendationSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -2423,51 +2447,115 @@ class GeneratedDecisionRecord {
 }
 
 class GeneratedContextMatchSignal {
+  final String value;
 
-  const GeneratedContextMatchSignal({
-  });
+  const GeneratedContextMatchSignal._(this.value);
+  static const app = GeneratedContextMatchSignal._("app");
+  static const person = GeneratedContextMatchSignal._("person");
+  static const document = GeneratedContextMatchSignal._("document");
+  static const meeting = GeneratedContextMatchSignal._("meeting");
+  static const freeTime = GeneratedContextMatchSignal._("free_time");
+  static const dependency = GeneratedContextMatchSignal._("dependency");
+  static const agent = GeneratedContextMatchSignal._("agent");
 
-  factory GeneratedContextMatchSignal.fromJson(Map<String, dynamic> json) {
-    return GeneratedContextMatchSignal(
-    );
+  factory GeneratedContextMatchSignal.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid ContextMatchSignal: expected string');
+    }
+    switch (value) {
+      case "app": return app;
+      case "person": return person;
+      case "document": return document;
+      case "meeting": return meeting;
+      case "free_time": return freeTime;
+      case "dependency": return dependency;
+      case "agent": return agent;
+      default:
+        throw FormatException('Invalid ContextMatchSignal: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedContextMatchSignal && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedFeedbackSubjectKind {
+  final String value;
 
-  const GeneratedFeedbackSubjectKind({
-  });
+  const GeneratedFeedbackSubjectKind._(this.value);
+  static const candidate = GeneratedFeedbackSubjectKind._("candidate");
+  static const task = GeneratedFeedbackSubjectKind._("task");
+  static const workstream = GeneratedFeedbackSubjectKind._("workstream");
+  static const artifact = GeneratedFeedbackSubjectKind._("artifact");
+  static const decision = GeneratedFeedbackSubjectKind._("decision");
 
-  factory GeneratedFeedbackSubjectKind.fromJson(Map<String, dynamic> json) {
-    return GeneratedFeedbackSubjectKind(
-    );
+  factory GeneratedFeedbackSubjectKind.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid FeedbackSubjectKind: expected string');
+    }
+    switch (value) {
+      case "candidate": return candidate;
+      case "task": return task;
+      case "workstream": return workstream;
+      case "artifact": return artifact;
+      case "decision": return decision;
+      default:
+        throw FormatException('Invalid FeedbackSubjectKind: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedFeedbackSubjectKind && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedInterventionSurface {
+  final String value;
 
-  const GeneratedInterventionSurface({
-  });
+  const GeneratedInterventionSurface._(this.value);
+  static const suggested = GeneratedInterventionSurface._("suggested");
+  static const whatMattersNow = GeneratedInterventionSurface._("what_matters_now");
 
-  factory GeneratedInterventionSurface.fromJson(Map<String, dynamic> json) {
-    return GeneratedInterventionSurface(
-    );
+  factory GeneratedInterventionSurface.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid InterventionSurface: expected string');
+    }
+    switch (value) {
+      case "suggested": return suggested;
+      case "what_matters_now": return whatMattersNow;
+      default:
+        throw FormatException('Invalid InterventionSurface: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedInterventionSurface && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedNormalizedContextMatch {
@@ -2483,9 +2571,9 @@ class GeneratedNormalizedContextMatch {
 
   factory GeneratedNormalizedContextMatch.fromJson(Map<String, dynamic> json) {
     return GeneratedNormalizedContextMatch(
-      signals: _required(_readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["signals"]), "signals", (value) => _readObjectList(value, GeneratedContextMatchSignal.fromJson), requiredField: true, nullable: false), "signals"),
+      signals: _required(_readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["signals"]), "signals", (value) => _readValueList(value, GeneratedContextMatchSignal.fromJson), requiredField: true, nullable: false), "signals"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
-      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", GeneratedRecommendationSubjectKind.fromJson, requiredField: true, nullable: false), "subject_kind"),
     );
   }
 
@@ -2520,10 +2608,10 @@ class GeneratedOpenLoopDescriptor {
   factory GeneratedOpenLoopDescriptor.fromJson(Map<String, dynamic> json) {
     return GeneratedOpenLoopDescriptor(
       blockingOnId: _readFieldValue<String>(_readField(json, const ["blocking_on_id"]), "blocking_on_id", _readString, requiredField: false, nullable: true),
-      kind: _required(_readFieldValue<GeneratedOpenLoopKind>(_readField(json, const ["kind"]), "kind", (value) => _readObject(value, GeneratedOpenLoopKind.fromJson), requiredField: true, nullable: false), "kind"),
+      kind: _required(_readFieldValue<GeneratedOpenLoopKind>(_readField(json, const ["kind"]), "kind", GeneratedOpenLoopKind.fromJson, requiredField: true, nullable: false), "kind"),
       loopId: _required(_readFieldValue<String>(_readField(json, const ["loop_id"]), "loop_id", _readString, requiredField: true, nullable: false), "loop_id"),
       nextActionCode: _required(_readFieldValue<String>(_readField(json, const ["next_action_code"]), "next_action_code", _readString, requiredField: true, nullable: false), "next_action_code"),
-      status: _required(_readFieldValue<GeneratedOpenLoopStatus>(_readField(json, const ["status"]), "status", (value) => _readObject(value, GeneratedOpenLoopStatus.fromJson), requiredField: true, nullable: false), "status"),
+      status: _required(_readFieldValue<GeneratedOpenLoopStatus>(_readField(json, const ["status"]), "status", GeneratedOpenLoopStatus.fromJson, requiredField: true, nullable: false), "status"),
       subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
     );
@@ -2543,83 +2631,191 @@ class GeneratedOpenLoopDescriptor {
 }
 
 class GeneratedOpenLoopKind {
+  final String value;
 
-  const GeneratedOpenLoopKind({
-  });
+  const GeneratedOpenLoopKind._(this.value);
+  static const task = GeneratedOpenLoopKind._("task");
+  static const artifact = GeneratedOpenLoopKind._("artifact");
+  static const decision = GeneratedOpenLoopKind._("decision");
+  static const approval = GeneratedOpenLoopKind._("approval");
+  static const externalWait = GeneratedOpenLoopKind._("external_wait");
 
-  factory GeneratedOpenLoopKind.fromJson(Map<String, dynamic> json) {
-    return GeneratedOpenLoopKind(
-    );
+  factory GeneratedOpenLoopKind.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid OpenLoopKind: expected string');
+    }
+    switch (value) {
+      case "task": return task;
+      case "artifact": return artifact;
+      case "decision": return decision;
+      case "approval": return approval;
+      case "external_wait": return externalWait;
+      default:
+        throw FormatException('Invalid OpenLoopKind: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedOpenLoopKind && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedOpenLoopStatus {
+  final String value;
 
-  const GeneratedOpenLoopStatus({
-  });
+  const GeneratedOpenLoopStatus._(this.value);
+  static const open = GeneratedOpenLoopStatus._("open");
+  static const blocked = GeneratedOpenLoopStatus._("blocked");
+  static const awaitingUser = GeneratedOpenLoopStatus._("awaiting_user");
+  static const awaitingExternal = GeneratedOpenLoopStatus._("awaiting_external");
 
-  factory GeneratedOpenLoopStatus.fromJson(Map<String, dynamic> json) {
-    return GeneratedOpenLoopStatus(
-    );
+  factory GeneratedOpenLoopStatus.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid OpenLoopStatus: expected string');
+    }
+    switch (value) {
+      case "open": return open;
+      case "blocked": return blocked;
+      case "awaiting_user": return awaitingUser;
+      case "awaiting_external": return awaitingExternal;
+      default:
+        throw FormatException('Invalid OpenLoopStatus: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedOpenLoopStatus && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedTaskIntelligenceFeedbackAction {
+  final String value;
 
-  const GeneratedTaskIntelligenceFeedbackAction({
-  });
+  const GeneratedTaskIntelligenceFeedbackAction._(this.value);
+  static const doNow = GeneratedTaskIntelligenceFeedbackAction._("do_now");
+  static const later = GeneratedTaskIntelligenceFeedbackAction._("later");
+  static const dismiss = GeneratedTaskIntelligenceFeedbackAction._("dismiss");
+  static const acceptCandidate = GeneratedTaskIntelligenceFeedbackAction._("accept_candidate");
+  static const edit = GeneratedTaskIntelligenceFeedbackAction._("edit");
+  static const complete = GeneratedTaskIntelligenceFeedbackAction._("complete");
 
-  factory GeneratedTaskIntelligenceFeedbackAction.fromJson(Map<String, dynamic> json) {
-    return GeneratedTaskIntelligenceFeedbackAction(
-    );
+  factory GeneratedTaskIntelligenceFeedbackAction.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid TaskIntelligenceFeedbackAction: expected string');
+    }
+    switch (value) {
+      case "do_now": return doNow;
+      case "later": return later;
+      case "dismiss": return dismiss;
+      case "accept_candidate": return acceptCandidate;
+      case "edit": return edit;
+      case "complete": return complete;
+      default:
+        throw FormatException('Invalid TaskIntelligenceFeedbackAction: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedTaskIntelligenceFeedbackAction && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedTaskIntelligenceFeedbackReason {
+  final String value;
 
-  const GeneratedTaskIntelligenceFeedbackReason({
-  });
+  const GeneratedTaskIntelligenceFeedbackReason._(this.value);
+  static const alreadyHandled = GeneratedTaskIntelligenceFeedbackReason._("already_handled");
+  static const notMine = GeneratedTaskIntelligenceFeedbackReason._("not_mine");
+  static const notUseful = GeneratedTaskIntelligenceFeedbackReason._("not_useful");
 
-  factory GeneratedTaskIntelligenceFeedbackReason.fromJson(Map<String, dynamic> json) {
-    return GeneratedTaskIntelligenceFeedbackReason(
-    );
+  factory GeneratedTaskIntelligenceFeedbackReason.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid TaskIntelligenceFeedbackReason: expected string');
+    }
+    switch (value) {
+      case "already_handled": return alreadyHandled;
+      case "not_mine": return notMine;
+      case "not_useful": return notUseful;
+      default:
+        throw FormatException('Invalid TaskIntelligenceFeedbackReason: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedTaskIntelligenceFeedbackReason && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 class GeneratedTaskIntelligenceOutcomeCode {
+  final String value;
 
-  const GeneratedTaskIntelligenceOutcomeCode({
-  });
+  const GeneratedTaskIntelligenceOutcomeCode._(this.value);
+  static const taskCompleted = GeneratedTaskIntelligenceOutcomeCode._("task_completed");
+  static const artifactApproved = GeneratedTaskIntelligenceOutcomeCode._("artifact_approved");
+  static const artifactDelivered = GeneratedTaskIntelligenceOutcomeCode._("artifact_delivered");
+  static const decisionResolved = GeneratedTaskIntelligenceOutcomeCode._("decision_resolved");
+  static const agentOutputApplied = GeneratedTaskIntelligenceOutcomeCode._("agent_output_applied");
+  static const workstreamAdvanced = GeneratedTaskIntelligenceOutcomeCode._("workstream_advanced");
 
-  factory GeneratedTaskIntelligenceOutcomeCode.fromJson(Map<String, dynamic> json) {
-    return GeneratedTaskIntelligenceOutcomeCode(
-    );
+  factory GeneratedTaskIntelligenceOutcomeCode.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid TaskIntelligenceOutcomeCode: expected string');
+    }
+    switch (value) {
+      case "task_completed": return taskCompleted;
+      case "artifact_approved": return artifactApproved;
+      case "artifact_delivered": return artifactDelivered;
+      case "decision_resolved": return decisionResolved;
+      case "agent_output_applied": return agentOutputApplied;
+      case "workstream_advanced": return workstreamAdvanced;
+      default:
+        throw FormatException('Invalid TaskIntelligenceOutcomeCode: $value');
+    }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-    };
-  }
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedTaskIntelligenceOutcomeCode && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
 }
 
 GeneratedPatchField<T> _readPatchField<T>(
@@ -2729,6 +2925,11 @@ List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) from
   return [
     for (final item in value) fromJson(_required(_readMap(item), 'list item'))
   ];
+}
+
+List<T>? _readValueList<T>(dynamic value, T Function(dynamic) fromJson) {
+  if (value is! List) return null;
+  return [for (final item in value) fromJson(item)];
 }
 
 List<String>? _readStringList(dynamic value) {

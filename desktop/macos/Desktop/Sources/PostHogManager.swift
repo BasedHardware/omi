@@ -624,6 +624,18 @@ extension PostHogManager {
         track("Task Intelligence Attribution", properties: event.analyticsProperties)
     }
 
+    func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+        track("Proactive Task Gate Evaluated", properties: [
+            "schema_version": trace.schemaVersion,
+            "decision_id": trace.decisionID,
+            "recommendation_id": trace.recommendationID,
+            "intervention_id": trace.interventionID,
+            "dedupe_hash": trace.dedupeHash,
+            "cohort": trace.cohort.rawValue,
+            "reason": trace.reason.rawValue,
+        ])
+    }
+
     func taskPromoted(taskCount: Int) {
         track("Task Promoted", properties: [
             "task_count": taskCount

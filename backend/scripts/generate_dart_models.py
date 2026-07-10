@@ -410,6 +410,7 @@ class DartType:
     is_date_time: bool = False
     is_map: bool = False
     is_dynamic: bool = False
+    is_string_wrapper: bool = False
 
     @property
     def annotation(self) -> str:
@@ -515,7 +516,13 @@ def dart_type_for(
     if isinstance(ref, str):
         schema_name = ref.rsplit('/', 1)[-1]
         if schema_name in target_schemas:
-            return DartType(generated_class_name(schema_name), nullable=nullable, ref_schema=schema_name)
+            ref_schema = all_schemas.get(schema_name, {})
+            return DartType(
+                generated_class_name(schema_name),
+                nullable=nullable,
+                ref_schema=schema_name,
+                is_string_wrapper=ref_schema.get('type') == 'string',
+            )
         ref_schema = all_schemas.get(schema_name, {})
         if ref_schema.get('type') == 'string':
             return DartType('String', nullable=nullable)
@@ -587,6 +594,8 @@ def converter_name(typ: DartType) -> str:
     if typ.list_item:
         item = typ.list_item
         if item.ref_schema:
+            if item.is_string_wrapper:
+                return f'(value) => _readValueList(value, {item.name}.fromJson)'
             return f'(value) => _readObjectList(value, {item.name}.fromJson)'
         if item.is_date_time:
             return '_readDateTimeList'
@@ -600,6 +609,8 @@ def converter_name(typ: DartType) -> str:
             return '_readMapList'
         return '_readDynamicList'
     if typ.ref_schema:
+        if typ.is_string_wrapper:
+            return f'{typ.name}.fromJson'
         return f'(value) => _readObject(value, {typ.name}.fromJson)'
     if typ.is_date_time:
         return '_readDateTime'
@@ -761,6 +772,60 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
     return '\n'.join(lines)
 
 
+def emit_string_wrapper(schema_name: str, schema: dict[str, Any]) -> str:
+    class_name = generated_class_name(schema_name)
+    values = [value for value in schema.get('enum', []) if isinstance(value, str)]
+    lines = [f'class {class_name} {{', '  final String value;', '', f'  const {class_name}._(this.value);']
+    for value in values:
+        constant = dart_field_name(re.sub(r'[^A-Za-z0-9_]', '_', value))
+        lines.append(f'  static const {constant} = {class_name}._({json.dumps(value)});')
+    lines.extend(
+        [
+            '',
+            f'  factory {class_name}.fromJson(dynamic value) {{',
+            '    if (value is! String) {',
+            f"      throw const FormatException('Invalid {schema_name}: expected string');",
+            '    }',
+        ]
+    )
+    if values:
+        lines.extend(
+            [
+                '    switch (value) {',
+                *[
+                    f'      case {json.dumps(value)}: return {constant_name};'
+                    for value, constant_name in (
+                        (value, dart_field_name(re.sub(r'[^A-Za-z0-9_]', '_', value))) for value in values
+                    )
+                ],
+                '      default:',
+                f"        throw FormatException('Invalid {schema_name}: $value');",
+                '    }',
+            ]
+        )
+    else:
+        lines.append(f'    return {class_name}._(value);')
+    lines.extend(
+        [
+            '  }',
+            '',
+            '  String toJson() => value;',
+            '',
+            '  @override',
+            '  bool operator ==(Object other) =>',
+            f'      identical(this, other) || other is {class_name} && other.value == value;',
+            '',
+            '  @override',
+            '  int get hashCode => value.hashCode;',
+            '',
+            '  @override',
+            '  String toString() => value;',
+            '}',
+        ]
+    )
+    return '\n'.join(lines)
+
+
 def emit_candidate_task_change() -> str:
     return '''class GeneratedCandidateTaskChange {
   final GeneratedTaskCreatePayload? create;
@@ -918,8 +983,8 @@ def emit_patch_class(schema_name: str, fields: list[Field]) -> str:
     return '\n'.join(lines)
 
 
-def emit_helpers() -> str:
-    return r'''
+def emit_helpers(*, include_value_list: bool = False) -> str:
+    helpers = r'''
 class _WireField {
   final bool present;
   final dynamic value;
@@ -1046,6 +1111,14 @@ List<Map<String, dynamic>>? _readMapList(dynamic value) {
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
 '''.strip()
+    if include_value_list:
+        value_list = '''List<T>? _readValueList<T>(dynamic value, T Function(dynamic) fromJson) {
+  if (value is! List) return null;
+  return [for (final item in value) fromJson(item)];
+}'''
+        anchor = '\n\nList<String>? _readStringList'
+        helpers = helpers.replace(anchor, f'\n\n{value_list}{anchor}')
+    return helpers
 
 
 def response_schema_for_operation(spec: dict[str, Any], operation_id: str) -> dict[str, Any]:
@@ -1116,6 +1189,9 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
                 ]
             )
             continue
+        if schemas[schema_name].get('type') == 'string':
+            chunks.extend([emit_string_wrapper(schema_name, schemas[schema_name]), ''])
+            continue
         chunks.append(
             emit_class(
                 schema_name,
@@ -1126,7 +1202,9 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
         chunks.append('')
     if group in {'action_items_folders', 'task_intelligence'}:
         chunks.extend([emit_patch_reader(), ''])
-    chunks.append(emit_helpers())
+    chunks.append(
+        emit_helpers(include_value_list=any(schemas[name].get('type') == 'string' for name in target_schemas))
+    )
     chunks.append('')
     return '\n'.join(chunks)
 
