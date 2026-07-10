@@ -803,6 +803,15 @@ export interface ConversationActionItemsResponse {
   conversation_id: string;
 }
 
+export interface ConversationAnalytics {
+  conversation_id: string;
+  speaker_count: number;
+  speakers?: Array<SpeakerAnalytics>;
+  total_seconds: number;
+  total_words: number;
+  words_per_minute: number;
+}
+
 export interface ConversationAudio {
   audio_files_fingerprint: string;
   built_at?: string | null;
@@ -2370,6 +2379,16 @@ export interface SimpleTranscriptSegment {
   text: string;
 }
 
+export interface SpeakerAnalytics {
+  is_user?: boolean;
+  person_id?: string | null;
+  speaker: string;
+  talk_seconds: number;
+  talk_share: number;
+  word_count: number;
+  words_per_minute: number;
+}
+
 export interface SpeechProfileMutationResponse {
   status: string;
 }
@@ -3029,6 +3048,7 @@ export interface OmiApiSchemas {
   "Conversation": Conversation;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationAnalytics": ConversationAnalytics;
   "ConversationAudio": ConversationAudio;
   "ConversationAudioSpan": ConversationAudioSpan;
   "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
@@ -3251,6 +3271,7 @@ export interface OmiApiSchemas {
   "SimplePerson": SimplePerson;
   "SimpleStructured": SimpleStructured;
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
+  "SpeakerAnalytics": SpeakerAnalytics;
   "SpeechProfileMutationResponse": SpeechProfileMutationResponse;
   "SpeechProfileResponse": SpeechProfileResponse;
   "SpeechProfileUploadResponse": SpeechProfileUploadResponse;
@@ -4242,6 +4263,17 @@ export interface OmiApiPaths {
       operationId: "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch";
       responses: {
         "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/analytics": {
+    get: {
+      operationId: "get_conversation_analytics_v1_conversations__conversation_id__analytics_get";
+      responses: {
+        "200": ConversationAnalytics;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -8304,6 +8336,21 @@ export async function update_action_item_description_v1_conversations__conversat
       ...init?.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversation_analytics_v1_conversations__conversation_id__analytics_get(path: { conversation_id: string }, init?: OmiApiClientInit): Promise<ConversationAnalytics> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/analytics`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -12413,4 +12460,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.
