@@ -30,7 +30,14 @@ const BLUETOOTH_RE = /bluetooth|hands-free/i
 export async function acquireMicStream(): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
   const label = stream.getAudioTracks()[0]?.label ?? ''
-  if (!VIRTUAL_INPUT_RE.test(label)) return stream
+  // The VB-Cable test lane deliberately feeds a known WAV in through a virtual
+  // input; steering away from it would defeat the harness. window.omi.allowVirtualMic
+  // (main-process opt-in under OMI_ALLOW_VIRTUAL_MIC) skips the guard for that lane
+  // only — default behavior is unchanged. Cast is a temporary integration seam until
+  // the field lands on OmiBridgeApi (Agent A).
+  const allowVirtualMic =
+    (window.omi as unknown as { allowVirtualMic?: boolean } | undefined)?.allowVirtualMic === true
+  if (allowVirtualMic || !VIRTUAL_INPUT_RE.test(label)) return stream
   const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
     (d) =>
       d.kind === 'audioinput' &&
@@ -45,7 +52,9 @@ export async function acquireMicStream(): Promise<MediaStream> {
     const better = await navigator.mediaDevices.getUserMedia({
       audio: { deviceId: { exact: pick.deviceId } }
     })
-    console.warn(`[audio] default input "${label}" is a virtual device — capturing "${pick.label}" instead`)
+    console.warn(
+      `[audio] default input "${label}" is a virtual device — capturing "${pick.label}" instead`
+    )
     stream.getTracks().forEach((t) => t.stop())
     return better
   } catch {

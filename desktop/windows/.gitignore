@@ -22,6 +22,9 @@ dist/
 # Generated audio test fixtures (pnpm fixtures:audio) — never commit binaries
 test/fixtures/audio/
 
+# Staged VAD runtime assets (pnpm vad:assets) — copied from node_modules, never commit binaries
+src/renderer/public/vad/
+
 # TypeScript incremental-build cache
 *.tsbuildinfo
 
