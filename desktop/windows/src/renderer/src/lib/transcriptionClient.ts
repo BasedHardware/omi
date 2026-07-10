@@ -1,19 +1,11 @@
 import { auth } from './firebase'
 import { startOmiListen, type OmiListenHandle } from './omiListenClient'
-import type {
-  BackendSegment,
-  ListenMode,
-  ListenSource,
-  TranscriptLine
-} from '../../../shared/types'
+import type { BackendSegment, ListenSource, TranscriptLine } from '../../../shared/types'
 
 // Conversation (/v4/listen) connects fast; a tight timeout surfaces failures
-// quickly. The PTT transcribe-stream endpoint's handshake can spike past 3s under
-// load, so give it a more forgiving window (the macOS client allows 30s). Kept
-// modest since main-process supersede now prevents the connection pile-up that
-// pushed connect times to 4-11s; a genuine failure shouldn't hang the UI for long.
+// quickly. (Push-to-talk does NOT ride this client — see lib/ptt/, whose stream
+// lane is opportunistic and needs no connect timeout at all.)
 const CONNECT_TIMEOUT_MS = 3000
-const PTT_CONNECT_TIMEOUT_MS = 8000
 
 export type TranscriptionCallbacks = {
   /** Fires every time a new finalized line is ready (a v4/listen segment). */
@@ -30,19 +22,10 @@ export type TranscriptionCallbacks = {
   /** Fires for every non-segment backend event (e.g. `memory_creating`). Optional;
    *  quota events are still handled internally regardless. */
   onEvent?: (event: { type: string; raw: Record<string, unknown> }) => void
-  /** Fires as soon as the capture session exists (mic open, socket created) —
-   *  BEFORE the socket connects, i.e. before startTranscription resolves. Lets a
-   *  PTT caller deliver finalize() at key-release even when the handshake is still
-   *  in flight, so the mic is cut and the capture sealed the moment the user lets
-   *  go instead of whenever the connection happens to land. */
-  onCaptureReady?: (capture: { finalize: () => void }) => void
 }
 
 export type TranscriptionHandle = {
   stop: () => void
-  /** PTT only: flush + finalize so the trailing transcript segment lands promptly.
-   *  No-op for conversation sessions. */
-  finalize: () => void
 }
 
 function segmentToLine(seg: BackendSegment): TranscriptLine {
@@ -92,12 +75,10 @@ const QUOTA_MESSAGE =
 async function startWithOmi(
   source: ListenSource,
   cb: TranscriptionCallbacks,
-  onLost: (reason: string) => void,
-  mode: ListenMode
+  onLost: (reason: string) => void
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
   let outcome: 'pending' | 'omi' | 'failed' = 'pending'
-  const connectTimeoutMs = mode === 'ptt' ? PTT_CONNECT_TIMEOUT_MS : CONNECT_TIMEOUT_MS
   return new Promise<OmiListenHandle | null>((resolve) => {
     let handle: OmiListenHandle | null = null
     const timeout = setTimeout(() => {
@@ -109,7 +90,7 @@ async function startWithOmi(
         /* ignore */
       }
       resolve(null)
-    }, connectTimeoutMs)
+    }, CONNECT_TIMEOUT_MS)
 
     startOmiListen(
       source,
@@ -179,8 +160,7 @@ async function startWithOmi(
             cb.onError(err)
           }
         }
-      },
-      mode
+      }
     )
       .then((h) => {
         // startOmiListen resolves as soon as the WS is *created* — long before
@@ -196,9 +176,6 @@ async function startWithOmi(
           }
         } else {
           handle = h
-          // Capture exists (mic live, WS handshaking) — hand the caller a way to
-          // finalize at key-release even before the connection resolves.
-          cb.onCaptureReady?.({ finalize: () => h.finalize() })
         }
       })
       .catch((err) => {
@@ -212,29 +189,22 @@ async function startWithOmi(
 }
 
 /**
- * Begin transcribing one audio source. `mode` selects the backend pipeline:
- * 'conversation' (default) uses Omi `/v4/listen` (full pipeline, per-uid
- * server-side conversation); 'ptt' uses `/v2/voice-message/transcribe-stream`
- * (transcription-only, no conversation lifecycle — used by the hold-Space Ask box
- * so separate captures never share state). Omi is the only transcription backend:
- * if it can't connect, runs out of free quota, or its socket drops mid-session, the
- * session ends and `onError` fires. (There is no Deepgram fallback.)
+ * Begin transcribing one audio source over Omi `/v4/listen` (the full
+ * conversation pipeline with per-uid server-side state) — used by continuous
+ * recording. Push-to-talk does NOT ride this client; it lives in `lib/ptt/`.
+ * Omi is the only transcription backend: if it can't connect, runs out of free
+ * quota, or its socket drops mid-session, the session ends and `onError` fires.
+ * (There is no Deepgram fallback.)
  */
 export async function startTranscription(
   source: ListenSource,
-  cb: TranscriptionCallbacks,
-  mode: ListenMode = 'conversation'
+  cb: TranscriptionCallbacks
 ): Promise<TranscriptionHandle> {
   let active: OmiListenHandle | null = null
 
-  const omi = await startWithOmi(
-    source,
-    cb,
-    (reason) => {
-      cb.onError(new Error(`Omi transcription stopped: ${reason}`))
-    },
-    mode
-  )
+  const omi = await startWithOmi(source, cb, (reason) => {
+    cb.onError(new Error(`Omi transcription stopped: ${reason}`))
+  })
 
   if (omi) {
     active = omi
@@ -252,13 +222,6 @@ export async function startTranscription(
     stop: (): void => {
       try {
         active?.stop()
-      } catch {
-        /* ignore */
-      }
-    },
-    finalize: (): void => {
-      try {
-        active?.finalize()
       } catch {
         /* ignore */
       }

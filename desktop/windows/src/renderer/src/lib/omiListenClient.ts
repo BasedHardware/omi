@@ -1,5 +1,5 @@
 import { auth } from './firebase'
-import type { BackendSegment, ListenEvent, ListenMode, ListenSource } from '../../../shared/types'
+import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 
 export type OmiListenCallbacks = {
@@ -24,20 +24,7 @@ export type OmiListenCallbacks = {
 
 export type OmiListenHandle = {
   stop: () => void
-  /** PTT only: stop the mic capture (after a short tail) and tell the backend to
-   *  flush + finalize so the trailing segment lands promptly. The socket stays open
-   *  to RECEIVE that segment — but no further audio is sent, so speech after the
-   *  hold is released can never leak into the transcript. No-op for conversation
-   *  sessions. */
-  finalize: () => void
 }
-
-// After finalize() we keep capturing for one more ScriptProcessor window before
-// cutting the mic: the processor delivers audio in 4096-sample (~256ms) buffers,
-// so stopping instantly would drop the in-flight partial buffer and clip the last
-// syllable of short words ("one", "hey"). Speech beyond this tail is discarded —
-// the released key is the source of truth.
-const FINALIZE_TAIL_MS = 300
 
 let nextSessionId = 1
 
@@ -70,8 +57,7 @@ async function getSystemAudioStream(): Promise<MediaStream> {
  */
 export async function startOmiListen(
   source: ListenSource,
-  cb: OmiListenCallbacks,
-  mode: ListenMode = 'conversation'
+  cb: OmiListenCallbacks
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
@@ -90,12 +76,10 @@ export async function startOmiListen(
 
   let stopped = false
   let connected = false
-  let finalizing = false
   let captureStopped = false
 
-  // Tear down just the audio-capture graph (mic stream, processor, context) —
-  // idempotent, and independent of the WS session so finalize() can cut the mic
-  // while the socket stays open for the trailing transcript.
+  // Tear down the audio-capture graph (mic stream, processor, context) — idempotent,
+  // shared by the start-failure path and stop().
   const stopCapture = (): void => {
     if (captureStopped) return
     captureStopped = true
@@ -153,7 +137,7 @@ export async function startOmiListen(
       source,
       token,
       language: getPreferences().language,
-      mode
+      mode: 'conversation'
     })
   } catch (e) {
     unsub()
@@ -175,18 +159,6 @@ export async function startOmiListen(
   processor.connect(audioCtx.destination)
 
   return {
-    finalize: (): void => {
-      if (stopped || finalizing) return
-      finalizing = true
-      // One more processor window of tail so the final syllable's in-flight partial
-      // buffer still ships, then the mic goes dead and the backend is told to flush.
-      // The IPC channel preserves ordering, so the tail audio lands before the
-      // finalize frame.
-      setTimeout(() => {
-        stopCapture()
-        if (!stopped) window.omi.listenFinalize(sessionId)
-      }, FINALIZE_TAIL_MS)
-    },
     stop: (): void => {
       stopped = true
       unsub()
