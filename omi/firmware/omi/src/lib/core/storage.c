@@ -134,6 +134,10 @@ typedef enum {
     SYNC_SPEED_MODE_BLE,
 } sync_speed_mode_t;
 
+/* Sync-speed metering is purely a logging aid. Compile it out entirely when
+ * logging is disabled (release build) so it costs nothing on the transfer hot
+ * path. */
+#if defined(CONFIG_LOG)
 static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
 static int64_t sync_speed_window_start_ms;
 static uint64_t sync_speed_window_bytes;
@@ -162,6 +166,16 @@ static void sync_speed_add_bytes(uint32_t bytes)
         sync_speed_window_bytes = 0;
     }
 }
+#else
+static inline void sync_speed_reset(sync_speed_mode_t mode)
+{
+    ARG_UNUSED(mode);
+}
+static inline void sync_speed_add_bytes(uint32_t bytes)
+{
+    ARG_UNUSED(bytes);
+}
+#endif /* CONFIG_LOG */
 
 static void storage_status_cache_set(const sd_ring_info_t *info)
 {
@@ -355,9 +369,7 @@ static int start_pending_read(struct bt_conn *conn)
     current_read_seq = pending_start_seq;
     remaining_packets = requested_packets;
     transfer_end_status = 0;
-    sync_speed_mode = SYNC_SPEED_MODE_NONE;
-    sync_speed_window_bytes = 0;
-    sync_speed_window_start_ms = 0;
+    sync_speed_reset(SYNC_SPEED_MODE_NONE);
 
     return 0;
 }
@@ -402,9 +414,11 @@ static void write_to_gatt(struct bt_conn *conn)
         return;
     }
 
+#if defined(CONFIG_LOG)
     if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
         sync_speed_reset(SYNC_SPEED_MODE_BLE);
     }
+#endif
 
     uint16_t ble_chunk = get_ble_data_chunk_size(conn);
 
