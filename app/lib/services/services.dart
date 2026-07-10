@@ -244,6 +244,10 @@ abstract class IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    // Fired with began=true/false around an audio-session interruption. Only
+    // NativeMicRecorderService emits it — capture resumes natively; Dart just
+    // mirrors the state.
+    Function(bool began)? onInterruption,
   });
   void stop();
 }
@@ -262,6 +266,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     await _runner.ensureRunning();
 
@@ -320,6 +325,7 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
       throw Exception("Recorder is recording, please stop it before start new recording.");
