@@ -28,6 +28,8 @@
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
     "test:e2e:ptt": "node scripts/run-ptt-e2e.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
+    "verify:oauth-contract": "node scripts/verify-oauth-contract.mjs",
+    "verify:oauth-flow": "node scripts/verify-oauth-flow.mjs",
     "vad:playback": "node scripts/run-vad-playback.mjs",
     "soak": "node scripts/run-soak.mjs",
     "soak:verify": "node scripts/soak-verify.mjs",
