@@ -84,18 +84,6 @@ Map<String, dynamic> _goalJsonWithDefaults(Map<String, dynamic> json) {
   return normalized;
 }
 
-Goal? _goalFromResponseJson(Map<String, dynamic> json) {
-  try {
-    return Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json)));
-  } on FormatException catch (error) {
-    Logger.warning('Skipping malformed goal response: $error');
-    return null;
-  } on TypeError catch (error) {
-    Logger.warning('Skipping malformed goal response: $error');
-    return null;
-  }
-}
-
 /// Goal model
 class Goal {
   final String id;
@@ -222,11 +210,17 @@ Future<Goal?> getCurrentGoal() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   if (response.statusCode == 200) {
-    final decoded = json.decode(response.body);
-    if (decoded is! Map<String, dynamic>) {
+    try {
+      return Goal.fromGenerated(
+        wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
+      );
+    } on FormatException catch (error) {
+      Logger.warning('Skipping malformed current goal response: $error');
+      return null;
+    } on TypeError catch (error) {
+      Logger.warning('Skipping malformed current goal response: $error');
       return null;
     }
-    return _goalFromResponseJson(decoded);
   }
   return null;
 }
@@ -239,13 +233,14 @@ Future<List<Goal>> getAllGoals() async {
   if (response.statusCode == 200) {
     final goals = <Goal>[];
     for (final entry in json.decode(response.body) as List<dynamic>) {
-      if (entry is! Map<String, dynamic>) {
-        Logger.warning('Skipping malformed goal response: expected object, got ${entry.runtimeType}');
-        continue;
-      }
-      final goal = _goalFromResponseJson(entry);
-      if (goal != null) {
-        goals.add(goal);
+      try {
+        goals.add(
+          Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(entry as Map<String, dynamic>))),
+        );
+      } on FormatException catch (error) {
+        Logger.warning('Skipping malformed goal in list: $error');
+      } on TypeError catch (error) {
+        Logger.warning('Skipping malformed goal in list: $error');
       }
     }
     return goals;

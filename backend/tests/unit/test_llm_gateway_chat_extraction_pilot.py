@@ -213,6 +213,7 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
         'capture_confidence',
         'ownership_confidence',
         'capture_owner',
+        'concrete_deliverable',
         'candidate_action',
         'target_task_id',
     ]
