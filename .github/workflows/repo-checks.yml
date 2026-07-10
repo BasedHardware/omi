@@ -5,6 +5,11 @@ on:
     branches: main
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: repo-checks-${{ github.event.pull_request.number || github.ref }}
@@ -51,6 +56,7 @@ jobs:
           cat /tmp/changed-files.txt
 
       - name: Check merge conflict markers
+        if: github.event_name != 'pull_request'
         run: |
           failed=0
           while IFS= read -r file; do
@@ -65,23 +71,27 @@ jobs:
           fi
 
       - name: Architecture guardrail warnings
+        if: github.event_name != 'pull_request'
         run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
 
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 
-      - name: Test brand UI ratchet helper
-        run: python3 .github/scripts/test_check_brand_ui.py
+      - name: Test PR preflight contracts
+        run: python3 .github/scripts/test_pr_preflight.py
 
-      - name: Check product invariant citations
+      - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          printf '%s' "$PR_BODY" > /tmp/pr-body.txt
-          python3 .github/scripts/check_product_invariants.py \
-            --changed-files /tmp/changed-files.txt \
-            --pr-body-file /tmp/pr-body.txt
+          scripts/pr-preflight \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"
+
+      - name: Test brand UI ratchet helper
+        run: python3 .github/scripts/test_check_brand_ui.py
 
       - name: Check brand UI purple ratchet (INV-UI-1)
         if: github.event_name == 'pull_request'
@@ -91,20 +101,8 @@ jobs:
             --base "${{ needs.changes.outputs.diff_base }}"
 
       - name: Check desktop changelog data
+        if: github.event_name != 'pull_request'
         run: python3 .github/scripts/desktop-changelog.py validate
-
-      - name: Check desktop changelog entry
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
-        run: |
-          SKIP_FLAG=""
-          if [ "${{ contains(github.event.pull_request.labels.*.name, 'no-changelog-needed') }}" = "true" ]; then
-            SKIP_FLAG="--skip"
-          fi
-
-          python3 .github/scripts/check-desktop-changelog.py \
-            --base "origin/${{ github.base_ref }}" \
-            --head HEAD \
-            $SKIP_FLAG
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
