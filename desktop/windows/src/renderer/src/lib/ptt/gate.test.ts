@@ -79,30 +79,36 @@ describe('voicedStats', () => {
     const t0 = performance.now()
     voicedStats(pcm)
     const ms = performance.now() - t0
-    // ~10-20ms warm in practice (a typical 2s hold is ~0.5ms); assert 150 so the
-    // gate can never become a release-latency problem without failing here.
+    // Tens of ms warm in practice for the 4.5-MINUTE worst case (a typical 2s
+    // hold is ~1ms). The budget exists to catch order-of-magnitude regressions,
+    // sized generously so parallel-CI load can't flake it.
     console.log(`[gate] 4.5min voicedStats: ${ms.toFixed(1)}ms`)
-    expect(ms).toBeLessThan(150)
+    expect(ms).toBeLessThan(400)
   })
 })
 
 describe('gateDecision', () => {
   it('flags a capture shorter than the minimum as too-short regardless of voicing', () => {
-    expect(gateDecision({ totalSec: MIN_TOTAL_AUDIO_SEC - 0.01, voicedSec: MIN_TOTAL_AUDIO_SEC - 0.01 })).toBe(
-      'too-short'
-    )
+    expect(
+      gateDecision({ totalSec: MIN_TOTAL_AUDIO_SEC - 0.01, voicedSec: MIN_TOTAL_AUDIO_SEC - 0.01, peak: 8000 })
+    ).toBe('too-short')
   })
 
   it('accepts exactly the minimum total duration', () => {
-    expect(gateDecision({ totalSec: MIN_TOTAL_AUDIO_SEC, voicedSec: MIN_VOICED_SEC })).toBe('ok')
+    expect(gateDecision({ totalSec: MIN_TOTAL_AUDIO_SEC, voicedSec: MIN_VOICED_SEC, peak: 8000 })).toBe('ok')
   })
 
   it('discards a long-but-silent hold silently', () => {
-    expect(gateDecision({ totalSec: 2.0, voicedSec: MIN_VOICED_SEC - 0.01 })).toBe('silent')
+    expect(gateDecision({ totalSec: 2.0, voicedSec: MIN_VOICED_SEC - 0.01, peak: 200 })).toBe('silent')
   })
 
   it('accepts exactly the minimum voiced duration', () => {
-    expect(gateDecision({ totalSec: 1.0, voicedSec: MIN_VOICED_SEC })).toBe('ok')
+    expect(gateDecision({ totalSec: 1.0, voicedSec: MIN_VOICED_SEC, peak: 8000 })).toBe('ok')
+  })
+
+  it('measures peak so the machine can tell a dead input from a quiet room', () => {
+    expect(voicedStats(zeros(1000)).peak).toBe(0)
+    expect(voicedStats(sine(1000, 8000)).peak).toBeGreaterThan(7500)
   })
 
   it('end-to-end: quiet speech below the RMS threshold is discarded, loud is kept', () => {

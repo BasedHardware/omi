@@ -13,14 +13,18 @@ export type AudioStats = {
   totalSec: number
   /** Seconds of 20ms frames whose RMS met the voiced threshold. */
   voicedSec: number
+  /** Loudest absolute sample (int16). Distinguishes a DEAD input (peak ≈ 0 —
+   *  virtual cable, muted/broken device) from a merely quiet room. */
+  peak: number
 }
 
 /** Measure a raw 16kHz mono PCM16 buffer: total duration + voiced duration
- *  (RMS over 20ms frames, macOS parity). A trailing partial frame is ignored
- *  for voicing but counted in totalSec. */
+ *  (RMS over 20ms frames, macOS parity) + peak. A trailing partial frame is
+ *  ignored for voicing but counted in totalSec/peak. */
 export function voicedStats(pcm: Int16Array, rmsThreshold = VOICED_RMS_THRESHOLD): AudioStats {
   const totalSec = pcm.length / 16000
   let voicedFrames = 0
+  let peak = 0
   const frames = Math.floor(pcm.length / VOICED_FRAME_SAMPLES)
   for (let f = 0; f < frames; f++) {
     const base = f * VOICED_FRAME_SAMPLES
@@ -28,10 +32,16 @@ export function voicedStats(pcm: Int16Array, rmsThreshold = VOICED_RMS_THRESHOLD
     for (let i = 0; i < VOICED_FRAME_SAMPLES; i++) {
       const s = pcm[base + i]
       sumSq += s * s
+      const a = s < 0 ? -s : s
+      if (a > peak) peak = a
     }
     if (Math.sqrt(sumSq / VOICED_FRAME_SAMPLES) >= rmsThreshold) voicedFrames++
   }
-  return { totalSec, voicedSec: (voicedFrames * VOICED_FRAME_SAMPLES) / 16000 }
+  for (let i = frames * VOICED_FRAME_SAMPLES; i < pcm.length; i++) {
+    const a = pcm[i] < 0 ? -pcm[i] : pcm[i]
+    if (a > peak) peak = a
+  }
+  return { totalSec, voicedSec: (voicedFrames * VOICED_FRAME_SAMPLES) / 16000, peak }
 }
 
 export type GateDecision =

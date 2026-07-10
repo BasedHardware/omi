@@ -68,3 +68,9 @@ export const WATCHDOG_MS = 25000
  *  the 150-400ms spin-up but the mic never idles open while you're just reading.
  *  Also released immediately when the overlay hides or loses focus. */
 export const MIC_IDLE_RELEASE_MS = 15000
+
+/** A whole hold whose loudest sample is below this (int16) means the input
+ *  device is effectively DEAD — a virtual cable with nothing routed in, or a
+ *  muted/broken mic — not a quiet room (macOS deadMicPeakThreshold parity).
+ *  Surfaced as an actionable hint instead of a silent discard. */
+export const DEAD_MIC_PEAK = 5

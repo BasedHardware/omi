@@ -67,8 +67,44 @@ type MicGraph = {
   ringSamples: number
 }
 
-async function createGraph(): Promise<MicGraph> {
+// Virtual/loopback input devices (VB-Audio Cable, VoiceMeeter, …) output pure
+// silence unless something routes audio into them. If Windows' DEFAULT capture
+// device is one of these, every hold hears zeros — observed in the wild when a
+// VB-Cable install grabbed the system default. Prefer a real microphone instead
+// (macOS parity: its PTT likewise avoids inputs that can't hear the user), and
+// among real mics prefer non-Bluetooth — opening a BT mic drops the headset to
+// HFP and degrades its output.
+const VIRTUAL_INPUT_RE = /virtual|vb-audio|voicemeeter|loopback|\bcable\b|blackhole/i
+const BLUETOOTH_RE = /bluetooth|hands-free/i
+
+async function acquireMicStream(): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  const label = stream.getAudioTracks()[0]?.label ?? ''
+  if (!VIRTUAL_INPUT_RE.test(label)) return stream
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+    (d) =>
+      d.kind === 'audioinput' &&
+      d.deviceId !== 'default' &&
+      d.deviceId !== 'communications' &&
+      d.label &&
+      !VIRTUAL_INPUT_RE.test(d.label)
+  )
+  const pick = inputs.find((d) => !BLUETOOTH_RE.test(d.label)) ?? inputs[0]
+  if (!pick) return stream // nothing better exists — keep the default
+  try {
+    const better = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { exact: pick.deviceId } }
+    })
+    console.warn(`[ptt] default input "${label}" is a virtual device — capturing "${pick.label}" instead`)
+    stream.getTracks().forEach((t) => t.stop())
+    return better
+  } catch {
+    return stream
+  }
+}
+
+async function createGraph(): Promise<MicGraph> {
+  const stream = await acquireMicStream()
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
   const source = ctx.createMediaStreamSource(stream)
 

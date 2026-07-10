@@ -58,7 +58,8 @@ export type PushToTalk = {
 
 const HINT_TEXT = {
   'too-short': 'Hold longer to record',
-  'too-long': 'Recording too long — keep it under 5 minutes'
+  'too-long': 'Recording too long — keep it under 5 minutes',
+  'dead-mic': 'Mic heard nothing — check your input device in Windows sound settings'
 } as const
 
 /** One capture's mutable world: its machine state plus everything the effects
@@ -290,7 +291,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
         }
         case 'showHint': {
           if (isForeground(job)) {
-            showHint(HINT_TEXT[eff.hint], eff.hint === 'too-long' ? TOO_LONG_HINT_MS : HINT_MS)
+            showHint(HINT_TEXT[eff.hint], eff.hint === 'too-short' ? HINT_MS : TOO_LONG_HINT_MS)
           }
           break
         }

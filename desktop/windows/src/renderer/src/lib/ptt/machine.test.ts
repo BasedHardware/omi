@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { reduce, initialState, assembleTranscript, type PttEvent, type PttState, type PttEffect } from './machine'
 
-// Gate-passing stats (total ≥ 0.35s, voiced ≥ 0.2s) and the two failing shapes.
-const OK_STATS = { totalSec: 2.0, voicedSec: 1.5 }
-const SHORT_STATS = { totalSec: 0.2, voicedSec: 0.2 }
-const SILENT_STATS = { totalSec: 2.0, voicedSec: 0.05 }
+// Gate-passing stats (total ≥ 0.35s, voiced ≥ 0.2s) and the failing shapes.
+const OK_STATS = { totalSec: 2.0, voicedSec: 1.5, peak: 8000 }
+const SHORT_STATS = { totalSec: 0.2, voicedSec: 0.2, peak: 8000 }
+const SILENT_STATS = { totalSec: 2.0, voicedSec: 0.05, peak: 200 } // quiet room
+const DEAD_MIC_STATS = { totalSec: 2.0, voicedSec: 0, peak: 0 } // flat-line input
 
 /** Fold events from idle, returning the final state and ALL effects in order. */
 function run(events: PttEvent[], from: PttState = initialState): { state: PttState; effects: PttEffect[] } {
@@ -144,7 +145,7 @@ describe('release gates', () => {
     expect(reduce(state, { type: 'HOLD_START' }).state.phase).toBe('holding')
   })
 
-  it('silent hold → silent discard: no hint, no network, no commit', () => {
+  it('silent hold (quiet room) → silent discard: no hint, no network, no commit', () => {
     const { state, effects } = run([
       { type: 'HOLD_START' },
       { type: 'RELEASE' },
@@ -154,6 +155,20 @@ describe('release gates', () => {
     expect(kinds(effects)).not.toContain('showHint')
     expect(kinds(effects)).not.toContain('startBatch')
     expect(kinds(effects)).not.toContain('sendFinalize')
+    expect(commitOf(effects)).toBeNull()
+  })
+
+  it('flat-line hold (dead input device) → actionable dead-mic hint, no network', () => {
+    // Regression: a virtual-cable default input (VB-Audio) produced pure zeros
+    // and the user saw NOTHING — silent discard looked like a broken feature.
+    const { state, effects } = run([
+      { type: 'HOLD_START' },
+      { type: 'RELEASE' },
+      { type: 'DRAINED', stats: DEAD_MIC_STATS }
+    ])
+    expect(state.phase).toBe('idle')
+    expect(effects).toContainEqual({ kind: 'showHint', hint: 'dead-mic' })
+    expect(kinds(effects)).not.toContain('startBatch')
     expect(commitOf(effects)).toBeNull()
   })
 })

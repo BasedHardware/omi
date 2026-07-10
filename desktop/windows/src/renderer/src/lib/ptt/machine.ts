@@ -14,6 +14,7 @@
 //   batching → BATCH_OK → commit | BATCH_FAIL → error strip
 //   any non-idle → CANCEL/WATCHDOG → idle (discard, abort in-flight work)
 import { type AudioStats, gateDecision } from './gate'
+import { DEAD_MIC_PEAK } from './constants'
 
 export type PttPhase = 'idle' | 'holding' | 'draining' | 'streamFinalize' | 'batching'
 
@@ -56,7 +57,7 @@ export type PttEffect =
   | { kind: 'abortBatch' }
   /** The capture's final transcript. Empty string ⇒ caller skips sending. */
   | { kind: 'commit'; text: string }
-  | { kind: 'showHint'; hint: 'too-short' | 'too-long' }
+  | { kind: 'showHint'; hint: 'too-short' | 'too-long' | 'dead-mic' }
   | { kind: 'showError'; message: string }
   /** Live transcript for the input box while the capture is in flight. */
   | { kind: 'setLiveText'; text: string }
@@ -115,7 +116,14 @@ export function reduce(s: PttState, e: PttEvent): Step {
         }
       }
       if (decision === 'silent') {
-        return { state: { ...s, phase: 'idle' }, effects: [{ kind: 'stopStream' }] }
+        // A flat-line hold (peak ≈ 0) means the INPUT is dead — a virtual cable
+        // or muted/broken mic — which deserves an actionable hint. A merely
+        // quiet room still discards silently.
+        const effects: PttEffect[] =
+          e.stats.peak < DEAD_MIC_PEAK
+            ? [{ kind: 'stopStream' }, { kind: 'showHint', hint: 'dead-mic' }]
+            : [{ kind: 'stopStream' }]
+        return { state: { ...s, phase: 'idle' }, effects }
       }
       if (s.streamConnected) {
         return { state: { ...s, phase: 'streamFinalize' }, effects: [{ kind: 'sendFinalize' }] }
