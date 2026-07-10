@@ -1,3 +1,6 @@
+// App-wide typeface: Inter Variable with optical sizing (bundled, OFL). See
+// globals.css --font-app for the stack + the Phase 8 font decision notes.
+import '@fontsource-variable/inter/opsz.css'
 import './styles/globals.css'
 
 import { StrictMode } from 'react'

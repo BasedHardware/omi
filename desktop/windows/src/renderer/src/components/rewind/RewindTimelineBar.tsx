@@ -131,7 +131,7 @@ export function RewindTimelineBar({
             )}
           </div>
           {span && (
-            <div className="relative h-4 text-[10px] text-white/40">
+            <div className="tnum relative h-4 text-[10px] text-white/40">
               {ticks.map((t, i) => {
                 // Show the DATE on the first tick of each day (and the very first
                 // tick) so panning across midnight is anchored; times elsewhere.

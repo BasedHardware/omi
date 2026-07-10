@@ -40,24 +40,10 @@ export default {
         chip: '14px'
       },
       fontFamily: {
-        display: [
-          '"SF Pro Display"',
-          '"SF Pro Text"',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI Variable"',
-          'system-ui',
-          'sans-serif'
-        ],
-        body: [
-          '"SF Pro Display"',
-          '"SF Pro Text"',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI Variable"',
-          'system-ui',
-          'sans-serif'
-        ]
+        // Both roles resolve through --font-app (Inter Variable, with the
+        // Segoe fallback stack) so the A/B hook + any future retheme is one var.
+        display: ['var(--font-app)', 'sans-serif'],
+        body: ['var(--font-app)', 'sans-serif']
       },
       backdropBlur: {
         glass: '24px',
