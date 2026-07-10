@@ -2837,17 +2837,6 @@ export interface UserUsageResponse {
   yearly?: UsageStats | null;
 }
 
-export interface UserWebhookHealthResponse {
-  disabled: boolean;
-  failure_count: number;
-  has_data: boolean;
-  last_error?: string | null;
-  last_failure_at?: number | null;
-  last_status?: number | null;
-  last_success_at?: number | null;
-  type: string;
-}
-
 export interface UserWebhookUrlResponse {
   url?: string | null;
 }
@@ -3325,7 +3314,6 @@ export interface OmiApiSchemas {
   "UserStatusResponse": UserStatusResponse;
   "UserSubscriptionResponse": UserSubscriptionResponse;
   "UserUsageResponse": UserUsageResponse;
-  "UserWebhookHealthResponse": UserWebhookHealthResponse;
   "UserWebhookUrlResponse": UserWebhookUrlResponse;
   "UserWebhooksStatusResponse": UserWebhooksStatusResponse;
   "ValidationError": ValidationError;
@@ -5994,7 +5982,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get";
       responses: {
-        "200": UserWebhookHealthResponse;
+        "200": unknown;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -11096,7 +11084,7 @@ export async function enable_user_webhook_endpoint_v1_users_developer_webhook__w
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get(path: { wtype: WebhookType }, init?: OmiApiClientInit): Promise<UserWebhookHealthResponse> {
+export async function get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get(path: { wtype: WebhookType }, init?: OmiApiClientInit): Promise<unknown> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhook/${path.wtype}/health`;
   const _search = "";

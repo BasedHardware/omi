@@ -16725,78 +16725,6 @@
         "title": "UserUsageResponse",
         "type": "object"
       },
-      "UserWebhookHealthResponse": {
-        "properties": {
-          "disabled": {
-            "title": "Disabled",
-            "type": "boolean"
-          },
-          "failure_count": {
-            "title": "Failure Count",
-            "type": "integer"
-          },
-          "has_data": {
-            "title": "Has Data",
-            "type": "boolean"
-          },
-          "last_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error"
-          },
-          "last_failure_at": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Failure At"
-          },
-          "last_status": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Status"
-          },
-          "last_success_at": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Success At"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "has_data",
-          "failure_count",
-          "disabled"
-        ],
-        "title": "UserWebhookHealthResponse",
-        "type": "object"
-      },
       "UserWebhookUrlResponse": {
         "properties": {
           "url": {
@@ -39183,9 +39111,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserWebhookHealthResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
