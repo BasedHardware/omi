@@ -77,6 +77,18 @@ TARGET_SCHEMAS = (
     'ArtifactStatusTransitionRequest',
     'ContinuationCheckpoint',
     'ContinuationCheckpointUpsert',
+    'WhatMattersNowProjection',
+    'EvaluationRequest',
+    'FeedbackCreate',
+    'FeedbackRecord',
+    'InterventionCreate',
+    'InterventionRecord',
+    'OutcomeCreate',
+    'OutcomeRecord',
+    'NormalizedContextSnapshot',
+    'OpenLoopSnapshot',
+    'SnapshotReceipt',
+    'DecisionDebugProjection',
     'ConversationSource',
     'ConversationStatus',
     'CategoryEnum',
@@ -487,7 +499,7 @@ def _swift_prop_name(wire_name: str) -> str:
     parts = re.split(r'[_\W]+', wire_name)
     if not parts:
         return wire_name
-    first = parts[0]
+    first = parts[0][:1].lower() + parts[0][1:]
     rest = ''.join(p[:1].upper() + p[1:] for p in parts[1:])
     candidate = first + rest
     if candidate in SWIFT_RESERVED:
@@ -652,9 +664,11 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
         'public struct OmiApiClient {',
         '  public let baseURL: String',
         '  public let token: String?',
-        '  public init(baseURL: String, token: String? = nil) {',
+        '  public let headers: [String: String]',
+        '  public init(baseURL: String, token: String? = nil, headers: [String: String] = [:]) {',
         '    self.baseURL = baseURL',
         '    self.token = token',
+        '    self.headers = headers',
         '  }',
         '}',
         '',
@@ -690,6 +704,7 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []  # (wire name, swift type)
             query_params: list[tuple[str, str, bool]] = []  # (wire name, swift type, required)
+            header_params: list[tuple[str, str, bool]] = []  # (wire name, swift type, required)
             if isinstance(raw_params, list):
                 for p in raw_params:
                     if not isinstance(p, dict):
@@ -705,6 +720,8 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                         path_params.append((pname, ptype))
                     elif location == 'query':
                         query_params.append((pname, ptype, required))
+                    elif location == 'header':
+                        header_params.append((pname, ptype, required))
 
             # Parse JSON requestBody.
             raw_body, body_required = _swift_request_body(operation)
@@ -720,6 +737,12 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                     sig_parts.append(f'{sw}: {qtype}')
                 else:
                     sig_parts.append(f'{sw}: {qtype}? = nil')
+            for pname, htype, required in header_params:
+                sw = _swift_prop_name(pname)
+                if required:
+                    sig_parts.append(f'{sw}: {htype}')
+                else:
+                    sig_parts.append(f'{sw}: {htype}? = nil')
             if body_type:
                 if body_required:
                     sig_parts.append(f'body: {body_type}')
@@ -757,9 +780,17 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append('  guard let url = components.url else { throw OmiApiError.invalidURL }')
             body_lines.append('  var req = URLRequest(url: url)')
             body_lines.append(f'  req.httpMethod = {_swift_string_literal(http_method.upper())}')
+            body_lines.append('  for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }')
             body_lines.append('  if let token = client.token {')
             body_lines.append('    req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")')
             body_lines.append('  }')
+            for pname, _htype, required in header_params:
+                sw = _swift_prop_name(pname)
+                name_lit = _swift_string_literal(pname)
+                if required:
+                    body_lines.append(f'  req.setValue(String({sw}), forHTTPHeaderField: {name_lit})')
+                else:
+                    body_lines.append(f'  if let {sw} {{ req.setValue(String({sw}), forHTTPHeaderField: {name_lit}) }}')
             if body_type:
                 body_lines.append('  req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
                 body_lines.append('  req.httpBody = try JSONEncoder().encode(body)')

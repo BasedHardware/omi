@@ -220,14 +220,14 @@ def associate_canonical_evidence(
 
     event = append_event(
         uid,
-        cast(str, judgment.workstream_id),
+        judgment.workstream_id,
         WorkstreamEventCreate(
             kind=WorkstreamEventKind.system,
             summary=cast(str, judgment.event_summary),
             evidence_refs=evidence.evidence_refs,
             sensitivity=WorkstreamSensitivity.normal,
         ),
-        idempotency_key=_association_idempotency_key(evidence, cast(str, judgment.workstream_id)),
+        idempotency_key=_association_idempotency_key(evidence, judgment.workstream_id),
         account_generation=control.account_generation if account_generation is None else account_generation,
         firestore_client=firestore_client,
         required_status=WorkstreamStatus.open,

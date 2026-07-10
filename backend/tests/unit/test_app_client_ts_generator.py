@@ -37,6 +37,33 @@ def test_typescript_operation_response_map_is_generated():
     assert '"200": GoalSuggestionResponse;' in generated
 
 
+def test_typescript_generator_emits_required_operation_headers():
+    spec = {
+        'components': {'schemas': {}},
+        'paths': {
+            '/v1/example': {
+                'post': {
+                    'operationId': 'create_example',
+                    'parameters': [
+                        {
+                            'in': 'header',
+                            'name': 'Idempotency-Key',
+                            'required': True,
+                            'schema': {'type': 'string'},
+                        }
+                    ],
+                    'responses': {'204': {'description': 'Created'}},
+                }
+            }
+        },
+    }
+
+    generated = generate_ts_openapi_types.generate(spec, 'test-openapi.json')
+
+    assert 'header: { Idempotency_Key: string }' in generated
+    assert '"Idempotency-Key": String(header.Idempotency_Key)' in generated
+
+
 def test_typescript_generator_handles_refs_nullability_and_additional_properties():
     spec = {
         'components': {

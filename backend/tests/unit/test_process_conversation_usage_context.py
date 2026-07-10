@@ -139,6 +139,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     conversation_capture.reconcile_after_legacy = MagicMock()
     add("utils.task_intelligence.conversation_capture", conversation_capture)
     task_intelligence.conversation_capture = conversation_capture
+    workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
+    workstream_association.associate_canonical_evidence = MagicMock()
+    add("utils.task_intelligence.workstream_association", workstream_association)
 
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")

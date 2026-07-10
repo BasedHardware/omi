@@ -69,6 +69,7 @@ from routers import (
     tts,
     memory_admin,
     memory_product,
+    task_recommendations,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -171,6 +172,7 @@ app.include_router(scores.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
+app.include_router(task_recommendations.router)
 
 
 methods_timeout = {

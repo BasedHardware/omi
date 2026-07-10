@@ -239,6 +239,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []
             query_params: list[tuple[str, str, bool]] = []
+            header_params: list[tuple[str, str, bool]] = []
             if isinstance(raw_params, list):
                 for p in raw_params:
                     if not isinstance(p, dict):
@@ -251,6 +252,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                         path_params.append((pname, ts_type))
                     elif location == 'query':
                         query_params.append((pname, ts_type, required))
+                    elif location == 'header':
+                        header_params.append((pname, ts_type, required))
 
             # Parse requestBody
             body_type: str | None = None
@@ -270,6 +273,9 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             if query_params:
                 fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in query_params)
                 sig_parts.append(f'query: {{ {fields} }}')
+            if header_params:
+                fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in header_params)
+                sig_parts.append(f'header: {{ {fields} }}')
             if body_type:
                 sig_parts.append(f'body: {body_type}')
             sig_parts.append('init?: OmiApiClientInit')
@@ -300,6 +306,14 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                 body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
             body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
             body_lines.append('      ...init?.headers,')
+            for pname, _ptype, required in header_params:
+                prop = ts_identifier(pname)
+                if required:
+                    body_lines.append(f"      {string_literal(pname)}: String(header.{prop}),")
+                else:
+                    body_lines.append(
+                        f"      ...(header.{prop} !== undefined ? {{ {string_literal(pname)}: String(header.{prop}) }} : {{}}),"
+                    )
             body_lines.append('    },')
             if body_type:
                 body_lines.append('    body: body ? JSON.stringify(body) : undefined,')

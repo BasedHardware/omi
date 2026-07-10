@@ -169,12 +169,14 @@
       "policy_class": "shared_capture_policy",
       "owner_paths": [
         "backend/database/candidates.py",
+        "backend/database/task_recommendations.py",
         "backend/routers/candidates.py",
         "backend/utils/task_intelligence/candidate_service.py"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
-        {"path": "backend/database/candidates.py", "symbol": "canonical_firestore.action_items", "discover": true}
+        {"path": "backend/database/candidates.py", "symbol": "canonical_firestore.action_items", "discover": true},
+        {"path": "backend/database/task_recommendations.py", "symbol": "canonical_firestore.action_items", "discover": true}
       ]
     },
     {

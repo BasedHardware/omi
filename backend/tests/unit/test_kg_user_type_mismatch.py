@@ -216,6 +216,11 @@ def _build_fakes() -> dict[str, ModuleType]:
     conversation_capture.legacy_document_ids = MagicMock(return_value=None)
     conversation_capture.reconcile_after_legacy = MagicMock()
     task_intelligence.conversation_capture = conversation_capture
+    workstream_association = add("utils.task_intelligence.workstream_association")
+    workstream_association.associate_canonical_evidence = MagicMock()
+
+    fallback = add("utils.observability.fallback")
+    fallback.record_fallback = MagicMock()
 
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
@@ -249,6 +254,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.memory",
         "utils.retrieval",
         "utils.other",
+        "utils.observability",
     ]:
         if pkg not in fakes:
             m = ModuleType(pkg)

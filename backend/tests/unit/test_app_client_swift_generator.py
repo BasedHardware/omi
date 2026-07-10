@@ -120,3 +120,32 @@ def test_swift_generator_module_helper_is_emitted():
     # OmiAnyCodable helper present for opaque maps even with no target schemas.
     assert 'public struct OmiAnyCodable: Codable' in generated
     assert 'public enum OmiAPI {' in generated
+
+
+def test_swift_generator_emits_required_headers_and_client_default_headers():
+    spec = {
+        'components': {'schemas': {}},
+        'paths': {
+            '/v1/example': {
+                'post': {
+                    'operationId': 'create_example',
+                    'parameters': [
+                        {
+                            'in': 'header',
+                            'name': 'Idempotency-Key',
+                            'required': True,
+                            'schema': {'type': 'string'},
+                        }
+                    ],
+                    'responses': {'200': {'content': {'application/json': {'schema': {'type': 'string'}}}}},
+                }
+            }
+        },
+    }
+
+    generated = generate_swift_openapi_types.generate(spec, 'test-openapi.json')
+
+    assert 'headers: [String: String] = [:]' in generated
+    assert 'idempotencyKey: String' in generated
+    assert 'for (name, value) in client.headers' in generated
+    assert 'req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")' in generated

@@ -6013,6 +6013,16 @@
         "title": "ClickUpTeamsResponse",
         "type": "object"
       },
+      "ContextMatchSignal": {
+        "enum": [
+          "app",
+          "person",
+          "document",
+          "meeting"
+        ],
+        "title": "ContextMatchSignal",
+        "type": "string"
+      },
       "ContinuationCheckpoint": {
         "additionalProperties": false,
         "properties": {
@@ -8005,6 +8015,152 @@
         "title": "DailySummaryUnresolvedQuestion",
         "type": "object"
       },
+      "DecisionDebugProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionRecord"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/WhatMattersNowProjection"
+          }
+        },
+        "required": [
+          "projection",
+          "decisions"
+        ],
+        "title": "DecisionDebugProjection",
+        "type": "object"
+      },
+      "DecisionRecord": {
+        "additionalProperties": false,
+        "description": "Debug-only audit record. It intentionally contains no prompt or model reasoning.",
+        "properties": {
+          "decision_summary": {
+            "maxLength": 1024,
+            "title": "Decision Summary",
+            "type": "string"
+          },
+          "eligibility": {
+            "$ref": "#/components/schemas/ShortlistEligibility"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "fact_definition_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Fact Definition Version",
+            "type": "string"
+          },
+          "facts_snapshot": {
+            "$ref": "#/components/schemas/DeterministicFacts"
+          },
+          "final_output_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Final Output Ref",
+            "type": "string"
+          },
+          "model_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "policy_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "prompt_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "shortlist_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Shortlist Ids",
+            "type": "array"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/RecommendationSubjectKind"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "subject_kind",
+          "subject_id",
+          "shortlist_ids",
+          "facts_snapshot",
+          "eligibility",
+          "prompt_version",
+          "policy_version",
+          "fact_definition_version",
+          "model_version",
+          "decision_summary",
+          "reason_codes",
+          "final_output_ref",
+          "evaluated_at",
+          "expires_at"
+        ],
+        "title": "DecisionRecord",
+        "type": "object"
+      },
       "DefaultTaskIntegrationRequest": {
         "description": "Request to set default task integration",
         "properties": {
@@ -8135,6 +8291,56 @@
           "message"
         ],
         "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
+      "DeterministicFacts": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "context_match_signals": {
+            "items": {
+              "$ref": "#/components/schemas/ContextMatchSignal"
+            },
+            "maxItems": 4,
+            "title": "Context Match Signals",
+            "type": "array"
+          },
+          "days_to_due": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days To Due"
+          },
+          "focused_goal_linked": {
+            "default": false,
+            "title": "Focused Goal Linked",
+            "type": "boolean"
+          },
+          "has_concrete_next_action": {
+            "title": "Has Concrete Next Action",
+            "type": "boolean"
+          },
+          "someone_blocked": {
+            "default": false,
+            "title": "Someone Blocked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "has_concrete_next_action",
+          "capture_confidence"
+        ],
+        "title": "DeterministicFacts",
         "type": "object"
       },
       "DevApiKey": {
@@ -9213,6 +9419,41 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvaluationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "material_hint": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Hint"
+          }
+        },
+        "title": "EvaluationRequest",
+        "type": "object"
+      },
       "Event": {
         "properties": {
           "created": {
@@ -9765,6 +10006,218 @@
         ],
         "title": "FcmTokenResponse",
         "type": "object"
+      },
+      "FeedbackCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/TaskIntelligenceFeedbackAction"
+          },
+          "context_snapshot_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Snapshot Hash"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          },
+          "later_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Later Until"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskIntelligenceFeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          }
+        },
+        "required": [
+          "subject_kind",
+          "subject_id",
+          "action"
+        ],
+        "title": "FeedbackCreate",
+        "type": "object"
+      },
+      "FeedbackRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/TaskIntelligenceFeedbackAction"
+          },
+          "attribution_chain_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Attribution Chain Id",
+            "type": "string"
+          },
+          "context_snapshot_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Snapshot Hash"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedupe_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedupe Key"
+          },
+          "feedback_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          },
+          "later_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Later Until"
+          },
+          "proposed_completion": {
+            "default": false,
+            "title": "Proposed Completion",
+            "type": "boolean"
+          },
+          "proposed_completion_candidate_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Completion Candidate Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskIntelligenceFeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          }
+        },
+        "required": [
+          "subject_kind",
+          "subject_id",
+          "action",
+          "feedback_id",
+          "attribution_chain_id",
+          "created_at"
+        ],
+        "title": "FeedbackRecord",
+        "type": "object"
+      },
+      "FeedbackSubjectKind": {
+        "enum": [
+          "candidate",
+          "task",
+          "workstream",
+          "artifact",
+          "decision"
+        ],
+        "title": "FeedbackSubjectKind",
+        "type": "string"
       },
       "FileChat": {
         "properties": {
@@ -11454,6 +11907,130 @@
         ],
         "title": "IntegrationResponse",
         "type": "object"
+      },
+      "InterventionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "dedupe_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          },
+          "surface": {
+            "$ref": "#/components/schemas/InterventionSurface"
+          }
+        },
+        "required": [
+          "surface",
+          "subject_kind",
+          "subject_id",
+          "dedupe_key",
+          "expires_at"
+        ],
+        "title": "InterventionCreate",
+        "type": "object"
+      },
+      "InterventionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_chain_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Attribution Chain Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedupe_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "intervention_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          },
+          "surface": {
+            "$ref": "#/components/schemas/InterventionSurface"
+          }
+        },
+        "required": [
+          "surface",
+          "subject_kind",
+          "subject_id",
+          "dedupe_key",
+          "expires_at",
+          "intervention_id",
+          "attribution_chain_id",
+          "created_at"
+        ],
+        "title": "InterventionRecord",
+        "type": "object"
+      },
+      "InterventionSurface": {
+        "enum": [
+          "suggested",
+          "what_matters_now"
+        ],
+        "title": "InterventionSurface",
+        "type": "string"
       },
       "KnowledgeGraphResponse": {
         "properties": {
@@ -13305,6 +13882,89 @@
         "title": "MoveConversationRequest",
         "type": "object"
       },
+      "NormalizedContextMatch": {
+        "additionalProperties": false,
+        "properties": {
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/ContextMatchSignal"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Signals",
+            "type": "array"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/RecommendationSubjectKind"
+          }
+        },
+        "required": [
+          "subject_kind",
+          "subject_id",
+          "signals"
+        ],
+        "title": "NormalizedContextMatch",
+        "type": "object"
+      },
+      "NormalizedContextSnapshot": {
+        "additionalProperties": false,
+        "description": "A bounded local match result; raw local context has no field to enter through.",
+        "properties": {
+          "device_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/NormalizedContextMatch"
+            },
+            "maxItems": 32,
+            "title": "Matches",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "snapshot_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "snapshot_id",
+          "generated_at",
+          "expires_at"
+        ],
+        "title": "NormalizedContextSnapshot",
+        "type": "object"
+      },
       "NotificationSettingsResponse": {
         "properties": {
           "enabled": {
@@ -13396,6 +14056,265 @@
           }
         },
         "title": "OnboardingStateUpdate",
+        "type": "object"
+      },
+      "OpenLoopDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking_on_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocking On Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OpenLoopKind"
+          },
+          "loop_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Loop Id",
+            "type": "string"
+          },
+          "next_action_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Next Action Code",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OpenLoopStatus"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loop_id",
+          "kind",
+          "subject_id",
+          "status",
+          "next_action_code",
+          "updated_at"
+        ],
+        "title": "OpenLoopDescriptor",
+        "type": "object"
+      },
+      "OpenLoopKind": {
+        "enum": [
+          "task",
+          "artifact",
+          "decision",
+          "approval",
+          "external_wait"
+        ],
+        "title": "OpenLoopKind",
+        "type": "string"
+      },
+      "OpenLoopSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_ref": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Ref"
+          },
+          "context_packet_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Context Packet Version",
+            "type": "string"
+          },
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "open_loop_snapshot": {
+            "items": {
+              "$ref": "#/components/schemas/OpenLoopDescriptor"
+            },
+            "maxItems": 32,
+            "title": "Open Loop Snapshot",
+            "type": "array"
+          },
+          "owner": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner",
+            "type": "string"
+          },
+          "runtime_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Runtime Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "workstream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Workstream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "owner",
+          "runtime_id",
+          "workstream_id",
+          "conversation_id",
+          "context_packet_version",
+          "generated_at",
+          "expires_at"
+        ],
+        "title": "OpenLoopSnapshot",
+        "type": "object"
+      },
+      "OpenLoopStatus": {
+        "enum": [
+          "open",
+          "blocked",
+          "awaiting_user",
+          "awaiting_external"
+        ],
+        "title": "OpenLoopStatus",
+        "type": "string"
+      },
+      "OutcomeCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_chain_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Attribution Chain Id",
+            "type": "string"
+          },
+          "outcome_code": {
+            "$ref": "#/components/schemas/TaskIntelligenceOutcomeCode"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          }
+        },
+        "required": [
+          "attribution_chain_id",
+          "subject_kind",
+          "subject_id",
+          "outcome_code"
+        ],
+        "title": "OutcomeCreate",
+        "type": "object"
+      },
+      "OutcomeRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_chain_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Attribution Chain Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome_code": {
+            "$ref": "#/components/schemas/TaskIntelligenceOutcomeCode"
+          },
+          "outcome_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Outcome Id",
+            "type": "string"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          }
+        },
+        "required": [
+          "attribution_chain_id",
+          "subject_kind",
+          "subject_id",
+          "outcome_code",
+          "outcome_id",
+          "occurred_at"
+        ],
+        "title": "OutcomeRecord",
         "type": "object"
       },
       "OverageInfoResponse": {
@@ -14444,6 +15363,140 @@
         ],
         "title": "RebuildResponse",
         "type": "object"
+      },
+      "Recommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "alternative_action": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alternative Action"
+          },
+          "dedupe_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "evidence_preview": {
+            "maxLength": 512,
+            "title": "Evidence Preview",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "feedback_subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Feedback Subject Id",
+            "type": "string"
+          },
+          "feedback_subject_kind": {
+            "$ref": "#/components/schemas/FeedbackSubjectKind"
+          },
+          "goal_or_workstream_label": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Or Workstream Label"
+          },
+          "headline": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Headline",
+            "type": "string"
+          },
+          "intervention_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "output_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Output Version",
+            "type": "string"
+          },
+          "recommended_action": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "subject_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/RecommendationSubjectKind"
+          },
+          "why_now": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Why Now",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intervention_id",
+          "output_version",
+          "subject_kind",
+          "subject_id",
+          "feedback_subject_kind",
+          "feedback_subject_id",
+          "headline",
+          "why_now",
+          "recommended_action",
+          "evidence_preview",
+          "dedupe_key",
+          "expires_at"
+        ],
+        "title": "Recommendation",
+        "type": "object"
+      },
+      "RecommendationSubjectKind": {
+        "enum": [
+          "candidate",
+          "task",
+          "workstream",
+          "artifact",
+          "decision",
+          "agent_open_loop"
+        ],
+        "title": "RecommendationSubjectKind",
+        "type": "string"
       },
       "RecordLlmUsageBucketRequest": {
         "properties": {
@@ -15764,6 +16817,40 @@
         "title": "SharedConversationResponse",
         "type": "object"
       },
+      "ShortlistEligibility": {
+        "additionalProperties": false,
+        "properties": {
+          "inside_due_window": {
+            "title": "Inside Due Window",
+            "type": "boolean"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "passes_recommendation_gates": {
+            "title": "Passes Recommendation Gates",
+            "type": "boolean"
+          },
+          "recent_material_activity": {
+            "title": "Recent Material Activity",
+            "type": "boolean"
+          },
+          "unexpired": {
+            "title": "Unexpired",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "open",
+          "unexpired",
+          "passes_recommendation_gates",
+          "recent_material_activity",
+          "inside_due_window"
+        ],
+        "title": "ShortlistEligibility",
+        "type": "object"
+      },
       "SimpleActionItem": {
         "properties": {
           "completed": {
@@ -16048,6 +17135,34 @@
           "end"
         ],
         "title": "SimpleTranscriptSegment",
+        "type": "object"
+      },
+      "SnapshotReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "replaced": {
+            "title": "Replaced",
+            "type": "boolean"
+          },
+          "snapshot_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "replaced",
+          "expires_at"
+        ],
+        "title": "SnapshotReceipt",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {
@@ -17723,6 +18838,39 @@
         ],
         "title": "TaskIntegrationsResponse",
         "type": "object"
+      },
+      "TaskIntelligenceFeedbackAction": {
+        "enum": [
+          "do_now",
+          "later",
+          "dismiss",
+          "accept_candidate",
+          "edit",
+          "complete"
+        ],
+        "title": "TaskIntelligenceFeedbackAction",
+        "type": "string"
+      },
+      "TaskIntelligenceFeedbackReason": {
+        "enum": [
+          "already_handled",
+          "not_mine",
+          "not_useful"
+        ],
+        "title": "TaskIntelligenceFeedbackReason",
+        "type": "string"
+      },
+      "TaskIntelligenceOutcomeCode": {
+        "enum": [
+          "task_completed",
+          "artifact_approved",
+          "artifact_delivered",
+          "decision_resolved",
+          "agent_output_applied",
+          "workstream_advanced"
+        ],
+        "title": "TaskIntelligenceOutcomeCode",
+        "type": "string"
       },
       "TaskOriginWorkIntent": {
         "additionalProperties": false,
@@ -19970,6 +21118,66 @@
         ],
         "title": "WebhookType",
         "type": "string"
+      },
+      "WhatMattersNowProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "material_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Material Version",
+            "type": "string"
+          },
+          "output_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Output Version",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/Recommendation"
+            },
+            "maxItems": 3,
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "output_version",
+          "material_version",
+          "generated_at",
+          "expires_at",
+          "recommendations"
+        ],
+        "title": "WhatMattersNowProjection",
+        "type": "object"
       },
       "WorkIntentReceipt": {
         "additionalProperties": false,
@@ -42368,6 +43576,591 @@
         ]
       }
     },
+    "/v1/task-intelligence/context-snapshot": {
+      "put": {
+        "operationId": "replace_context_snapshot_v1_task_intelligence_context_snapshot_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormalizedContextSnapshot"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Replace Context Snapshot",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/task-intelligence/debug/evaluations/{evaluation_id}": {
+      "get": {
+        "operationId": "get_evaluation_debug_projection_v1_task_intelligence_debug_evaluations__evaluation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evaluation_id",
+            "required": true,
+            "schema": {
+              "title": "Evaluation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Debug",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "X-Omi-Debug",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionDebugProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Evaluation Debug Projection",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/task-intelligence/feedback": {
+      "post": {
+        "operationId": "create_feedback_v1_task_intelligence_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Feedback",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/task-intelligence/interventions": {
+      "post": {
+        "operationId": "register_intervention_v1_task_intelligence_interventions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterventionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterventionRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Register Intervention",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/task-intelligence/open-loop-snapshot": {
+      "put": {
+        "operationId": "replace_open_loop_snapshot_v1_task_intelligence_open_loop_snapshot_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenLoopSnapshot"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Replace Open Loop Snapshot",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/task-intelligence/outcomes": {
+      "post": {
+        "operationId": "create_outcome_v1_task_intelligence_outcomes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Outcome",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
     "/v1/users/ai-profile": {
       "get": {
         "operationId": "get_ai_profile_v1_users_ai_profile_get",
@@ -47922,6 +49715,188 @@
         "summary": "Update Transcription Preferences Endpoint",
         "tags": [
           "v1"
+        ]
+      }
+    },
+    "/v1/what-matters-now": {
+      "get": {
+        "operationId": "get_what_matters_now_v1_what_matters_now_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatMattersNowProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get What Matters Now",
+        "tags": [
+          "task-intelligence"
+        ]
+      }
+    },
+    "/v1/what-matters-now/evaluate": {
+      "post": {
+        "operationId": "evaluate_what_matters_now_v1_what_matters_now_evaluate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatMattersNowProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Evaluate What Matters Now",
+        "tags": [
+          "task-intelligence"
         ]
       }
     },

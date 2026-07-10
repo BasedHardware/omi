@@ -1670,6 +1670,950 @@ class GeneratedContinuationCheckpointUpsert {
   }
 }
 
+class GeneratedWhatMattersNowProjection {
+  final String evaluationId;
+  final DateTime expiresAt;
+  final DateTime generatedAt;
+  final String materialVersion;
+  final String outputVersion;
+  final List<GeneratedRecommendation> recommendations;
+  final int schemaVersion;
+
+  const GeneratedWhatMattersNowProjection({
+    required this.evaluationId,
+    required this.expiresAt,
+    required this.generatedAt,
+    required this.materialVersion,
+    required this.outputVersion,
+    required this.recommendations,
+    this.schemaVersion = 1,
+  });
+
+  factory GeneratedWhatMattersNowProjection.fromJson(Map<String, dynamic> json) {
+    return GeneratedWhatMattersNowProjection(
+      evaluationId: _required(_readFieldValue<String>(_readField(json, const ["evaluation_id"]), "evaluation_id", _readString, requiredField: true, nullable: false), "evaluation_id"),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      generatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["generated_at"]), "generated_at", _readDateTime, requiredField: true, nullable: false), "generated_at"),
+      materialVersion: _required(_readFieldValue<String>(_readField(json, const ["material_version"]), "material_version", _readString, requiredField: true, nullable: false), "material_version"),
+      outputVersion: _required(_readFieldValue<String>(_readField(json, const ["output_version"]), "output_version", _readString, requiredField: true, nullable: false), "output_version"),
+      recommendations: _required(_readFieldValue<List<GeneratedRecommendation>>(_readField(json, const ["recommendations"]), "recommendations", (value) => _readObjectList(value, GeneratedRecommendation.fromJson), requiredField: true, nullable: false), "recommendations"),
+      schemaVersion: _required(_readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "schema_version"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'evaluation_id': evaluationId,
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'generated_at': generatedAt.toUtc().toIso8601String(),
+      'material_version': materialVersion,
+      'output_version': outputVersion,
+      'recommendations': recommendations.map((value) => value.toJson()).toList(),
+      'schema_version': schemaVersion,
+    };
+  }
+}
+
+class GeneratedEvaluationRequest {
+  final String? deviceId;
+  final String? materialHint;
+
+  const GeneratedEvaluationRequest({
+    this.deviceId,
+    this.materialHint,
+  });
+
+  factory GeneratedEvaluationRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedEvaluationRequest(
+      deviceId: _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: false, nullable: true),
+      materialHint: _readFieldValue<String>(_readField(json, const ["material_hint"]), "material_hint", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'device_id': deviceId,
+      'material_hint': materialHint,
+    };
+  }
+}
+
+class GeneratedFeedbackCreate {
+  final GeneratedTaskIntelligenceFeedbackAction action;
+  final String? contextSnapshotHash;
+  final String? interventionId;
+  final DateTime? laterUntil;
+  final GeneratedTaskIntelligenceFeedbackReason? reason;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+
+  const GeneratedFeedbackCreate({
+    required this.action,
+    this.contextSnapshotHash,
+    this.interventionId,
+    this.laterUntil,
+    this.reason,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedFeedbackCreate.fromJson(Map<String, dynamic> json) {
+    return GeneratedFeedbackCreate(
+      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackAction.fromJson), requiredField: true, nullable: false), "action"),
+      contextSnapshotHash: _readFieldValue<String>(_readField(json, const ["context_snapshot_hash"]), "context_snapshot_hash", _readString, requiredField: false, nullable: true),
+      interventionId: _readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: false, nullable: true),
+      laterUntil: _readFieldValue<DateTime>(_readField(json, const ["later_until"]), "later_until", _readDateTime, requiredField: false, nullable: true),
+      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackReason.fromJson), requiredField: false, nullable: true),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action.toJson(),
+      'context_snapshot_hash': contextSnapshotHash,
+      'intervention_id': interventionId,
+      'later_until': laterUntil?.toUtc().toIso8601String(),
+      'reason': reason?.toJson(),
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedFeedbackRecord {
+  final GeneratedTaskIntelligenceFeedbackAction action;
+  final String attributionChainId;
+  final String? contextSnapshotHash;
+  final DateTime createdAt;
+  final String? dedupeKey;
+  final String feedbackId;
+  final String? interventionId;
+  final DateTime? laterUntil;
+  final bool proposedCompletion;
+  final String? proposedCompletionCandidateId;
+  final GeneratedTaskIntelligenceFeedbackReason? reason;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+
+  const GeneratedFeedbackRecord({
+    required this.action,
+    required this.attributionChainId,
+    this.contextSnapshotHash,
+    required this.createdAt,
+    this.dedupeKey,
+    required this.feedbackId,
+    this.interventionId,
+    this.laterUntil,
+    this.proposedCompletion = false,
+    this.proposedCompletionCandidateId,
+    this.reason,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedFeedbackRecord.fromJson(Map<String, dynamic> json) {
+    return GeneratedFeedbackRecord(
+      action: _required(_readFieldValue<GeneratedTaskIntelligenceFeedbackAction>(_readField(json, const ["action"]), "action", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackAction.fromJson), requiredField: true, nullable: false), "action"),
+      attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
+      contextSnapshotHash: _readFieldValue<String>(_readField(json, const ["context_snapshot_hash"]), "context_snapshot_hash", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dedupeKey: _readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: false, nullable: true),
+      feedbackId: _required(_readFieldValue<String>(_readField(json, const ["feedback_id"]), "feedback_id", _readString, requiredField: true, nullable: false), "feedback_id"),
+      interventionId: _readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: false, nullable: true),
+      laterUntil: _readFieldValue<DateTime>(_readField(json, const ["later_until"]), "later_until", _readDateTime, requiredField: false, nullable: true),
+      proposedCompletion: _required(_readFieldValue<bool>(_readField(json, const ["proposed_completion"]), "proposed_completion", _readBool, requiredField: false, nullable: false, defaultValue: false), "proposed_completion"),
+      proposedCompletionCandidateId: _readFieldValue<String>(_readField(json, const ["proposed_completion_candidate_id"]), "proposed_completion_candidate_id", _readString, requiredField: false, nullable: true),
+      reason: _readFieldValue<GeneratedTaskIntelligenceFeedbackReason>(_readField(json, const ["reason"]), "reason", (value) => _readObject(value, GeneratedTaskIntelligenceFeedbackReason.fromJson), requiredField: false, nullable: true),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action.toJson(),
+      'attribution_chain_id': attributionChainId,
+      'context_snapshot_hash': contextSnapshotHash,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'dedupe_key': dedupeKey,
+      'feedback_id': feedbackId,
+      'intervention_id': interventionId,
+      'later_until': laterUntil?.toUtc().toIso8601String(),
+      'proposed_completion': proposedCompletion,
+      'proposed_completion_candidate_id': proposedCompletionCandidateId,
+      'reason': reason?.toJson(),
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedInterventionCreate {
+  final String dedupeKey;
+  final List<GeneratedEvidenceRef>? evidenceRefs;
+  final DateTime expiresAt;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+  final GeneratedInterventionSurface surface;
+
+  const GeneratedInterventionCreate({
+    required this.dedupeKey,
+    this.evidenceRefs,
+    required this.expiresAt,
+    required this.subjectId,
+    required this.subjectKind,
+    required this.surface,
+  });
+
+  factory GeneratedInterventionCreate.fromJson(Map<String, dynamic> json) {
+    return GeneratedInterventionCreate(
+      dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", (value) => _readObject(value, GeneratedInterventionSurface.fromJson), requiredField: true, nullable: false), "surface"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dedupe_key': dedupeKey,
+      'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+      'surface': surface.toJson(),
+    };
+  }
+}
+
+class GeneratedInterventionRecord {
+  final String attributionChainId;
+  final DateTime createdAt;
+  final String dedupeKey;
+  final List<GeneratedEvidenceRef>? evidenceRefs;
+  final DateTime expiresAt;
+  final String interventionId;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+  final GeneratedInterventionSurface surface;
+
+  const GeneratedInterventionRecord({
+    required this.attributionChainId,
+    required this.createdAt,
+    required this.dedupeKey,
+    this.evidenceRefs,
+    required this.expiresAt,
+    required this.interventionId,
+    required this.subjectId,
+    required this.subjectKind,
+    required this.surface,
+  });
+
+  factory GeneratedInterventionRecord.fromJson(Map<String, dynamic> json) {
+    return GeneratedInterventionRecord(
+      attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      interventionId: _required(_readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: true, nullable: false), "intervention_id"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      surface: _required(_readFieldValue<GeneratedInterventionSurface>(_readField(json, const ["surface"]), "surface", (value) => _readObject(value, GeneratedInterventionSurface.fromJson), requiredField: true, nullable: false), "surface"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'attribution_chain_id': attributionChainId,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'dedupe_key': dedupeKey,
+      'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'intervention_id': interventionId,
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+      'surface': surface.toJson(),
+    };
+  }
+}
+
+class GeneratedOutcomeCreate {
+  final String attributionChainId;
+  final GeneratedTaskIntelligenceOutcomeCode outcomeCode;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+
+  const GeneratedOutcomeCreate({
+    required this.attributionChainId,
+    required this.outcomeCode,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedOutcomeCreate.fromJson(Map<String, dynamic> json) {
+    return GeneratedOutcomeCreate(
+      attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
+      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", (value) => _readObject(value, GeneratedTaskIntelligenceOutcomeCode.fromJson), requiredField: true, nullable: false), "outcome_code"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'attribution_chain_id': attributionChainId,
+      'outcome_code': outcomeCode.toJson(),
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedOutcomeRecord {
+  final String attributionChainId;
+  final DateTime occurredAt;
+  final GeneratedTaskIntelligenceOutcomeCode outcomeCode;
+  final String outcomeId;
+  final String subjectId;
+  final GeneratedFeedbackSubjectKind subjectKind;
+
+  const GeneratedOutcomeRecord({
+    required this.attributionChainId,
+    required this.occurredAt,
+    required this.outcomeCode,
+    required this.outcomeId,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedOutcomeRecord.fromJson(Map<String, dynamic> json) {
+    return GeneratedOutcomeRecord(
+      attributionChainId: _required(_readFieldValue<String>(_readField(json, const ["attribution_chain_id"]), "attribution_chain_id", _readString, requiredField: true, nullable: false), "attribution_chain_id"),
+      occurredAt: _required(_readFieldValue<DateTime>(_readField(json, const ["occurred_at"]), "occurred_at", _readDateTime, requiredField: true, nullable: false), "occurred_at"),
+      outcomeCode: _required(_readFieldValue<GeneratedTaskIntelligenceOutcomeCode>(_readField(json, const ["outcome_code"]), "outcome_code", (value) => _readObject(value, GeneratedTaskIntelligenceOutcomeCode.fromJson), requiredField: true, nullable: false), "outcome_code"),
+      outcomeId: _required(_readFieldValue<String>(_readField(json, const ["outcome_id"]), "outcome_id", _readString, requiredField: true, nullable: false), "outcome_id"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'attribution_chain_id': attributionChainId,
+      'occurred_at': occurredAt.toUtc().toIso8601String(),
+      'outcome_code': outcomeCode.toJson(),
+      'outcome_id': outcomeId,
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedNormalizedContextSnapshot {
+  final String deviceId;
+  final DateTime expiresAt;
+  final DateTime generatedAt;
+  final List<GeneratedNormalizedContextMatch>? matches;
+  final int schemaVersion;
+  final String snapshotId;
+
+  const GeneratedNormalizedContextSnapshot({
+    required this.deviceId,
+    required this.expiresAt,
+    required this.generatedAt,
+    this.matches,
+    this.schemaVersion = 1,
+    required this.snapshotId,
+  });
+
+  factory GeneratedNormalizedContextSnapshot.fromJson(Map<String, dynamic> json) {
+    return GeneratedNormalizedContextSnapshot(
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      generatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["generated_at"]), "generated_at", _readDateTime, requiredField: true, nullable: false), "generated_at"),
+      matches: _readFieldValue<List<GeneratedNormalizedContextMatch>>(_readField(json, const ["matches"]), "matches", (value) => _readObjectList(value, GeneratedNormalizedContextMatch.fromJson), requiredField: false, nullable: true),
+      schemaVersion: _required(_readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "schema_version"),
+      snapshotId: _required(_readFieldValue<String>(_readField(json, const ["snapshot_id"]), "snapshot_id", _readString, requiredField: true, nullable: false), "snapshot_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'device_id': deviceId,
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'generated_at': generatedAt.toUtc().toIso8601String(),
+      'matches': matches?.map((value) => value.toJson()).toList(),
+      'schema_version': schemaVersion,
+      'snapshot_id': snapshotId,
+    };
+  }
+}
+
+class GeneratedOpenLoopSnapshot {
+  final String? checkpointRef;
+  final String contextPacketVersion;
+  final String conversationId;
+  final String deviceId;
+  final DateTime expiresAt;
+  final DateTime generatedAt;
+  final List<GeneratedOpenLoopDescriptor>? openLoopSnapshot;
+  final String owner;
+  final String runtimeId;
+  final int schemaVersion;
+  final String workstreamId;
+
+  const GeneratedOpenLoopSnapshot({
+    this.checkpointRef,
+    required this.contextPacketVersion,
+    required this.conversationId,
+    required this.deviceId,
+    required this.expiresAt,
+    required this.generatedAt,
+    this.openLoopSnapshot,
+    required this.owner,
+    required this.runtimeId,
+    this.schemaVersion = 1,
+    required this.workstreamId,
+  });
+
+  factory GeneratedOpenLoopSnapshot.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopSnapshot(
+      checkpointRef: _readFieldValue<String>(_readField(json, const ["checkpoint_ref"]), "checkpoint_ref", _readString, requiredField: false, nullable: true),
+      contextPacketVersion: _required(_readFieldValue<String>(_readField(json, const ["context_packet_version"]), "context_packet_version", _readString, requiredField: true, nullable: false), "context_packet_version"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      generatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["generated_at"]), "generated_at", _readDateTime, requiredField: true, nullable: false), "generated_at"),
+      openLoopSnapshot: _readFieldValue<List<GeneratedOpenLoopDescriptor>>(_readField(json, const ["open_loop_snapshot"]), "open_loop_snapshot", (value) => _readObjectList(value, GeneratedOpenLoopDescriptor.fromJson), requiredField: false, nullable: true),
+      owner: _required(_readFieldValue<String>(_readField(json, const ["owner"]), "owner", _readString, requiredField: true, nullable: false), "owner"),
+      runtimeId: _required(_readFieldValue<String>(_readField(json, const ["runtime_id"]), "runtime_id", _readString, requiredField: true, nullable: false), "runtime_id"),
+      schemaVersion: _required(_readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "schema_version"),
+      workstreamId: _required(_readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString, requiredField: true, nullable: false), "workstream_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'checkpoint_ref': checkpointRef,
+      'context_packet_version': contextPacketVersion,
+      'conversation_id': conversationId,
+      'device_id': deviceId,
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'generated_at': generatedAt.toUtc().toIso8601String(),
+      'open_loop_snapshot': openLoopSnapshot?.map((value) => value.toJson()).toList(),
+      'owner': owner,
+      'runtime_id': runtimeId,
+      'schema_version': schemaVersion,
+      'workstream_id': workstreamId,
+    };
+  }
+}
+
+class GeneratedSnapshotReceipt {
+  final DateTime expiresAt;
+  final bool replaced;
+  final String snapshotId;
+
+  const GeneratedSnapshotReceipt({
+    required this.expiresAt,
+    required this.replaced,
+    required this.snapshotId,
+  });
+
+  factory GeneratedSnapshotReceipt.fromJson(Map<String, dynamic> json) {
+    return GeneratedSnapshotReceipt(
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      replaced: _required(_readFieldValue<bool>(_readField(json, const ["replaced"]), "replaced", _readBool, requiredField: true, nullable: false), "replaced"),
+      snapshotId: _required(_readFieldValue<String>(_readField(json, const ["snapshot_id"]), "snapshot_id", _readString, requiredField: true, nullable: false), "snapshot_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'replaced': replaced,
+      'snapshot_id': snapshotId,
+    };
+  }
+}
+
+class GeneratedDecisionDebugProjection {
+  final List<GeneratedDecisionRecord> decisions;
+  final GeneratedWhatMattersNowProjection projection;
+
+  const GeneratedDecisionDebugProjection({
+    required this.decisions,
+    required this.projection,
+  });
+
+  factory GeneratedDecisionDebugProjection.fromJson(Map<String, dynamic> json) {
+    return GeneratedDecisionDebugProjection(
+      decisions: _required(_readFieldValue<List<GeneratedDecisionRecord>>(_readField(json, const ["decisions"]), "decisions", (value) => _readObjectList(value, GeneratedDecisionRecord.fromJson), requiredField: true, nullable: false), "decisions"),
+      projection: _required(_readFieldValue<GeneratedWhatMattersNowProjection>(_readField(json, const ["projection"]), "projection", (value) => _readObject(value, GeneratedWhatMattersNowProjection.fromJson), requiredField: true, nullable: false), "projection"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'decisions': decisions.map((value) => value.toJson()).toList(),
+      'projection': projection.toJson(),
+    };
+  }
+}
+
+class GeneratedRecommendation {
+  final String? alternativeAction;
+  final String dedupeKey;
+  final String evidencePreview;
+  final List<GeneratedEvidenceRef>? evidenceRefs;
+  final DateTime expiresAt;
+  final String feedbackSubjectId;
+  final GeneratedFeedbackSubjectKind feedbackSubjectKind;
+  final String? goalOrWorkstreamLabel;
+  final String headline;
+  final String interventionId;
+  final String outputVersion;
+  final String recommendedAction;
+  final String subjectId;
+  final GeneratedRecommendationSubjectKind subjectKind;
+  final String whyNow;
+
+  const GeneratedRecommendation({
+    this.alternativeAction,
+    required this.dedupeKey,
+    required this.evidencePreview,
+    this.evidenceRefs,
+    required this.expiresAt,
+    required this.feedbackSubjectId,
+    required this.feedbackSubjectKind,
+    this.goalOrWorkstreamLabel,
+    required this.headline,
+    required this.interventionId,
+    required this.outputVersion,
+    required this.recommendedAction,
+    required this.subjectId,
+    required this.subjectKind,
+    required this.whyNow,
+  });
+
+  factory GeneratedRecommendation.fromJson(Map<String, dynamic> json) {
+    return GeneratedRecommendation(
+      alternativeAction: _readFieldValue<String>(_readField(json, const ["alternative_action"]), "alternative_action", _readString, requiredField: false, nullable: true),
+      dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      evidencePreview: _required(_readFieldValue<String>(_readField(json, const ["evidence_preview"]), "evidence_preview", _readString, requiredField: true, nullable: false), "evidence_preview"),
+      evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      feedbackSubjectId: _required(_readFieldValue<String>(_readField(json, const ["feedback_subject_id"]), "feedback_subject_id", _readString, requiredField: true, nullable: false), "feedback_subject_id"),
+      feedbackSubjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["feedback_subject_kind"]), "feedback_subject_kind", (value) => _readObject(value, GeneratedFeedbackSubjectKind.fromJson), requiredField: true, nullable: false), "feedback_subject_kind"),
+      goalOrWorkstreamLabel: _readFieldValue<String>(_readField(json, const ["goal_or_workstream_label"]), "goal_or_workstream_label", _readString, requiredField: false, nullable: true),
+      headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
+      interventionId: _required(_readFieldValue<String>(_readField(json, const ["intervention_id"]), "intervention_id", _readString, requiredField: true, nullable: false), "intervention_id"),
+      outputVersion: _required(_readFieldValue<String>(_readField(json, const ["output_version"]), "output_version", _readString, requiredField: true, nullable: false), "output_version"),
+      recommendedAction: _required(_readFieldValue<String>(_readField(json, const ["recommended_action"]), "recommended_action", _readString, requiredField: true, nullable: false), "recommended_action"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+      whyNow: _required(_readFieldValue<String>(_readField(json, const ["why_now"]), "why_now", _readString, requiredField: true, nullable: false), "why_now"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'alternative_action': alternativeAction,
+      'dedupe_key': dedupeKey,
+      'evidence_preview': evidencePreview,
+      'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'feedback_subject_id': feedbackSubjectId,
+      'feedback_subject_kind': feedbackSubjectKind.toJson(),
+      'goal_or_workstream_label': goalOrWorkstreamLabel,
+      'headline': headline,
+      'intervention_id': interventionId,
+      'output_version': outputVersion,
+      'recommended_action': recommendedAction,
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+      'why_now': whyNow,
+    };
+  }
+}
+
+class GeneratedRecommendationSubjectKind {
+
+  const GeneratedRecommendationSubjectKind({
+  });
+
+  factory GeneratedRecommendationSubjectKind.fromJson(Map<String, dynamic> json) {
+    return GeneratedRecommendationSubjectKind(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedDeterministicFacts {
+  final double captureConfidence;
+  final List<GeneratedContextMatchSignal>? contextMatchSignals;
+  final double? daysToDue;
+  final bool focusedGoalLinked;
+  final bool hasConcreteNextAction;
+  final bool someoneBlocked;
+
+  const GeneratedDeterministicFacts({
+    required this.captureConfidence,
+    this.contextMatchSignals,
+    this.daysToDue,
+    this.focusedGoalLinked = false,
+    required this.hasConcreteNextAction,
+    this.someoneBlocked = false,
+  });
+
+  factory GeneratedDeterministicFacts.fromJson(Map<String, dynamic> json) {
+    return GeneratedDeterministicFacts(
+      captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      contextMatchSignals: _readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["context_match_signals"]), "context_match_signals", (value) => _readObjectList(value, GeneratedContextMatchSignal.fromJson), requiredField: false, nullable: true),
+      daysToDue: _readFieldValue<double>(_readField(json, const ["days_to_due"]), "days_to_due", _readDouble, requiredField: false, nullable: true),
+      focusedGoalLinked: _required(_readFieldValue<bool>(_readField(json, const ["focused_goal_linked"]), "focused_goal_linked", _readBool, requiredField: false, nullable: false, defaultValue: false), "focused_goal_linked"),
+      hasConcreteNextAction: _required(_readFieldValue<bool>(_readField(json, const ["has_concrete_next_action"]), "has_concrete_next_action", _readBool, requiredField: true, nullable: false), "has_concrete_next_action"),
+      someoneBlocked: _required(_readFieldValue<bool>(_readField(json, const ["someone_blocked"]), "someone_blocked", _readBool, requiredField: false, nullable: false, defaultValue: false), "someone_blocked"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capture_confidence': captureConfidence,
+      'context_match_signals': contextMatchSignals?.map((value) => value.toJson()).toList(),
+      'days_to_due': daysToDue,
+      'focused_goal_linked': focusedGoalLinked,
+      'has_concrete_next_action': hasConcreteNextAction,
+      'someone_blocked': someoneBlocked,
+    };
+  }
+}
+
+class GeneratedShortlistEligibility {
+  final bool insideDueWindow;
+  final bool open;
+  final bool passesRecommendationGates;
+  final bool recentMaterialActivity;
+  final bool unexpired;
+
+  const GeneratedShortlistEligibility({
+    required this.insideDueWindow,
+    required this.open,
+    required this.passesRecommendationGates,
+    required this.recentMaterialActivity,
+    required this.unexpired,
+  });
+
+  factory GeneratedShortlistEligibility.fromJson(Map<String, dynamic> json) {
+    return GeneratedShortlistEligibility(
+      insideDueWindow: _required(_readFieldValue<bool>(_readField(json, const ["inside_due_window"]), "inside_due_window", _readBool, requiredField: true, nullable: false), "inside_due_window"),
+      open: _required(_readFieldValue<bool>(_readField(json, const ["open"]), "open", _readBool, requiredField: true, nullable: false), "open"),
+      passesRecommendationGates: _required(_readFieldValue<bool>(_readField(json, const ["passes_recommendation_gates"]), "passes_recommendation_gates", _readBool, requiredField: true, nullable: false), "passes_recommendation_gates"),
+      recentMaterialActivity: _required(_readFieldValue<bool>(_readField(json, const ["recent_material_activity"]), "recent_material_activity", _readBool, requiredField: true, nullable: false), "recent_material_activity"),
+      unexpired: _required(_readFieldValue<bool>(_readField(json, const ["unexpired"]), "unexpired", _readBool, requiredField: true, nullable: false), "unexpired"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'inside_due_window': insideDueWindow,
+      'open': open,
+      'passes_recommendation_gates': passesRecommendationGates,
+      'recent_material_activity': recentMaterialActivity,
+      'unexpired': unexpired,
+    };
+  }
+}
+
+class GeneratedDecisionRecord {
+  final String decisionSummary;
+  final GeneratedShortlistEligibility eligibility;
+  final DateTime evaluatedAt;
+  final String evaluationId;
+  final List<GeneratedEvidenceRef>? evidenceRefs;
+  final DateTime expiresAt;
+  final String factDefinitionVersion;
+  final GeneratedDeterministicFacts factsSnapshot;
+  final String finalOutputRef;
+  final String modelVersion;
+  final String policyVersion;
+  final String promptVersion;
+  final List<String> reasonCodes;
+  final List<String> shortlistIds;
+  final String subjectId;
+  final GeneratedRecommendationSubjectKind subjectKind;
+
+  const GeneratedDecisionRecord({
+    required this.decisionSummary,
+    required this.eligibility,
+    required this.evaluatedAt,
+    required this.evaluationId,
+    this.evidenceRefs,
+    required this.expiresAt,
+    required this.factDefinitionVersion,
+    required this.factsSnapshot,
+    required this.finalOutputRef,
+    required this.modelVersion,
+    required this.policyVersion,
+    required this.promptVersion,
+    required this.reasonCodes,
+    required this.shortlistIds,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedDecisionRecord.fromJson(Map<String, dynamic> json) {
+    return GeneratedDecisionRecord(
+      decisionSummary: _required(_readFieldValue<String>(_readField(json, const ["decision_summary"]), "decision_summary", _readString, requiredField: true, nullable: false), "decision_summary"),
+      eligibility: _required(_readFieldValue<GeneratedShortlistEligibility>(_readField(json, const ["eligibility"]), "eligibility", (value) => _readObject(value, GeneratedShortlistEligibility.fromJson), requiredField: true, nullable: false), "eligibility"),
+      evaluatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["evaluated_at"]), "evaluated_at", _readDateTime, requiredField: true, nullable: false), "evaluated_at"),
+      evaluationId: _required(_readFieldValue<String>(_readField(json, const ["evaluation_id"]), "evaluation_id", _readString, requiredField: true, nullable: false), "evaluation_id"),
+      evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      factDefinitionVersion: _required(_readFieldValue<String>(_readField(json, const ["fact_definition_version"]), "fact_definition_version", _readString, requiredField: true, nullable: false), "fact_definition_version"),
+      factsSnapshot: _required(_readFieldValue<GeneratedDeterministicFacts>(_readField(json, const ["facts_snapshot"]), "facts_snapshot", (value) => _readObject(value, GeneratedDeterministicFacts.fromJson), requiredField: true, nullable: false), "facts_snapshot"),
+      finalOutputRef: _required(_readFieldValue<String>(_readField(json, const ["final_output_ref"]), "final_output_ref", _readString, requiredField: true, nullable: false), "final_output_ref"),
+      modelVersion: _required(_readFieldValue<String>(_readField(json, const ["model_version"]), "model_version", _readString, requiredField: true, nullable: false), "model_version"),
+      policyVersion: _required(_readFieldValue<String>(_readField(json, const ["policy_version"]), "policy_version", _readString, requiredField: true, nullable: false), "policy_version"),
+      promptVersion: _required(_readFieldValue<String>(_readField(json, const ["prompt_version"]), "prompt_version", _readString, requiredField: true, nullable: false), "prompt_version"),
+      reasonCodes: _required(_readFieldValue<List<String>>(_readField(json, const ["reason_codes"]), "reason_codes", _readStringList, requiredField: true, nullable: false), "reason_codes"),
+      shortlistIds: _required(_readFieldValue<List<String>>(_readField(json, const ["shortlist_ids"]), "shortlist_ids", _readStringList, requiredField: true, nullable: false), "shortlist_ids"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'decision_summary': decisionSummary,
+      'eligibility': eligibility.toJson(),
+      'evaluated_at': evaluatedAt.toUtc().toIso8601String(),
+      'evaluation_id': evaluationId,
+      'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'fact_definition_version': factDefinitionVersion,
+      'facts_snapshot': factsSnapshot.toJson(),
+      'final_output_ref': finalOutputRef,
+      'model_version': modelVersion,
+      'policy_version': policyVersion,
+      'prompt_version': promptVersion,
+      'reason_codes': reasonCodes,
+      'shortlist_ids': shortlistIds,
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedContextMatchSignal {
+
+  const GeneratedContextMatchSignal({
+  });
+
+  factory GeneratedContextMatchSignal.fromJson(Map<String, dynamic> json) {
+    return GeneratedContextMatchSignal(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedFeedbackSubjectKind {
+
+  const GeneratedFeedbackSubjectKind({
+  });
+
+  factory GeneratedFeedbackSubjectKind.fromJson(Map<String, dynamic> json) {
+    return GeneratedFeedbackSubjectKind(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedInterventionSurface {
+
+  const GeneratedInterventionSurface({
+  });
+
+  factory GeneratedInterventionSurface.fromJson(Map<String, dynamic> json) {
+    return GeneratedInterventionSurface(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedNormalizedContextMatch {
+  final List<GeneratedContextMatchSignal> signals;
+  final String subjectId;
+  final GeneratedRecommendationSubjectKind subjectKind;
+
+  const GeneratedNormalizedContextMatch({
+    required this.signals,
+    required this.subjectId,
+    required this.subjectKind,
+  });
+
+  factory GeneratedNormalizedContextMatch.fromJson(Map<String, dynamic> json) {
+    return GeneratedNormalizedContextMatch(
+      signals: _required(_readFieldValue<List<GeneratedContextMatchSignal>>(_readField(json, const ["signals"]), "signals", (value) => _readObjectList(value, GeneratedContextMatchSignal.fromJson), requiredField: true, nullable: false), "signals"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      subjectKind: _required(_readFieldValue<GeneratedRecommendationSubjectKind>(_readField(json, const ["subject_kind"]), "subject_kind", (value) => _readObject(value, GeneratedRecommendationSubjectKind.fromJson), requiredField: true, nullable: false), "subject_kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'signals': signals.map((value) => value.toJson()).toList(),
+      'subject_id': subjectId,
+      'subject_kind': subjectKind.toJson(),
+    };
+  }
+}
+
+class GeneratedOpenLoopDescriptor {
+  final String? blockingOnId;
+  final GeneratedOpenLoopKind kind;
+  final String loopId;
+  final String nextActionCode;
+  final GeneratedOpenLoopStatus status;
+  final String subjectId;
+  final DateTime updatedAt;
+
+  const GeneratedOpenLoopDescriptor({
+    this.blockingOnId,
+    required this.kind,
+    required this.loopId,
+    required this.nextActionCode,
+    required this.status,
+    required this.subjectId,
+    required this.updatedAt,
+  });
+
+  factory GeneratedOpenLoopDescriptor.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopDescriptor(
+      blockingOnId: _readFieldValue<String>(_readField(json, const ["blocking_on_id"]), "blocking_on_id", _readString, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<GeneratedOpenLoopKind>(_readField(json, const ["kind"]), "kind", (value) => _readObject(value, GeneratedOpenLoopKind.fromJson), requiredField: true, nullable: false), "kind"),
+      loopId: _required(_readFieldValue<String>(_readField(json, const ["loop_id"]), "loop_id", _readString, requiredField: true, nullable: false), "loop_id"),
+      nextActionCode: _required(_readFieldValue<String>(_readField(json, const ["next_action_code"]), "next_action_code", _readString, requiredField: true, nullable: false), "next_action_code"),
+      status: _required(_readFieldValue<GeneratedOpenLoopStatus>(_readField(json, const ["status"]), "status", (value) => _readObject(value, GeneratedOpenLoopStatus.fromJson), requiredField: true, nullable: false), "status"),
+      subjectId: _required(_readFieldValue<String>(_readField(json, const ["subject_id"]), "subject_id", _readString, requiredField: true, nullable: false), "subject_id"),
+      updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'blocking_on_id': blockingOnId,
+      'kind': kind.toJson(),
+      'loop_id': loopId,
+      'next_action_code': nextActionCode,
+      'status': status.toJson(),
+      'subject_id': subjectId,
+      'updated_at': updatedAt.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedOpenLoopKind {
+
+  const GeneratedOpenLoopKind({
+  });
+
+  factory GeneratedOpenLoopKind.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopKind(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedOpenLoopStatus {
+
+  const GeneratedOpenLoopStatus({
+  });
+
+  factory GeneratedOpenLoopStatus.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopStatus(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedTaskIntelligenceFeedbackAction {
+
+  const GeneratedTaskIntelligenceFeedbackAction({
+  });
+
+  factory GeneratedTaskIntelligenceFeedbackAction.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskIntelligenceFeedbackAction(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedTaskIntelligenceFeedbackReason {
+
+  const GeneratedTaskIntelligenceFeedbackReason({
+  });
+
+  factory GeneratedTaskIntelligenceFeedbackReason.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskIntelligenceFeedbackReason(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
+class GeneratedTaskIntelligenceOutcomeCode {
+
+  const GeneratedTaskIntelligenceOutcomeCode({
+  });
+
+  factory GeneratedTaskIntelligenceOutcomeCode.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskIntelligenceOutcomeCode(
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+    };
+  }
+}
+
 GeneratedPatchField<T> _readPatchField<T>(
   Map<String, dynamic> json,
   String name,
