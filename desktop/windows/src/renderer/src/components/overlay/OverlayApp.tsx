@@ -211,16 +211,25 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
           </div>
 
           {ptt.recording && (
-            // Live capture strip BELOW the input, ONLY while holding Space: the
-            // waveform animates and the recognized transcript renders into the
-            // textarea above. On release the strip disappears (no "Transcribing…");
-            // the transcript keeps filling the box and auto-sends when settled.
+            // Live capture strip BELOW the input, while holding Space: the waveform
+            // animates and the recognized transcript renders into the textarea above.
             <div className="flex items-center gap-3 rounded-xl bg-neutral-800/50 px-3 py-1.5">
               <span className="shrink-0 text-xs font-medium text-neutral-300">Listening…</span>
               <Waveform analyserRef={ptt.analyserRef} />
               <span className="shrink-0 text-[10px] text-neutral-500">
                 release to send · Esc cancels
               </span>
+            </div>
+          )}
+
+          {!ptt.recording && ptt.finalizing && (
+            // After release we wait for the backend's transcript (connect + finalize,
+            // ~1s). Without a cue the user sees nothing happening and re-holds — which
+            // cancels this in-flight capture. A spinner tells them it's processing.
+            <div className="flex items-center gap-2 rounded-xl bg-neutral-800/50 px-3 py-1.5">
+              <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200" />
+              <span className="shrink-0 text-xs font-medium text-neutral-300">Transcribing…</span>
+              <span className="shrink-0 text-[10px] text-neutral-500">Esc cancels</span>
             </div>
           )}
         </div>

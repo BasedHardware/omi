@@ -52,7 +52,27 @@ type Session = {
   source: 'mic' | 'system'
   mode: ListenMode
   closed: boolean
+  // Audio captured before the socket reaches OPEN. The renderer starts streaming
+  // PCM the moment the mic is live, but the WS handshake can take a beat (esp. PTT
+  // transcribe-stream under load). Without this, a quick hold ("hello") is spoken
+  // and released before OPEN, so every chunk is dropped and nothing transcribes.
+  // We buffer those pre-OPEN chunks (bounded) and flush them on 'open'.
+  pending: Buffer[]
+  pendingBytes: number
+  // PTT: 'finalize' was requested while the socket was still CONNECTING. Sent
+  // right after the pre-connect flush on 'open', so a hold released mid-handshake
+  // still gets a prompt trailing segment instead of waiting out Deepgram's
+  // silence endpointing.
+  finalizePending: boolean
+  // PTT: finalize was requested (sent or queued). Audio arriving after this is
+  // dropped — the released key is the source of truth for what the capture
+  // contains, so late speech can never leak into the transcript.
+  finalized: boolean
 }
+
+// Cap the pre-connect buffer (~5s of 16 kHz mono PCM16 = 160 KB). If the socket
+// somehow never opens, we never grow this without bound; oldest chunks drop first.
+const MAX_PENDING_BYTES = 16000 * 2 * 5
 
 const sessions = new Map<string, Session>()
 
@@ -75,6 +95,30 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     sessions.delete(args.sessionId)
   }
   const mode: ListenMode = args.mode ?? 'conversation'
+
+  // Push-to-talk is a single-at-a-time gesture. When a new PTT hold opens its
+  // connection, close any prior PTT session for the same window — a rapid series of
+  // holds otherwise leaves several connections handshaking to the same endpoint at
+  // once, and they contend (connect times balloon from ~100ms to 4-11s). Killing the
+  // superseded one keeps exactly one live PTT connection, so the newest stays fast.
+  // The client already abandons the prior hold's commit on a new hold, so nothing is
+  // lost that wasn't already being discarded.
+  if (mode === 'ptt') {
+    for (const [id, s] of sessions) {
+      if (id !== args.sessionId && s.mode === 'ptt' && s.ownerId === owner.id) {
+        console.log(`[omi-listen] supersede ${id} (new PTT hold ${args.sessionId})`)
+        s.closed = true
+        s.pending = []
+        s.pendingBytes = 0
+        sessions.delete(id)
+        try {
+          s.ws.close()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
 
   const base = buildListenEndpoint(mode, args.language)
   let url = base
@@ -102,12 +146,50 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     headers: { Authorization: `Bearer ${args.token}` }
   })
   ws.binaryType = 'arraybuffer'
-  const session: Session = { ws, ownerId: owner.id, source: args.source, mode, closed: false }
+  const session: Session = {
+    ws,
+    ownerId: owner.id,
+    source: args.source,
+    mode,
+    closed: false,
+    pending: [],
+    pendingBytes: 0,
+    finalizePending: false,
+    finalized: false
+  }
   sessions.set(args.sessionId, session)
+  const t0 = Date.now()
   console.log(`[omi-listen] start ${args.sessionId} mode=${mode} source=${args.source}`)
 
   ws.on('open', () => {
-    console.log(`[omi-listen] connected ${args.sessionId} mode=${mode}`)
+    console.log(`[omi-listen] connected ${args.sessionId} mode=${mode} in ${Date.now() - t0}ms`)
+    // Flush audio captured while the handshake was in flight, in order, so speech
+    // spoken during the connect window (e.g. a quick "hello") isn't lost.
+    if (session.pending.length > 0) {
+      console.log(
+        `[omi-listen] flush ${args.sessionId} ${session.pending.length} pre-connect chunk(s) (${session.pendingBytes}B)`
+      )
+      for (const chunk of session.pending) {
+        try {
+          ws.send(chunk)
+        } catch {
+          /* ignore */
+        }
+      }
+      session.pending = []
+      session.pendingBytes = 0
+    }
+    // Release happened while we were still connecting — deliver the queued
+    // finalize now that the flushed audio is on the wire.
+    if (session.finalizePending) {
+      session.finalizePending = false
+      console.log(`[omi-listen] finalize ${args.sessionId} (queued during connect)`)
+      try {
+        ws.send('finalize')
+      } catch {
+        /* ignore */
+      }
+    }
     emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected' })
   })
 
@@ -139,7 +221,9 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   })
 
   ws.on('error', (err) => {
-    console.log(`[omi-listen] error ${args.sessionId} mode=${mode}: ${err.message}`)
+    console.log(
+      `[omi-listen] error ${args.sessionId} mode=${mode} after ${Date.now() - t0}ms (readyState=${ws.readyState}): ${err.message}`
+    )
     emit(session.ownerId, {
       sessionId: args.sessionId,
       kind: 'error',
@@ -167,8 +251,25 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
 
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
-  if (!s || s.ws.readyState !== WebSocket.OPEN) return
-  s.ws.send(pcm)
+  if (!s) return
+  // Finalize already requested — the capture is sealed. Drop late audio so speech
+  // after the hold was released can never appear in the transcript.
+  if (s.finalized) return
+  if (s.ws.readyState === WebSocket.OPEN) {
+    s.ws.send(pcm)
+    return
+  }
+  // Still connecting (or closing): buffer so pre-OPEN speech isn't dropped. Once
+  // OPEN the 'open' handler flushes these. Bounded — drop oldest past the cap.
+  if (s.ws.readyState === WebSocket.CONNECTING) {
+    const chunk = Buffer.from(pcm)
+    s.pending.push(chunk)
+    s.pendingBytes += chunk.byteLength
+    while (s.pendingBytes > MAX_PENDING_BYTES && s.pending.length > 1) {
+      const dropped = s.pending.shift()!
+      s.pendingBytes -= dropped.byteLength
+    }
+  }
 }
 
 /**
@@ -180,7 +281,16 @@ function feedSession(sessionId: string, pcm: ArrayBuffer): void {
  */
 function finalizeSession(sessionId: string): void {
   const s = sessions.get(sessionId)
-  if (!s || s.mode !== 'ptt' || s.ws.readyState !== WebSocket.OPEN) return
+  if (!s || s.mode !== 'ptt') return
+  s.finalized = true // seal the capture: feeds from here on are dropped
+  if (s.ws.readyState === WebSocket.CONNECTING) {
+    // Handshake still in flight — queue it; the 'open' handler sends it right
+    // after flushing the buffered audio.
+    console.log(`[omi-listen] finalize ${sessionId} queued (still connecting)`)
+    s.finalizePending = true
+    return
+  }
+  if (s.ws.readyState !== WebSocket.OPEN) return
   console.log(`[omi-listen] finalize ${sessionId}`)
   try {
     s.ws.send('finalize')
@@ -192,7 +302,10 @@ function finalizeSession(sessionId: string): void {
 function stopSession(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (!s) return
+  console.log(`[omi-listen] stop ${sessionId} mode=${s.mode} (readyState=${s.ws.readyState})`)
   s.closed = true
+  s.pending = []
+  s.pendingBytes = 0
   sessions.delete(sessionId)
   try {
     s.ws.close()

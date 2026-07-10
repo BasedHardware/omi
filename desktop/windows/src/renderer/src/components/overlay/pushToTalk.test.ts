@@ -14,7 +14,8 @@ const CFG: FinalizeConfig = {
   noVoiceGraceMs: 700,
   silenceMs: 450,
   settleMs: 500,
-  trailingGraceMs: 1000
+  trailingGraceMs: 1000,
+  emptyGraceMs: 2500
 }
 
 const line = (text: string, speaker?: string): TranscriptLine => ({ text, speaker })
@@ -117,14 +118,25 @@ describe('upsertLine', () => {
 })
 
 describe('shouldFinalize', () => {
-  const base = { elapsedMs: 100, everVoiced: true, silentForMs: 0, sinceLastSegmentMs: 100 }
+  const base = {
+    elapsedMs: 100,
+    everVoiced: true,
+    silentForMs: 0,
+    sinceLastSegmentMs: 100,
+    sinceConnectedMs: 100
+  }
 
   it('always commits past the hard cap', () => {
     expect(shouldFinalize({ ...base, elapsedMs: CFG.maxMs }, CFG)).toBe(true)
   })
 
   it('ends quickly when nothing was captured (no voice, no segment)', () => {
-    const nothing = { everVoiced: false, silentForMs: 9999, sinceLastSegmentMs: null }
+    const nothing = {
+      everVoiced: false,
+      silentForMs: 9999,
+      sinceLastSegmentMs: null,
+      sinceConnectedMs: 9999
+    }
     expect(shouldFinalize({ ...nothing, elapsedMs: CFG.noVoiceGraceMs - 1 }, CFG)).toBe(false)
     expect(shouldFinalize({ ...nothing, elapsedMs: CFG.noVoiceGraceMs }, CFG)).toBe(true)
   })
@@ -167,12 +179,52 @@ describe('shouldFinalize', () => {
     ).toBe(false)
   })
 
-  it('keeps waiting if voice was detected but no segment has arrived yet', () => {
+  it('keeps waiting while voiced-but-unrecognized and NOT yet connected (short of the cap)', () => {
+    // Slow connect: the audio hasn't even been delivered yet — don't give up early.
     expect(
       shouldFinalize(
-        { elapsedMs: 1000, everVoiced: true, silentForMs: 9999, sinceLastSegmentMs: null },
+        {
+          elapsedMs: CFG.emptyGraceMs + 1000,
+          everVoiced: true,
+          silentForMs: 9999,
+          sinceLastSegmentMs: null,
+          sinceConnectedMs: null
+        },
         CFG
       )
     ).toBe(false)
+  })
+
+  it('gives the backend the empty grace AFTER connect before committing empty', () => {
+    // Connected late: measure the nothing-recognized window from connect, not release.
+    expect(
+      shouldFinalize(
+        {
+          elapsedMs: CFG.emptyGraceMs + 1000,
+          everVoiced: true,
+          silentForMs: 9999,
+          sinceLastSegmentMs: null,
+          sinceConnectedMs: CFG.emptyGraceMs - 1
+        },
+        CFG
+      )
+    ).toBe(false)
+  })
+
+  it('commits empty once released AND connected past the empty grace with no segment', () => {
+    // Regression: a quiet unrecognized word used to have NO exit here short of the
+    // hard cap — the UI hung on "Transcribing…" for the full maxMs.
+    expect(
+      shouldFinalize(
+        {
+          elapsedMs: CFG.emptyGraceMs,
+          everVoiced: true,
+          silentForMs: 9999,
+          sinceLastSegmentMs: null,
+          sinceConnectedMs: CFG.emptyGraceMs
+        },
+        CFG
+      )
+    ).toBe(true)
   })
 })

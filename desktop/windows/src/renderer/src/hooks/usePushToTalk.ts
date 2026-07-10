@@ -9,22 +9,29 @@ import {
   type FinalizeConfig
 } from '../components/overlay/pushToTalk'
 
-// After Space is released we keep the mic + transcription stream OPEN and decide
-// when to commit from live signals (see shouldFinalize), rather than a fixed delay:
-//  - VAD watches the mic so we wait until you've actually STOPPED talking, then
-//  - send the PTT 'finalize' frame (on release) and wait for the backend's trailing
-//    FINAL segment to land and settle. The transcribe-stream backend flushes +
-//    finalizes Deepgram on that frame, so the tail arrives ~0.3s later. A capture
-//    that produced nothing ends fast; a hard cap always ends it.
+// Releasing Space SEALS the capture — the key is the source of truth for what the
+// message contains. On release the mic is cut (after a ~300ms tail inside
+// omiListenClient so the last syllable isn't clipped), the backend is told to
+// flush + finalize, and audio past that point is dropped in the main process.
+// The remaining wait (see shouldFinalize) is only for the backend's trailing
+// FINAL segment to land and settle — nothing new can enter the transcript.
 const FINALIZE_CFG: FinalizeConfig = {
-  maxMs: 6000,
+  // Hard cap must cover PTT_CONNECT_TIMEOUT_MS (8s): a hold released mid-handshake
+  // only gets its transcript after connect+flush+finalize, so giving up sooner
+  // than the connect timeout throws away a capture that was about to succeed.
+  maxMs: 8500,
   noVoiceGraceMs: 700,
   silenceMs: 350,
   settleMs: 400,
   // Hold the commit briefly past release so the post-'finalize' trailing segment
-  // (~0.3s) lands before we send. (Legacy value from the v4/listen era, when the
-  // tail was ~1.8s-late with no interim; safe to lower now that PTT finalizes.)
-  trailingGraceMs: 1000
+  // (~0.3s) lands before we send. Lowered from the v4/listen era's 1000ms (when the
+  // tail was ~1.8s-late with no interim) — PTT now flushes + finalizes on release,
+  // so the tail is prompt and a shorter floor makes the commit feel much snappier.
+  trailingGraceMs: 400,
+  // Voiced but nothing ever recognized (e.g. speech too quiet): once released AND
+  // connected this long with zero segments, commit empty instead of hanging to the
+  // hard cap. Covers the flush→finalize→trailing-segment round-trip with margin.
+  emptyGraceMs: 2500
 }
 const POLL_MS = 120
 // Mic energy this far above its adaptive noise floor counts as speech (VAD). The
@@ -101,6 +108,18 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const sessionRef = useRef(0)
 
   const handleRef = useRef<TranscriptionHandle | null>(null)
+  // Early capture handle (mic live, socket may still be handshaking) — arrives via
+  // onCaptureReady BEFORE startTranscription resolves, so key-release can seal the
+  // capture immediately instead of waiting for the connection to land.
+  const captureRef = useRef<{ finalize: () => void } | null>(null)
+  // Space was released before even the capture handle existed (a very fast
+  // release) — deliver the finalize the moment it arrives. Without this, a hold
+  // released mid-setup never finalizes and the transcript waits out Deepgram's
+  // slow silence endpointing.
+  const wantFinalizeRef = useRef(false)
+  // When the transcription socket connected (0 = not yet) — feeds shouldFinalize's
+  // "connected but nothing recognized" empty-commit gate.
+  const connectedAtRef = useRef(0)
   const linesRef = useRef<TranscriptLine[]>([])
   const interimRef = useRef('')
   // Timestamp (ms) of the last accepted segment THIS hold, or 0 if none yet.
@@ -215,6 +234,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
       /* ignore */
     }
     handleRef.current = null
+    captureRef.current = null
+    wantFinalizeRef.current = false
     markConsumed()
     linesRef.current = []
     interimRef.current = ''
@@ -238,6 +259,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
     lastSegmentAtRef.current = 0
     lastVoiceAtRef.current = 0
     everVoicedRef.current = false
+    connectedAtRef.current = 0
     onTranscript('')
 
     void startAudioViz(session)
@@ -261,9 +283,20 @@ export function usePushToTalk(opts: Options): PushToTalk {
               interimRef.current = t
               onTranscript(assembleTranscript(linesRef.current, interimRef.current))
             },
-            onBackend: () => {},
+            onBackend: () => {
+              if (sessionRef.current === session) connectedAtRef.current = Date.now()
+            },
             onError: (e) => {
               if (sessionRef.current === session) setError(e.message)
+            },
+            onCaptureReady: (capture) => {
+              if (sessionRef.current !== session) return
+              captureRef.current = capture
+              // Space already released while the capture was being set up — seal it now.
+              if (wantFinalizeRef.current) {
+                wantFinalizeRef.current = false
+                capture.finalize()
+              }
             }
           },
           'ptt'
@@ -294,10 +327,18 @@ export function usePushToTalk(opts: Options): PushToTalk {
       return
     }
 
-    // Keep the mic + transcription stream open through finalize: VAD watches for you
-    // to stop talking. Tell the PTT backend to flush + finalize so the trailing
-    // segment lands promptly (~0.3s) instead of waiting out silence.
-    handleRef.current?.finalize()
+    // Release seals the capture: stop the VAD/waveform mic (post-release speech
+    // must not extend the wait) and tell the capture to cut its mic + finalize —
+    // the backend flushes and the trailing segment lands promptly (~0.3s). The
+    // socket stays open only to RECEIVE that segment. If even the capture handle
+    // doesn't exist yet (released mid-setup), flag it so onCaptureReady seals it
+    // the moment it arrives.
+    stopAudioViz()
+    if (captureRef.current) {
+      captureRef.current.finalize()
+    } else {
+      wantFinalizeRef.current = true
+    }
     const session = sessionRef.current
     finalizingRef.current = true
     setFinalizing(true)
@@ -315,6 +356,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
         /* ignore */
       }
       handleRef.current = null
+      captureRef.current = null
+      wantFinalizeRef.current = false
       const text = assembleTranscript(linesRef.current, interimRef.current)
       markConsumed()
       linesRef.current = []
@@ -334,7 +377,8 @@ export function usePushToTalk(opts: Options): PushToTalk {
           elapsedMs: now - releasedAt,
           everVoiced: everVoicedRef.current,
           silentForMs: now - lastVoiceAtRef.current,
-          sinceLastSegmentMs: lastSegmentAtRef.current > 0 ? now - lastSegmentAtRef.current : null
+          sinceLastSegmentMs: lastSegmentAtRef.current > 0 ? now - lastSegmentAtRef.current : null,
+          sinceConnectedMs: connectedAtRef.current > 0 ? now - connectedAtRef.current : null
         },
         FINALIZE_CFG
       )

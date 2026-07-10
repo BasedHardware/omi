@@ -33,6 +33,15 @@ export type FinalizeConfig = {
    * that trailing segment to arrive (the hard cap `maxMs` still bounds the wait).
    */
   trailingGraceMs: number
+  /**
+   * Voice was detected but the backend recognized NOTHING (no segment ever): commit
+   * empty once we've been both released AND connected at least this long. Post-release
+   * the flush/finalize round-trip is well under a second, so if the backend has had
+   * this window after connecting and produced nothing, there is nothing coming — end
+   * the capture instead of hanging to `maxMs`. While still CONNECTING we keep waiting
+   * (the audio hasn't even been delivered yet); `maxMs` bounds that case.
+   */
+  emptyGraceMs: number
 }
 
 /** Live inputs to the finalize decision, sampled each poll after Space is released. */
@@ -45,6 +54,10 @@ export type FinalizeState = {
   silentForMs: number
   /** Time since the last accepted segment, or null if none has arrived this hold. */
   sinceLastSegmentMs: number | null
+  /** Time since the transcription socket connected, or null while still connecting.
+   *  Distinguishes "backend saw the audio and recognized nothing" (commit empty)
+   *  from "the audio hasn't even been delivered yet" (keep waiting). */
+  sinceConnectedMs: number | null
 }
 
 /**
@@ -58,6 +71,13 @@ export function shouldFinalize(s: FinalizeState, cfg: FinalizeConfig): boolean {
   if (s.elapsedMs >= cfg.maxMs) return true
   // Nothing captured at all → end fast (e.g. a key drop so quick no audio was caught).
   if (!s.everVoiced && s.sinceLastSegmentMs === null) return s.elapsedMs >= cfg.noVoiceGraceMs
+  // Voice detected but the backend never recognized anything: once we've been both
+  // released AND connected past the empty grace, nothing is coming — commit empty.
+  // (Regression guard: this used to have NO exit short of maxMs, so a quiet
+  // unrecognized word hung "Transcribing…" for the full cap.)
+  if (s.sinceLastSegmentMs === null) {
+    return s.sinceConnectedMs !== null && Math.min(s.elapsedMs, s.sinceConnectedMs) >= cfg.emptyGraceMs
+  }
   // Otherwise: hold the commit open until the backend's trailing segment has had
   // time to arrive (trailingGraceMs), THEN require you've stopped talking AND the
   // last segment has settled. Without the grace, a quick release commits in the

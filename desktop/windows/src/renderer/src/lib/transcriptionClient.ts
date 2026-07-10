@@ -7,7 +7,13 @@ import type {
   TranscriptLine
 } from '../../../shared/types'
 
+// Conversation (/v4/listen) connects fast; a tight timeout surfaces failures
+// quickly. The PTT transcribe-stream endpoint's handshake can spike past 3s under
+// load, so give it a more forgiving window (the macOS client allows 30s). Kept
+// modest since main-process supersede now prevents the connection pile-up that
+// pushed connect times to 4-11s; a genuine failure shouldn't hang the UI for long.
 const CONNECT_TIMEOUT_MS = 3000
+const PTT_CONNECT_TIMEOUT_MS = 8000
 
 export type TranscriptionCallbacks = {
   /** Fires every time a new finalized line is ready (a v4/listen segment). */
@@ -24,6 +30,12 @@ export type TranscriptionCallbacks = {
   /** Fires for every non-segment backend event (e.g. `memory_creating`). Optional;
    *  quota events are still handled internally regardless. */
   onEvent?: (event: { type: string; raw: Record<string, unknown> }) => void
+  /** Fires as soon as the capture session exists (mic open, socket created) —
+   *  BEFORE the socket connects, i.e. before startTranscription resolves. Lets a
+   *  PTT caller deliver finalize() at key-release even when the handshake is still
+   *  in flight, so the mic is cut and the capture sealed the moment the user lets
+   *  go instead of whenever the connection happens to land. */
+  onCaptureReady?: (capture: { finalize: () => void }) => void
 }
 
 export type TranscriptionHandle = {
@@ -85,6 +97,7 @@ async function startWithOmi(
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
   let outcome: 'pending' | 'omi' | 'failed' = 'pending'
+  const connectTimeoutMs = mode === 'ptt' ? PTT_CONNECT_TIMEOUT_MS : CONNECT_TIMEOUT_MS
   return new Promise<OmiListenHandle | null>((resolve) => {
     let handle: OmiListenHandle | null = null
     const timeout = setTimeout(() => {
@@ -96,7 +109,7 @@ async function startWithOmi(
         /* ignore */
       }
       resolve(null)
-    }, CONNECT_TIMEOUT_MS)
+    }, connectTimeoutMs)
 
     startOmiListen(
       source,
@@ -183,6 +196,9 @@ async function startWithOmi(
           }
         } else {
           handle = h
+          // Capture exists (mic live, WS handshaking) — hand the caller a way to
+          // finalize at key-release even before the connection resolves.
+          cb.onCaptureReady?.({ finalize: () => h.finalize() })
         }
       })
       .catch((err) => {
