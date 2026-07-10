@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceTurnOutbox.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
 preconditions:
