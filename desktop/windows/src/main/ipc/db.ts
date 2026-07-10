@@ -4,9 +4,12 @@ import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
+import { runMigrations } from './dbMigrations'
 import type {
   AppUsageRecord,
   ChatMessage,
+  ConversationSyncPatch,
+  ConversationSyncState,
   FileIndexDigest,
   IndexedAppRecord,
   IndexedFileRecord,
@@ -20,6 +23,7 @@ import type {
   OnboardingGraphNode,
   OnboardingGraphEdge,
   RewindFrame,
+  SyncSegment,
   UsageCategory
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
@@ -195,6 +199,9 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // Versioned migrations (PRAGMA user_version) — everything beyond the additive
+  // baseline above. Ordered + exactly-once; see dbMigrations.ts.
+  runMigrations(db)
   return db
 }
 
@@ -207,7 +214,21 @@ type LocalConversationRow = {
   kind: string | null
   messages: string | null
   title: string | null
+  syncState: string | null
+  segmentsJson: string | null
+  cloudId: string | null
+  syncAttempts: number | null
+  syncError: string | null
 }
+
+const SYNC_STATES: ConversationSyncState[] = [
+  'local_only',
+  'pending',
+  'posting',
+  'done',
+  'failed',
+  'unconfirmed'
+]
 
 function mapLocalConversation(row: LocalConversationRow): LocalConversation {
   return {
@@ -218,17 +239,25 @@ function mapLocalConversation(row: LocalConversationRow): LocalConversation {
     createdAt: row.createdAt,
     kind: row.kind === 'chat' ? 'chat' : 'recording',
     messages: row.messages ? (JSON.parse(row.messages) as ChatMessage[]) : undefined,
-    title: row.title ?? null
+    title: row.title ?? null,
+    syncState: SYNC_STATES.includes(row.syncState as ConversationSyncState)
+      ? (row.syncState as ConversationSyncState)
+      : 'local_only',
+    segments: row.segmentsJson ? (JSON.parse(row.segmentsJson) as SyncSegment[]) : null,
+    cloudId: row.cloudId ?? null,
+    syncAttempts: row.syncAttempts ?? 0,
+    syncError: row.syncError ?? null
   }
 }
 
 const LOCAL_CONVERSATION_COLUMNS =
-  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, title'
+  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, title, ' +
+  'sync_state AS syncState, segments_json AS segmentsJson, cloud_id AS cloudId, sync_attempts AS syncAttempts, sync_error AS syncError'
 
 export function insertLocalConversation(c: LocalConversation): void {
   get()
     .prepare(
-      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title, sync_state, segments_json, cloud_id, sync_attempts, sync_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .run(
       c.id,
@@ -238,8 +267,34 @@ export function insertLocalConversation(c: LocalConversation): void {
       c.createdAt,
       c.kind ?? 'recording',
       c.messages ? JSON.stringify(c.messages) : null,
-      c.title ?? null
+      c.title ?? null,
+      c.syncState ?? 'local_only',
+      c.segments && c.segments.length > 0 ? JSON.stringify(c.segments) : null,
+      c.cloudId ?? null,
+      c.syncAttempts ?? 0,
+      c.syncError ?? null
     )
+}
+
+/** Persist an outbox transition (see ConversationSyncState / lib/sync/outbox.ts).
+ *  cloudId/syncError only change when present in the patch; incrementAttempts
+ *  bumps the counter atomically with the state write. */
+export function updateLocalConversationSync(id: string, patch: ConversationSyncPatch): void {
+  const sets = ['sync_state = ?']
+  const params: unknown[] = [patch.syncState]
+  if (patch.cloudId !== undefined) {
+    sets.push('cloud_id = ?')
+    params.push(patch.cloudId)
+  }
+  if (patch.syncError !== undefined) {
+    sets.push('sync_error = ?')
+    params.push(patch.syncError)
+  }
+  if (patch.incrementAttempts) sets.push('sync_attempts = sync_attempts + 1')
+  params.push(id)
+  get()
+    .prepare(`UPDATE local_conversation SET ${sets.join(', ')} WHERE id = ?`)
+    .run(...params)
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {

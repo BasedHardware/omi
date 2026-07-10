@@ -4,6 +4,7 @@ import type {
   OmiBridgeApi,
   OmiOverlayApi,
   LocalConversation,
+  ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
@@ -32,6 +33,8 @@ const omi: OmiBridgeApi = {
   deleteLocalConversation: (id: string) => ipcRenderer.invoke('db:deleteLocalConversation', id),
   updateLocalConversationTitle: (id: string, title: string) =>
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
+  updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
+    ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)
