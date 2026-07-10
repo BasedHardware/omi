@@ -280,7 +280,9 @@ class TestSyncV2Structure:
         pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
         with open(pipeline_path, encoding='utf-8') as f:
             pipeline_source = f.read()
-        segment = pipeline_source[pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')]
+        segment = pipeline_source[
+            pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')
+        ]
 
         assert 'resolve_client_device_from_request(request)' in v1
         assert 'resolve_client_device(' in v2
