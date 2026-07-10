@@ -4315,11 +4315,9 @@ class FloatingControlBarManager {
         let generation = activeQueryGeneration
 
         barWindow.state.currentQueryFromVoice = true
-        barWindow.state.isVoiceListening = false
-        barWindow.state.isVoiceLocked = false
-        barWindow.state.isVoiceFollowUp = false
-        barWindow.state.voiceTranscript = ""
-        barWindow.state.voiceFollowUpTranscript = ""
+        if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+            VoiceTurnCoordinator.shared.send(.clearPresentation(turnID: turnID))
+        }
 
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider {

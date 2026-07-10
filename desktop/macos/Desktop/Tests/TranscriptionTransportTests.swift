@@ -95,7 +95,21 @@ final class TranscriptionTransportTests: XCTestCase {
     }
     let body = String(src[range.lowerBound...].prefix(700))
     XCTAssertTrue(body.contains("micCaptureGeneration == turn"), "warning must be turn-guarded")
-    XCTAssertTrue(body.contains("pttHintGeneration"), "overflow hint must self-clear like the too-short hint")
+    XCTAssertTrue(body.contains(".hintChanged(turnID:"), "warning must use the reducer-owned hint path")
+
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    model = reducer.reduce(
+      model,
+      .hintChanged(turnID: turnID, text: "Recording too long — keep it under 5 min")
+    ).model
+    XCTAssertTrue(model.turn?.deadlines.contains(.hintVisibility) == true)
+    model = reducer.reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .hintVisibility)
+    ).model
+    XCTAssertEqual(model.turn?.projection.hint, "")
   }
 
   // MARK: BL-014 — deinit must not deadlock
