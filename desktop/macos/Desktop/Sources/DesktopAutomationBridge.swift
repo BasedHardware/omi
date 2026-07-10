@@ -730,6 +730,41 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "conversation_reconciliation_snapshot",
+      summary: "Exercise cache-first list/detail reconciliation and open the canonical detail",
+      params: []
+    ) { _ in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      await appState.loadConversations()
+      guard let seed = appState.conversations.first else {
+        return ["error": "no conversation available for reconciliation"]
+      }
+
+      var cachedProjectionId: String?
+      let detail = await appState.loadConversationDetail(seed) { cached in
+        cachedProjectionId = cached.id
+      }
+      let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
+
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": detail.id, "showTranscript": true]
+      )
+
+      return [
+        "list_loaded": appState.conversations.isEmpty ? "false" : "true",
+        "cached_projection_seen": cachedProjectionId == seed.id ? "true" : "false",
+        "detail_id_matches": detail.id == seed.id ? "true" : "false",
+        "detail_has_revision": detail.updatedAt == nil ? "false" : "true",
+        "detail_transcript_included": detail.transcriptSegmentsIncluded ? "true" : "false",
+        "cache_id_matches": persisted?.id == detail.id ? "true" : "false",
+        "cache_revision_matches": persisted?.updatedAt == detail.updatedAt ? "true" : "false",
+        "opened_detail": "true",
+      ]
+    }
+
+    register(
       name: "memories_snapshot",
       summary: "Return memories page load state for harness assertions",
       params: []
@@ -1456,17 +1491,17 @@ final class DesktopAutomationActionRegistry {
       guard let id = params["id"], !id.isEmpty else {
         return ["error": "missing 'id'"]
       }
-      try await APIClient.shared.deleteConversation(id: id)
-      await MainActor.run {
-        if let appState = AppState.current {
-          appState.deleteConversationLocally(id)
-        } else {
-          NotificationCenter.default.post(
-            name: .conversationDeleted,
-            object: nil,
-            userInfo: ["conversationId": id]
-          )
+      if let appState = await MainActor.run(body: { AppState.current }) {
+        guard await appState.deleteConversation(id) else {
+          throw APIError.invalidResponse
         }
+      } else {
+        try await APIClient.shared.deleteConversation(id: id)
+        NotificationCenter.default.post(
+          name: .conversationDeleted,
+          object: nil,
+          userInfo: ["conversationId": id]
+        )
       }
       return ["deleted": id]
     }

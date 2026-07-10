@@ -4722,6 +4722,18 @@
             "default": false,
             "title": "Transcript Segments Compressed"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
             "default": "private"
@@ -4797,6 +4809,24 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationMutationResponse": {
+        "description": "Canonical conversation snapshot returned after a user mutation.",
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "conversation"
+        ],
+        "title": "ConversationMutationResponse",
         "type": "object"
       },
       "ConversationPhoto": {
@@ -13245,6 +13275,18 @@
             ],
             "default": false,
             "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -25698,7 +25740,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FolderMutationResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26475,7 +26517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26857,7 +26899,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },

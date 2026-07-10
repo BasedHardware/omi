@@ -298,7 +298,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.reset()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil

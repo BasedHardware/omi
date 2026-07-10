@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
     MergeConversationsRequest,
@@ -373,12 +374,12 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationMutationResponse
 )
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
-    return {'status': 'Ok'}
+    return {'status': 'Ok', 'conversation': _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.delete(
@@ -1011,13 +1012,13 @@ def set_conversation_visibility(
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationMutationResponse
 )
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok"}
+    return {"status": "Ok", "conversation": _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.get(

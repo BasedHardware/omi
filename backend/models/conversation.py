@@ -27,6 +27,7 @@ __all__ = [
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
+    'ConversationMutationResponse',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -84,6 +85,10 @@ class ConversationPostProcessing(BaseModel):
 class Conversation(BaseModel):
     id: str
     created_at: datetime
+    # Firestore's document update time, attached by the database read layer.
+    # This is the canonical server revision clients use for cache reconciliation;
+    # it is deliberately not derived from started_at/finished_at.
+    updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
@@ -169,6 +174,13 @@ class Conversation(BaseModel):
         # Convert all datetime objects recursively
         conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
+
+
+class ConversationMutationResponse(BaseModel):
+    """Canonical conversation snapshot returned after a user mutation."""
+
+    status: str
+    conversation: Conversation
 
 
 class CreateConversation(BaseModel):
