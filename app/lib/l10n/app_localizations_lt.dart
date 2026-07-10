@@ -9,6 +9,9 @@ class AppLocalizationsLt extends AppLocalizations {
   AppLocalizationsLt([String locale = 'lt']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Seanso laikas baigėsi — prisijunkite dar kartą.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

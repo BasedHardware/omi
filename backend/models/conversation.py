@@ -82,6 +82,37 @@ class ConversationPostProcessing(BaseModel):
     fail_reason: Optional[str] = None
 
 
+class ConversationAudioSpan(BaseModel):
+    """Maps one captured audio_file part into the dense conversation MP3.
+
+    wall_offset is seconds relative to conversation.started_at (the same basis
+    as TranscriptSegment.start); artifact_offset is seconds into the MP3. The
+    >90s inter-part gaps are collapsed in the artifact, so segment-level seek is
+    span arithmetic: artifact_pos = artifact_offset + (segment.start - wall_offset).
+    """
+
+    file_id: str
+    wall_offset: float
+    artifact_offset: float
+    len: float
+
+
+class ConversationAudio(BaseModel):
+    """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
+
+    audio_files_fingerprint identifies the audio_files content the artifact was
+    built from; a mismatch with the doc's current audio_files means the artifact
+    is stale and must be rebuilt.
+    """
+
+    audio_files_fingerprint: str
+    duration: float  # wall-clock seconds: last span wall_offset + len
+    captured_duration: float  # seconds of actual audio: sum of span lens
+    spans: List[ConversationAudioSpan] = []
+    content_type: str = 'audio/mpeg'
+    built_at: Optional[datetime] = None
+
+
 class Conversation(BaseModel):
     id: str
     created_at: datetime
@@ -101,6 +132,7 @@ class Conversation(BaseModel):
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
     audio_files: List[AudioFile] = []
+    conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
 
     apps_results: List[AppResult] = []

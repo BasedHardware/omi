@@ -9,6 +9,9 @@ class AppLocalizationsSk extends AppLocalizations {
   AppLocalizationsSk([String locale = 'sk']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Platnosť relácie vypršala — prihláste sa znova.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

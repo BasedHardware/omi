@@ -32,14 +32,14 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 Merging `desktop/macos/**` changes queues them for the next weekday or manually dispatched candidate; it does not expose a beta automatically:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` candidate tag
+1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Qualification** (`scripts/bless-release.sh`) — rebuilds the exact tag and runs the T2 desktop harness
+3. **Qualification** (`scripts/qualify-desktop-beta.sh`) — rebuilds the exact tag, runs the T2 desktop harness, and writes canonical `qualifiedBeta*` evidence metadata
 4. **Beta promotion** (`desktop_promote_beta.yml`) — validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -51,8 +51,9 @@ Signed artifact smoke scope:
 - Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance beta/stable visibility only after digest-matched qualification passes.
 
 Stable/prod is manual:
+- Nominate the current qualified beta with `desktop_nominate_stable_candidate.yml`. Nomination records the tag/SHA, operator, rationale, soak review, telemetry review, release-note review, and qualification evidence. It never changes beta/stable pointers or deploys production.
 - Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.
-- Run GitHub Actions workflow `desktop_promote_prod.yml` with `release_tag=v*-macos` and `confirm=promote-stable`.
+- Run GitHub Actions workflow `desktop_promote_prod.yml` with the nominated `release_tag=v*-macos` stable candidate and `confirm=promote-stable`.
 - The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
 - Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
 - The promotion workflow is roll-forward only. Stable rollback needs a newer fixed release or a separate manual infrastructure rollback plan, because both desktop feeds choose the newest stable app release.

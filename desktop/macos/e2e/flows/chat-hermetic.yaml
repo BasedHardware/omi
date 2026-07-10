@@ -19,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift

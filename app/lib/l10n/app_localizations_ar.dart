@@ -9,6 +9,9 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'انتهت صلاحية الجلسة — سجّل الدخول مرة أخرى.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

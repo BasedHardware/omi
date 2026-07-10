@@ -32,6 +32,10 @@ from utils.other.storage import (
     get_playback_artifact_signed_url,
     upload_playback_artifact,
     mark_playback_unavailable,
+    compute_audio_files_fingerprint,
+    get_conversation_playback_signed_url,
+    upload_conversation_playback_artifact,
+    mark_conversation_playback_unavailable,
 )
 from utils.byok import has_byok_keys
 from utils.cloud_tasks import (
@@ -251,7 +255,9 @@ def get_audio_signed_urls_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    return sync_playback.get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files', []))
+    return sync_playback.get_audio_signed_urls(
+        uid, conversation_id, conversation.get('audio_files', []), conversation=conversation
+    )
 
 
 # **********************************************
@@ -906,6 +912,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     """
     try:
         payload = await request.json()
+        if payload.get('schema_version') == 2:
+            return await _run_conversation_merge_job(payload, task_retry_count)
         uid = payload['uid']
         conversation_id = payload['conversation_id']
         audio_file_id = payload['audio_file_id']
@@ -964,6 +972,112 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
 
         await run_blocking(storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data)
         logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    finally:
+        await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
+    """schema_version 2: build the conversation-level dense MP3 + spans and stamp
+    the doc (conversation_audio). Upload precedes the stamp so a stamped
+    fingerprint always implies a servable blob. Freshness is re-checked from the
+    doc, not the payload: if audio_files changed since enqueue, a newer
+    fingerprint-named task exists and this one is acked as superseded.
+    """
+    try:
+        uid = payload['uid']
+        conversation_id = payload['conversation_id']
+        payload_fingerprint = payload.get('fingerprint')
+    except Exception as e:
+        logger.error(f'audio_merge handler: invalid v2 payload, dropping task: {e}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    lock_key = f'audio:{conversation_id}:conversation'
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    if not lock_token:
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    try:
+        conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+        if not conversation or not conversation.get('audio_files'):
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
+        audio_files = conversation['audio_files']
+        fingerprint = compute_audio_files_fingerprint(audio_files)
+        if payload_fingerprint and payload_fingerprint != fingerprint:
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
+
+        stamp = conversation.get('conversation_audio') or {}
+        if stamp.get('audio_files_fingerprint') == fingerprint:
+            existing = await run_blocking(storage_executor, get_conversation_playback_signed_url, uid, conversation_id)
+            if existing:
+                return JSONResponse(status_code=200, content={'status': 'exists'})
+
+        started_at = conversation.get('started_at') or conversation.get('created_at')
+        started_at_ts = started_at.timestamp()
+
+        try:
+            mp3_data, spans = await run_blocking(
+                sync_executor,
+                sync_playback.build_conversation_playback_artifact,
+                uid,
+                conversation_id,
+                audio_files,
+                started_at_ts,
+            )
+        except FileNotFoundError:
+            logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                uid,
+                conversation_id,
+                fingerprint,
+                'chunks_missing',
+            )
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
+        except Exception as e:
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
+                await run_blocking(
+                    storage_executor,
+                    mark_conversation_playback_unavailable,
+                    uid,
+                    conversation_id,
+                    fingerprint,
+                    'merge_failed',
+                )
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            logger.warning(
+                f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+        mp3_size = len(mp3_data)
+        del mp3_data
+
+        captured_duration = round(sum(s['len'] for s in spans), 3)
+        wall_duration = round(spans[-1]['wall_offset'] + spans[-1]['len'], 3)
+        await run_blocking(
+            db_executor,
+            conversations_db.update_conversation,
+            uid,
+            conversation_id,
+            {
+                'conversation_audio': {
+                    'audio_files_fingerprint': fingerprint,
+                    'duration': wall_duration,
+                    'captured_duration': captured_duration,
+                    'spans': spans,
+                    'content_type': 'audio/mpeg',
+                    'built_at': datetime.now(timezone.utc),
+                }
+            },
+        )
+        logger.info(
+            f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
+        )
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)

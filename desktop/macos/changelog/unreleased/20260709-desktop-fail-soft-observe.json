@@ -1,3 +1,0 @@
-{
-  "change": "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)"
-}

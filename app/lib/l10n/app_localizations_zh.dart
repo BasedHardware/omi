@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => '会话已过期，请重新登录。';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

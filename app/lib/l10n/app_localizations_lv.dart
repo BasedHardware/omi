@@ -9,6 +9,9 @@ class AppLocalizationsLv extends AppLocalizations {
   AppLocalizationsLv([String locale = 'lv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesija ir beigusies — pierakstieties vēlreiz.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

@@ -1,5 +1,6 @@
 {
     "@@locale": "tr",
+    "sessionExpiredSignInAgain": "Oturumun süresi doldu — tekrar giriş yapın.",
     "appTitle": "Omi",
     "conversationTab": "Konuşma",
     "transcriptTab": "Transkript",

@@ -1,5 +1,6 @@
 {
     "@@locale": "fi",
+    "sessionExpiredSignInAgain": "Istunto on vanhentunut — kirjaudu uudelleen.",
     "appTitle": "Omi",
     "conversationTab": "Keskustelu",
     "transcriptTab": "Litterointi",

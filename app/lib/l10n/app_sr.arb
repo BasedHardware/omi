@@ -1,5 +1,6 @@
 {
     "@@locale": "sr",
+    "sessionExpiredSignInAgain": "Сесија је истекла — пријавите се поново.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

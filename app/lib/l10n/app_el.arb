@@ -1,5 +1,6 @@
 {
     "@@locale": "el",
+    "sessionExpiredSignInAgain": "Η συνεδρία έληξε — συνδεθείτε ξανά.",
     "appTitle": "Omi",
     "conversationTab": "Συνομιλία",
     "transcriptTab": "Απομαγνητοφώνηση",

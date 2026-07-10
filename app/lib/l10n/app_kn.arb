@@ -1,5 +1,6 @@
 {
     "@@locale": "kn",
+    "sessionExpiredSignInAgain": "ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "@@last_modified": "2024-12-26",
     "appTitle": "ಓಮಿ",
     "@appTitle": {

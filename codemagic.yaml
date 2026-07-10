@@ -2699,7 +2699,7 @@ workflows:
             "$DMG_PATH"
 
           echo "GitHub release candidate created: $CM_TAG"
-          echo "Run desktop/macos/scripts/bless-release.sh $CM_TAG to execute T2 qualification and promote beta."
+          echo "Run desktop/macos/scripts/qualify-desktop-beta.sh $CM_TAG to execute T2 qualification and promote beta."
 
     artifacts:
       - build/*.app

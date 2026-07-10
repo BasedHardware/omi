@@ -1,6 +1,84 @@
 import Foundation
 import OmiSupport
 
+/// Thread-safe, actor-independent holder for the debug suspend/resume (SIGSTOP /
+/// SIGCONT) state used by the non-prod stall harness.
+///
+/// `AgentRuntimeProcess.sendJson()` does a *blocking* stdin write. If the agent is
+/// frozen (SIGSTOP) and a query fills the ~64KB pipe buffer, that write blocks the
+/// actor — so if the resume (SIGCONT) were also actor-isolated it could never run,
+/// deadlocking the agent permanently. Routing the SIGCONT through this lock-guarded
+/// holder keeps it off the actor, so resume/auto-resume always fire even while the
+/// actor is stuck writing to the frozen process. Generation-guarded so a stale
+/// auto-resume can't SIGCONT after an explicit resume or a newer suspend.
+final class DebugSuspendControl: @unchecked Sendable {
+  private let lock = NSLock()
+  private var pid: pid_t?
+  private var generation: UInt64 = 0
+  /// Sends SIGCONT and reports success. Injectable so the generation-guard logic
+  /// is unit-testable without real signals; defaults to `kill(pid, SIGCONT) == 0`.
+  private let sendContinue: (pid_t) -> Bool
+
+  init(sendContinue: @escaping (pid_t) -> Bool = { kill($0, SIGCONT) == 0 }) {
+    self.sendContinue = sendContinue
+  }
+
+  /// Record a SIGSTOP; returns the generation for its safety auto-resume timer.
+  func arm(pid: pid_t) -> UInt64 {
+    lock.lock()
+    defer { lock.unlock() }
+    self.pid = pid
+    generation &+= 1
+    return generation
+  }
+
+  /// Explicit resume: SIGCONT the armed pid and, on success, advance the
+  /// generation (cancelling the pending auto-resume). Returns the resumed pid, or
+  /// nil if nothing was armed or the SIGCONT failed. On failure the state stays
+  /// armed so the safety auto-resume can still recover the process. The signal is
+  /// sent OUTSIDE the lock — never invoke the injectable closure while holding it.
+  func resume() -> pid_t? {
+    lock.lock()
+    let armed = pid
+    lock.unlock()
+    guard let armed, sendContinue(armed) else { return nil }
+    lock.lock()
+    defer { lock.unlock() }
+    // A newer suspend/disarm may have moved on; only clear the pid we resumed.
+    if pid == armed {
+      pid = nil
+      generation &+= 1
+    }
+    return armed
+  }
+
+  /// Safety auto-resume: SIGCONT only if this generation is still the armed one.
+  /// Signal sent outside the lock; state cleared only on a successful send.
+  func autoResume(generation: UInt64) -> pid_t? {
+    lock.lock()
+    let armed = (generation == self.generation) ? pid : nil
+    lock.unlock()
+    guard let armed, sendContinue(armed) else { return nil }
+    lock.lock()
+    defer { lock.unlock() }
+    if pid == armed, self.generation == generation {
+      pid = nil
+    }
+    return armed
+  }
+
+  /// Clear on process teardown so a later resume can't SIGCONT a reused pid.
+  /// `closePipes()` calls this on every teardown/relaunch path; the only residual
+  /// window (OS reaping the pid before teardown runs) is benign — SIGCONT to a
+  /// process that isn't stopped is a no-op — and the whole flow is non-prod only.
+  func disarm() {
+    lock.lock()
+    defer { lock.unlock() }
+    pid = nil
+    generation &+= 1
+  }
+}
+
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
 
@@ -130,7 +208,13 @@ actor AgentRuntimeProcess {
   private struct ActiveVoiceSeedRequest {
     let clientId: String
     let requestId: String
-    let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
+    let continuation: CheckedContinuation<VoiceSeedContextResult, Error>
+  }
+
+  private struct ActiveSurfaceTurnRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<Bool, Error>
   }
 
   struct KernelTurnTailTurn: Sendable {
@@ -140,6 +224,12 @@ actor AgentRuntimeProcess {
     let createdAtMs: Int
     let metadataJson: String
     let origin: String
+  }
+
+  struct VoiceSeedContextResult: Sendable {
+    let conversationId: String
+    let context: String
+    let idempotencyKeys: [String]
   }
 
   struct KernelTurnTailResult: Sendable {
@@ -176,11 +266,16 @@ actor AgentRuntimeProcess {
   private var stdoutLineBuffer = Data()
   private var isRunning = false
   private var processGeneration: UInt64 = 0
+
+  /// Debug suspend/resume state, held off-actor so SIGCONT never deadlocks behind
+  /// an actor blocked writing to the frozen process. See DebugSuspendControl.
+  private nonisolated let debugSuspend = DebugSuspendControl()
   private var lastExitWasOOM = false
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var activeSurfaceTurnRequests: [RuntimeMessage.RequestKey: ActiveSurfaceTurnRequest] = [:]
   private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
   /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
   /// never append; a second ChatProvider attach must not fan out duplicates.
@@ -244,6 +339,10 @@ actor AgentRuntimeProcess {
     }
     for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
       activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeSurfaceTurnRequests where request.clientId == clientId {
+      activeSurfaceTurnRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
     for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
@@ -418,16 +517,20 @@ actor AgentRuntimeProcess {
   func recordSurfaceTurn(
     clientId: String,
     surface: AgentSurfaceReference,
+    ownerID: String? = nil,
     userText: String,
     assistantText: String,
     origin: String,
     interrupted: Bool = false,
     idempotencyKey: String? = nil
-  ) {
+  ) async throws -> Bool {
+    guard isRunning else { throw BridgeError.stopped }
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     var dict: [String: Any] = [
       "type": "record_surface_turn",
       "protocolVersion": 2,
-      "requestId": UUID().uuidString,
+      "requestId": requestId,
       "clientId": clientId,
       "surfaceKind": surface.surfaceKind,
       "externalRefKind": surface.externalRefKind,
@@ -440,17 +543,34 @@ actor AgentRuntimeProcess {
     if let idempotencyKey, !idempotencyKey.isEmpty {
       dict["idempotencyKey"] = idempotencyKey
     }
-    if let ownerId = currentOwnerId() {
+    if let ownerId = ownerID ?? currentOwnerId() {
       dict["ownerId"] = ownerId
     }
-    sendJson(dict)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeSurfaceTurnRequests[requestKey] = ActiveSurfaceTurnRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      guard sendJson(dict) else {
+        activeSurfaceTurnRequests.removeValue(forKey: requestKey)?.continuation.resume(
+          throwing: BridgeError.processExited
+        )
+        return
+      }
+      Task {
+        try? await Task.sleep(nanoseconds: 5_000_000_000)
+        guard let request = self.activeSurfaceTurnRequests.removeValue(forKey: requestKey) else { return }
+        request.continuation.resume(throwing: BridgeError.timeout)
+      }
+    }
   }
 
   func getVoiceSeedContext(
     clientId: String,
     harnessMode: String,
     surface: AgentSurfaceReference
-  ) async throws -> (conversationId: String, context: String) {
+  ) async throws -> VoiceSeedContextResult {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -592,10 +712,6 @@ actor AgentRuntimeProcess {
 
   // MARK: - Automation stall hook (non-production only)
 
-  /// Generation guard so a late auto-resume from an earlier suspend can't
-  /// SIGCONT a process that a newer suspend is deliberately holding.
-  private var debugSuspendGeneration: UInt64 = 0
-
   /// Freeze the agent's stdio stream by sending SIGSTOP to the node bridge
   /// process. With the process paused it emits no further events, so an in-flight
   /// chat send stalls exactly like a hung ACP subprocess — driving the
@@ -614,58 +730,37 @@ actor AgentRuntimeProcess {
     guard kill(pid, SIGSTOP) == 0 else {
       return ["error": "SIGSTOP failed for pid \(pid) (errno \(errno))"]
     }
-    debugSuspendGeneration &+= 1
-    let generation = debugSuspendGeneration
+    // Arm the off-actor control so resume/auto-resume can SIGCONT even if the
+    // actor later blocks writing to this now-frozen process.
+    let generation = debugSuspend.arm(pid: pid)
     // Cap the freeze window so a forgotten resume can't wedge the agent.
     let cappedMs = max(1_000, min(durationMs, 300_000))
     log("AgentRuntimeProcess: DEBUG suspended stream pid=\(pid) for \(cappedMs)ms (gen \(generation))")
-    Task { [weak self] in
+    // The safety auto-resume runs off the actor (via the control), so a wedged
+    // actor — e.g. one blocked writing to this frozen process — can't starve it.
+    Task { [debugSuspend] in
       try? await Task.sleep(nanoseconds: UInt64(cappedMs) * 1_000_000)
-      await self?.autoResumeStream(pid: pid, generation: generation)
+      if let resumed = debugSuspend.autoResume(generation: generation) {
+        log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(resumed) (gen \(generation))")
+      }
     }
     return ["suspended": "true", "pid": "\(pid)", "durationMs": "\(cappedMs)"]
   }
 
   /// SIGCONT the agent process immediately (early clear of a debug suspend).
-  func debugResumeStream() -> [String: String] {
+  /// `nonisolated` and routed through the off-actor control so it runs even when
+  /// the actor is blocked writing to the frozen process — otherwise the very
+  /// resume that would unblock that write could never fire, deadlocking the agent.
+  nonisolated func debugResumeStream() -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "resume_agent_stream is disabled on production bundles"]
     }
-    guard let process, process.isRunning, process.processIdentifier > 0 else {
-      return ["error": "no running agent process to resume"]
+    guard let pid = debugSuspend.resume() else {
+      return ["error": "no suspended agent to resume"]
     }
-    let pid = process.processIdentifier
-    guard kill(pid, SIGCONT) == 0 else {
-      // SIGCONT failed (pid raced to exit, or an unexpected errno). Do NOT bump
-      // the generation here: leaving the pending auto-resume armed is the safe
-      // choice, so a still-frozen process can't stay stuck until app restart.
-      return ["error": "SIGCONT failed for pid \(pid) (errno \(errno))"]
-    }
-    // Only cancel the pending safety auto-resume once the explicit resume
-    // actually succeeded.
-    debugSuspendGeneration &+= 1
     log("AgentRuntimeProcess: DEBUG resumed stream pid=\(pid)")
     return ["resumed": "true", "pid": "\(pid)"]
   }
-
-  private func autoResumeStream(pid: pid_t, generation: UInt64) {
-    // Only the suspend that scheduled this auto-resume may clear it; a newer
-    // suspend or an explicit resume has already moved the generation on.
-    guard generation == debugSuspendGeneration else { return }
-    // Only resume if the SAME process is still alive. A stored Process that has
-    // already exited can still report its original pid (which the OS may have
-    // reused), so require isRunning as well as a pid match — never SIGCONT a
-    // reused pid. restart()/stop() already SIGKILL the old process, so a
-    // torn-down/relaunched agent has nothing to resume here.
-    guard let process, process.isRunning, process.processIdentifier == pid else { return }
-    _ = kill(pid, SIGCONT)
-    log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(pid) (gen \(generation))")
-  }
-  // Caveat: autoResumeStream is actor-isolated, so it can only run once the
-  // actor is idle. The intended stall flow writes only the tiny 180s interrupt
-  // to the frozen process (far below the stdin pipe buffer), so the actor never
-  // blocks on a write while suspended; do not push large stdin payloads to a
-  // suspended agent or the auto-resume could be delayed until the actor frees.
 
   func interrupt(clientId: String, requestId: String) {
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -1242,6 +1337,11 @@ actor AgentRuntimeProcess {
 
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
+        if let requestKey = message.requestKey,
+          let request = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
+        {
+          request.continuation.resume(returning: true)
+        }
         turnRecordedHandler?(recorded)
       }
 
@@ -1362,7 +1462,12 @@ actor AgentRuntimeProcess {
     }
     let conversationId = message.payload["conversationId"] as? String ?? ""
     let context = message.payload["context"] as? String ?? ""
-    request.continuation.resume(returning: (conversationId: conversationId, context: context))
+    let idempotencyKeys = message.payload["idempotencyKeys"] as? [String] ?? []
+    request.continuation.resume(
+      returning: VoiceSeedContextResult(
+        conversationId: conversationId,
+        context: context,
+        idempotencyKeys: idempotencyKeys))
   }
 
   private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
@@ -1413,6 +1518,15 @@ actor AgentRuntimeProcess {
     {
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
       controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
+      return
+    }
+    if let requestKey = message.requestKey,
+      let surfaceRequest = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
+    {
+      log("AgentRuntimeProcess: surface turn error (raw): \(raw)")
+      surfaceRequest.continuation.resume(
+        throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+      )
       return
     }
     guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
@@ -1526,6 +1640,11 @@ actor AgentRuntimeProcess {
     for request in seedRequests {
       request.continuation.resume(throwing: error)
     }
+    let surfaceRequests = activeSurfaceTurnRequests.values
+    activeSurfaceTurnRequests.removeAll()
+    for request in surfaceRequests {
+      request.continuation.resume(throwing: error)
+    }
     let tailRequests = activeKernelTurnTailRequests.values
     activeKernelTurnTailRequests.removeAll()
     for request in tailRequests {
@@ -1542,6 +1661,9 @@ actor AgentRuntimeProcess {
   }
 
   private func closePipes() {
+    // Process is going away/reset — clear the suspend control so a pending resume
+    // or auto-resume can't SIGCONT a reused pid.
+    debugSuspend.disarm()
     if let stdinPipe {
       try? stdinPipe.fileHandleForWriting.close()
       try? stdinPipe.fileHandleForReading.close()

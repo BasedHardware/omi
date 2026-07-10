@@ -58,9 +58,12 @@ from utils.fair_use import (
 )
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
+    compute_audio_files_fingerprint,
     delete_syncing_temporal_file,
     download_syncing_temporal_file,
+    enqueue_conversation_artifact_build,
     get_syncing_file_temporal_signed_url,
     precache_conversation_audio,
     schedule_syncing_temporal_file_deletion,
@@ -664,6 +667,10 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             files_payload = [af.model_dump() for af in audio_files]
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
+            if is_audio_merge_dispatch_enabled():
+                enqueue_conversation_artifact_build(
+                    uid, conversation_id, compute_audio_files_fingerprint(files_payload), caller='sync_finalize'
+                )
         except Exception as e:
             logger.error(f'sync: failed to finalize audio_files for {conversation_id}: {e}')
 

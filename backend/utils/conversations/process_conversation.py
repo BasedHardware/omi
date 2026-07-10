@@ -97,7 +97,12 @@ from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
 )
-from utils.other.storage import precache_conversation_audio
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.other.storage import (
+    compute_audio_files_fingerprint,
+    enqueue_conversation_artifact_build,
+    precache_conversation_audio,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1067,11 +1072,18 @@ def process_conversation(
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
             if audio_files:
                 conversation.audio_files = audio_files
-                conversations_db.update_conversation(
-                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
-                )
+                files_payload = [af.dict() for af in audio_files]
+                conversations_db.update_conversation(uid, conversation.id, {'audio_files': files_payload})
                 # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
+                precache_conversation_audio(uid, conversation.id, files_payload)
+                # Build the conversation-level playback artifact (dense MP3 + spans)
+                if is_audio_merge_dispatch_enabled():
+                    enqueue_conversation_artifact_build(
+                        uid,
+                        conversation.id,
+                        compute_audio_files_fingerprint(files_payload),
+                        caller='process_conversation',
+                    )
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
 

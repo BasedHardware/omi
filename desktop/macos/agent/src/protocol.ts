@@ -337,12 +337,15 @@ export interface TurnRecordedMessage extends OutboundEnvelope {
   idempotencyKey?: string;
   userTurnId?: string;
   assistantTurnId?: string;
+  recorded: boolean;
+  duplicate: boolean;
 }
 
 export interface VoiceSeedContextMessage extends OutboundEnvelope {
   type: "voice_seed_context";
   conversationId: string;
   context: string;
+  idempotencyKeys: string[];
 }
 
 export interface KernelTurnTailMessage extends OutboundEnvelope {

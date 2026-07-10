@@ -9,6 +9,9 @@ class AppLocalizationsTe extends AppLocalizations {
   AppLocalizationsTe([String locale = 'te']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'సెషన్ గడువు ముగిసింది — మళ్లీ సైన్ ఇన్ చేయండి.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

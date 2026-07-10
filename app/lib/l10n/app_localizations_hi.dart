@@ -9,6 +9,9 @@ class AppLocalizationsHi extends AppLocalizations {
   AppLocalizationsHi([String locale = 'hi']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'सत्र की समय-सीमा समाप्त हो गई — फिर से साइन इन करें।';
+
+  @override
   String get appTitle => 'ओमी';
 
   @override

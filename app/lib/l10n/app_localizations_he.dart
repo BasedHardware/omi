@@ -9,6 +9,9 @@ class AppLocalizationsHe extends AppLocalizations {
   AppLocalizationsHe([String locale = 'he']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ההפעלה פגה — יש להתחבר שוב.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

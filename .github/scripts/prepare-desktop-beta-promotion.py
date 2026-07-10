@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a blessed desktop candidate and build its control-plane manifest."""
+"""Validate a qualified desktop candidate and build its control-plane manifest."""
 
 from __future__ import annotations
 
@@ -10,7 +10,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from desktop_release_metadata import fail, parse_metadata  # noqa: E402
+from desktop_release_metadata import (  # noqa: E402
+    desktop_qualification_from_metadata,
+    fail,
+    parse_metadata,
+    require_desktop_qualification,
+)
 
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
 
@@ -41,16 +46,9 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
     if channel not in {"candidate", "beta"}:
         fail(f"release channel must be candidate or beta, got {channel!r}")
 
-    if metadata.get("blessed", "").lower() not in {"true", "1", "yes"}:
-        fail("release must have blessed: true")
-    if metadata.get("blessedTier") != "2":
-        fail(f"release must have blessedTier: 2, got {metadata.get('blessedTier')!r}")
-    if metadata.get("blessedSha") != target_sha:
-        fail("blessedSha does not match the release tag commit")
-    evidence_name = metadata.get("blessedEvidence", "")
-    if not evidence_name:
-        fail("release is missing blessedEvidence")
-    _asset(release, {evidence_name})
+    asset_names = {asset.get("name") for asset in release.get("assets", []) if asset.get("name")}
+    qualification = desktop_qualification_from_metadata(metadata)
+    require_desktop_qualification(qualification, target_sha=target_sha, asset_names=asset_names)
 
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
@@ -61,6 +59,19 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
+    qualification_manifest = {
+        "passed": True,
+        "tier": "T2",
+        "evidence_asset": qualification.evidence,
+    }
+    if qualification.source == "legacy":
+        # Preserve the immutable manifest shape used by releases registered
+        # before canonical qualification metadata existed. This keeps exact
+        # beta-promotion retries idempotent.
+        qualification_manifest["blessed_at"] = qualification.qualified_at
+    else:
+        qualification_manifest["qualified_at"] = qualification.qualified_at
+
     return {
         "release_id": release_tag,
         "platform": "macos",
@@ -75,12 +86,7 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
         "source_sha": target_sha,
         "zip_sha256": zip_sha256,
         "dmg_sha256": dmg_sha256,
-        "qualification": {
-            "passed": True,
-            "tier": "T2",
-            "blessed_at": metadata.get("blessedAt"),
-            "evidence_asset": evidence_name,
-        },
+        "qualification": qualification_manifest,
     }
 
 

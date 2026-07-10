@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 
 MACOS_RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+(?:\.\d+)?\+\d+-macos$")
-BLESSED_KEYS = ("blessed", "blessedAt", "blessedSha", "blessedTier", "blessedEvidence")
+QUALIFICATION_KEYS = (
+    "qualifiedBeta",
+    "qualifiedBetaAt",
+    "qualifiedBetaSha",
+    "qualifiedBetaTier",
+    "qualifiedBetaEvidence",
+)
 
 
 def _strip_comment(line: str) -> str:
@@ -68,7 +74,7 @@ def check_manifest(manifest_path: Path) -> None:
         raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
 
 
-def update_blessed_keys(
+def update_qualification_keys(
     body_path: Path,
     *,
     stamp: str,
@@ -81,13 +87,13 @@ def update_blessed_keys(
     out: list[str] = []
     in_block = False
     saw_key_value_block = False
-    seen = {key: False for key in BLESSED_KEYS}
-    blessed_values = {
-        "blessed": "true",
-        "blessedAt": stamp,
-        "blessedSha": sha,
-        "blessedTier": tier,
-        "blessedEvidence": asset,
+    seen = {key: False for key in QUALIFICATION_KEYS}
+    qualification_values = {
+        "qualifiedBeta": "true",
+        "qualifiedBetaAt": stamp,
+        "qualifiedBetaSha": sha,
+        "qualifiedBetaTier": tier,
+        "qualifiedBetaEvidence": asset,
     }
 
     for line in lines:
@@ -98,16 +104,16 @@ def update_blessed_keys(
             out.append(line)
             continue
         if stripped == "KEY_VALUE_END":
-            for key in BLESSED_KEYS:
+            for key in QUALIFICATION_KEYS:
                 if not seen[key]:
-                    out.append(f"{key}: {blessed_values[key]}")
+                    out.append(f"{key}: {qualification_values[key]}")
             in_block = False
             out.append(line)
             continue
         if in_block and ":" in stripped:
             key = stripped.split(":", 1)[0].strip()
             if key in seen:
-                out.append(f"{key}: {blessed_values[key]}")
+                out.append(f"{key}: {qualification_values[key]}")
                 seen[key] = True
                 continue
         out.append(line)
@@ -184,17 +190,17 @@ def _self_test() -> int:
 <!-- KEY_VALUE_START -->
 channel: candidate
 isLive: false
-blessed: false
+qualifiedBeta: false
 <!-- KEY_VALUE_END -->
 """
     body_path = Path("/tmp/release-keyvalue-body.md")
     body_path.write_text(sample_body, encoding="utf-8")
-    update_blessed_keys(body_path, stamp="2026-07-06T12:00:00Z", sha="abc123", asset="evidence.json")
+    update_qualification_keys(body_path, stamp="2026-07-06T12:00:00Z", sha="abc123", asset="evidence.json")
     updated = parse_keyvalue_block(body_path.read_text(encoding="utf-8"))
-    if updated.get("blessed") != "true" or updated.get("blessedSha") != "abc123":
-        fail("update-blessed", f"unexpected metadata: {updated}")
+    if updated.get("qualifiedBeta") != "true" or updated.get("qualifiedBetaSha") != "abc123":
+        fail("update-qualified-beta", f"unexpected metadata: {updated}")
     else:
-        ok("update-blessed writes blessed keys")
+        ok("update-qualified-beta writes canonical qualification keys")
 
     malformed_body_path = Path("/tmp/release-keyvalue-body-no-kv.md")
     malformed_body_path.write_text("Release notes without KEY_VALUE block\n", encoding="utf-8")
@@ -204,32 +210,32 @@ blessed: false
         encoding="utf-8",
     )
     try:
-        update_blessed_keys(
+        update_qualification_keys(
             malformed_body_path,
             stamp="2026-07-06T12:00:00Z",
             sha="abc123",
             asset="evidence.json",
         )
-        fail("update-blessed missing KEY_VALUE block", "expected SystemExit")
+        fail("update-qualified-beta missing KEY_VALUE block", "expected SystemExit")
     except SystemExit as exc:
         if "KEY_VALUE" in str(exc):
-            ok("update-blessed missing KEY_VALUE block fails loudly")
+            ok("update-qualified-beta missing KEY_VALUE block fails loudly")
         else:
-            fail("update-blessed missing KEY_VALUE block", f"unexpected exit: {exc}")
+            fail("update-qualified-beta missing KEY_VALUE block", f"unexpected exit: {exc}")
 
     try:
-        update_blessed_keys(
+        update_qualification_keys(
             unclosed_body_path,
             stamp="2026-07-06T12:00:00Z",
             sha="abc123",
             asset="evidence.json",
         )
-        fail("update-blessed unclosed KEY_VALUE block", "expected SystemExit")
+        fail("update-qualified-beta unclosed KEY_VALUE block", "expected SystemExit")
     except SystemExit as exc:
         if "KEY_VALUE_END" in str(exc):
-            ok("update-blessed unclosed KEY_VALUE block fails loudly")
+            ok("update-qualified-beta unclosed KEY_VALUE block fails loudly")
         else:
-            fail("update-blessed unclosed KEY_VALUE block", f"unexpected exit: {exc}")
+            fail("update-qualified-beta unclosed KEY_VALUE block", f"unexpected exit: {exc}")
 
     release_json = Path("/tmp/release-keyvalue-release.json")
     release_json.write_text(
@@ -267,7 +273,10 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check-manifest", help="Exit 0 when harness manifest passed")
     check.add_argument("manifest")
 
-    update = sub.add_parser("update-blessed", help="Write blessed metadata into release notes KEY_VALUE block")
+    update = sub.add_parser(
+        "update-qualified-beta",
+        help="Write canonical qualified-beta metadata into the release notes KEY_VALUE block",
+    )
     update.add_argument("body_file")
     update.add_argument("stamp")
     update.add_argument("sha")
@@ -284,8 +293,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check-manifest":
         check_manifest(Path(args.manifest))
         return 0
-    if args.command == "update-blessed":
-        update_blessed_keys(
+    if args.command == "update-qualified-beta":
+        update_qualification_keys(
             Path(args.body_file),
             stamp=args.stamp,
             sha=args.sha,

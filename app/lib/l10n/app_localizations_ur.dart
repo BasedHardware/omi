@@ -9,6 +9,9 @@ class AppLocalizationsUr extends AppLocalizations {
   AppLocalizationsUr([String locale = 'ur']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'سیشن کی میعاد ختم ہو گئی — دوبارہ سائن ان کریں۔';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

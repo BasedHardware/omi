@@ -9,6 +9,9 @@ class AppLocalizationsFi extends AppLocalizations {
   AppLocalizationsFi([String locale = 'fi']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Istunto on vanhentunut — kirjaudu uudelleen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
