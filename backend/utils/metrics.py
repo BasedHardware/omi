@@ -50,6 +50,36 @@ OMI_FALLBACK_TOTAL = Counter(
     ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
 )
 
+DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
+    'desktop_update_resolution_total',
+    'Desktop update channel resolutions by platform, channel, and source',
+    ['platform', 'channel', 'source'],
+)
+
+DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
+    'desktop_update_pointer_mismatch_total',
+    'Desktop update pointer and legacy release mismatches',
+    ['platform', 'channel', 'field'],
+)
+
+DESKTOP_UPDATE_POINTER_AGE_SECONDS = Gauge(
+    'desktop_update_pointer_age_seconds',
+    'Age of the selected desktop update pointer',
+    ['platform', 'channel'],
+)
+
+DESKTOP_UPDATE_LKG_AGE_SECONDS = Gauge(
+    'desktop_update_lkg_age_seconds',
+    'Age of the selected desktop update last-known-good cache entry',
+    ['platform', 'channel'],
+)
+
+DESKTOP_UPDATE_FEED_VALID = Gauge(
+    'desktop_update_feed_valid',
+    'Whether a valid desktop update was resolved for a channel',
+    ['platform', 'channel'],
+)
+
 OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     'omi_sync_dispatch_attempts_total',
     'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',

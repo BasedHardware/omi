@@ -419,6 +419,8 @@ def process_segment(
     turnstile: Optional[_OrderedTurnstile] = None,
     private_cloud_sync_enabled: bool = False,
     data_protection_level: str = None,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -504,6 +506,8 @@ def process_segment(
                 source=source,
                 is_locked=is_locked,
                 private_cloud_sync_enabled=private_cloud_sync_enabled,
+                client_device_id=client_device_id,
+                client_platform=client_platform,
             )
             created = process_conversation(uid, language, create_memory)
             with lock:
@@ -722,6 +726,8 @@ async def _run_full_pipeline_background_async(
     job_dir: str,
     target_conversation_id: str = None,
     task_mode: bool = False,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -932,6 +938,8 @@ async def _run_full_pipeline_background_async(
                     assignment_turnstile,
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)

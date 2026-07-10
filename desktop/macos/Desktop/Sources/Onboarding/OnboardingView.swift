@@ -476,6 +476,9 @@ struct OnboardingView: View {
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false
     OnboardingChatPersistence.clear()
+    ChatDraftStore.shared.clear(.onboardingMain)
+    ChatDraftStore.shared.clear(.onboardingFloating)
+    FloatingControlBarManager.shared.barState?.switchAIDraft(to: .floatingMain)
 
     if let onComplete = onComplete {
       onComplete()

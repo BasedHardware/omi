@@ -224,7 +224,7 @@ class AppState: ObservableObject {
   @Published var conversationsError: String? = nil
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
-  var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
+  let conversationRepository = ConversationRepository()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -430,6 +430,18 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    conversationRepository.onSnapshot = { [weak self] snapshot in
+      guard let self else { return }
+      self.conversations = snapshot.conversations
+      self.isLoadingConversations = snapshot.isLoading
+      self.conversationsError = snapshot.error
+      if self.hasActiveConversationFilters {
+        self.filteredConversationsCount = snapshot.count
+      } else {
+        self.totalConversationsCount = snapshot.count
+        self.filteredConversationsCount = nil
+      }
+    }
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
     // it before any backend call has a chance to refresh state — but never for

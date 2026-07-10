@@ -62,6 +62,14 @@ final class TranscriptionTransportTests: XCTestCase {
     XCTAssertTrue(src.contains("didOpenWithProtocol"))
   }
 
+  func testConversationWebSocketCarriesDeviceProvenanceHeaders() throws {
+    let src = try source(relativePath: "Sources/TranscriptionService.swift")
+
+    XCTAssertTrue(src.contains("X-App-Platform"))
+    XCTAssertTrue(src.contains("X-Device-Id-Hash"))
+    XCTAssertTrue(src.contains("ClientDeviceService.shared.deviceIdHash"))
+  }
+
   // MARK: BL-013 — bounded per-turn audio buffer
 
   func testBatchAudioBufferIsBounded() throws {

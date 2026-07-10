@@ -521,24 +521,20 @@ extension APIClient {
 
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)")
+    try await delete("v1/conversations/\(id)?cascade=true")
     invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation
-  func setConversationStarred(id: String, starred: Bool) async throws {
+  func setConversationStarred(id: String, starred: Bool) async throws -> ServerConversation {
     let url = URL(string: baseURL + "v1/conversations/\(id)/starred?starred=\(starred)")!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
+    return response.conversation
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -572,7 +568,7 @@ extension APIClient {
   }
 
   /// Updates the title of a conversation
-  func updateConversationTitle(id: String, title: String) async throws {
+  func updateConversationTitle(id: String, title: String) async throws -> ServerConversation {
     var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
     components.queryItems = [URLQueryItem(name: "title", value: title)]
     let url = components.url!
@@ -580,12 +576,8 @@ extension APIClient {
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
+    return response.conversation
   }
 
   /// Searches conversations with a query
@@ -754,7 +746,7 @@ extension APIClient {
   }
 
   /// Moves a conversation to a folder
-  func moveConversationToFolder(conversationId: String, folderId: String?) async throws {
+  func moveConversationToFolder(conversationId: String, folderId: String?) async throws -> ServerConversation {
     let body = MoveToFolderRequest(folderId: folderId)
     let url = URL(string: baseURL + "v1/conversations/\(conversationId)/folder")!
     var request = URLRequest(url: url)
@@ -762,13 +754,9 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
+    return response.conversation
   }
 
 }
@@ -809,6 +797,11 @@ enum ConversationSource: String, Codable {
   }
 }
 
+private struct ConversationMutationResponse: Decodable {
+  let status: String
+  let conversation: ServerConversation
+}
+
 enum TranscriptPresenceState: Equatable {
   case omittedFromResponse
   case lockedOrRedacted
@@ -818,7 +811,8 @@ enum TranscriptPresenceState: Equatable {
 
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
-    lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
+    lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
+      && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
       && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
@@ -828,6 +822,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   let id: String
   let createdAt: Date
+  /// Canonical Firestore document revision. Never derived from recording timestamps.
+  let updatedAt: Date?
   let startedAt: Date?
   let finishedAt: Date?
 
@@ -855,6 +851,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case updatedAt = "updated_at"
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
@@ -884,9 +881,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
     id = wire.id
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
+    structured = Structured(wire.structured)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -932,6 +930,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   init(
     id: String,
     createdAt: Date,
+    updatedAt: Date? = nil,
     startedAt: Date?,
     finishedAt: Date?,
     structured: Structured,
@@ -953,6 +952,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   ) {
     self.id = id
     self.createdAt = createdAt
+    self.updatedAt = updatedAt
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured

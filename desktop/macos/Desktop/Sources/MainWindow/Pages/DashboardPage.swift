@@ -546,7 +546,7 @@ struct DashboardPage: View {
                         hasSelectedAppContext: selectedApp != nil,
                         source: "dashboard_chat"
                     )
-                    Task { await chatProvider.sendMessage(text) }
+                    Task { await chatProvider.sendMainDraft(text) }
                 },
                 onStop: {
                     chatProvider.stopAgent(owner: .mainChat)
@@ -1049,11 +1049,11 @@ struct DashboardPage: View {
     }
 
     private func sendFromHomeAskBar() {
-        let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draft = chatProvider.draftText
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         // Text is required — ChatProvider.sendMessage no-ops on empty text, so
         // an attachment-only "send" would silently drop the turn.
         guard !text.isEmpty else { return }
-        chatProvider.draftText = ""
         openHomeChat(focusInput: false)
         AnalyticsManager.shared.chatMessageSent(
             messageLength: text.count,
@@ -1063,7 +1063,7 @@ struct DashboardPage: View {
         if chatProvider.isSending {
             return
         } else {
-            Task { await chatProvider.sendMessage(text) }
+            Task { await chatProvider.sendMainDraft(draft) }
         }
     }
 

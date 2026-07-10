@@ -145,6 +145,7 @@ enum ConversationReconciliationPolicy {
     return ServerConversation(
       id: serverConversation.id,
       createdAt: serverConversation.createdAt,
+      updatedAt: serverConversation.updatedAt,
       startedAt: serverConversation.startedAt,
       finishedAt: serverConversation.finishedAt,
       structured: structured,

@@ -130,6 +130,16 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertTrue(source.contains("let fetchResult = try await fetchMemoriesPageDeviceScopeAware("))
         XCTAssertTrue(source.contains("let page = fetchResult.page"))
         XCTAssertTrue(source.contains("deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride"))
+        XCTAssertTrue(source.contains("reason: \"capability_mismatch\""))
+    }
+
+    func testLegacyDeviceScopeFallbackDoesNotLocallyHideUnprovenancedMemories() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(
+            source.contains("if filterThisDeviceOnly && deviceScopeSupported {"),
+            "The local device matcher must run only when the backend can provide device provenance."
+        )
     }
 
     func testMemoriesPageProjectsCacheReadsBeforeDisplay() throws {

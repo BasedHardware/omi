@@ -267,6 +267,24 @@ class TestSyncV2Structure:
             'run_blocking(storage_executor' not in func_body
         ), "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
 
+    def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
+        """Offline sync must stamp the conversation that canonical extraction reads."""
+        source = self._read_sync_source()
+        v1_start = source.index('async def sync_local_files(')
+        v2_start = source.index('async def sync_local_files_v2')
+        v1 = source[v1_start:v2_start]
+        v2_end = source.find('\n@router.', v2_start + 1)
+        v2 = source[v2_start:v2_end]
+        task_handler = source[source.index('async def run_sync_job') :]
+        segment = source[source.index('def process_segment(') : source.index('\ndef _store_sync_audio_chunk')]
+
+        assert 'resolve_client_device_from_request(request)' in v1
+        assert 'resolve_client_device(' in v2
+        assert "'client_device_id': client_device_context.client_device_id" in v2
+        assert 'client_device_id=client_device_context.client_device_id' in v2
+        assert 'client_device_id=client_device_id' in task_handler
+        assert 'client_device_id=client_device_id' in segment
+
 
 # ---------------------------------------------------------------------------
 # 2. Redis sync_jobs module tests
@@ -1322,6 +1340,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
@@ -1357,6 +1376,12 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+        )
+        sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+        )
 
         _install_sync_observability_stubs()
 
@@ -1883,6 +1908,7 @@ class TestV2EndpointExecution:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
@@ -1918,6 +1944,12 @@ class TestV2EndpointExecution:
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+        )
+        sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+            return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+        )
 
         _install_sync_observability_stubs()
 

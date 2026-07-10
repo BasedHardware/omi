@@ -41,14 +41,15 @@ class TestRecordSpeechMsSource:
         pipe_mock = MagicMock()
         self._mock_redis.pipeline.return_value = pipe_mock
 
-        fair_use_mod.record_speech_ms('user1', 1000, source='realtime')
-        realtime_calls = [str(c) for c in pipe_mock.method_calls]
+        with patch.object(fair_use_mod.time, 'time', return_value=1_800_000_000):
+            fair_use_mod.record_speech_ms('user1', 1000, source='realtime')
+            realtime_calls = [str(c) for c in pipe_mock.method_calls]
 
-        pipe_mock.reset_mock()
-        self._mock_redis.pipeline.return_value = pipe_mock
+            pipe_mock.reset_mock()
+            self._mock_redis.pipeline.return_value = pipe_mock
 
-        fair_use_mod.record_speech_ms('user1', 1000, source='sync')
-        sync_calls = [str(c) for c in pipe_mock.method_calls]
+            fair_use_mod.record_speech_ms('user1', 1000, source='sync')
+            sync_calls = [str(c) for c in pipe_mock.method_calls]
 
         # Same Redis operations regardless of source
         assert realtime_calls == sync_calls

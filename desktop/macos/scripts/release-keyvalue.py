@@ -45,11 +45,13 @@ def preflight_release(release_json_path: Path, tag: str) -> None:
         raise SystemExit("release must be published and not a GitHub prerelease")
 
     metadata = parse_keyvalue_block(release.get("body") or "")
-    if metadata.get("channel") != "beta":
-        raise SystemExit(f"channel must be beta, got {metadata.get('channel')!r}")
+    if metadata.get("channel") not in {"candidate", "beta"}:
+        raise SystemExit(f"channel must be candidate or beta, got {metadata.get('channel')!r}")
     is_live = metadata.get("isLive", "").lower()
-    if is_live not in {"true", "1", "yes"}:
-        raise SystemExit(f"isLive must be true, got {metadata.get('isLive')!r}")
+    if metadata.get("channel") == "candidate" and is_live not in {"false", "0", "no"}:
+        raise SystemExit(f"candidate isLive must be false, got {metadata.get('isLive')!r}")
+    if metadata.get("channel") == "beta" and is_live not in {"true", "1", "yes"}:
+        raise SystemExit(f"beta isLive must be true, got {metadata.get('isLive')!r}")
     if not MACOS_RELEASE_TAG_RE.match(tag):
         raise SystemExit(f"not a macOS release tag: {tag}")
 
@@ -180,8 +182,8 @@ def _self_test() -> int:
     sample_body = """Release notes
 
 <!-- KEY_VALUE_START -->
-channel: beta
-isLive: true
+channel: candidate
+isLive: false
 blessed: false
 <!-- KEY_VALUE_END -->
 """
@@ -243,9 +245,9 @@ blessed: false
     )
     try:
         preflight_release(release_json, "v11.0.0+11000-macos")
-        ok("preflight-release valid beta release")
+        ok("preflight-release valid candidate release")
     except SystemExit as exc:
-        fail("preflight-release valid beta release", f"unexpected exit {exc.code}")
+        fail("preflight-release valid candidate release", f"unexpected exit {exc.code}")
 
     if failures:
         print(f"\n{len(failures)} self-test failure(s)", file=sys.stderr)

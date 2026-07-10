@@ -60,6 +60,7 @@ from utils.fair_use import (
 )
 from utils.observability.fallback import record_fallback
 from utils.metrics import OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL
+from utils.client_device import resolve_client_device, resolve_client_device_from_request
 from utils.subscription import has_transcription_credits
 from utils.sync import playback as sync_playback
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
@@ -264,6 +265,7 @@ async def sync_local_files(
         f'user_agent={request.headers.get("user-agent", "")}'
     )
     response.headers.update(_V1_DEPRECATION_HEADERS)
+    client_device_context = resolve_client_device_from_request(request)
 
     # Pre-check gates (#5854)
     hard_restricted, retry_after = get_hard_restriction_status(uid)
@@ -407,6 +409,8 @@ async def sync_local_files(
                     assignment_turnstile,
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
+                    client_device_id=client_device_context.client_device_id,
+                    client_platform=client_device_context.platform,
                 )
                 for path in ordered_paths
             ]
@@ -493,12 +497,21 @@ async def sync_local_files_v2(
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    # Browser/mobile clients carry capture provenance in these request headers.
+    # It must survive both the inline and Cloud Tasks pipeline branches.
+    client_device_context = resolve_client_device(
+        x_app_platform=x_app_platform if isinstance(x_app_platform, str) else None,
+        x_device_id_hash=x_device_id_hash if isinstance(x_device_id_hash, str) else None,
+    )
+
     # Pre-check gates (same as v1)
     hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
     if hard_restricted:
@@ -557,6 +570,8 @@ async def sync_local_files_v2(
                         'source': source.value,
                         'should_lock': should_lock,
                         'conversation_id': conversation_id,
+                        'client_device_id': client_device_context.client_device_id,
+                        'client_platform': client_device_context.platform,
                         'enqueued_at': time.time(),
                     },
                 )
@@ -625,6 +640,8 @@ async def sync_local_files_v2(
                     should_lock,
                     job_dir,
                     conversation_id,
+                    client_device_id=client_device_context.client_device_id,
+                    client_platform=client_device_context.platform,
                 ),
                 name=f'sync_pipeline:{job_id}',
             )
@@ -698,6 +715,12 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        client_device_id = payload.get('client_device_id')
+        client_platform = payload.get('client_platform')
+        if not isinstance(client_device_id, str):
+            client_device_id = None
+        if not isinstance(client_platform, str):
+            client_platform = None
     except Exception as e:
         # A malformed payload will not fix itself on retry — consume it.
         logger.error(f'sync job handler: invalid payload, dropping task: {e}')
@@ -742,6 +765,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 job_dir,
                 conversation_id,
                 task_mode=True,
+                client_device_id=client_device_id,
+                client_platform=client_platform,
             )
         except Exception as e:
             max_attempts = get_sync_tasks_max_attempts()

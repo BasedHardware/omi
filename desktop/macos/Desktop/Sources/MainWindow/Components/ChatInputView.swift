@@ -192,7 +192,6 @@ struct ChatInputView: View {
         guard canSend else { return }
         guard !isSending else { return }
         let text = inputText
-        inputText = ""
         onSend(text)
     }
 

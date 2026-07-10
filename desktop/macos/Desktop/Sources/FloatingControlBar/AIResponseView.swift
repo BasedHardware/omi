@@ -8,7 +8,7 @@ struct AIResponseView: View {
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
-    @State private var followUpText: String = ""
+    @Binding var followUpText: String
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
@@ -584,7 +584,7 @@ struct AIResponseView: View {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         let staged = attachments
         guard !trimmed.isEmpty || !staged.isEmpty else { return }
-        followUpText = ""
+        followUpText = trimmed
         attachments = []
         if !staged.isEmpty {
             FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)

@@ -1816,7 +1816,7 @@ class TestFolderMoveLockEnforcement:
 
         request = MoveConversationRequest(folder_id='folder-1')
         result = move_conversation_to_folder('conv-1', request, uid='test-uid')
-        assert result == {"status": "ok"}
+        assert result == {"status": "ok", "conversation": _make_conversation(locked=False)}
 
     def test_bulk_move_rejects_if_any_locked(self):
         import database.conversations as conversations_db
@@ -1857,3 +1857,47 @@ class TestFolderMoveLockEnforcement:
         request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
         result = bulk_move_conversations('folder-1', request, uid='test-uid')
         assert result == {"status": "ok", "moved_count": 2}
+
+
+class TestConversationCanonicalMutationResponses:
+    def test_title_endpoint_returns_post_write_canonical_snapshot(self, monkeypatch):
+        import database.conversations as conversations_db
+        from routers import conversations as conversations_router
+
+        before = {'id': 'conversation-1', 'structured': {'title': 'Before'}}
+        canonical = {
+            'id': 'conversation-1',
+            'updated_at': datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+            'structured': {'title': 'Renamed', 'overview': 'Processing finished'},
+        }
+        responses = iter([before, canonical])
+        monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *_args: next(responses))
+        update_title = MagicMock()
+        monkeypatch.setattr(conversations_db, 'update_conversation_title', update_title)
+
+        result = conversations_router.patch_conversation_title('conversation-1', 'Renamed', uid='user-1')
+
+        assert result == {'status': 'Ok', 'conversation': canonical}
+        update_title.assert_called_once_with('user-1', 'conversation-1', 'Renamed')
+
+    def test_star_endpoint_returns_post_write_processing_state(self, monkeypatch):
+        import database.conversations as conversations_db
+        from routers import conversations as conversations_router
+
+        before = {'id': 'conversation-1', 'starred': False, 'status': 'processing'}
+        canonical = {
+            'id': 'conversation-1',
+            'updated_at': datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+            'starred': True,
+            'status': 'completed',
+            'structured': {'overview': 'Processing finished'},
+        }
+        responses = iter([before, canonical])
+        monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *_args: next(responses))
+        set_starred = MagicMock()
+        monkeypatch.setattr(conversations_db, 'set_conversation_starred', set_starred)
+
+        result = conversations_router.set_conversation_starred('conversation-1', True, uid='user-1')
+
+        assert result == {'status': 'Ok', 'conversation': canonical}
+        set_starred.assert_called_once_with('user-1', 'conversation-1', True)

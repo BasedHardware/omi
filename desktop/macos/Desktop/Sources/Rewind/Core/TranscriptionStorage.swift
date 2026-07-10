@@ -805,23 +805,31 @@ actor TranscriptionStorage {
             if var existingSession = try TranscriptionSessionRecord
                 .filter(Column("backendId") == conversation.id)
                 .fetchOne(database) {
-                // Skip if local record is newer than the conversation's latest timestamp.
-                // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.).
-                // Exception: finalization can create a backend-synced local shell with an id/status
-                // but no structured title/overview. Backend list/detail sync must be allowed to hydrate
-                // that shell later, even when local completion happened after the server's finished_at timestamp.
-                let serverTimestamp = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
-                let localMutationIsNewer = existingSession.updatedAt >= serverTimestamp
+                // Firestore update_time is the only server freshness authority.
+                // Local cache-write time and recording timestamps are unrelated clocks.
+                let incomingIsOlder: Bool
+                if let incomingRevision = conversation.updatedAt,
+                   let cachedRevision = existingSession.serverUpdatedAt {
+                    incomingIsOlder = incomingRevision < cachedRevision
+                } else {
+                    incomingIsOlder = false
+                }
                 let shouldHydrateLocalShell = existingSession.hasHydratableServerFields(from: conversation)
-                if localMutationIsNewer && !shouldHydrateLocalShell {
+                let upgradesDetail = conversation.transcriptSegmentsIncluded
+                    && existingSession.cacheCompleteness == .list
+                let requiresConservativeMerge = conversation.updatedAt == nil || incomingIsOlder
+                if requiresConservativeMerge && !shouldHydrateLocalShell && !upgradesDetail {
                     guard let sessionId = existingSession.id else {
                         throw TranscriptionStorageError.invalidState("Session ID is nil")
                     }
                     return (sessionId, false)
                 }
 
-                // Update existing session
-                existingSession.updateFrom(conversation, preservingNewerLocalFields: localMutationIsNewer)
+                if requiresConservativeMerge {
+                    existingSession.hydrateMissingFields(from: conversation)
+                } else {
+                    existingSession.updateFrom(conversation)
+                }
                 try existingSession.update(database)
                 guard let sessionId = existingSession.id else {
                     throw TranscriptionStorageError.invalidState("Session ID is nil after update")
@@ -978,9 +986,18 @@ actor TranscriptionStorage {
             // Segments are only needed for conversation detail view, not list view
             // This makes the query O(1) instead of O(N) for much faster loading
             return sessions.compactMap { session in
-                session.toServerConversation(segments: [])
+                session.toServerConversation(segments: [], transcriptIncluded: false)
             }
         }
+    }
+
+    /// Read the richest cached projection for a detail screen.
+    func getCachedConversation(id: String) async throws -> ServerConversation? {
+        guard let session = try await getSessionByBackendId(id), let sessionId = session.id else {
+            return nil
+        }
+        let segments = try await getSegments(sessionId: sessionId)
+        return session.toServerConversation(segments: segments)
     }
 
     /// Get count of local conversations

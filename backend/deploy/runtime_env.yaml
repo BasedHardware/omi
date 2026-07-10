@@ -8,6 +8,12 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
         env:
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -76,6 +82,12 @@ environments:
       services:
         backend:
           env:
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_ENV_STAGE:
@@ -383,6 +395,12 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
@@ -439,6 +457,12 @@ environments:
       services:
         backend:
           env:
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity

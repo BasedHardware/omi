@@ -2393,6 +2393,7 @@ class AuthService {
             SentrySDK.setUser(nil)
         }
 
+        let signingOutUserID = UserDefaults.standard.string(forKey: "auth_userId")
         try Auth.auth().signOut()
         // Reset coordinator only after Firebase sign-out succeeds so the state
         // transition is atomic — if signOut() throws (e.g. keychain error), the
@@ -2402,6 +2403,7 @@ class AuthService {
         isSignedIn = false
         CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()
+        ChatDraftStore.shared.clearAll(ownerID: signingOutUserID)
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()

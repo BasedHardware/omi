@@ -147,10 +147,9 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Whether the backend supports device_scope filtering for this user.
-  /// Canonical memory users support it; legacy users get a 400. When a 400 is
-  /// received we clear this so subsequent fetches omit device_scope and fall
-  /// back to client-side filtering (ClientDeviceService.memoryMatchesThisDevice)
-  /// applied in recomputeFilteredMemories.
+  /// Canonical memory users support it; legacy users get a 400. Legacy rows
+  /// have no capture provenance, so after that fallback we preserve the
+  /// unscoped list rather than falsely filtering every row out locally.
   private var deviceScopeSupported = true
 
   @Published var selectedTags: Set<MemoryTag> = [] {
@@ -679,7 +678,11 @@ class MemoriesViewModel: ObservableObject {
       result = result.filter { allowedTiers.contains($0.tier) }
     }
 
-    if filterThisDeviceOnly {
+    // A canonical response has already been filtered server-side and its
+    // provenance is authoritative. Legacy rows cannot identify their capture
+    // device, so keeping them visible is the only honest fallback; filtering
+    // them client-side would turn the list into a misleading empty state.
+    if filterThisDeviceOnly && deviceScopeSupported {
       result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
     }
 
@@ -750,8 +753,9 @@ class MemoriesViewModel: ObservableObject {
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
   /// get a 400 from device_scope=current; on that we retry without the scope
-  /// and return the capability update to the guarded page commit. Client-side device
-  /// filtering (recomputeFilteredMemories) preserves the "This Mac" UX.
+  /// and return the capability update to the guarded page commit. Legacy rows
+  /// lack capture provenance, so recomputeFilteredMemories keeps that fallback
+  /// list visible.
   private func fetchMemoriesPageDeviceScopeAware(limit: Int, offset: Int) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
     do {
@@ -760,6 +764,14 @@ class MemoriesViewModel: ObservableObject {
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "device_scoped",
+        to: "unscoped",
+        reason: "capability_mismatch",
+        outcome: .degraded,
+        extra: ["user_visible": false]
+      )
       let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: nil)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }

@@ -525,6 +525,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         guard state.showingAIConversation else { return }
 
+        if !state.aiInputText.isEmpty {
+            state.aiInputText = ""
+            return
+        }
+
         if state.hasVisibleConversation {
             clearVisibleConversationFromUI()
         } else {
@@ -1104,7 +1109,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             // treats the dead agent surface as restorable and the next Ask Omi open
             // restores into a blank response panel instead of a fresh input.
             state.conversationSurface = .closed
-            state.aiInputText = ""
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
             state.isAILoading = false
@@ -1207,7 +1211,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             withAnimation(.easeOut(duration: 0.08)) {
                 state.present(.mainResponse)
                 state.isAILoading = false
-                state.aiInputText = ""
             }
             resizeToResponseHeight(animated: true)
             // Mid-stream close cancels the floating binder; re-subscribe so the
@@ -1230,7 +1233,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.present(.mainInput)
                 state.isAILoading = false
-                state.aiInputText = ""
                 state.setLocalAnswerOverride(nil)
                 // Match the explicit resize height so the observer doesn't immediately override it
                 state.inputViewHeight = inputPanelHeight
@@ -2255,7 +2257,6 @@ class FloatingControlBarManager {
             withAnimation(.easeOut(duration: 0.10)) {
                 window.state.present(.agent(pillID))
                 window.state.isAILoading = false
-                window.state.aiInputText = ""
             }
             window.resizeForActiveAgentChatPublic(pillID: pillID, animated: true)
             completion?(true)
@@ -2596,7 +2597,6 @@ class FloatingControlBarManager {
         }
         window.state.present(.mainInput)
         window.state.isAILoading = false
-        window.state.aiInputText = ""
         window.resizeToResponseHeightPublic(animated: false)
         window.state.present(.mainInput)
         return [
@@ -2620,7 +2620,6 @@ class FloatingControlBarManager {
         withAnimation(.easeOut(duration: 0.10)) {
             window.state.present(.agent(pill.id))
             window.state.isAILoading = false
-            window.state.aiInputText = ""
         }
         window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: false)
         guard wait else {
@@ -3404,7 +3403,6 @@ class FloatingControlBarManager {
         case .visible:
             chatCancellable?.cancel()
             chatCancellable = nil
-            barWindow.state.aiInputText = ""
             barWindow.state.displayedQuery = ""
             barWindow.state.bindQuestionMessageId(nil)
             barWindow.state.setLocalAnswerOverride(message)
@@ -3485,7 +3483,7 @@ class FloatingControlBarManager {
     ) {
         chatCancellable?.cancel()
         chatCancellable = nil
-        barWindow.state.aiInputText = ""
+        barWindow.state.clearSubmittedAIDraftIfUnchanged(userText)
         barWindow.state.displayedQuery = userText
         // Provider timeline is SoT: enrich the existing message in place (e.g. spawn_agent
         // tool block), then bindAnswerMessage only. localAnswerOverride is reserved for
@@ -3911,7 +3909,6 @@ class FloatingControlBarManager {
 
         window.state.present(.mainResponse)
         window.state.isAILoading = false
-        window.state.aiInputText = ""
         if !shouldRestoreVisibleConversation {
             window.state.clearViewport()
         }
@@ -4240,7 +4237,10 @@ class FloatingControlBarManager {
             surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
-            clientTurnId: clientTurnId
+            clientTurnId: clientTurnId,
+            onAccepted: { [weak barWindow] in
+                barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+            }
         )
 
         if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
@@ -4488,7 +4488,7 @@ extension FloatingControlBarWindow {
     func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true) {
         cancelInputHeightObserver()
         state.currentQueryFromVoice = fromVoice
-        state.aiInputText = ""
+        state.markAIDraftSubmitted(message)
         state.displayedQuery = message
         state.clearCurrentAnswerAnchors()
         // clearCurrentAnswerAnchors keeps archived exchanges; sendAIQuery binds the real turn id.

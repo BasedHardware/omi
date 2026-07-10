@@ -50,6 +50,17 @@ For an identified session, lifecycle/finalization uses that exact identity; it
 must not timestamp-match or force-process a nearby user-global conversation.
 Timestamp/source matching is legacy-only compatibility behavior.
 
+## Capture-device provenance
+
+Every capture client with WebSocket-upgrade header support sends
+`X-App-Platform` and `X-Device-Id-Hash` on `/v4/listen`. The backend records
+that provenance on the conversation stub, allowing extracted canonical
+memories to participate in the **This device** filter. Browsers cannot attach
+custom upgrade headers, so `/v4/web/listen` carries the hash in its required
+first auth message; the backend fixes its platform to `web` before creating
+the conversation. Missing provenance remains unknown rather than being
+assigned to a different device.
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -58,7 +69,7 @@ sequenceDiagram
     participant Pusher
     participant Firestore
 
-    Client->>Backend: WS connect (uid, language, sample_rate, codec, client_conversation_id)
+    Client->>Backend: WS connect (uid, language, sample_rate, codec, client_conversation_id, device headers)
     Backend->>Backend: Auth check (dev-token or Firebase)
     Backend->>Backend: Select STT provider (STT_SERVICE_MODELS + language)
     Backend->>Firestore: Create/resume exact client conversation (status=in_progress)
