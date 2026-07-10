@@ -51,7 +51,7 @@ struct HomeStatusLoader {
 /// returning to Home can render cached values without repeating provider scans.
 @MainActor
 final class HomeStatusStore: ObservableObject {
-    static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+    static let omiDeviceHistoryDefaultsKey = DefaultsKey.homeOmiDeviceAccountHistory.rawValue
 
     let connectorStatusStore: ImportConnectorStatusStore
 
@@ -64,6 +64,8 @@ final class HomeStatusStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let loader: HomeStatusLoader
+    private let currentUserIDProvider: () -> String?
+    private var sessionUserID: String?
     private var lastRefreshAt = Date.distantPast
     private var refreshTask: Task<Void, Never>?
     private var refreshID: UUID?
@@ -74,13 +76,25 @@ final class HomeStatusStore: ObservableObject {
     init(
         connectorStatusStore: ImportConnectorStatusStore? = nil,
         defaults: UserDefaults = .standard,
-        loader: HomeStatusLoader? = nil
+        loader: HomeStatusLoader? = nil,
+        currentUserIDProvider: (() -> String?)? = nil
     ) {
-        let connectorStatusStore = connectorStatusStore ?? ImportConnectorStatusStore(defaults: defaults)
+        let currentUserIDProvider = currentUserIDProvider ?? {
+            defaults.string(forKey: .authUserId)
+        }
+        let sessionUserID = Self.normalizedUserID(currentUserIDProvider())
+        let connectorStatusStore = connectorStatusStore
+            ?? ImportConnectorStatusStore(defaults: defaults, sessionUserID: sessionUserID)
         self.connectorStatusStore = connectorStatusStore
         self.defaults = defaults
         self.loader = loader ?? .live(connectorStatusStore: connectorStatusStore)
-        accountHasOmiDeviceConversations = defaults.bool(forKey: Self.omiDeviceHistoryDefaultsKey)
+        self.currentUserIDProvider = currentUserIDProvider
+        self.sessionUserID = sessionUserID
+        accountHasOmiDeviceConversations = Self.loadPersistedDeviceHistory(
+            defaults: defaults,
+            userID: sessionUserID
+        )
+        connectorStatusStore.setSessionUserID(sessionUserID)
 
         connectorStatusStore.objectWillChange
             .sink { [weak self] _ in
@@ -96,6 +110,8 @@ final class HomeStatusStore: ObservableObject {
     }
 
     func refreshIfNeeded(force: Bool = false, now: Date = Date()) async {
+        ensureCurrentSessionScope()
+
         if let refreshTask {
             await refreshTask.value
             return
@@ -122,6 +138,13 @@ final class HomeStatusStore: ObservableObject {
     }
 
     func resetSessionState() {
+        resetTransientState()
+        sessionUserID = nil
+        connectorStatusStore.setSessionUserID(nil)
+        accountHasOmiDeviceConversations = false
+    }
+
+    private func resetTransientState() {
         refreshGeneration += 1
         refreshTask?.cancel()
         refreshTask = nil
@@ -133,7 +156,19 @@ final class HomeStatusStore: ObservableObject {
         memoryCount = nil
         taskCount = nil
         memoryExportStatuses = [:]
-        accountHasOmiDeviceConversations = defaults.bool(forKey: Self.omiDeviceHistoryDefaultsKey)
+    }
+
+    private func ensureCurrentSessionScope() {
+        let currentUserID = Self.normalizedUserID(currentUserIDProvider())
+        guard currentUserID != sessionUserID else { return }
+
+        resetTransientState()
+        sessionUserID = currentUserID
+        connectorStatusStore.setSessionUserID(currentUserID)
+        accountHasOmiDeviceConversations = Self.loadPersistedDeviceHistory(
+            defaults: defaults,
+            userID: currentUserID
+        )
     }
 
     private func performRefresh(generation: Int) async {
@@ -196,7 +231,30 @@ final class HomeStatusStore: ObservableObject {
         }
         if knowledgeCounts.hasOmiDeviceConversations == true {
             accountHasOmiDeviceConversations = true
-            defaults.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
+            if let key = Self.deviceHistoryDefaultsKey(userID: sessionUserID) {
+                defaults.set(true, forKey: key)
+            }
         }
+    }
+
+    private static func normalizedUserID(_ userID: String?) -> String? {
+        let trimmed = userID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func deviceHistoryDefaultsKey(userID: String?) -> String? {
+        guard let userID = normalizedUserID(userID) else { return nil }
+        return "\(omiDeviceHistoryDefaultsKey).user.\(userID)"
+    }
+
+    private static func loadPersistedDeviceHistory(defaults: UserDefaults, userID: String?) -> Bool {
+        guard let scopedKey = deviceHistoryDefaultsKey(userID: userID) else { return false }
+
+        if defaults.object(forKey: scopedKey) == nil,
+           defaults.object(forKey: .homeOmiDeviceAccountHistory) != nil {
+            defaults.set(defaults.bool(forKey: .homeOmiDeviceAccountHistory), forKey: scopedKey)
+            defaults.removeObject(forKey: .homeOmiDeviceAccountHistory)
+        }
+        return defaults.bool(forKey: scopedKey)
     }
 }

@@ -36,6 +36,8 @@ enum DefaultsKey: String {
     case multiChatEnabled = "multiChatEnabled"
     case aiChatWorkingDirectory = "aiChatWorkingDirectory"
     case onboardingStep = "onboardingStep"
+    case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
+    case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
 }
 
@@ -50,6 +52,7 @@ extension UserDefaults {
     func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+    func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
     func removeObject(forKey key: DefaultsKey) { removeObject(forKey: key.rawValue) }

@@ -210,6 +210,7 @@ final class HomeStatusStoreTests: XCTestCase {
         let testDefaults = makeDefaults()
         let defaults = testDefaults.defaults
         defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+        defaults.set("user-a", forKey: "auth_userId")
 
         let connectorStore = ImportConnectorStatusStore(defaults: defaults)
         let store = HomeStatusStore(
@@ -243,6 +244,7 @@ final class HomeStatusStoreTests: XCTestCase {
         let testDefaults = makeDefaults()
         let defaults = testDefaults.defaults
         defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+        defaults.set("user-a", forKey: "auth_userId")
         defaults.set(true, forKey: HomeStatusStore.omiDeviceHistoryDefaultsKey)
 
         var deviceLookupRequests: [Bool] = []
@@ -270,6 +272,53 @@ final class HomeStatusStoreTests: XCTestCase {
 
         XCTAssertTrue(store.accountHasOmiDeviceConversations)
         XCTAssertEqual(deviceLookupRequests, [false])
+        XCTAssertNil(defaults.object(forKey: HomeStatusStore.omiDeviceHistoryDefaultsKey))
+    }
+
+    func testAccountSwitchDoesNotExposePreviousAccountStatus() async throws {
+        let testDefaults = makeDefaults()
+        let defaults = testDefaults.defaults
+        defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+        defaults.set("user-a", forKey: "auth_userId")
+
+        let connectorStore = ImportConnectorStatusStore(defaults: defaults)
+        let store = HomeStatusStore(
+            connectorStatusStore: connectorStore,
+            defaults: defaults,
+            loader: HomeStatusLoader(
+                refreshConnectorStatuses: {},
+                loadScreenshotCount: { nil },
+                loadKnowledgeCounts: { _ in
+                    HomeKnowledgeCounts(
+                        conversations: nil,
+                        memories: nil,
+                        tasks: nil,
+                        hasOmiDeviceConversations: defaults.string(forKey: "auth_userId") == "user-a"
+                    )
+                },
+                loadMemoryExportStatuses: { [:] }
+            )
+        )
+        let email = try XCTUnwrap(ImportConnector.all.first { $0.id == "email" })
+
+        connectorStore.markSynced(connectorID: "email", sourceCount: 12)
+        await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 50_000))
+        XCTAssertTrue(store.accountHasOmiDeviceConversations)
+        XCTAssertTrue(connectorStore.snapshot(for: email).isConnected)
+
+        defaults.set("user-b", forKey: "auth_userId")
+        store.resetSessionState()
+        await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 50_100))
+
+        XCTAssertFalse(store.accountHasOmiDeviceConversations)
+        XCTAssertFalse(connectorStore.snapshot(for: email).isConnected)
+
+        defaults.set("user-a", forKey: "auth_userId")
+        await store.refreshIfNeeded(force: true, now: Date(timeIntervalSince1970: 50_200))
+
+        XCTAssertTrue(store.accountHasOmiDeviceConversations)
+        XCTAssertTrue(connectorStore.snapshot(for: email).isConnected)
+        XCTAssertEqual(connectorStore.snapshot(for: email).primaryText, "12 emails")
     }
 
     private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {

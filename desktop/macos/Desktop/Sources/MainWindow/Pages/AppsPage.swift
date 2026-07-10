@@ -752,9 +752,20 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
+    private var sessionUserID: String?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, sessionUserID: String? = nil) {
         self.defaults = defaults
+        self.sessionUserID = Self.normalizedUserID(
+            sessionUserID ?? defaults.string(forKey: .authUserId)
+        )
+        load()
+    }
+
+    func setSessionUserID(_ userID: String?) {
+        let userID = Self.normalizedUserID(userID)
+        guard userID != sessionUserID else { return }
+        sessionUserID = userID
         load()
     }
 
@@ -787,36 +798,48 @@ final class ImportConnectorStatusStore: ObservableObject {
         var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
         if let sourceCount {
             metrics.sourceCount = max(sourceCount, 0)
-            defaults.set(metrics.sourceCount, forKey: sourceCountKeyPrefix + connectorID)
+            defaults.set(metrics.sourceCount, forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: connectorID))
         }
         if let memoryCount {
             metrics.memoryCount = max(memoryCount, 0)
-            defaults.set(metrics.memoryCount, forKey: memoryCountKeyPrefix + connectorID)
+            defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
         }
         metrics.lastSyncedAt = syncedAt
-        defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + connectorID)
+        defaults.set(
+            syncedAt.timeIntervalSince1970,
+            forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
+        )
         metrics.lastDeltaCount = lastDeltaCount
-        defaults.set(lastDeltaCount != nil, forKey: hasLastDeltaKeyPrefix + connectorID)
+        defaults.set(
+            lastDeltaCount != nil,
+            forKey: storageKey(prefix: hasLastDeltaKeyPrefix, connectorID: connectorID)
+        )
         if let lastDeltaCount {
-            defaults.set(lastDeltaCount, forKey: lastDeltaCountKeyPrefix + connectorID)
+            defaults.set(
+                lastDeltaCount,
+                forKey: storageKey(prefix: lastDeltaCountKeyPrefix, connectorID: connectorID)
+            )
         } else {
-            defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
+            defaults.removeObject(forKey: storageKey(prefix: lastDeltaCountKeyPrefix, connectorID: connectorID))
         }
         if let availabilityText {
             metrics.availabilityText = availabilityText
-            defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
+            defaults.set(
+                availabilityText,
+                forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID)
+            )
         }
         metricsByID[connectorID] = metrics
         connectorDidSync.send(connectorID)
     }
 
     private func clearStoredMetrics(for connectorID: String) {
-        defaults.removeObject(forKey: sourceCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: memoryCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
-        defaults.removeObject(forKey: availabilityTextKeyPrefix + connectorID)
+        defaults.removeObject(forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: connectorID))
+        defaults.removeObject(forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
+        defaults.removeObject(forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID))
+        defaults.removeObject(forKey: storageKey(prefix: lastDeltaCountKeyPrefix, connectorID: connectorID))
+        defaults.removeObject(forKey: storageKey(prefix: hasLastDeltaKeyPrefix, connectorID: connectorID))
+        defaults.removeObject(forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID))
         metricsByID[connectorID] = ConnectorMetrics()
     }
 
@@ -831,25 +854,35 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     private func load() {
+        metricsByID = [:]
+        guard sessionUserID != nil else { return }
         for connector in ImportConnector.all {
+            migrateLegacyMetricsIfNeeded(connectorID: connector.id)
             var metrics = ConnectorMetrics()
 
-            if defaults.object(forKey: sourceCountKeyPrefix + connector.id) != nil {
-                metrics.sourceCount = defaults.integer(forKey: sourceCountKeyPrefix + connector.id)
+            let sourceCountKey = storageKey(prefix: sourceCountKeyPrefix, connectorID: connector.id)
+            let memoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: connector.id)
+            let lastSyncedAtKey = storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connector.id)
+            let hasLastDeltaKey = storageKey(prefix: hasLastDeltaKeyPrefix, connectorID: connector.id)
+            let lastDeltaCountKey = storageKey(prefix: lastDeltaCountKeyPrefix, connectorID: connector.id)
+            let availabilityTextKey = storageKey(prefix: availabilityTextKeyPrefix, connectorID: connector.id)
+
+            if defaults.object(forKey: sourceCountKey) != nil {
+                metrics.sourceCount = defaults.integer(forKey: sourceCountKey)
             }
-            if defaults.object(forKey: memoryCountKeyPrefix + connector.id) != nil {
-                metrics.memoryCount = defaults.integer(forKey: memoryCountKeyPrefix + connector.id)
+            if defaults.object(forKey: memoryCountKey) != nil {
+                metrics.memoryCount = defaults.integer(forKey: memoryCountKey)
             }
-            if defaults.object(forKey: lastSyncedAtKeyPrefix + connector.id) != nil {
-                let timestamp = defaults.double(forKey: lastSyncedAtKeyPrefix + connector.id)
+            if defaults.object(forKey: lastSyncedAtKey) != nil {
+                let timestamp = defaults.double(forKey: lastSyncedAtKey)
                 if timestamp > 0 {
                     metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
                 }
             }
-            if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
-                metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
+            if defaults.bool(forKey: hasLastDeltaKey) {
+                metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKey)
             }
-            metrics.availabilityText = defaults.string(forKey: availabilityTextKeyPrefix + connector.id)
+            metrics.availabilityText = defaults.string(forKey: availabilityTextKey)
 
             metricsByID[connector.id] = metrics
         }
@@ -861,23 +894,77 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     private func hydrateLegacyManualImports() {
+        guard let sessionUserID else { return }
+        let ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
         let legacyChatGPTCount = defaults.integer(forKey: onboardingChatGPTImportedMemoriesKey)
+        let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
+        if ownerUserID == nil,
+           (legacyChatGPTCount > 0 || legacyClaudeCount > 0) {
+            defaults.set(sessionUserID, forKey: .onboardingMemoryImportOwnerUserId)
+        }
+
+        let resolvedOwnerUserID = Self.normalizedUserID(
+            defaults.string(forKey: .onboardingMemoryImportOwnerUserId)
+        )
+        guard resolvedOwnerUserID == sessionUserID else { return }
+
+        let chatGPTMemoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: "chatgpt")
         if legacyChatGPTCount > 0,
-           defaults.object(forKey: memoryCountKeyPrefix + "chatgpt") == nil {
+           defaults.object(forKey: chatGPTMemoryCountKey) == nil {
             var metrics = metricsByID["chatgpt"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyChatGPTCount
             metrics.availabilityText = "Imported during onboarding"
             metricsByID["chatgpt"] = metrics
+            defaults.set(legacyChatGPTCount, forKey: chatGPTMemoryCountKey)
+            defaults.set(
+                "Imported during onboarding",
+                forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "chatgpt")
+            )
         }
 
-        let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
+        let claudeMemoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: "claude")
         if legacyClaudeCount > 0,
-           defaults.object(forKey: memoryCountKeyPrefix + "claude") == nil {
+           defaults.object(forKey: claudeMemoryCountKey) == nil {
             var metrics = metricsByID["claude"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyClaudeCount
             metrics.availabilityText = "Imported during onboarding"
             metricsByID["claude"] = metrics
+            defaults.set(legacyClaudeCount, forKey: claudeMemoryCountKey)
+            defaults.set(
+                "Imported during onboarding",
+                forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "claude")
+            )
         }
+    }
+
+    private func storageKey(prefix: String, connectorID: String) -> String {
+        guard let sessionUserID else { return prefix + connectorID }
+        return "\(prefix)user.\(sessionUserID).\(connectorID)"
+    }
+
+    private func migrateLegacyMetricsIfNeeded(connectorID: String) {
+        guard sessionUserID != nil else { return }
+        for prefix in [
+            sourceCountKeyPrefix,
+            memoryCountKeyPrefix,
+            lastSyncedAtKeyPrefix,
+            lastDeltaCountKeyPrefix,
+            hasLastDeltaKeyPrefix,
+            availabilityTextKeyPrefix,
+        ] {
+            let legacyKey = prefix + connectorID
+            let scopedKey = storageKey(prefix: prefix, connectorID: connectorID)
+            if defaults.object(forKey: scopedKey) == nil,
+               let legacyValue = defaults.object(forKey: legacyKey) {
+                defaults.set(legacyValue, forKey: scopedKey)
+            }
+            defaults.removeObject(forKey: legacyKey)
+        }
+    }
+
+    private static func normalizedUserID(_ userID: String?) -> String? {
+        let trimmed = userID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func refreshLocalFilesMetrics() async {
@@ -901,17 +988,28 @@ final class ImportConnectorStatusStore: ObservableObject {
 
             var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
             metrics.sourceCount = result.count
-            defaults.set(result.count, forKey: sourceCountKeyPrefix + "local-files")
+            defaults.set(
+                result.count,
+                forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "local-files")
+            )
             if metrics.lastSyncedAt == nil, let lastIndexedAt = result.lastIndexedAt {
                 metrics.lastSyncedAt = lastIndexedAt
-                defaults.set(lastIndexedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "local-files")
+                defaults.set(
+                    lastIndexedAt.timeIntervalSince1970,
+                    forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "local-files")
+                )
             }
             if metrics.lastSyncedAt != nil || result.count > 0 {
                 metrics.availabilityText = "On-device index"
-                defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
+                defaults.set(
+                    "On-device index",
+                    forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "local-files")
+                )
             } else {
                 metrics.availabilityText = nil
-                defaults.removeObject(forKey: availabilityTextKeyPrefix + "local-files")
+                defaults.removeObject(
+                    forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "local-files")
+                )
             }
             metricsByID["local-files"] = metrics
         } catch {
@@ -925,14 +1023,23 @@ final class ImportConnectorStatusStore: ObservableObject {
         case .connected(let noteCount, _):
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = noteCount
-            defaults.set(noteCount, forKey: sourceCountKeyPrefix + "apple-notes")
+            defaults.set(
+                noteCount,
+                forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "apple-notes")
+            )
             if metrics.lastSyncedAt == nil {
                 let syncedAt = Date()
                 metrics.lastSyncedAt = syncedAt
-                defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "apple-notes")
+                defaults.set(
+                    syncedAt.timeIntervalSince1970,
+                    forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "apple-notes")
+                )
             }
             metrics.availabilityText = "Private notes accessible"
-            defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
+            defaults.set(
+                "Private notes accessible",
+                forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "apple-notes")
+            )
             metricsByID["apple-notes"] = metrics
         case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
