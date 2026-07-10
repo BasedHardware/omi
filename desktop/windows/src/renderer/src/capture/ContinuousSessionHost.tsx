@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { getPreferences, onPreferencesChange } from '../lib/preferences'
-import { requestFinalize } from '../lib/liveConversation'
+import { liveConversation, requestFinalize } from '../lib/liveConversation'
+import { formatAssistantLine, shouldInjectIntoLive } from '../lib/voice/injectedTranscript'
 import { startLiveMicSession } from './liveMicSession'
+import { captureLiveStore } from './liveStore'
 
 // Owns the always-on mic → /v4/listen session, INSIDE the capture window (moved
 // from the app-shell ContinuousRecordingHost). It runs the session when either:
@@ -31,6 +33,15 @@ export function ContinuousSessionHost(): null {
         // In the capture window requestFinalize notifies the local subscriber (the
         // running liveMicSession), which ends → stores → restarts the session.
         requestFinalize()
+      } else if (cmd.type === 'assistant-utterance') {
+        // Echo gate companion (Phase 6): while the gate pauses the feed, Omi's
+        // spoken words still belong in the record — injected from SOURCE text,
+        // never re-transcribed. Only when a session is actually running (a line
+        // injected into a dead store would leak into the next session's view).
+        if (shouldInjectIntoLive(liveConversation.getStatus())) {
+          const line = formatAssistantLine(cmd.text, cmd.utteranceId)
+          if (line) captureLiveStore.appendLine(line)
+        }
       }
     })
   }, [])
