@@ -17,6 +17,7 @@ import type {
 import { AiCloneStore } from './store'
 import { BeeperClient, beeperTimestampMs, type BeeperChat, type BeeperMessage } from './beeperClient'
 import { decide, AUTO_SEND_HOURLY_CAP } from './responder'
+import { ChatTaskQueue } from './chatTaskQueue'
 import { generateReply, type ReplyTranscriptLine } from './replyEngine'
 
 const DEFAULT_API_BASE = 'https://api.omi.me'
@@ -37,8 +38,8 @@ export class AiCloneService {
   private autoSends: number[] = []
   /** message ids already handled — WS re-delivers upserts for edits/reactions. */
   private processed = new Set<string>()
-  /** chats with a reply generation in flight (one at a time per chat). */
-  private inFlight = new Set<string>()
+  /** Per-chat serializer: one reply at a time per chat, later arrivals parked. */
+  private queue = new ChatTaskQueue()
   /** id → chat metadata cache for titles/types in decisions and drafts. */
   private chatCache = new Map<string, BeeperChat>()
 
@@ -160,7 +161,7 @@ export class AiCloneService {
       onEvent: (e) => {
         if (e.type !== 'message.upserted' || !e.chatID) return
         for (const entry of e.entries ?? []) {
-          void this.handleIncoming(e.chatID, entry)
+          this.handleIncoming(e.chatID, entry)
         }
       }
     })
@@ -200,30 +201,35 @@ export class AiCloneService {
 
   // --- the responder loop ---
 
-  private async handleIncoming(chatID: string, message: BeeperMessage): Promise<void> {
-    if (!this.client || !message.id || this.processed.has(message.id)) return
-    let chat = this.chatCache.get(chatID)
-    if (!chat) {
-      await this.refreshChatCache()
-      chat = this.chatCache.get(chatID) ?? { id: chatID }
-    }
-    const decision = decide({
-      message,
-      chatType: chat.type === 'group' ? 'group' : 'single',
-      chatMode: this.store.getChatMode(chatID),
-      sessionStartedAt: this.sessionStartedAt,
-      autoSentThisHour: this.autoSentThisHour(),
-      autoSendHourlyCap: AUTO_SEND_HOURLY_CAP
-    })
-    if (decision.action === 'ignore') return
-    this.markProcessed(message.id)
-    if (this.inFlight.has(chatID)) return
-    this.inFlight.add(chatID)
-    try {
+  private handleIncoming(chatID: string, message: BeeperMessage): void {
+    const messageId = message.id
+    if (!messageId || this.processed.has(messageId)) return
+    // Serialize per chat through the queue — a message arriving while this
+    // chat's reply is still generating is parked and handled right after
+    // (previously an in-flight guard silently dropped it). The decision runs
+    // inside the task, at execution time, so a parked message is judged
+    // against current state (mode changes, hourly cap, …).
+    this.queue.submit(chatID, async () => {
+      if (!this.client || this.processed.has(messageId)) return
+      let chat = this.chatCache.get(chatID)
+      if (!chat) {
+        await this.refreshChatCache()
+        chat = this.chatCache.get(chatID) ?? { id: chatID }
+      }
+      const decision = decide({
+        message,
+        chatType: chat.type === 'group' ? 'group' : 'single',
+        chatMode: this.store.getChatMode(chatID),
+        sessionStartedAt: this.sessionStartedAt,
+        autoSentThisHour: this.autoSentThisHour(),
+        autoSendHourlyCap: AUTO_SEND_HOURLY_CAP
+      })
+      if (decision.action === 'ignore') return
+      // Only accepted messages are marked processed — ignores stay cheap to
+      // re-decide, and a parked-then-superseded message was never marked.
+      this.markProcessed(messageId)
       await this.respond(chat, message, decision.action)
-    } finally {
-      this.inFlight.delete(chatID)
-    }
+    })
   }
 
   private markProcessed(id: string): void {
