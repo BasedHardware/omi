@@ -297,6 +297,9 @@ export type OmiBridgeApi = {
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */
   allowVirtualMic: boolean
+  /** True when OMI_E2E=1 — renderer-side test hooks (e.g. window.__omiVoice)
+   *  attach only in harness runs, never in production. */
+  e2e: boolean
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */

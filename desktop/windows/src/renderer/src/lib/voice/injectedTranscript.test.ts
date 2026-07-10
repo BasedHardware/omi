@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  formatAssistantLine,
-  shouldInjectIntoLive,
-  ASSISTANT_SPEAKER
-} from './injectedTranscript'
+import { formatAssistantLine, shouldInjectIntoLive, ASSISTANT_SPEAKER } from './injectedTranscript'
 
 describe('formatAssistantLine', () => {
   it('formats an utterance with the Omi speaker and a stable id', () => {

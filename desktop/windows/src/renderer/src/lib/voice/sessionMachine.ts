@@ -36,10 +36,7 @@ export const initialVoiceState: VoiceSessionState = { status: 'idle' }
 
 /** Pure transition. Illegal events for the current state are ignored (return the
  *  same state), so a late async callback can never corrupt the machine. */
-export function transition(
-  state: VoiceSessionState,
-  event: VoiceSessionEvent
-): VoiceSessionState {
+export function transition(state: VoiceSessionState, event: VoiceSessionEvent): VoiceSessionState {
   switch (event.type) {
     case 'start':
       // Only from rest states — a second start while connecting/live is a no-op

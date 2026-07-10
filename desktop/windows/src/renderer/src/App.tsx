@@ -29,6 +29,7 @@ import { TrayStateHost } from './components/tray/TrayStateHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
+import { attachVoiceE2eHook } from './lib/voice/e2eHook'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -137,6 +138,13 @@ function App(): React.JSX.Element {
   // Main window fans out auth transitions to the hidden capture window so it can
   // refresh its own Firebase session (and thus its listen-WS auth). Re-sent when
   // the capture window restarts, so a fresh one syncs immediately.
+  // Voice test hook (no-op unless OMI_E2E=1) — attached at the ROOT so the
+  // smoke harness can drive the voice controller even on the signed-out screen
+  // (its error-path assertion starts a session with no auth). Main window only.
+  useEffect(() => {
+    if (!IS_SECONDARY_WINDOW) attachVoiceE2eHook()
+  }, [])
+
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     const send = (): void =>

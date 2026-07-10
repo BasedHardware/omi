@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDown, Send } from 'lucide-react'
+import { ArrowDown, AudioLines, Send } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/appState'
@@ -12,6 +12,7 @@ import omiMark from '../assets/omi-logo.png'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
+import { VoiceSessionSurface } from '../components/voice/VoiceSessionSurface'
 
 function firstName(u: User | null): string {
   const display = u?.displayName?.trim().split(/\s+/)[0]
@@ -39,6 +40,8 @@ function ChatBar(props: {
   onChange: (v: string) => void
   onSend: () => void
   sending: boolean
+  voiceOpen: boolean
+  onToggleVoice: () => void
 }): React.JSX.Element {
   // Solid (no backdrop-blur): a blurred bar re-rasterizes every frame during the
   // bar's slide, which made that transition feel laggy.
@@ -53,6 +56,18 @@ function ChatBar(props: {
         placeholder="Ask Omi…"
         className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
       />
+      <button
+        onClick={props.onToggleVoice}
+        aria-label={props.voiceOpen ? 'Hide voice session' : 'Talk with Omi'}
+        className={cn(
+          'shrink-0 rounded-xl p-2.5 transition-colors',
+          props.voiceOpen
+            ? 'bg-white/[0.14] text-white'
+            : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.12] hover:text-white'
+        )}
+      >
+        <AudioLines className="h-4 w-4" />
+      </button>
       <button
         disabled={props.sending}
         onClick={props.onSend}
@@ -189,6 +204,9 @@ export function Home(): React.JSX.Element {
   // Draft text is LOCAL state (not in the app-wide chat hook) so typing only
   // re-renders Home's chat bar — not the whole app shell + every mounted page.
   const [input, setInput] = useState('')
+  // Voice-session surface (Phase 6), toggled from the chat bar. The surface
+  // component is host-agnostic — the Phase 4 bar mounts the same one later.
+  const [voiceOpen, setVoiceOpen] = useState(false)
   const handleSend = (): void => {
     const text = input
     if (!text.trim() || chat.sending) return
@@ -437,7 +455,19 @@ export function Home(): React.JSX.Element {
       {/* Chat bar — rides to the bottom via the spacer collapse. */}
       <div className="py-3">
         <div className="fade-in-slow mx-auto max-w-4xl">
-          <ChatBar value={input} onChange={setInput} onSend={handleSend} sending={chat.sending} />
+          {voiceOpen && (
+            <div className="mb-2">
+              <VoiceSessionSurface onClose={() => setVoiceOpen(false)} />
+            </div>
+          )}
+          <ChatBar
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            sending={chat.sending}
+            voiceOpen={voiceOpen}
+            onToggleVoice={() => setVoiceOpen((v) => !v)}
+          />
         </div>
       </div>
 
