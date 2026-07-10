@@ -73,6 +73,15 @@ struct BrowserGoogleSession: Equatable {
                     value = decrypted.decode('latin-1')
                 except Exception:
                     continue
+            elif enc[:1] == b'v' and enc[1:3].isdigit():
+                # Versioned but not v10/v11 (e.g. v20 app-bound, or a newer macOS
+                # scheme whose key lives in iCloud Keychain). We can't decrypt it, so
+                # skip it — never fall through to the plaintext branch below, which
+                # would emit the raw ciphertext as a garbage "cookie" value.
+                # ponytail: deliberately no v20/app-bound decoder (YAGNI on macOS
+                # today). Ceiling: these browsers silently contribute no cookies;
+                # upgrade path is Google OAuth, not a per-version scraper.
+                continue
             elif enc:
                 try:
                     value = enc.decode('latin-1')
