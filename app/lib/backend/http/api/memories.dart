@@ -15,7 +15,7 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromJson(json.decode(response.body));
+    return Memory.fromGeneratedWireJson(json.decode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
@@ -32,21 +32,51 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   return response.statusCode == 200;
 }
 
-Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return [];
+/// Result of [getMemories], carrying whether server-side device_scope was supported.
+class GetMemoriesResult {
+  final List<Memory> memories;
+  final bool deviceScopeSupported;
+
+  const GetMemoriesResult(this.memories, this.deviceScopeSupported);
+}
+
+List<Memory> _decodeMemoriesResponse(String body) {
+  return (json.decode(body) as List<dynamic>)
+      .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
+      .toList();
+}
+
+Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+  var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
+  if (thisDeviceOnly) {
+    url += '&device_scope=current';
+  }
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null) {
+    return GetMemoriesResult([], !thisDeviceOnly);
+  }
   if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded is List) {
-      return decoded.map((e) => Memory.fromJson(e)).toList();
+    try {
+      return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
+    } catch (e) {
+      Logger.error('Failed to decode memories 200 response: $e');
+      return const GetMemoriesResult([], true);
     }
   }
-  return [];
+  // Legacy memory users cannot use server-side device_scope; fetch all and
+  // signal that local device filtering should be skipped to avoid hiding
+  // legacy rows that have no primary_capture_device/capture_device_ids.
+  if (thisDeviceOnly && response.statusCode == 400) {
+    final fallback = await getMemoriesResult(limit: limit, offset: offset);
+    return GetMemoriesResult(fallback.memories, false);
+  }
+  return GetMemoriesResult([], !thisDeviceOnly);
+}
+
+/// Convenience wrapper for callers that do not need the device_scope support flag.
+Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+  final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: thisDeviceOnly);
+  return result.memories;
 }
 
 Future<bool> deleteMemoryServer(String memoryId) async {

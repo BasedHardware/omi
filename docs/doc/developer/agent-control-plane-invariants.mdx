@@ -1,0 +1,165 @@
+# Agent Control Plane Invariants
+
+**Status:** Enforced contract for Phase 1 control-plane changes
+**Scope:** Normative invariants and guard tests. Architecture, schema rationale,
+and rollout phases remain in [agent-control-plane](/doc/developer/agent-control-plane).
+
+Future PRs that touch `desktop/macos/agent/src/runtime`, adapter bindings,
+control tools, request-scoped relay state, or startup reconciliation should name
+the invariant they affect and update the matching guard test.
+
+## Identity
+
+### Omi IDs and adapter-native IDs are separate namespaces
+
+`session_id`, `run_id`, `attempt_id`, `binding_id`, `artifact_id`,
+`delegation_id`, and `grant_id` are Omi-owned. Adapter-native session IDs are
+opaque adapter data and live only in `adapter_bindings.adapter_native_session_id`
+or explicitly named compatibility fields such as `adapterSessionId` and
+`legacyAdapterSessionId`.
+
+Guard surface:
+
+- `assertAdapterBindingContract` rejects adapters that return an Omi session ID
+  as their native session ID.
+- `assertAdapterAttemptResultContract` rejects terminal results that conflate or
+  drift away from the binding's adapter-native ID.
+- `runtime-adapter.test.ts` pins both failure modes.
+
+### An Omi session ID does not change when bindings change
+
+Adapter changes, stale native sessions, process restarts, and model or MCP
+compatibility changes create a new binding generation or attempt under the same
+Omi session/run as appropriate.
+
+Guard surface:
+
+- `adapter_bindings.binding_generation` is monotonic per session/adapter.
+- Binding compatibility hashes include cwd, system prompt, and the
+  adapter-effective MCP server set.
+- `run-attempt-lifecycle.test.ts` and `adapter-binding.test.ts` cover stale
+  binding retry, compatibility changes, and request-scoped MCP env stripping.
+
+## Authority
+
+### Owner authority comes from active Omi context
+
+The active owner for a control operation comes from the Omi request, run, or
+attempt context. Tool-supplied `ownerId` values are guards: they can reject a
+request, but they do not authorize it.
+
+Guard surface:
+
+- `control-tools.ts` rejects owner-scoped adapter-originated calls without active
+  request, run, or attempt context.
+- `kernel.ts` validates session, run, attempt, and artifact selectors against
+  the active owner.
+- `control-tools.test.ts` covers mismatched guards, cold direct control, and
+  concurrent owner-scoped tool calls.
+
+### Request-scoped state is keyed by client and request
+
+A bare `requestId` is not unique under concurrent clients. Request-scoped
+control and relay maps must use `(clientId, requestId)`.
+
+Guard surface:
+
+- `compatibility-facade.ts` stores active request state by
+  `JSON.stringify([clientId, requestId])`.
+- `tool-relay.test.ts`, `tool-correlation.test.ts`, `control-tools.test.ts`, and
+  `compatibility-facade.test.ts` cover concurrent clients and missing client IDs.
+
+## Lifecycle
+
+### Exactly one non-terminal attempt per run has execution authority
+
+Only one attempt with status `queued`, `starting`, `running`, `waiting_input`,
+`waiting_approval`, or `cancelling` may exist for a run.
+
+Guard surface:
+
+- The kernel refuses to create a second active attempt.
+- SQLite enforces `run_attempts_one_active_per_run_uq`, a partial unique index
+  on `run_attempts(run_id)` for active statuses.
+- The migration that introduces the index repairs legacy duplicate active
+  attempts by orphaning older attempts and writing `attempt.orphaned` events in
+  the same transaction before installing the index.
+- `sqlite-store.test.ts` verifies the storage-level invariant.
+
+### Silence, disappearance, and UI dismissal are not success
+
+Run completion is determined only by a terminal kernel state persisted by the
+control plane. Startup reconciliation marks active attempts `orphaned`; it does
+not infer success from process disappearance.
+
+Guard surface:
+
+- `reconcileStartup()` updates active attempts to `orphaned`, marks
+  non-resumable active bindings stale, and creates recovery dispatches for
+  interrupted delegations.
+- `sqlite-store.test.ts` and `run-attempt-lifecycle.test.ts` cover startup
+  reconciliation and idempotent recovery dispatch behavior.
+
+### Cancellation acknowledgement is truthful
+
+`dispatchAttempted` and `adapterAcknowledged` are separate. A cancelled run is
+terminally `cancelled` even if partial text exists. `adapterAcknowledged` remains
+false unless the adapter independently confirms cancellation or the worker is
+known terminated.
+
+Guard surface:
+
+- `CancelDispatchResult` carries both fields.
+- Adapter capability expectations mark acknowledgement gaps as
+  `known_limitation` with follow-up ticket references.
+
+## Binding Compatibility
+
+### Compatibility is determined by stable adapter-effective inputs
+
+The kernel hashes cwd, system prompt, and stable MCP server configuration to
+decide whether a binding is reusable. If an adapter mutates MCP servers before
+passing them to its native runtime, it must implement `effectiveMcpServers` so
+the hash reflects what the adapter actually saw.
+
+Guard surface:
+
+- `stableMcpServerConfig` strips request-scoped MCP env keys before hashing.
+- `RuntimeAdapter.effectiveMcpServers` documents adapter mutation behavior.
+- `run-attempt-lifecycle.test.ts` covers request-scoped env changes and
+  adapter-stripped MCP sets.
+
+### Process-local bindings are pinned or stale
+
+Bindings with `resume_fidelity = 'none'` must be pinned to their worker while
+active. On restart they become stale and cannot be treated as native-resumable.
+
+Guard surface:
+
+- The capability matrix requires `pinnedWorker` for process-local production
+  adapters.
+- Worker-pool tests enforce one active attempt per worker and idle pinned-worker
+  retention.
+- Startup reconciliation marks active non-resumable bindings stale.
+
+### Adapter capabilities are explicit
+
+Every production adapter must declare `required`, `unsupported`, or
+`known_limitation` for every capability key. Known limitations need a follow-up
+ticket.
+
+Guard surface:
+
+- `ADAPTER_CAPABILITY_MATRIX` is the source of truth.
+- `runtime-adapter.test.ts` verifies production expectations and ticketed known
+  limitations.
+
+## Persistence
+
+Lifecycle state transitions and their durable events should commit in the same
+SQLite transaction. New store paths must use `AgentStore.withTransaction` when
+they persist both a state transition and an event row.
+
+Startup reconciliation must be deterministic and idempotent. Re-running it
+should either no-op or strictly refine stale interrupted state without producing
+duplicate recovery dispatches.

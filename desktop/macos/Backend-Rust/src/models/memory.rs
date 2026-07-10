@@ -39,6 +39,8 @@ pub struct MemoryDB {
     pub category: MemoryCategory,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub memory_id: Option<String>,
     pub conversation_id: Option<String>,
     #[serde(default)]
     pub reviewed: bool,
@@ -77,10 +79,28 @@ pub struct MemoryDB {
     pub current_activity: Option<String>,
     /// Window title when memory was extracted
     pub window_title: Option<String>,
+    /// Protection level for encrypted memory content.
+    #[serde(default)]
+    pub data_protection_level: Option<String>,
+    /// Temporal lifecycle fields owned by Python's memory brain.
+    #[serde(default)]
+    pub valid_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub invalid_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub superseded_by: Option<String>,
+    #[serde(default)]
+    pub edited: bool,
+    #[serde(default)]
+    pub is_locked: bool,
+    #[serde(default)]
+    pub kg_extracted: bool,
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 fn default_visibility_field() -> String {
-    "private".to_string()
+    "public".to_string()
 }
 
 impl MemoryDB {
@@ -99,14 +119,20 @@ impl MemoryDB {
             MemoryCategory::Interesting => 1,
             MemoryCategory::System => 0,
             MemoryCategory::Manual => 1,
-            // Legacy categories - treat as system
-            MemoryCategory::Core | MemoryCategory::Hobbies |
-            MemoryCategory::Lifestyle | MemoryCategory::Interests => 0,
+            MemoryCategory::Workflow => 1,
+            MemoryCategory::Core
+            | MemoryCategory::Hobbies
+            | MemoryCategory::Lifestyle
+            | MemoryCategory::Interests
+            | MemoryCategory::Work
+            | MemoryCategory::Skills
+            | MemoryCategory::Learnings => 1,
+            MemoryCategory::Habits | MemoryCategory::Other | MemoryCategory::Auto => 0,
         };
         let cat_boost = 999 - category_boost;
 
         let timestamp = created_at.timestamp();
 
-        format!("{:02}_{:03}_{:010}", manual_boost, cat_boost, timestamp)
+        format!("{:02}_{:02}_{:010}", manual_boost, cat_boost, timestamp)
     }
 }

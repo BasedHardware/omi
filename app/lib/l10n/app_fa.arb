@@ -1,5 +1,6 @@
 {
     "@@locale": "fa",
+    "sessionExpiredSignInAgain": "جلسه منقضی شد — دوباره وارد شوید.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.",
     "transcribeLaterTitle": "رونویسی در زمان دلخواه",
     "transcribeLaterDescription": "صدا را همین حالا ضبط کنید و به‌جای رونویسی زنده، هر وقت خواستید آن را رونویسی کنید. ضبط‌ها روی گوشی شما ذخیره می‌شوند و سپس با بارگذاری آن‌ها گفت‌وگوها ساخته می‌شوند.",
-    "transcribeLaterNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
+    "transcribeLaterNote": "فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
     "transcribeLaterStorageFull": "فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.",
     "unmute": "باصدا کردن",
     "newRecording": "ضبط جدید",
@@ -10642,6 +10643,12 @@
     "captureModeLiveDescription": "رونویسی همزمان هنگام صحبت کردن.",
     "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.",
     "backgroundModeUnavailable": "حالت پس‌زمینه در دسترس نیست چون هیچ دستگاه سازگاری متصل نیست. برای استفاده از این ویژگی، یک دستگاه Omi، OpenGlass یا Friend Pendant وصل کنید.",
+    "memoryThisDevice": "این دستگاه",
+    "memoryThisIphone": "این iPhone",
+    "memoryThisPhone": "این تلفن",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "نحوه استفاده از Omi",
     "deviceOnboardingTranscriptionTitle": "با Omi خود صحبت کنید",
     "deviceOnboardingTranscriptionSubtitle": "چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید",
@@ -10675,5 +10682,44 @@
     "deviceOnboardingIntroSubtitle": "یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
     "jumpToLatestMessage": "پرش به آخرین پیام",
-    "latest": "آخرین"
+    "latest": "آخرین",
+    "flashFirmware": "فلش کردن میان‌افزار",
+    "pendantRecordingTitle": "در حال ضبط روی آویز",
+    "pendantRecordingNote": "آویز شما به‌صورت مستقل ضبط می‌کند. تا وقتی برنامه باز است، ضبط‌ها با گوشی شما همگام‌سازی می‌شوند.",
+    "pendantSyncingRecordings": "در حال همگام‌سازی ضبط‌ها از آویز شما…",
+    "pendantMinutesStored": "~{minutes} دقیقه ذخیره شده",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید.",
+    "connectRayBanMeta": "اتصال Ray-Ban Meta",
+    "raybanMetaSetupDescription": "از عینک Ray-Ban Meta خود به‌عنوان دستگاه ضبط Omi برای گفتگوها و زمینه‌ی بصری استفاده کنید. Omi برنامه‌ی Meta AI را باز می‌کند تا عینک شما را متصل کند.",
+    "raybanMetaOpenMetaAI": "اتصال از طریق Meta AI",
+    "raybanMetaWaitingForMetaAI": "اتصال را در برنامه‌ی Meta AI کامل کنید، سپس به اینجا بازگردید.",
+    "raybanMetaCheckAgain": "بررسی دوباره",
+    "raybanMetaAllowCamera": "اجازه‌ی دوربین روی عینک",
+    "raybanMetaCameraExplanation": "Omi از دوربین عینک شما برای افزودن عکس به گفتگوهای شما استفاده می‌کند. می‌توانید از این مرحله صرف‌نظر کنید و فقط از صدا استفاده کنید.",
+    "raybanMetaSkipForNow": "فعلاً رد شود",
+    "raybanMetaAudioOnlyTitle": "حالت فقط صوتی Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "این نسخه از Omi می‌تواند از میکروفون عینک شما از طریق Bluetooth استفاده کند. ضبط عکس به نسخه‌ی توسعه‌دهنده‌ی Meta از Omi نیاز دارد.",
+    "raybanMetaMusicPauseNote": "موسیقی روی تلفن شما هنگام استفاده از میکروفون عینک متوقف می‌شود.",
+    "raybanMetaContinue": "ادامه",
+    "raybanMetaCapturePhoto": "گرفتن عکس",
+    "raybanMetaPhotoRequested": "عکس درخواست شد — در گفتگوی شما نمایش داده خواهد شد.",
+    "raybanMetaMicrophoneReady": "میکروفون آماده است",
+    "raybanMetaImageCaptureReady": "ضبط تصویر آماده است",
+    "raybanMetaImageCaptureUnavailable": "در حالت فقط صوتی در دسترس نیست",
+    "raybanMetaCamera": "دوربین",
+    "errorConnectingRayBanMeta": "خطا در اتصال به Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

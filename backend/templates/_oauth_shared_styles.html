@@ -1,0 +1,848 @@
+<style>
+    :root {
+        color-scheme: light dark;
+
+        /* Surfaces */
+        --bg-base: #f1f1ee;
+        --bg-glow: rgba(255, 255, 255, 0.9);
+        --surface: #ffffff;
+        --surface-muted: #fafaf8;
+        --surface-sunken: #f3f3f0;
+        --tile: #f0f0ec;
+
+        /* Text */
+        --text: #131312;
+        --muted: #67675f;
+        --faint: #8c8c84;
+
+        /* Lines */
+        --border: #e7e7e1;
+        --border-strong: #d6d6ce;
+        --line: #d7d7cf;
+
+        /* Accents */
+        --btn-bg: #131312;
+        --btn-bg-hover: #2c2c2a;
+        --btn-fg: #ffffff;
+        --brand-tile-bg: #131312;
+        --brand-tile-fg: #ffffff;
+        --provider-bg: #ffffff;
+        --provider-fg: #131312;
+        --provider-bg-hover: #f5f5f1;
+
+        /* Feedback */
+        --ring: rgba(19, 19, 18, 0.14);
+        --danger: #b3261e;
+        --danger-bg: #fdf3f1;
+        --danger-border: rgba(179, 38, 30, 0.26);
+        --success: #15803d;
+        --success-bg: rgba(21, 128, 61, 0.1);
+        --scroll-shadow: rgba(19, 19, 18, 0.1);
+
+        --radius-card: 18px;
+        --radius: 12px;
+        --radius-sm: 10px;
+        --shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 24px 60px -20px rgba(17, 17, 17, 0.22);
+        --shadow-tile: 0 1px 2px rgba(17, 17, 17, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg-base: #0b0b0c;
+            --bg-glow: rgba(255, 255, 255, 0.045);
+            --surface: #161618;
+            --surface-muted: #1b1b1e;
+            --surface-sunken: #202024;
+            --tile: #232327;
+
+            --text: #f4f4f1;
+            --muted: #a4a49e;
+            --faint: #7c7c76;
+
+            --border: #2a2a2e;
+            --border-strong: #3b3b41;
+            --line: #34343a;
+
+            --btn-bg: #f4f4f1;
+            --btn-bg-hover: #e3e3dd;
+            --btn-fg: #131312;
+            --brand-tile-bg: #f4f4f1;
+            --brand-tile-fg: #131312;
+            --provider-bg: #232327;
+            --provider-fg: #f4f4f1;
+            --provider-bg-hover: #2b2b30;
+
+            --ring: rgba(255, 255, 255, 0.22);
+            --danger: #ff7a6e;
+            --danger-bg: rgba(255, 122, 110, 0.1);
+            --danger-border: rgba(255, 122, 110, 0.3);
+            --success: #4ade80;
+            --success-bg: rgba(74, 222, 128, 0.12);
+            --scroll-shadow: rgba(0, 0, 0, 0.55);
+
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 30px 70px -24px rgba(0, 0, 0, 0.7);
+            --shadow-tile: 0 1px 2px rgba(0, 0, 0, 0.4);
+        }
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    /* The hidden attribute must win over component display rules
+       (e.g. .consent-retry { display: grid }) so the consent button
+       stays hidden until the user has signed in. */
+    [hidden] {
+        display: none !important;
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        background:
+            radial-gradient(120% 80% at 50% -10%, var(--bg-glow), transparent 60%),
+            var(--bg-base);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    .oauth-shell {
+        width: min(100%, 440px);
+    }
+
+    .oauth-card {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-card);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+    }
+
+    /* ---- Header ---- */
+    .oauth-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-muted);
+    }
+
+    .omi-logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    .omi-logo .omi-mark {
+        width: 22px;
+        height: 22px;
+    }
+
+    .oauth-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+
+    .oauth-eyebrow svg {
+        width: 13px;
+        height: 13px;
+        opacity: 0.85;
+    }
+
+    /* ---- Content ---- */
+    .oauth-content {
+        padding: 30px 26px 26px;
+    }
+
+    /* ---- Connection lockup hero ---- */
+    .oauth-hero {
+        text-align: center;
+        margin-bottom: 26px;
+    }
+
+    .connect-lockup {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 2px auto 22px;
+    }
+
+    .lockup-tile {
+        width: 60px;
+        height: 60px;
+        flex: 0 0 60px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        font-size: 24px;
+        font-weight: 700;
+        overflow: hidden;
+        box-shadow: var(--shadow-tile);
+    }
+
+    .lockup-app {
+        border: 1px solid var(--border-strong);
+        background: var(--tile);
+        color: var(--text);
+    }
+
+    .lockup-app img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .lockup-omi {
+        background: var(--brand-tile-bg);
+        color: var(--brand-tile-fg);
+        border: 1px solid transparent;
+    }
+
+    .lockup-omi .omi-mark {
+        width: 30px;
+        height: 30px;
+    }
+
+    .lockup-bridge {
+        position: relative;
+        flex: 0 0 64px;
+        height: 60px;
+        display: grid;
+        place-items: center;
+    }
+
+    .lockup-bridge::before {
+        content: "";
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-top: 2px dashed var(--line);
+    }
+
+    .lockup-bridge-badge {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        color: var(--muted);
+        box-shadow: var(--shadow-tile);
+    }
+
+    .lockup-bridge-badge svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    h1 {
+        margin: 0;
+        color: var(--text);
+        font-size: clamp(22px, 5vw, 27px);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+    }
+
+    .oauth-subtitle {
+        margin: 9px auto 0;
+        max-width: 34ch;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.5;
+    }
+
+    .oauth-subtitle strong {
+        color: var(--text);
+        font-weight: 650;
+    }
+
+    /* ---- Permissions ---- */
+    .permissions-card {
+        margin: 0 0 22px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-muted);
+        overflow: hidden;
+    }
+
+    .permissions-title {
+        margin: 0;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .permissions-list {
+        max-height: min(340px, 38vh);
+        overflow: auto;
+        overscroll-behavior: contain;
+        list-style: none;
+        padding: 6px;
+        margin: 0;
+        /* Scroll shadows: top/bottom cues appear only when the list overflows
+           (broad ChatGPT scopes), so users know to scroll for more. */
+        background:
+            linear-gradient(var(--surface-muted) 30%, rgba(0, 0, 0, 0)) center top,
+            linear-gradient(rgba(0, 0, 0, 0), var(--surface-muted) 70%) center bottom,
+            radial-gradient(farthest-side at 50% 0, var(--scroll-shadow), rgba(0, 0, 0, 0)) center top,
+            radial-gradient(farthest-side at 50% 100%, var(--scroll-shadow), rgba(0, 0, 0, 0)) center bottom;
+        background-repeat: no-repeat;
+        background-size: 100% 28px, 100% 28px, 100% 12px, 100% 12px;
+        background-attachment: local, local, scroll, scroll;
+    }
+
+    .permissions-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+        padding: 10px;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .permissions-list li + li {
+        border-top: 1px solid var(--border);
+    }
+
+    .perm-check {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+        margin-top: 1px;
+        display: inline-grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--success-bg);
+        color: var(--success);
+    }
+
+    .perm-check svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    /* Legacy fallback dot (kept for safety; not used in current markup) */
+    .permission-dot {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+        display: inline-grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--success-bg);
+        color: var(--success);
+    }
+
+    .permission-dot::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: currentColor;
+    }
+
+    /* ---- Actions ---- */
+    .oauth-actions {
+        display: grid;
+        gap: 14px;
+    }
+
+    .email-sign-in-form {
+        display: grid;
+        gap: 14px;
+    }
+
+    .oauth-field {
+        display: grid;
+        gap: 6px;
+    }
+
+    .oauth-field label {
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .oauth-field input {
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+        font-size: 16px;
+        line-height: 1.3;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .oauth-field input::placeholder {
+        color: var(--faint);
+    }
+
+    .oauth-field input:focus {
+        border-color: var(--text);
+        box-shadow: 0 0 0 3px var(--ring);
+        outline: none;
+    }
+
+    .oauth-field input:disabled,
+    .email-sign-in-button:disabled,
+    .connect-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
+
+    .btn-primary,
+    .email-sign-in-button,
+    .connect-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 50px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: var(--btn-bg);
+        color: var(--btn-fg);
+        font-size: 15px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
+    }
+
+    .email-sign-in-button:hover:not(:disabled),
+    .connect-button:hover:not(:disabled) {
+        background: var(--btn-bg-hover);
+    }
+
+    .email-sign-in-button:active:not(:disabled),
+    .connect-button:active:not(:disabled) {
+        transform: translateY(1px);
+    }
+
+    .oauth-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .oauth-divider::before,
+    .oauth-divider::after {
+        content: "";
+        height: 1px;
+        flex: 1;
+        background: var(--border);
+    }
+
+    /* ---- Signed-in identity (consent retry state) ---- */
+    .consent-retry {
+        display: grid;
+        gap: 12px;
+    }
+
+    .signed-in-chip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-muted);
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .signed-in-chip .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--success);
+        flex: 0 0 auto;
+    }
+
+    /* ---- Loader / error ---- */
+    .loader,
+    .error {
+        display: none;
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .loader {
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: var(--surface-sunken);
+        color: var(--muted);
+        text-align: center;
+    }
+
+    .loader.is-visible {
+        display: flex;
+    }
+
+    .spinner {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 2px solid var(--border-strong);
+        border-top-color: var(--text);
+        animation: oauth-spin 720ms linear infinite;
+        flex: 0 0 auto;
+    }
+
+    @keyframes oauth-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .error {
+        align-items: flex-start;
+        gap: 9px;
+        border: 1px solid var(--danger-border);
+        background: var(--danger-bg);
+        color: var(--danger);
+        font-weight: 500;
+        text-align: left;
+    }
+
+    .error.is-visible {
+        display: flex;
+    }
+
+    .error svg {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        margin-top: 1px;
+    }
+
+    /* ---- Footer ---- */
+    .oauth-footer {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 16px 22px;
+        border-top: 1px solid var(--border);
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .oauth-footer svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 15px;
+        margin-top: 1px;
+        opacity: 0.85;
+    }
+
+    .oauth-footer a {
+        color: var(--text);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: var(--border-strong);
+    }
+
+    .oauth-footer a:hover {
+        text-decoration-color: var(--text);
+    }
+
+    .oauth-footer strong {
+        color: var(--text);
+        font-weight: 650;
+    }
+
+    /* ---- Focus visibility ---- */
+    :focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+
+    button:focus-visible {
+        outline-offset: 3px;
+    }
+
+    /* =========================================================
+       FirebaseUI overrides — map FirebaseUI's MDL DOM onto the
+       Omi design system. Kept aligned with the native components
+       above so provider buttons / email forms look identical.
+       ========================================================= */
+    #firebaseui-auth-container {
+        min-height: 0;
+    }
+
+    #firebaseui-auth-container .mdl-card,
+    #firebaseui-auth-container .firebaseui-container {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--text) !important;
+        font-family: inherit !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-card-header,
+    #firebaseui-auth-container .firebaseui-title,
+    #firebaseui-auth-container .firebaseui-subtitle,
+    #firebaseui-auth-container .firebaseui-tos {
+        display: none !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-card-content,
+    #firebaseui-auth-container .firebaseui-card-actions {
+        width: 100% !important;
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-list-item {
+        margin: 0 0 10px !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-idp-list {
+        list-style: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-idp-button {
+        width: 100% !important;
+        max-width: none !important;
+        min-height: 50px !important;
+        margin: 0 !important;
+        padding: 0 16px !important;
+        border: 1px solid var(--border-strong) !important;
+        border-radius: var(--radius-sm) !important;
+        background: var(--provider-bg) !important;
+        color: var(--provider-fg) !important;
+        box-shadow: none !important;
+        text-align: center !important;
+        transition: background 120ms ease !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-idp-button:hover {
+        background: var(--provider-bg-hover) !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-idp-text,
+    #firebaseui-auth-container .firebaseui-idp-text-long {
+        color: var(--provider-fg) !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-idp-icon-wrapper {
+        left: 16px !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-textfield {
+        width: 100% !important;
+        margin: 0 0 18px !important;
+        padding: 0 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-textfield.mdl-textfield {
+        display: block !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-textfield input {
+        width: 100% !important;
+        height: 48px !important;
+        padding: 12px 14px !important;
+        border: 1px solid var(--border-strong) !important;
+        border-radius: var(--radius-sm) !important;
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        font-family: inherit !important;
+        font-size: 16px !important;
+        line-height: 1.3 !important;
+        box-sizing: border-box !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-textfield input:focus {
+        border-color: var(--text) !important;
+        box-shadow: 0 0 0 3px var(--ring) !important;
+        outline: none !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-label {
+        top: -18px !important;
+        color: var(--text) !important;
+        font-family: inherit !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+
+    #firebaseui-auth-container .mdl-textfield__label::after {
+        display: none !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-input,
+    #firebaseui-auth-container .mdl-textfield__input {
+        border-bottom: 0 !important;
+        color: var(--text) !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-form-actions {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        gap: 12px !important;
+        width: 100% !important;
+        margin: 18px 0 0 !important;
+        padding: 0 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-button {
+        min-width: 0 !important;
+        height: 46px !important;
+        margin: 0 !important;
+        padding: 0 18px !important;
+        border-radius: var(--radius-sm) !important;
+        box-shadow: none !important;
+        font-family: inherit !important;
+        font-size: 14px !important;
+        font-weight: 650 !important;
+        letter-spacing: 0 !important;
+        text-transform: none !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-id-submit {
+        background: var(--btn-bg) !important;
+        color: var(--btn-fg) !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-id-secondary-link,
+    #firebaseui-auth-container .firebaseui-link {
+        color: var(--text) !important;
+        font-weight: 600 !important;
+        text-decoration: underline !important;
+        text-underline-offset: 2px !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-error {
+        color: var(--danger) !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-info-bar {
+        margin: 0 0 14px !important;
+        padding: 10px 14px !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-sm) !important;
+        background: var(--surface-sunken) !important;
+        color: var(--muted) !important;
+        box-shadow: none !important;
+    }
+
+    #firebaseui-auth-container .firebaseui-info-bar-message {
+        color: var(--muted) !important;
+        font-family: inherit !important;
+        font-size: 13px !important;
+    }
+
+    #firebaseui-auth-container .mdl-progress > .progressbar {
+        background-color: var(--text) !important;
+    }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 480px) {
+        body {
+            align-items: flex-start;
+            padding: 0;
+            background: var(--surface);
+        }
+
+        .oauth-shell {
+            width: 100%;
+            min-height: 100dvh;
+        }
+
+        .oauth-card {
+            min-height: 100dvh;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .oauth-header {
+            background: var(--surface);
+        }
+
+        .oauth-content {
+            flex: 1;
+            padding: 28px 20px 24px;
+        }
+
+        .oauth-footer {
+            background: var(--surface);
+        }
+
+        .permissions-list {
+            max-height: none;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+        }
+    }
+</style>

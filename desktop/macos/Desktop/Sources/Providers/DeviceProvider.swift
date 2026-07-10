@@ -19,7 +19,9 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Singleton
 
-    static let shared = DeviceProvider()
+    static let shared = DeviceProvider(bluetoothManager: BluetoothManager.shared)
+    typealias ConnectionFactory = @MainActor (BtDevice) -> DeviceConnection?
+    typealias StorageDataChecker = @MainActor () async -> (totalBytes: Int, currentOffset: Int)?
 
     // MARK: - Published State
 
@@ -64,7 +66,12 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Private Properties
 
-    private var bluetoothManager: BluetoothManager { BluetoothManager.shared }
+    private let bluetoothManager: DeviceBluetoothManaging
+    private let userDefaults: UserDefaults
+    private let notificationCenter: NotificationCenter
+    private let connectionFactory: ConnectionFactory
+    private let storageDataChecker: StorageDataChecker
+    private let autoReconnectEnabled: Bool
     /// The active device connection (internal for AudioSourceManager access)
     private(set) var activeConnection: DeviceConnection?
     private var batterySubscription: Task<Void, Never>?
@@ -89,7 +96,20 @@ final class DeviceProvider: ObservableObject {
 
     private var hasSetupBluetoothBindings = false
 
-    private init() {
+    init(
+        bluetoothManager: DeviceBluetoothManaging,
+        userDefaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default,
+        connectionFactory: @escaping ConnectionFactory = { DeviceConnectionFactory.create(device: $0) },
+        storageDataChecker: @escaping StorageDataChecker = { await StorageSyncService.shared.checkForStorageData() },
+        autoReconnectEnabled: Bool = true
+    ) {
+        self.bluetoothManager = bluetoothManager
+        self.userDefaults = userDefaults
+        self.notificationCenter = notificationCenter
+        self.connectionFactory = connectionFactory
+        self.storageDataChecker = storageDataChecker
+        self.autoReconnectEnabled = autoReconnectEnabled
         setupNotificationBindings()
         loadPairedDevice()
     }
@@ -100,12 +120,14 @@ final class DeviceProvider: ObservableObject {
         guard !hasSetupBluetoothBindings else { return }
         hasSetupBluetoothBindings = true
 
-        // Force CBCentralManager creation to start receiving state updates
-        // This triggers the Bluetooth permission dialog on first use
-        _ = bluetoothManager.centralManager
+        bluetoothManager.prepareForStateUpdates()
+
+        bluetoothState = bluetoothManager.currentBluetoothState
+        isScanning = bluetoothManager.currentIsScanning
+        discoveredDevices = bluetoothManager.currentDiscoveredDevices
 
         // Observe Bluetooth state changes
-        bluetoothManager.$bluetoothState
+        bluetoothManager.bluetoothStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.bluetoothState = state
@@ -113,7 +135,7 @@ final class DeviceProvider: ObservableObject {
             .store(in: &cancellables)
 
         // Observe scanning state
-        bluetoothManager.$isScanning
+        bluetoothManager.isScanningPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] scanning in
                 self?.isScanning = scanning
@@ -121,7 +143,7 @@ final class DeviceProvider: ObservableObject {
             .store(in: &cancellables)
 
         // Observe discovered devices
-        bluetoothManager.$discoveredDevices
+        bluetoothManager.discoveredDevicesPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] devices in
                 self?.discoveredDevices = devices
@@ -132,7 +154,7 @@ final class DeviceProvider: ObservableObject {
     private func setupNotificationBindings() {
 
         // Observe BLE connection events
-        NotificationCenter.default.publisher(for: .bleDeviceConnected)
+        notificationCenter.publisher(for: .bleDeviceConnected)
             .receive(on: DispatchQueue.main)
             .compactMap { $0.userInfo?["peripheralId"] as? UUID }
             .sink { [weak self] peripheralId in
@@ -140,7 +162,7 @@ final class DeviceProvider: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.publisher(for: .bleDeviceDisconnected)
+        notificationCenter.publisher(for: .bleDeviceDisconnected)
             .receive(on: DispatchQueue.main)
             .compactMap { $0.userInfo?["peripheralId"] as? UUID }
             .sink { [weak self] peripheralId in
@@ -152,13 +174,13 @@ final class DeviceProvider: ObservableObject {
     // MARK: - Persistence
 
     private func loadPairedDevice() {
-        guard let deviceId = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceId),
+        guard let deviceId = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceId),
               !deviceId.isEmpty else {
             return
         }
 
-        let deviceName = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceName) ?? "Unknown Device"
-        let deviceTypeRaw = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceType) ?? "omi"
+        let deviceName = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceName) ?? "Unknown Device"
+        let deviceTypeRaw = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceType) ?? "omi"
         let deviceType = DeviceType(rawValue: deviceTypeRaw) ?? .omi
 
         pairedDevice = BtDevice(
@@ -173,14 +195,14 @@ final class DeviceProvider: ObservableObject {
 
     private func savePairedDevice(_ device: BtDevice?) {
         if let device = device {
-            UserDefaults.standard.set(device.id, forKey: UserDefaultsKeys.pairedDeviceId)
-            UserDefaults.standard.set(device.name, forKey: UserDefaultsKeys.pairedDeviceName)
-            UserDefaults.standard.set(device.type.rawValue, forKey: UserDefaultsKeys.pairedDeviceType)
+            userDefaults.set(device.id, forKey: UserDefaultsKeys.pairedDeviceId)
+            userDefaults.set(device.name, forKey: UserDefaultsKeys.pairedDeviceName)
+            userDefaults.set(device.type.rawValue, forKey: UserDefaultsKeys.pairedDeviceType)
             logger.info("Saved paired device: \(device.displayName)")
         } else {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceId)
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceName)
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceType)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceId)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceName)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceType)
             logger.info("Cleared paired device")
         }
     }
@@ -227,7 +249,7 @@ final class DeviceProvider: ObservableObject {
 
         do {
             // Create connection using factory
-            guard let connection = DeviceConnectionFactory.create(device: device) else {
+            guard let connection = connectionFactory(device) else {
                 throw DeviceConnectionError.connectionFailed("Failed to create connection")
             }
 
@@ -330,6 +352,7 @@ final class DeviceProvider: ObservableObject {
 
     /// Start periodic reconnection attempts
     func startReconnectionTimer() {
+        guard autoReconnectEnabled else { return }
         guard pairedDevice != nil else { return }
         guard reconnectionTimer == nil else { return }
 
@@ -463,7 +486,7 @@ final class DeviceProvider: ObservableObject {
 
     /// Check if device has pending storage data to sync
     private func checkPendingStorageSync() async {
-        guard let (totalBytes, currentOffset) = await StorageSyncService.shared.checkForStorageData() else {
+        guard let (totalBytes, currentOffset) = await storageDataChecker() else {
             return
         }
 
@@ -476,7 +499,7 @@ final class DeviceProvider: ObservableObject {
             logger.info("Device has \(String(format: "%.1f", mbToSync)) MB of audio data pending sync")
 
             // Post notification that storage sync is available
-            NotificationCenter.default.post(
+            notificationCenter.post(
                 name: .storageSyncAvailable,
                 object: nil,
                 userInfo: ["bytesToSync": bytesToSync]

@@ -11,7 +11,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/memories/page.dart';
+import 'package:omi/services/client_device_service.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -29,16 +29,25 @@ class MemoryItem extends StatelessWidget {
   final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
 
+  /// Invoked after a swipe-to-delete so the host page can show an undo
+  /// notification. Optional — hosts without one (e.g. category page) omit it.
+  final void Function(String content, Memory memory)? onDeleteNotification;
+
   const MemoryItem({
     super.key,
     required this.memory,
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
+    this.onDeleteNotification,
   });
 
   @override
   Widget build(BuildContext context) {
+    final provenanceType = ClientDeviceService.instance.deviceProvenanceType(
+      primaryCaptureDevice: memory.primaryCaptureDevice,
+    );
+    final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
     final Widget memoryWidget = GestureDetector(
       onTap: () {
         onTap(context, memory, provider);
@@ -59,7 +68,14 @@ class MemoryItem extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [Text(memory.content.decodeString, style: AppStyles.body)],
+                    children: [
+                      Text(memory.content.decodeString, style: AppStyles.body),
+                      if (provenanceLabel != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(provenanceLabel, style: TextStyle(fontSize: 11, color: AppStyles.textTertiary)),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
@@ -127,9 +143,7 @@ class MemoryItem extends StatelessWidget {
         provider.deleteMemory(memory);
         PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
-        if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
-          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
-        }
+        onDeleteNotification?.call(memoryContent, memory);
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -142,6 +156,28 @@ class MemoryItem extends StatelessWidget {
     );
   }
 
+  /// Resolves a [DeviceProvenanceType] to a localized label, or null if none.
+  String? _resolveProvenanceLabel(BuildContext context, DeviceProvenanceType? type) {
+    switch (type) {
+      case DeviceProvenanceType.thisDevice:
+        return context.l10n.memoryThisDevice;
+      case DeviceProvenanceType.thisIphone:
+        return context.l10n.memoryThisIphone;
+      case DeviceProvenanceType.thisPhone:
+        return context.l10n.memoryThisPhone;
+      case DeviceProvenanceType.mac:
+        return context.l10n.memoryProvenanceMac;
+      case DeviceProvenanceType.iphone:
+        return context.l10n.memoryProvenanceIphone;
+      case DeviceProvenanceType.android:
+        return context.l10n.memoryProvenanceAndroid;
+      case DeviceProvenanceType.other:
+        return null; // Unknown devices show no provenance label.
+      case null:
+        return null;
+    }
+  }
+
   Widget _buildConversationLinkButton(BuildContext context) {
     return GestureDetector(
       onTap: () => _navigateToConversation(context),
@@ -152,7 +188,7 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
+        child: Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
       ),
     );
   }
@@ -267,7 +303,7 @@ class MemoryItem extends StatelessWidget {
   // PopupMenuItem<MemoryVisibility> _buildVisibilityItem(
   //   BuildContext context,
   //   MemoryVisibility visibility,
-  //   IconData icon,
+  //   FaIconData icon,
   //   String description,
   // ) {
   //   final isSelected = memory.visibility == visibility;

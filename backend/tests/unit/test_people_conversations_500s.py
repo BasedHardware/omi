@@ -7,13 +7,8 @@ Regression tests for #5423 (Person model validation) and #5424 (conversations re
        for every conversation, exceeding Cloud Run's 32MB response limit.
 """
 
-import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
-
-# Mock Firestore client before importing database modules
-_client_mod = MagicMock()
-sys.modules.setdefault('database._client', _client_mod)
 
 from models.other import Person
 

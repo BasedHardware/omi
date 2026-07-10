@@ -72,6 +72,7 @@ export function RewindTab(): React.JSX.Element {
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
   useEffect(() => {
     if (insight && !INSIGHT_INTERVALS.includes(insight.intervalMin)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
       void patchInsight({ intervalMin: 15 })
     }
   }, [insight])

@@ -116,6 +116,8 @@ if _endpoints is None:
     sys.modules['utils.other.endpoints'] = _endpoints
 _endpoints.get_current_user_uid = lambda: 'uid1'
 _endpoints.with_rate_limit = lambda dependency, _policy: dependency
+_endpoints.with_rate_limit_context = lambda dependency, _policy: dependency
+_endpoints.check_api_key_rate_limit = MagicMock()
 _endpoints.get_user = MagicMock()
 
 _ensure_package_path('models', BACKEND_DIR / 'models')

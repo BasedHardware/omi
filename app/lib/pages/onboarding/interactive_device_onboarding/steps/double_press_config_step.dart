@@ -118,10 +118,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
+          border: Border.all(color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1), width: 1),
         ),
         child: Column(
           children: [
@@ -150,19 +147,19 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(description,
-                          style: TextStyle(
-                              color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E),
-                              fontSize: 13)),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E),
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            if (isSelected) ...[
-              const SizedBox(height: 12),
-              _buildInlineDemo(action, provider.doublePressCount),
-            ],
+            if (isSelected) ...[const SizedBox(height: 12), _buildInlineDemo(action, provider.doublePressCount)],
           ],
         ),
       ),

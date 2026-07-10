@@ -1,65 +1,64 @@
+import json
+import os
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, List, Tuple, cast
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Add the project root to the Python path
 project_root = str(Path(__file__).resolve().parents[2])
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# File to store the state
-STATE_FILE = 'chat_state.json'
-
-# Add the project root to the Python path
-project_root = str(Path(__file__).resolve().parents[2])
-if project_root not in sys.path:
-    sys.path.append(project_root)
-
-from current import *
-from _shared import *
+from current import *  # noqa: F401, F403
+from _shared import *  # noqa: F401, F403
 from database.auth import get_user_name
-from models.chat import Message
+from models.chat import Message, MessageSender, MessageType
 from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import qa_rag
-from utils.retrieval.rag import retrieve_rag_context
 
-# File to store the state
+from utils.retrieval import rag as _rag_module
+
+# retrieve_rag_context was removed from utils.retrieval.rag; keep a typed alias for this legacy script.
+retrieve_rag_context: Any = cast(Any, getattr(_rag_module, 'retrieve_rag_context', None))
 STATE_FILE = 'chat_state.json'
 
 
 # Custom JSON encoder to handle datetime objects and Memory objects
 class CustomEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return {'__datetime__': obj.isoformat()}
-        if isinstance(obj, Conversation):
-            return {'__memory__': obj.dict()}
-        return super().default(obj)
+    def default(self, o: Any) -> Any:
+        if isinstance(o, datetime):
+            return {'__datetime__': o.isoformat()}
+        if isinstance(o, Conversation):
+            return {'__memory__': o.dict()}
+        return super().default(o)
 
 
 # Custom JSON decoder to handle datetime objects and Memory objects
 class CustomDecoder(json.JSONDecoder):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
-    @staticmethod
-    def object_hook(dct):
+    def object_hook(self, dct: dict[str, Any]) -> Any:  # type: ignore[override]
         if '__datetime__' in dct:
-            return datetime.fromisoformat(dct['__datetime__'])
+            return datetime.fromisoformat(str(dct['__datetime__']))
         if '__memory__' in dct:
-            return Conversation(**dct['__memory__'])
+            return Conversation(**cast(dict[str, Any], dct['__memory__']))
         return dct
 
 
 # Load state from file
-def load_state():
+def load_state() -> dict[str, Any]:
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
-                state = json.load(f, cls=CustomDecoder)
-            return state
+                state: Any = json.load(f, cls=CustomDecoder)
+            return cast(dict[str, Any], state)
         except json.JSONDecodeError as e:
             st.error(f"Error loading state: {str(e)}. Starting with a fresh state.")
             os.rename(STATE_FILE, f"{STATE_FILE}.bak")
@@ -70,8 +69,8 @@ def load_state():
 
 
 # Save state to file
-def save_state():
-    state = {
+def save_state() -> None:
+    state: dict[str, Any] = {
         'messages': st.session_state.messages,
         'visualizations': st.session_state.visualizations,
         'contexts': st.session_state.contexts,
@@ -93,35 +92,43 @@ if 'memories' not in st.session_state:
     st.session_state.memories = state['memories']
 
 
-def add_message(message: Message):
+def add_message(message: Message) -> None:
     st.session_state.messages.append(message.__dict__)
     save_state()
 
 
 def get_messages(limit: int = 10) -> List[Message]:
-    return [Message(**msg) for msg in st.session_state.messages[-limit:]]
+    return [Message(**msg) for msg in cast(List[Any], st.session_state.messages)[-limit:]]
 
 
-def send_message(text: str):
-    human_message = Message(id=str(uuid.uuid4()), text=text, created_at=datetime.utcnow(), sender='human', type='text')
+def send_message(text: str) -> None:
+    human_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender=MessageSender.human,
+        type=MessageType.text,
+    )
     add_message(human_message)
 
     # Retrieve context and generate response
-    data = retrieve_rag_context(uid, get_messages(), return_context_params=True)
-    topics, dates_range = [], []
+    data: Any = retrieve_rag_context(uid, get_messages(), return_context_params=True)
+    topics: List[str] = []
 
+    context_str: str
+    memories: Any
     if len(data) == 2:
-        context_str, memories = data
+        context_str, memories = cast(Tuple[str, Any], data)
     else:
-        context_str, memories, topics, dates_range = data
+        context_str, memories, topics, _ = cast(Tuple[str, Any, List[str], Any], data)
 
-    response: str = qa_rag(uid, context_str, get_messages(), None)
+    response: str = qa_rag(uid, context_str, context_str, None, messages=get_messages())
 
     # Generate visualization
     ai_message_id = str(uuid.uuid4())
     if topics:
         file_name = f'{ai_message_id}.html'
-        generate_visualization(topics, memories, file_name)
+        generate_visualization(topics, cast(List[Conversation], memories), file_name)
         visualization_path = os.path.join(project_root, 'scripts', 'rag', 'visualizations', file_name)
         if os.path.exists(visualization_path):
             with open(visualization_path, 'r') as f:
@@ -131,12 +138,18 @@ def send_message(text: str):
     st.session_state.contexts[ai_message_id] = context_str
     st.session_state.memories[ai_message_id] = memories
 
-    ai_message = Message(id=ai_message_id, text=response, created_at=datetime.utcnow(), sender='ai', type='text')
+    ai_message = Message(
+        id=ai_message_id,
+        text=response,
+        created_at=datetime.now(timezone.utc),
+        sender=MessageSender.ai,
+        type=MessageType.text,
+    )
     add_message(ai_message)
     save_state()
 
 
-def clear_state():
+def clear_state() -> None:
     st.session_state.messages = []
     st.session_state.visualizations = {}
     st.session_state.contexts = {}
@@ -195,24 +208,28 @@ if st.button("Clear Chat History"):
     clear_state()
 
 # Display chat messages with inline visualizations and context
+visualizations = cast(dict[str, str], st.session_state.visualizations)
+contexts = cast(dict[str, str], st.session_state.contexts)
+memories_state = cast(dict[str, List[Conversation]], st.session_state.memories)
+
 for message in get_messages():
     with st.chat_message(message.sender):
         st.write(f"{message.text}")
 
         # Display visualization if available
-        if message.id in st.session_state.visualizations:
-            st.components.v1.html(st.session_state.visualizations[message.id], height=600)
+        if message.id in visualizations:
+            components.html(visualizations[message.id], height=600)
 
         # Display context used by AI
-        if message.id in st.session_state.contexts:
+        if message.id in contexts:
             with st.expander("Show Context Used"):
-                st.code(st.session_state.contexts[message.id], language="")
+                st.code(contexts[message.id], language="")
 
         # Display memories used for context
-        if message.id in st.session_state.memories:
+        if message.id in memories_state:
             with st.expander("Show Memories Used"):
-                memories = st.session_state.memories[message.id]
-                for i, memory in enumerate(memories):
+                msg_memories = memories_state[message.id]
+                for i, memory in enumerate(msg_memories):
                     st.markdown(f"**Memory {i + 1}**")
                     col1, col2 = st.columns(2)
                     with col1:

@@ -1,5 +1,6 @@
 {
     "@@locale": "lt",
+    "sessionExpiredSignInAgain": "Seanso laikas baigėsi — prisijunkite dar kartą.",
     "@captureRecordingError": {
         "placeholders": {
             "error": {
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.",
     "transcribeLaterTitle": "Transkribuoti vėliau",
     "transcribeLaterDescription": "Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.",
-    "transcribeLaterNote": "Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
+    "transcribeLaterNote": "Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
     "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
     "unmute": "Įjungti garsą",
     "newRecording": "Naujas įrašas",
@@ -3064,6 +3065,12 @@
     "captureModeLiveDescription": "Transkribuokite tikruoju laiku, kol kalbate.",
     "captureModeLaterDescription": "Išsaugokite garsą dabar ir transkribuokite kada panorėję.",
     "backgroundModeUnavailable": "Foninis režimas nepasiekiamas, nes neprijungtas suderinamas įrenginys. Prijunkite Omi, OpenGlass arba Friend Pendant įrenginį, kad galėtumėte naudoti šią funkciją.",
+    "memoryThisDevice": "Šis įrenginys",
+    "memoryThisIphone": "Šis iPhone",
+    "memoryThisPhone": "Šis telefonas",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Kaip naudoti Omi",
     "deviceOnboardingTranscriptionTitle": "Kalbėkite į Omi",
     "deviceOnboardingTranscriptionSubtitle": "Pasakykite kelis žodžius ir stebėkite, kaip jie atsiranda realiuoju laiku",
@@ -3097,5 +3104,44 @@
     "deviceOnboardingIntroSubtitle": "Greita praktinė apžvalga visko, ką gali jūsų Omi.",
     "deviceOnboardingIntroDuration": "Maždaug 1 minutė",
     "jumpToLatestMessage": "Peršokti į naujausią pranešimą",
-    "latest": "Naujausias"
+    "latest": "Naujausias",
+    "flashFirmware": "Įrašyti programinę aparatinę įrangą",
+    "pendantRecordingTitle": "Įrašoma pakabuke",
+    "pendantRecordingNote": "Jūsų pakabukas įrašinėja savarankiškai. Įrašai sinchronizuojami su telefonu, kol programa atidaryta.",
+    "pendantSyncingRecordings": "Sinchronizuojami įrašai iš jūsų pakabuko…",
+    "pendantMinutesStored": "~{minutes} min išsaugota",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.",
+    "connectRayBanMeta": "Prijungti Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Naudokite savo Ray-Ban Meta akinius kaip Omi įrašymo įrenginį pokalbiams ir vaizdiniam kontekstui. Omi atidarys Meta AI programėlę, kad susietų jūsų akinius.",
+    "raybanMetaOpenMetaAI": "Prisijungti per Meta AI",
+    "raybanMetaWaitingForMetaAI": "Užbaikite prisijungimą Meta AI programėlėje ir grįžkite čia.",
+    "raybanMetaCheckAgain": "Tikrinti dar kartą",
+    "raybanMetaAllowCamera": "Leisti naudoti akinių kamerą",
+    "raybanMetaCameraExplanation": "Omi naudoja jūsų akinių kamerą, kad pridėtų nuotraukas prie jūsų pokalbių. Galite tai praleisti ir naudoti tik garsą.",
+    "raybanMetaSkipForNow": "Praleisti kol kas",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta tik garso režimas",
+    "raybanMetaAudioOnlyExplanation": "Ši Omi versija gali naudoti jūsų akinių mikrofoną per Bluetooth. Nuotraukoms fiksuoti reikia Meta kūrėjų Omi versijos.",
+    "raybanMetaMusicPauseNote": "Muzika jūsų telefone pristabdoma, kol naudojamas akinių mikrofonas.",
+    "raybanMetaContinue": "Tęsti",
+    "raybanMetaCapturePhoto": "Fotografuoti",
+    "raybanMetaPhotoRequested": "Nuotrauka užsakyta — ji pasirodys jūsų pokalbyje.",
+    "raybanMetaMicrophoneReady": "Mikrofonas paruoštas",
+    "raybanMetaImageCaptureReady": "Vaizdų fiksavimas paruoštas",
+    "raybanMetaImageCaptureUnavailable": "Negalima tik garso režimu",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Klaida jungiantis prie Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

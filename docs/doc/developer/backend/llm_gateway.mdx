@@ -1,14 +1,10 @@
 ---
 title: "LLM Gateway"
 icon: "route"
-description: "Architecture for Omi's internal LLM routing gateway, auto lanes, route artifacts, and first chat-structured pilot."
+description: "Architecture for Omi's internal LLM routing gateway, auto lanes, route artifacts, and chat-structured workloads."
 ---
 
 # LLM Gateway Architecture
-
-> Status: v1 foundation implemented; first backend pilot is code-on by default with application-level fallback.
->
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, local service URL configuration for backend callers, and code-on structured-output caller pilots for `chat_extraction.requires_context`, `conversation_discard.should_discard`, and `conversation_action_items.extract.shadow` with application-level fallback.
 
 ## Decision
 
@@ -26,7 +22,7 @@ Do not build a user-facing router product. Do not add sliders, per-user routing 
 
 The existing realtime `backend/routers/auto_model.py` and desktop `AutoModelSelector` path are legacy context, not the template for this service. New gateway work must not add a public picker endpoint, must not fetch benchmark data in the request path, and must not expand desktop-side routing caches.
 
-## First Pilot
+## Chat-Structured Lane
 
 The first lane is:
 
@@ -38,13 +34,19 @@ For v1, this is the only supported OpenAI-compatible chat-completions interface.
 
 `chat-structured` is for non-streaming structured extraction and classification work, such as memory extraction, chat extraction helpers, conversation post-processing structure, and schema-bound feature decisions. It is the safest first lane because it has clear success checks: JSON/schema validity, parser repair rate, extraction precision/recall, latency, and cost.
 
-The first concrete backend pilot is `utils.llm.chat.requires_context(question: str) -> bool`. Non-BYOK requests call the gateway first and fall back to the existing provider path if the gateway misses or fails, so this is an infrastructure change with no intended user-visible behavior change.
+Backend structured callers can route non-BYOK requests through the gateway and fall back to their existing provider path if the gateway misses or fails. This keeps gateway adoption isolated from user-visible behavior changes unless a feature explicitly promotes the gateway result to authoritative serving.
 
-Non-BYOK requests call `/v1/chat/completions` first with `model: "omi:auto:chat-structured"`, text-only messages, and a JSON schema response format for `RequiresContext`. The caller sends low-cardinality metadata identifying `chat_extraction.requires_context`, not raw user text in logs or telemetry. Service auth uses the existing bearer-token contract; backend callers read `OMI_LLM_GATEWAY_SERVICE_TOKEN` first and then `LLM_GATEWAY_SERVICE_TOKEN` for local compatibility.
+Non-BYOK requests call `/v1/chat/completions` with `model: "omi:auto:chat-structured"`, text-only messages, and a JSON schema response format. The caller sends low-cardinality feature metadata, not raw user text in logs or telemetry. Service auth uses the existing bearer-token contract; backend callers read `OMI_LLM_GATEWAY_SERVICE_TOKEN` first and then `LLM_GATEWAY_SERVICE_TOKEN` for local compatibility.
 
-BYOK requests skip this pilot because gateway BYOK forwarding is not implemented yet. The application-level fallback is the safety mechanism: any gateway HTTP error, timeout, unsupported capability response, malformed JSON, missing or invalid content, Pydantic validation failure, or unexpected exception falls back to the existing `get_llm('chat_extraction').with_structured_output(...)` path and returns that result. The pilot does not depend on gateway route/LKG fallback; if the gateway internally returns an error after trying its configured policy, the caller still treats that as a miss and uses the existing path.
+BYOK requests skip gateway routing until BYOK forwarding is implemented for the lane. The application-level fallback is the safety mechanism: any gateway HTTP error, timeout, unsupported capability response, malformed JSON, missing or invalid content, Pydantic validation failure, or unexpected exception falls back to the existing legacy provider path and returns that result. Caller fallback does not depend on gateway route/LKG fallback; if the gateway internally returns an error after trying its configured policy, the caller still treats that as a miss and uses the existing path.
 
-The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for this pilot. Current outcomes are `success`, `fallback`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
+The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for structured gateway callers. Outcomes are bounded classes such as `success`, `fallback`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
+
+## Deployment
+
+Development LLM Gateway deploys are intentionally allowed before production deploys. The dedicated manual workflow and the automatic workflow deploy only to development until the production rollout checklist is explicitly completed and the workflow guard is removed.
+
+Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts the known development ingress if it was bootstrapped before Helm owned it, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the dev-only guardrail and required secret/env preflight.
 
 Primary user chat should follow later as a separate lane, likely:
 
@@ -133,14 +135,15 @@ Credential context is request-level metadata. It records credential mode, caller
 
 For v1, build the gateway as a separate FastAPI app in the backend tree, using the same Python toolchain and dependency-lock workflow as the main backend.
 
-Preferred rollout:
+Promotion model:
 
-1. Add the app entrypoint and unit tests without any production traffic.
-2. Add a local run command and Docker/Helm wiring for a separately named service.
-3. Add `/ready` startup/readiness validation that fails closed unless active and LKG route config is valid.
-4. Add service-to-service auth from backend and pusher to the gateway.
-5. Route one structured feature through the gateway in shadow mode.
-6. Promote only after the route artifact has an Omi eval report and rollback has been tested.
+1. Start with no live product traffic while service startup, readiness, config validation, and service auth are verified.
+2. Route non-embedding features through the gateway in shadow mode (`OMI_LLM_GATEWAY_DEV_SHADOW_ALL_*` and feature shadow flags).
+3. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. When serving is on, turn shadow flags **off** so callers do not double-hit the gateway. Keep hard direct surfaces (BYOK, Anthropic agentic chat, Assistants/file chat, omni realtime) on providers via `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=true`. Backend wraps gateway clients with legacy fallback on hard transport failures (timeout / 5xx / connection).
+4. Run prod shadow before prod serving when the feature touches user content or user-visible behavior. Prod serving also requires `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true` and an explicit gateway URL.
+5. Promote prod serving only after rollback has been tested and the route artifact has suitable eval evidence.
+
+**Dev serving rollback (config-only):** unset `OMI_LLM_GATEWAY_FEATURE_MODE` (or set it to anything other than `gateway`/`true`/`1`/`yes`) on Cloud Run `backend` / `backend-sync` / `backend-integration` and GKE `backend-listen`. Optionally restore shadow flags. Do not set feature mode on prod without the prod allow env.
 
 Do not start by embedding the gateway router into `backend/main.py`. That would make the gateway look separate in code while still sharing the main backend process, lifecycle, scaling, and blast radius.
 
@@ -180,6 +183,13 @@ Backend-listen env:
 |---|---|
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
+| `OMI_LLM_GATEWAY_FEATURE_MODE` | Dev serving flip: `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
+| `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
+| `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |
+| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation structure extraction |
+| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation structure shadow traffic |
+| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation action-item extraction |
+| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation action-item shadow traffic |
 
 Gateway env:
 
@@ -189,6 +199,8 @@ Gateway env:
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | same `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `LLM_GATEWAY_ALLOWED_CALLERS` | `backend` |
 | `OPENAI_API_KEY` | existing `*-omi-backend-secrets` key `OPENAI_API_KEY` |
+| `GEMINI_API_KEY` | existing `*-omi-backend-secrets` key `GEMINI_API_KEY` (required for gemini-backed feature lanes) |
+| `OPENROUTER_API_KEY` | existing `*-omi-backend-secrets` key `OPENROUTER_API_KEY` (required for openrouter-backed feature lanes) |
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
 
 ExternalSecrets expect a GCP Secret Manager secret named `OMI_LLM_GATEWAY_SERVICE_TOKEN` in both projects:
@@ -198,7 +210,7 @@ dev:  based-hardware-dev / OMI_LLM_GATEWAY_SERVICE_TOKEN
 prod: based-hardware     / OMI_LLM_GATEWAY_SERVICE_TOKEN
 ```
 
-Do not use remote config for this rollout. Rotate the service token through Secret Manager and ExternalSecrets, not through app config.
+Do not use remote config for service-to-service credentials. Rotate the service token through Secret Manager and ExternalSecrets, not through app config.
 
 The chart exposes only a `ClusterIP` service. `/health` is unauthenticated. Kubernetes liveness/startup/readiness probes call `/health`; the deployment workflow then runs an in-cluster authenticated smoke test against `/ready` and `/v1/chat/completions` with `Authorization: Bearer ...` plus `X-Omi-Service-Caller: backend`.
 
@@ -485,7 +497,7 @@ is_auto_lane_id(model: str) -> bool
 
 Implemented route refs are additive only. `get_route_ref(feature)` currently returns an `ExplicitRouteRef` for every existing feature by default, including pinned routes, profile routes, fallback routes, and provider/model construction options from `get_route_options(feature, model, provider)`. `AutoLaneRouteRef` is available behind an intentionally empty feature-to-lane mapping in `model_config.py` so a later ticket can map selected features to `omi:auto:chat-structured` without changing the legacy helpers.
 
-Backend callers that use `get_llm(feature)` can be migrated feature by feature. Route refs do not change return values from `get_model(feature)`, `get_provider(feature)`, or `get_llm(feature)`. The first pilot routes only non-BYOK `utils.llm.chat.requires_context` calls through the gateway first; all other `chat_extraction` helpers remain on the existing explicit path.
+Backend callers that use `get_llm(feature)` can be migrated feature by feature. Route refs do not change return values from `get_model(feature)`, `get_provider(feature)`, or `get_llm(feature)`. Gateway-enabled callers should use explicit application-level fallback until a feature has passed its lane-specific promotion gates.
 
 ## BYOK Policy
 
@@ -559,7 +571,7 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 - maps typed gateway exceptions to OpenAI-style error envelopes with `error.message`, `error.type`, `error.param`, and `error.code`;
 - rejects unknown auto lanes, bare provider model names, streaming, tools, unsupported capabilities, and unknown top-level request parameters before provider execution.
 
-Another real background caller is the conversation discard classifier in post-processing. It sends `conversation_discard.should_discard` through `omi:auto:chat-structured` and falls back to the legacy `conv_discard` LLM path if the gateway returns invalid output, times out, or fails. Action-item extraction also sends `conversation_action_items.extract.shadow` through the gateway as shadow traffic, then still uses the legacy `conv_action_items` result for product behavior. These routes give the rollout real backend-originated gateway traffic without adding latency to the foreground desktop chat path.
+Background callers can use the gateway for latency-insensitive structured decisions and post-processing work, then fall back to their legacy LLM path if the gateway returns invalid output, times out, or fails. Shadow callers still use the legacy result for product behavior while emitting bounded comparison metrics.
 
 The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
@@ -600,24 +612,21 @@ llm_gateway_request_latency_seconds
 Labels are bounded and low-cardinality: `lane_id`, `route_artifact_id`, `provider`, `model`, `used_lkg`, `fallback_used`, `fallback_reason`, `outcome`, and `error_class`.
 
 The backend caller also exposes `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for app-level success/fallback/skipped behavior.
+The same backend observability helper emits a privacy-safe Cloud Logging line
+containing `llm_gateway_backend_event` with the same low-cardinality dimensions
+plus `kind`, `field`, `route`, and `service`. This gives rollout owners a stable
+query surface even when backend caller metrics are hard to inspect per runtime
+surface.
 
-Do not log raw prompts, transcripts, screenshots, memory contents, provider response bodies, or BYOK keys. Use existing sanitizer patterns for error bodies and user text.
+Shadow-only features can also emit privacy-safe comparison buckets through
+`llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These
+metrics compare derived properties such as category match, empty/non-empty
+status, length ratio, and normalized similarity bands. They must not store raw
+transcripts, prompts, titles, overviews, memories, or provider responses.
 
-## Build Status
-
-1. Add this architecture doc and temporary implementation tickets. Done.
-2. Add `llm_gateway` service skeleton with health endpoint. Done.
-3. Add Pydantic schemas for lane config, route artifacts, feature bundles, capability declarations, retries, timeouts, rollout, evidence, credential policy, fallback policy, and LKG. Done.
-4. Add service-auth and credential-policy contracts. Done.
-5. Add resolver tests with no network calls. Done.
-6. Add capability validator tests for `chat-structured`. Done.
-7. Add provider executor with fake providers and fallback/error normalization tests. Done.
-8. Add `/v1/chat/completions` non-streaming support behind service auth. Done.
-9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic. Done.
-10. Add route refs and gateway URL helpers in main backend so selected `model_config.py` features can call the gateway later. Done.
-11. Route one low-risk structured feature to `omi:auto:chat-structured` in shadow mode. Done for non-BYOK `chat_extraction.requires_context`, protected by application-level fallback.
-12. Add gateway-side metrics and authenticated metrics endpoint. Done.
-13. Add Omi eval reports and promote only after schema validity, extraction quality, latency, and cost gates pass.
+Do not log raw prompts, transcripts, screenshots, memory contents, provider
+response bodies, conversation IDs, UIDs, or BYOK keys. Use existing sanitizer
+patterns for error bodies and user text.
 
 ## Shadow Safety
 
@@ -632,6 +641,8 @@ Shadow mode must be explicitly bounded before any live user content goes through
 - metrics-only comparison unless an approved eval store exists.
 
 Prefer offline replay/eval before live shadow for memory- or transcript-heavy workloads.
+
+Shadow callers must not put gateway latency on the authoritative product path. Run the legacy or serving result first, then schedule shadow work through the shared executor pools or another bounded background path. A gateway timeout, provider outage, disabled feature flag, or sampled-out request should affect only shadow metrics, never the returned product result.
 
 ## Explicit Non-Goals
 

@@ -45,9 +45,12 @@ from utils.retrieval.tools import (
     search_screen_activity_tool,
     save_user_preference_tool,
     fetch_url_tool,
+    traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.other.endpoints import timeit
@@ -98,6 +101,7 @@ CORE_TOOLS = [
     search_screen_activity_tool,
     save_user_preference_tool,
     fetch_url_tool,
+    traverse_knowledge_graph_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -126,6 +130,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
         'search_memories_tool': 'Searching memories',
+        'traverse_knowledge_graph_tool': 'Traversing knowledge graph',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
@@ -271,7 +276,8 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
-    return str(result)
+    result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -451,7 +457,7 @@ async def _run_anthropic_agent_stream(
                 response = await stream.get_final_message()
 
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
+            await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
             await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
             await callback.end()
             return

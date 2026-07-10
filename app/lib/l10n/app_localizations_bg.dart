@@ -9,6 +9,9 @@ class AppLocalizationsBg extends AppLocalizations {
   AppLocalizationsBg([String locale = 'bg']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесията изтече — влезте отново.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9375,7 +9378,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
+      'Засега работи с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9401,6 +9404,24 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
+
+  @override
+  String get memoryThisDevice => 'Това устройство';
+
+  @override
+  String get memoryThisIphone => 'Този iPhone';
+
+  @override
+  String get memoryThisPhone => 'Този телефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 
   @override
   String get deviceTutorial => 'Как да използвате Omi';
@@ -9504,4 +9525,89 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get latest => 'Последно';
+
+  @override
+  String get flashFirmware => 'Инсталирай фърмуера';
+
+  @override
+  String get pendantRecordingTitle => 'Запис на висулката';
+
+  @override
+  String get pendantRecordingNote =>
+      'Висулката ви записва самостоятелно. Записите се синхронизират с телефона ви, докато приложението е отворено.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизиране на записите от висулката ви…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин съхранени';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Паметта на висулката е почти пълна — дръжте приложението отворено, за да се синхронизира.';
+
+  @override
+  String get connectRayBanMeta => 'Свързване на Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Използвайте вашите очила Ray-Ban Meta като устройство за заснемане на Omi за разговори и визуален контекст. Omi ще отвори приложението Meta AI, за да свърже очилата ви.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Свързване чрез Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завършете свързването в приложението Meta AI и след това се върнете тук.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Провери отново';
+
+  @override
+  String get raybanMetaAllowCamera => 'Разреши камерата на очилата';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi използва камерата на очилата ви, за да добавя снимки към разговорите ви. Можете да пропуснете това и да използвате само аудио.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Пропусни засега';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Режим само аудио на Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Тази версия на Omi може да използва микрофона на очилата ви през Bluetooth. Заснемането на снимки изисква версията за разработчици на Omi от Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Музиката на телефона ви се поставя на пауза, докато микрофонът на очилата се използва.';
+
+  @override
+  String get raybanMetaContinue => 'Продължи';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Заснеми снимка';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Заявена е снимка — тя ще се появи в разговора ви.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Микрофонът е готов';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Заснемането на изображение е готово';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Недостъпно в режим само аудио';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Грешка при свързване с Ray-Ban Meta: $error';
+  }
 }

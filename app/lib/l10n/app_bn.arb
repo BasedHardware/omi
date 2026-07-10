@@ -1,5 +1,6 @@
 {
     "@@locale": "bn",
+    "sessionExpiredSignInAgain": "সেশনের মেয়াদ শেষ হয়েছে — আবার সাইন ইন করুন।",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।",
     "transcribeLaterTitle": "পরে ট্রান্সক্রাইব করুন",
     "transcribeLaterDescription": "এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।",
-    "transcribeLaterNote": "আপাতত শুধু Omi ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।",
+    "transcribeLaterNote": "আপাতত Omi এবং Limitless ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।",
     "transcribeLaterStorageFull": "আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।",
     "unmute": "আনমিউট করুন",
     "newRecording": "নতুন রেকর্ডিং",
@@ -10642,6 +10643,12 @@
     "captureModeLiveDescription": "আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।",
     "captureModeLaterDescription": "এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।",
     "backgroundModeUnavailable": "কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।",
+    "memoryThisDevice": "এই ডিভাইস",
+    "memoryThisIphone": "এই iPhone",
+    "memoryThisPhone": "এই ফোন",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Omi কীভাবে ব্যবহার করবেন",
     "deviceOnboardingTranscriptionTitle": "আপনার Omi-তে কথা বলুন",
     "deviceOnboardingTranscriptionSubtitle": "কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন",
@@ -10675,5 +10682,44 @@
     "deviceOnboardingIntroSubtitle": "আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।",
     "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
     "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
-    "latest": "সর্বশেষ"
+    "latest": "সর্বশেষ",
+    "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন",
+    "pendantRecordingTitle": "পেনড্যান্টে রেকর্ডিং চলছে",
+    "pendantRecordingNote": "আপনার পেনড্যান্ট নিজে থেকেই রেকর্ড করছে। অ্যাপ খোলা থাকাকালীন রেকর্ডিং আপনার ফোনে সিঙ্ক হয়।",
+    "pendantSyncingRecordings": "আপনার পেনড্যান্ট থেকে রেকর্ডিং সিঙ্ক হচ্ছে…",
+    "pendantMinutesStored": "~{minutes} মিনিট সংরক্ষিত",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।",
+    "connectRayBanMeta": "Ray-Ban Meta সংযুক্ত করুন",
+    "raybanMetaSetupDescription": "কথোপকথন এবং ভিজ্যুয়াল প্রসঙ্গের জন্য আপনার Ray-Ban Meta চশমা Omi ক্যাপচার ডিভাইস হিসেবে ব্যবহার করুন। Omi আপনার চশমা লিঙ্ক করতে Meta AI অ্যাপ খুলবে।",
+    "raybanMetaOpenMetaAI": "Meta AI-এর মাধ্যমে সংযুক্ত করুন",
+    "raybanMetaWaitingForMetaAI": "Meta AI অ্যাপে সংযোগ সম্পূর্ণ করুন, তারপর এখানে ফিরে আসুন।",
+    "raybanMetaCheckAgain": "আবার পরীক্ষা করুন",
+    "raybanMetaAllowCamera": "চশমায় ক্যামেরা অনুমতি দিন",
+    "raybanMetaCameraExplanation": "Omi আপনার কথোপকথনে ছবি যোগ করতে আপনার চশমার ক্যামেরা ব্যবহার করে। আপনি এটি এড়িয়ে গিয়ে শুধুমাত্র অডিও ব্যবহার করতে পারেন।",
+    "raybanMetaSkipForNow": "আপাতত এড়িয়ে যান",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta শুধুমাত্র অডিও মোড",
+    "raybanMetaAudioOnlyExplanation": "Omi-এর এই সংস্করণটি Bluetooth-এর মাধ্যমে আপনার চশমার মাইক্রোফোন ব্যবহার করতে পারে। ছবি ক্যাপচারের জন্য Omi-এর Meta ডেভেলপার বিল্ড প্রয়োজন।",
+    "raybanMetaMusicPauseNote": "চশমার মাইক্রোফোন ব্যবহারের সময় আপনার ফোনের সঙ্গীত থেমে যায়।",
+    "raybanMetaContinue": "চালিয়ে যান",
+    "raybanMetaCapturePhoto": "ছবি তুলুন",
+    "raybanMetaPhotoRequested": "ছবির অনুরোধ করা হয়েছে — এটি আপনার কথোপকথনে প্রদর্শিত হবে।",
+    "raybanMetaMicrophoneReady": "মাইক্রোফোন প্রস্তুত",
+    "raybanMetaImageCaptureReady": "ছবি ক্যাপচার প্রস্তুত",
+    "raybanMetaImageCaptureUnavailable": "শুধুমাত্র অডিও মোডে অনুপলব্ধ",
+    "raybanMetaCamera": "ক্যামেরা",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta-তে সংযোগ করতে ত্রুটি: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

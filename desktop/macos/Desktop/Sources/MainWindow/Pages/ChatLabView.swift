@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Data Models
 
@@ -161,7 +162,7 @@ class ChatLabViewModel: ObservableObject {
             // Timeout after 10 seconds
             let deadline = Date().addingTimeInterval(10)
             while process.isRunning && Date() < deadline {
-                Thread.sleep(forTimeInterval: 0.1)
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
             if process.isRunning { process.terminate() }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -172,12 +173,6 @@ class ChatLabViewModel: ObservableObject {
             // Deduplicate by date and take last 10
             var seenDates = Set<String>()
             var entries: [PromptHistoryEntry] = []
-            let dateFmt = DateFormatter()
-            dateFmt.dateFormat = "yyyy-MM-dd"
-
-            let displayFmt = DateFormatter()
-            displayFmt.dateFormat = "MMM d"
-
             for line in lines {
                 let parts = line.components(separatedBy: "|")
                 guard parts.count >= 3 else { continue }
@@ -188,8 +183,6 @@ class ChatLabViewModel: ObservableObject {
                 // Only one version per day
                 guard !seenDates.contains(dateRaw) else { continue }
                 seenDates.insert(dateRaw)
-
-                let displayDate = dateFmt.date(from: dateRaw).map { displayFmt.string(from: $0) } ?? dateRaw
 
                 // Get the prompt content at this commit
                 let promptContent = getFileAtCommit(repoPath: repoPath, hash: hash, file: promptFile)
@@ -336,7 +329,7 @@ class ChatLabViewModel: ObservableObject {
             let response = await runThroughBridge(
                 question: q.text,
                 systemPrompt: systemPrompt,
-                sessionKey: "chat-lab-\(vIdx)-\(i)"
+                labSessionId: "chat-lab-\(vIdx)-\(i)"
             )
 
             versions[vIdx].evaluations[i].response = response
@@ -363,12 +356,12 @@ class ChatLabViewModel: ObservableObject {
 
     /// Send a question through the real agent bridge (same path as floating bar / main chat).
     /// Falls back to direct API if bridge isn't available.
-    private func runThroughBridge(question: String, systemPrompt: String, sessionKey: String) async -> String {
+    private func runThroughBridge(question: String, systemPrompt: String, labSessionId: String) async -> String {
         let chatProvider = chatProvider
         let result = await chatProvider.labRunQuestion(
             question: question,
             systemPrompt: systemPrompt,
-            sessionKey: sessionKey
+            labSessionId: labSessionId
         )
         return result
     }

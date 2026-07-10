@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct ScoreWidget: View {
     let scoreResponse: ScoreResponse?

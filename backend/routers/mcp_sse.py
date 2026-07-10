@@ -11,17 +11,18 @@ import asyncio
 import json
 import logging
 import os
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Union, List, Any
+from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
+from pydantic import BaseModel
+
 import firebase_admin.auth
+from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import critical_executor, db_executor, run_blocking
 
@@ -37,26 +38,46 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    read_default_read_rollout,
+)
+from utils.memory.memory_service import (
+    MemoryService,
+    raise_if_legacy_write_blocked,
+    resolve_external_memory_write_context,
+)
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.memory_system import MemorySystem
+from utils.memory.product_authorization import (
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
+)
+from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
     collect_filtered_memories,
+    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    search_default_mcp_memories_vector,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
-
-# Store active sessions
-active_sessions: dict = {}
 
 MCP_RESOURCE_URL = mcp_oauth_db.MCP_RESOURCE_URL
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
@@ -65,29 +86,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -118,24 +118,45 @@ SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 
 
-class MCPSession:
-    """Represents an active MCP session."""
-
-    def __init__(self, session_id: str, user_id: str):
-        self.session_id = session_id
-        self.user_id = user_id
-        self.created_at = datetime.utcnow()
-        self.initialized = False
-
-
 @dataclass
 class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
+    memory_context: Optional[ProductAuthorizationContext] = None
+
+
+def _mcp_memory_context_from_api_key_user_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
+    verified_auth = McpVerifiedAuth(
+        uid=user_data["user_id"],
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+        scopes=tuple(user_data.get("scopes") or ()),
+    )
+    return build_mcp_default_memory_read_context(verified_auth)
+
+
+def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
+    """Validate an MCP API key and return its memory product auth context."""
+    if not authorization:
+        return None
+
+    token = authorization
+    if authorization.startswith("Bearer "):
+        token = authorization[7:]
+
+    if not token.startswith("omi_mcp_"):
+        return None
+
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data or not user_data.get("user_id"):
+        return None
+    return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
@@ -148,10 +169,17 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-        if not user_id:
+        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not user_data or not user_data.get("user_id"):
             return None
-        return MCPAuthContext(uid=user_id, auth_type="legacy_mcp_key", scopes=MCP_LEGACY_API_KEY_SCOPES)
+        return MCPAuthContext(
+            uid=user_data["user_id"],
+            auth_type="legacy_mcp_key",
+            scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
+            app_id=user_data.get("app_id"),
+            key_id=user_data.get("key_id"),
+            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
+        )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
@@ -231,7 +259,7 @@ SCOPE_PERMISSION_TEXT = {
 }
 
 
-def _tools_for_scopes(scopes: list[str]) -> list[dict]:
+def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
     return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
 
@@ -243,7 +271,7 @@ def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 
 # MCP Tool Definitions
-MCP_TOOLS = [
+MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_user_profile",
         "description": (
@@ -705,6 +733,30 @@ class ToolExecutionError(Exception):
         super().__init__(self.message)
 
 
+def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
+    if exc.status_code == 404:
+        raise ToolExecutionError("Memory not found", code=-32001) from exc
+    if exc.status_code == 402:
+        raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
+    if exc.status_code in {403, 409, 503}:
+        raise ToolExecutionError(str(exc.detail), code=-32009) from exc
+    raise ToolExecutionError(str(exc.detail)) from exc
+
+
+def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
+    """Turn a missing-Firestore-index failure into a typed, actionable tool error.
+
+    The app-filtered screen activity query needs a composite index (appName +
+    timestamp). Without it Firestore raises FailedPrecondition, which otherwise
+    surfaces to the MCP client as an opaque 500 (see AGENTS.md gotcha #7).
+    """
+    raise ToolExecutionError(
+        "Screen activity isn't queryable right now — its search index is still being built. "
+        "Retry in a few minutes, or narrow the request by removing the app filter.",
+        code=-32009,
+    ) from exc
+
+
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
     if not value:
@@ -715,8 +767,14 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
-def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
+def execute_tool(
+    user_id: str,
+    tool_name: str,
+    arguments: Dict[str, Any],
+    auth_context: Optional[ProductAuthorizationContext] = None,
+) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
+    memory_system = pin_memory_system(user_id, db_client=db)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
@@ -729,7 +787,8 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         }
 
     elif tool_name == "get_memories":
-        categories = arguments.get("categories", [])
+        raw_categories: object = arguments.get("categories", [])
+        categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
@@ -748,12 +807,57 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             )
 
         # Validate categories
-        valid_categories = []
-        for cat in categories:
+        valid_categories: List[str] = []
+        for cat in categories_list:
             try:
                 valid_categories.append(MemoryCategory(cat).value)
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
+
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
+        if memory_system == MemorySystem.CANONICAL:
+            filtered = collect_filtered_memories(
+                lambda batch_offset, batch_limit: [
+                    m.model_dump(mode='json')
+                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                ],
+                limit=limit,
+                offset=offset,
+                reviewed=reviewed,
+                manually_added=manually_added,
+                include_activity=include_activity,
+                include_sensitive=include_sensitive,
+                updated_after=updated_after,
+                sort=sort,
+                categories=valid_categories or None,
+            )
+            memories = filtered['memories']
+            for memory in memories:
+                if memory.get('is_locked', False):
+                    content = memory.get('content', '')
+                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+            return {"memories": memories}
+
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        memory_list_results = list_default_mcp_memories(
+            uid=user_id,
+            limit=limit,
+            offset=offset,
+            db_client=db,
+            rollout_decision=memory_rollout,
+            categories=valid_categories,
+            reviewed=reviewed,
+            manually_added=manually_added,
+        )
+        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": memory_list_results.memories}
+        if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+            return {"memories": []}
 
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: memories_db.get_memories(
@@ -781,26 +885,68 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not content:
             raise ToolExecutionError("Content is required")
 
-        # Auto-categorize memories from MCP clients
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+        try:
+            write_context = resolve_external_memory_write_context(
+                user_id,
+                db_client=db,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_create",
+            )
+            raise_if_legacy_write_blocked(write_context)
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
+
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
-        memories_db.create_memory(user_id, memory_db.model_dump())
+        try:
+            memory_db = MemoryService(db_client=db).create_external_memory(
+                user_id,
+                memory_db,
+                memory_system=write_context.memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_create",
+                upsert_vector=False,
+                require_canonical_promotion=True,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
 
-        return {"success": True, "memory": memory_db.model_dump()}
+        exposure = (
+            MemoryApiExposure.CANONICAL
+            if write_context.memory_system == MemorySystem.CANONICAL
+            else MemoryApiExposure.LEGACY
+        )
+        return {"success": True, "memory": memory_api_payload(memory_db, exposure)}
 
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
-        memory = memories_db.get_memory(user_id, memory_id)
-        if not memory:
-            raise ToolExecutionError("Memory not found", code=-32001)
-        if memory.get('is_locked', False):
-            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        memories_db.delete_memory(user_id, memory_id)
+        try:
+            MemoryService(db_client=db).delete_external_memory(
+                user_id,
+                memory_id,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_delete",
+                delete_vector=False,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
         return {"success": True}
 
     elif tool_name == "edit_memory":
@@ -809,19 +955,33 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
 
-        memory = memories_db.get_memory(user_id, memory_id)
-        if not memory:
-            raise ToolExecutionError("Memory not found", code=-32001)
-        if memory.get('is_locked', False):
-            raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002)
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
-        memories_db.edit_memory(user_id, memory_id, content)
+        if not content.strip():
+            raise ToolExecutionError("content must not be empty", code=-32602)
+        try:
+            MemoryService(db_client=db).update_external_memory_content(
+                user_id,
+                memory_id,
+                content,
+                memory_system=memory_system,
+                consumer='mcp',
+                operation="mcp_tool_memory_edit",
+                upsert_vector=False,
+            )
+        except HTTPException as exc:
+            _raise_tool_error_from_http(exc)
         return {"success": True}
 
     elif tool_name == "get_conversations":
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
-        categories = arguments.get("categories", [])
+        raw_categories = arguments.get("categories", [])
+        categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         limit = arguments.get("limit", 20)
         offset = arguments.get("offset", 0)
 
@@ -842,8 +1002,8 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
                 raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
 
         # Validate categories
-        valid_categories = []
-        for cat in categories:
+        valid_categories: List[str] = []
+        for cat in categories_list:
             try:
                 valid_categories.append(CategoryEnum(cat).value)
             except ValueError:
@@ -861,7 +1021,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         )
 
         # Simplify conversation data
-        simple_conversations = []
+        simple_conversations: List[Dict[str, Any]] = []
         for conv in conversations:
             redact_conversation_for_list(conv)
             simple_conversations.append(
@@ -901,11 +1061,34 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
 
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
+        if memory_system == MemorySystem.CANONICAL:
+            memory_service = MemoryService(db_client=db)
+            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
+
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        vector_search_results = search_default_mcp_memories_vector(
+            uid=user_id,
+            query=query,
+            limit=limit,
+            db_client=db,
+            rollout_decision=memory_rollout,
+        )
+        if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": vector_search_results.memories}
+        if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+            return {"memories": []}
+
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:
             return {"memories": []}
 
-        memory_ids = [m.get('memory_id') for m in matches if m.get('memory_id')]
+        memory_ids = cast(List[str], [m.get('memory_id') for m in matches if m.get('memory_id')])
         if not memory_ids:
             return {"memories": []}
         memories = memories_db.get_memories_by_ids(user_id, memory_ids)
@@ -913,7 +1096,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
         # or superseded facts, while fetching extra candidates before filtering.
         score_map = {m.get('memory_id'): m.get('score', 0) for m in matches if m.get('memory_id')}
-        results = []
+        results: List[Dict[str, Any]] = []
         for mem in memories:
             if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
                 continue
@@ -957,7 +1140,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         conversations = conversations_db.get_conversations_by_id(user_id, conversation_ids)
 
         # Simplify and handle locked content
-        results = []
+        results: List[Dict[str, Any]] = []
         for conv in conversations:
             structured = conv.get("structured")
             if conv.get("is_locked", False) and structured:
@@ -988,7 +1171,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
         score_map = {str(m['post_id']): m.get('score', 0) for m in matches}
         posts = x_posts_db.get_x_posts_by_ids(user_id, [m['post_id'] for m in matches])
-        results = []
+        results: List[Dict[str, Any]] = []
         for p in posts:
             results.append(
                 {
@@ -1121,14 +1304,20 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         app = arguments.get("app")
         summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
         if summary:
-            return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            try:
+                return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            except FailedPrecondition as e:
+                _raise_screen_activity_index_error(e)
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        rows = screen_activity_db.get_screen_activity(
-            user_id, start_date=start, end_date=end, app_filter=app, limit=limit
-        )
+        try:
+            rows = screen_activity_db.get_screen_activity(
+                user_id, start_date=start, end_date=end, app_filter=app, limit=limit
+            )
+        except FailedPrecondition as e:
+            _raise_screen_activity_index_error(e)
         return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
 
     elif tool_name == "get_daily_summaries":
@@ -1150,36 +1339,29 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
 
 
-def create_mcp_response(id: Any, result: dict) -> dict:
+def create_mcp_response(id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
     """Create a JSON-RPC 2.0 response."""
     return {"jsonrpc": "2.0", "id": id, "result": result}
 
 
-def create_mcp_error(id: Any, code: int, message: str) -> dict:
+def create_mcp_error(id: Any, code: int, message: str) -> Dict[str, Any]:
     """Create a JSON-RPC 2.0 error response."""
     return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 
 
 def handle_mcp_message(
-    auth_context: MCPAuthContext, message: dict, session: Optional[MCPSession] = None
-) -> tuple[Optional[dict], Optional[str]]:
+    auth_context: MCPAuthContext, message: Dict[str, Any]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
     Returns (response, new_session_id) tuple.
     """
     msg_id = message.get("id")
     method = message.get("method")
-    params = message.get("params", {})
-    new_session_id = None
+    raw_params: object = message.get("params", {})
+    params: Dict[str, Any] = cast(Dict[str, Any], raw_params) if isinstance(raw_params, dict) else {}
 
     if method == "initialize":
-        # Create a new session
-        session_id = str(uuid.uuid4())
-        new_session = MCPSession(session_id, auth_context.uid)
-        new_session.initialized = True
-        active_sessions[session_id] = new_session
-        new_session_id = session_id
-
         return (
             create_mcp_response(
                 msg_id,
@@ -1195,7 +1377,7 @@ def handle_mcp_message(
                     ),
                 },
             ),
-            new_session_id,
+            None,
         )
 
     elif method == "notifications/initialized":
@@ -1207,14 +1389,17 @@ def handle_mcp_message(
 
     elif method == "tools/call":
         tool_name = params.get("name")
-        arguments = params.get("arguments", {})
+        raw_arguments: object = params.get("arguments", {})
+        arguments: Dict[str, Any] = cast(Dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
 
         if not tool_name:
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
         try:
-            _require_tool_scope(auth_context, tool_name)
-            result = execute_tool(auth_context.uid, tool_name, arguments)
+            mcp_auth_context = auth_context
+            _require_tool_scope(mcp_auth_context, tool_name)
+            auth_context = mcp_auth_context.memory_context
+            result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
@@ -1247,6 +1432,47 @@ def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONRe
     return JSONResponse(status_code=status_code, content={"error": error, "error_description": description})
 
 
+class McpSseAuthMethodResponse(BaseModel):
+    header: Optional[str] = None
+    format: Optional[str] = None
+    authorization_endpoint: Optional[str] = None
+    token_endpoint: Optional[str] = None
+    resource: Optional[str] = None
+    scopes: list[str] = []
+
+
+class McpSseAuthenticationResponse(BaseModel):
+    methods: list[str]
+    api_key: McpSseAuthMethodResponse
+    oauth2: McpSseAuthMethodResponse
+
+
+class McpSseInstructionsResponse(BaseModel):
+    step1: str
+    step2: str
+    step3: str
+
+
+class McpSseInfoResponse(BaseModel):
+    endpoint: str
+    transport: str
+    protocol_version: str
+    authentication: McpSseAuthenticationResponse
+    instructions: McpSseInstructionsResponse
+
+
+class McpAuthorizeConsentResponse(BaseModel):
+    redirect_uri: str
+
+
+class McpTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    scope: str
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1255,7 +1481,7 @@ def _validate_authorize_request(
     scope: Optional[str],
     code_challenge: Optional[str],
     code_challenge_method: Optional[str],
-) -> tuple[dict, list[str]]:
+) -> Tuple[Dict[str, Any], List[str]]:
     client = mcp_oauth_db.get_client(client_id)
     if response_type != "code":
         raise ValueError("response_type must be code")
@@ -1280,6 +1506,18 @@ def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> s
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
 
 
+async def _get_token_request_data(request: Request) -> Dict[str, Any]:
+    content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+    if content_type == "application/json":
+        body: object = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Invalid request body")
+        return cast(Dict[str, Any], body)
+
+    form_data = await request.form()
+    return dict(form_data)
+
+
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
 def mcp_authorize(
     request: Request,
@@ -1294,17 +1532,19 @@ def mcp_authorize(
 ):
     """OAuth authorize endpoint."""
     try:
-        _, scopes = _validate_authorize_request(
+        client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
     except ValueError as e:
         return _oauth_error("invalid_request", str(e))
 
+    client_name = str(client.get("name") or client_id)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
         "mcp_oauth_authorize.html",
         {
             "request": request,
+            "client_name": client_name,
             "oauth_params": {
                 "response_type": response_type,
                 "client_id": client_id,
@@ -1325,7 +1565,7 @@ def mcp_authorize(
     )
 
 
-@router.post("/authorize", tags=["mcp"])
+@router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
 def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
@@ -1341,8 +1581,8 @@ def mcp_authorize_consent(
         _, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
-        decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
-        uid = decoded_token["uid"]
+        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
@@ -1352,39 +1592,28 @@ def mcp_authorize_consent(
 
     grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
     code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, code_challenge
+        uid, grant["id"], client_id, redirect_uri, resource, scopes, cast(str, code_challenge)
     )
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 
-@router.post("/token", tags=["mcp"])
+@router.post("/token", tags=["mcp"], response_model=McpTokenResponse)
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:
-        form_data = await request.form()
-        client_secret = form_data.get("client_secret")
-        client_id = form_data.get("client_id")
-        grant_type = form_data.get("grant_type")
-        code = form_data.get("code")
-        redirect_uri = form_data.get("redirect_uri")
-        resource = form_data.get("resource")
-        code_verifier = form_data.get("code_verifier")
-        refresh_token = form_data.get("refresh_token")
-        scope = form_data.get("scope")
+        request_data = await _get_token_request_data(request)
     except Exception:
-        try:
-            body = await request.json()
-            client_secret = body.get("client_secret")
-            client_id = body.get("client_id")
-            grant_type = body.get("grant_type")
-            code = body.get("code")
-            redirect_uri = body.get("redirect_uri")
-            resource = body.get("resource")
-            code_verifier = body.get("code_verifier")
-            refresh_token = body.get("refresh_token")
-            scope = body.get("scope")
-        except Exception:
-            return _oauth_error("invalid_request", "Invalid request body")
+        return _oauth_error("invalid_request", "Invalid request body")
+
+    client_secret = request_data.get("client_secret")
+    client_id = request_data.get("client_id")
+    grant_type = request_data.get("grant_type")
+    code = request_data.get("code")
+    redirect_uri = request_data.get("redirect_uri")
+    resource = request_data.get("resource")
+    code_verifier = request_data.get("code_verifier")
+    refresh_token = request_data.get("refresh_token")
+    scope = request_data.get("scope")
 
     client = await run_blocking(db_executor, mcp_oauth_db.get_client, client_id or "")
     if (
@@ -1403,7 +1632,7 @@ async def mcp_token(request: Request):
             db_executor,
             mcp_oauth_db.exchange_authorization_code_for_tokens,
             code,
-            client_id,
+            cast(str, client_id),
             redirect_uri,
             resource,
             code_verifier,
@@ -1418,7 +1647,7 @@ async def mcp_token(request: Request):
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
-            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, client_id, resource, scope
+            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
         )
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid refresh token")
@@ -1427,7 +1656,7 @@ async def mcp_token(request: Request):
     return _oauth_error("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
 
 
-@router.post("/v1/mcp/sse", tags=["mcp"])
+@router.post("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_streamable_http(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1441,34 +1670,28 @@ async def mcp_streamable_http(
 
     - POST JSON-RPC messages to this endpoint
     - Responses are returned as SSE stream or JSON depending on Accept header
-    - Session ID is returned in Mcp-Session-Id header after initialization
+    - This hosted transport is stateless; bearer-token auth scopes every request
     """
     # Authenticate
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
     if not auth_context:
         raise invalid_mcp_auth_exception()
+    user_id = auth_context.uid
 
     # Rate limit per-user
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
+    await run_blocking(critical_executor, check_rate_limit_inline, user_id, "mcp:sse")
 
     # Parse request body
     try:
-        body = await request.json()
+        body: object = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Get session if provided
-    session = None
-    if mcp_session_id:
-        if mcp_session_id not in active_sessions:
-            raise HTTPException(status_code=404, detail="Session not found")
-        session = active_sessions[mcp_session_id]
-        # Verify session belongs to this user
-        if session.user_id != auth_context.uid:
-            raise HTTPException(status_code=403, detail="Session does not belong to this user")
-
     # Handle batch requests (array of messages)
-    messages = body if isinstance(body, list) else [body]
+    raw_messages: List[Dict[str, Any]] = (
+        cast(List[Dict[str, Any]], body) if isinstance(body, list) else [cast(Dict[str, Any], body)]
+    )
+    messages: List[Dict[str, Any]] = raw_messages
 
     # Check if all messages are notifications/responses (no id)
     all_notifications = all(msg.get("id") is None for msg in messages)
@@ -1476,22 +1699,22 @@ async def mcp_streamable_http(
     if all_notifications:
         # Process notifications without response
         for msg in messages:
-            await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+            await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         return Response(status_code=202)
 
     # Process messages and collect responses
-    responses = []
-    new_session_id = None
+    responses: List[Dict[str, Any]] = []
+    new_session_id: Optional[str] = None
 
     for msg in messages:
-        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         if session_id:
             new_session_id = session_id
         if response:
             responses.append(response)
 
     # Prepare headers
-    headers = {}
+    headers: Dict[str, str] = {}
     if new_session_id:
         headers["Mcp-Session-Id"] = new_session_id
 
@@ -1517,7 +1740,7 @@ async def mcp_streamable_http(
             return JSONResponse(content=responses, headers=headers)
 
 
-@router.get("/v1/mcp/sse", tags=["mcp"])
+@router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_sse_get(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1533,6 +1756,8 @@ async def mcp_sse_get(
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
     if not auth_context:
         raise invalid_mcp_auth_exception()
+
+    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
 
     # For backwards compatibility, also support the old SSE flow
     # Return an empty SSE stream that just sends keepalives
@@ -1556,14 +1781,14 @@ async def mcp_sse_get(
     )
 
 
-@router.head("/v1/mcp/sse", tags=["mcp"])
+@router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_sse_head(authorization: Optional[str] = Header(None, alias="Authorization")):
     if not authenticate_mcp_request(authorization):
         raise invalid_mcp_auth_exception()
     return Response(status_code=200)
 
 
-@router.delete("/v1/mcp/sse", tags=["mcp"])
+@router.delete("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_delete_session(
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1575,22 +1800,12 @@ def mcp_delete_session(
     if not auth_context:
         raise invalid_mcp_auth_exception("Invalid or missing API key")
 
-    if not mcp_session_id:
-        raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
-
-    if mcp_session_id not in active_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    session = active_sessions[mcp_session_id]
-    if session.user_id != auth_context.uid:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this session")
-
-    # Delete the session
-    del active_sessions[mcp_session_id]
+    # Hosted MCP is stateless; terminate requests are best-effort so stale
+    # or load-balanced session ids do not create client-visible errors.
     return Response(status_code=204)
 
 
-@router.get("/v1/mcp/sse/info", tags=["mcp"])
+@router.get("/v1/mcp/sse/info", tags=["mcp"], response_model=McpSseInfoResponse)
 def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.

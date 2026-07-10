@@ -798,7 +798,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             color: isActive ? activeColor : (isPast ? activeColor.withValues(alpha: 0.7) : inactiveColor),
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 1))
+              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 1)),
             ],
           ),
         );
@@ -1303,8 +1303,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              decoration:
-                  BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(40)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(40),
+              ),
               child: const Text(
                 'omi.me/wrapped',
                 style: TextStyle(
@@ -3276,8 +3278,10 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                             Container(
                               width: 28,
                               height: 28,
-                              decoration:
-                                  BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -3469,8 +3473,10 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
                               Container(
                                 width: 32,
                                 height: 32,
-                                decoration:
-                                    BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
                                 child: Center(
                                   child: Text(
                                     '${index + 1}',
@@ -3665,8 +3671,10 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                             Container(
                               width: 28,
                               height: 28,
-                              decoration:
-                                  BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -3859,7 +3867,10 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
                     Text(
                       widget.headerLine1,
                       style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8), fontSize: 24, fontWeight: FontWeight.w500),
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     Text(
                       widget.headerLine2,
@@ -4647,7 +4658,10 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                     child: Text(
                       'omi.me/wrapped',
                       style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5), fontSize: 14, fontWeight: FontWeight.w500),
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),

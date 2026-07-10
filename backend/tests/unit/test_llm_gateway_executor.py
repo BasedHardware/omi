@@ -11,7 +11,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
 )
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutPolicy, RolloutStage
@@ -43,6 +43,68 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     assert not result.used_lkg
     assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
     assert provider.calls[0].request['stream'] is False
+
+
+@pytest.mark.asyncio
+async def test_executor_forwards_prompt_parser_request_without_response_format():
+    config = config_with_active_route(active_route_with_fallbacks([]))
+    request = valid_request()
+    request.pop('response_format')
+    resolved = resolve_chat_completion_route(config, request)
+    active_primary = resolved.active_route.primary
+    provider = FakeChatCompletionProvider([fake_success_response(active_primary, content='{"answer":"primary"}')])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert 'response_format' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
+async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
+    active_route = active_route_with_fallbacks([]).model_copy(
+        update={
+            'provider_options': {'temperature': 0.9},
+            'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0),
+        }
+    )
+    lkg_route = (
+        load_gateway_config(prod_mode=True)
+        .route_artifacts[LKG_ROUTE]
+        .model_copy(update={'provider_options': {'temperature': 0.1}})
+    )
+    config = config_with_routes(active_route, lkg_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.last_known_good_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['temperature'] == 0.1
+
+
+@pytest.mark.asyncio
+async def test_executor_maps_gemini_thinking_budget_before_provider_call():
+    active_route = active_route_with_fallbacks([]).model_copy(update={'provider_options': {'thinking_budget': 0}})
+    config = config_with_active_route(active_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert provider.calls[0].request['reasoning_effort'] == 'none'
+    assert 'thinking_budget' not in provider.calls[0].request
 
 
 @pytest.mark.asyncio
@@ -335,6 +397,7 @@ async def test_shadow_active_route_serves_lkg_not_active():
     assert result.selected_model == 'gpt-4.1-mini'
     assert result.used_lkg
     assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
 
 @pytest.mark.asyncio
@@ -387,12 +450,7 @@ async def test_canary_active_route_with_percent_zero_serves_lkg():
 
 @pytest.mark.asyncio
 async def test_canary_route_enforces_partial_rollout_percentage():
-    """A canary route at <100% should send only a proportional fraction of
-    requests to the active route, with the rest falling back to LKG.
-
-    Deterministic hashing means the distribution is stable per-request, but
-    over many distinct requests the percentage is honored within a tolerance.
-    """
+    """A canary route at <100% should send stable in-bucket requests active and the rest to LKG."""
     from llm_gateway.gateway.executor import _is_route_eligible_to_serve
 
     canary_route = active_route_with_fallbacks([]).model_copy(
@@ -400,17 +458,17 @@ async def test_canary_route_enforces_partial_rollout_percentage():
     )
     config = config_with_active_route(canary_route)
 
-    active_count = 0
-    total = 500
-    from llm_gateway.gateway.resolver import resolve_chat_completion_route as _resolve
+    active_messages = ('msg 1', 'msg 3', 'msg 5')
+    lkg_messages = ('msg 0', 'msg 2', 'msg 4')
 
-    for i in range(total):
-        resolved = _resolve(config, valid_request(messages=[{'role': 'user', 'content': f'msg {i}'}]))
+    for content in active_messages:
+        resolved = resolve_chat_completion_route(config, valid_request(messages=[{'role': 'user', 'content': content}]))
+        assert _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request)
+
+    for content in lkg_messages:
+        resolved = resolve_chat_completion_route(config, valid_request(messages=[{'role': 'user', 'content': content}]))
         if _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request):
-            active_count += 1
-
-    # With 30% canary, expect ~150 ± 30 (generous tolerance for deterministic hash)
-    assert 100 <= active_count <= 200, f'canary distribution off: {active_count}/{total}'
+            pytest.fail(f'{content!r} unexpectedly entered the 30% canary bucket')
 
 
 @pytest.mark.asyncio

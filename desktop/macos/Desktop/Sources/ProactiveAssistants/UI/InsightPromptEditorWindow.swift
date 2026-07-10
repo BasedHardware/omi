@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import OmiTheme
 
 /// SwiftUI view for editing the insight prompt
 struct InsightPromptEditorView: View {
@@ -145,6 +146,8 @@ extension InsightPromptEditorWindow: NSWindowDelegate {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     InsightPromptEditorView()
 }
+#endif

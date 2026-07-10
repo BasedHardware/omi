@@ -1,0 +1,38 @@
+version: 2
+name: feedback-payload-dryrun
+tier: 2
+description: SET-02 — assemble the feedback report payload via the shared builders without submitting to Sentry
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FeedbackView.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Dry-run builds the report title from a message, no Sentry capture
+    bridge.action:
+      name: dump_feedback_payload_dryrun
+      params:
+        message: "[[MARKER:set02-dryrun]]"
+    expect:
+      result.detail.sentry_message: "User Report: [[MARKER:set02-dryrun]]"
+      result.detail.sentry_capture_invoked: "false"
+      result.detail.would_submit_to_sentry: "false"
+      result.detail.diagnostics_filename: "desktop_diagnostics.json"
+
+  - id: S2
+    name: Empty message yields the logs-only title
+    bridge.action:
+      name: dump_feedback_payload_dryrun
+    expect:
+      result.detail.sentry_message: "User Report (logs only)"
+      result.detail.sentry_capture_invoked: "false"
+
+  - id: S3
+    name: No real feedback submission was logged
+    log.expect:
+      absent:
+        - "User report submitted to Sentry"
+        - "DesktopAutomationBridge: failed"

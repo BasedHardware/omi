@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import uuid
 import asyncio
-from typing import List, Optional, AsyncGenerator, Tuple, TYPE_CHECKING
+from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from models.conversation import Conversation
 
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, BaseMessage
 
-import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import retrieve_is_file_question
@@ -52,8 +51,8 @@ async def _execute_file_chat_stream(
     uid: str,
     messages: List[Message],
     chat_session: ChatSession,
-    callback_data: dict,
-) -> AsyncGenerator[str, None]:
+    callback_data: Optional[Dict[str, Any]] = None,
+) -> AsyncGenerator[Optional[str], None]:
     """Handle file chat with streaming."""
     last_message = messages[-1] if messages else None
     question = last_message.text if last_message else ""
@@ -76,8 +75,8 @@ async def _execute_file_chat_stream(
 
     try:
         # Run the producer as a concurrent task so chunks stream in real-time
-        async def _produce():
-            return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=callback)
+        async def _produce() -> str:
+            return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=cast(Any, callback))
 
         task = asyncio.create_task(_produce())
 
@@ -114,12 +113,12 @@ async def execute_persona_chat_stream(
     messages: List[Message],
     app: App,
     cited: Optional[bool] = False,
-    callback_data: dict = None,
-    chat_session: Optional[str] = None,
-) -> AsyncGenerator[str, None]:
+    callback_data: Optional[Dict[str, Any]] = None,
+    chat_session: Optional[ChatSession] = None,
+) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
     system_prompt = app.persona_prompt
-    formatted_messages = [SystemMessage(content=system_prompt)]
+    formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
 
     for msg in messages:
         if msg.sender == "ai":
@@ -127,7 +126,7 @@ async def execute_persona_chat_stream(
         else:
             formatted_messages.append(HumanMessage(content=msg.text))
 
-    full_response = []
+    full_response: List[str] = []
     callback = AsyncStreamingCallback()
 
     # Generate run_id for LangSmith tracing
@@ -145,9 +144,9 @@ async def execute_persona_chat_stream(
         },
     )
 
-    all_callbacks = [callback] + tracer_callbacks
+    all_callbacks: List[Any] = [callback] + tracer_callbacks
 
-    run_metadata = {
+    run_metadata: Dict[str, Any] = {
         "run_id": langsmith_run_id,
         "run_name": "chat.persona.stream",
         "tags": ["chat", "persona", "streaming"],
@@ -209,10 +208,10 @@ async def execute_chat_stream(
     messages: List[Message],
     app: Optional[App] = None,
     cited: Optional[bool] = False,
-    callback_data: dict = {},
+    callback_data: Dict[str, Any] = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
     - Persona apps -> persona chat (LangChain/OpenAI)
@@ -231,7 +230,7 @@ async def execute_chat_stream(
 
     # 2. File attachments
     last_msg = messages[-1] if messages else None
-    if _has_file_context(last_msg, chat_session):
+    if chat_session is not None and _has_file_context(last_msg, chat_session):
         async for chunk in _execute_file_chat_stream(uid, messages, chat_session, callback_data):
             yield chunk
         return
@@ -255,7 +254,7 @@ def execute_graph_chat(
 
     Runs the streaming chat and collects the result.
     """
-    callback_data = {}
+    callback_data: Dict[str, Any] = {}
 
     async def _run():
         async for _ in execute_chat_stream(uid, messages, app, cited=cited, callback_data=callback_data):

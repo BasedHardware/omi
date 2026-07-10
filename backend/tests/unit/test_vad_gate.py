@@ -2,64 +2,12 @@
 
 import os
 import struct
-import sys
 import tempfile
 import threading
 import time
-import types
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-def _ensure_package_path(name: str, path: Path):
-    module = sys.modules.get(name)
-    if module is None:
-        module = types.ModuleType(name)
-        sys.modules[name] = module
-
-    module.__path__ = [str(path)]
-
-    parent_name, _, child_name = name.rpartition(".")
-    if parent_name:
-        parent = sys.modules.get(parent_name)
-        if parent is not None:
-            setattr(parent, child_name, module)
-
-    return module
-
-
-def _drop_stale_module(name: str, expected_file: Path):
-    module = sys.modules.get(name)
-    if module is None:
-        return
-
-    module_file = getattr(module, "__file__", None)
-    if module_file is not None and Path(module_file).resolve() == expected_file.resolve():
-        return
-
-    sys.modules.pop(name, None)
-    parent_name, _, child_name = name.rpartition(".")
-    parent = sys.modules.get(parent_name)
-    if parent is not None and getattr(parent, child_name, None) is module:
-        delattr(parent, child_name)
-
-
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.stt", BACKEND_DIR / "utils" / "stt")
-_drop_stale_module("utils.http_client", BACKEND_DIR / "utils" / "http_client.py")
-_drop_stale_module("utils.stt.vad", BACKEND_DIR / "utils" / "stt" / "vad.py")
-_drop_stale_module("utils.stt.vad_gate", BACKEND_DIR / "utils" / "stt" / "vad_gate.py")
-
-sys.modules.setdefault('database.redis_db', MagicMock())
-sys.modules.setdefault('onnxruntime', MagicMock())
-if 'pydub' not in sys.modules:
-    _pydub_mod = types.ModuleType('pydub')
-    _pydub_mod.AudioSegment = MagicMock()
-    sys.modules['pydub'] = _pydub_mod
 
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 from utils.stt.vad_gate import (
@@ -982,6 +930,7 @@ class TestDgDeadDetection:
         assert mock_conn.send.call_count > 0
 
 
+@pytest.mark.slow
 class TestSafeSocketDelegation:
     """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
 
@@ -1332,6 +1281,7 @@ class TestOnnxStateAndConcurrency:
             assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
 
 
+@pytest.mark.slow
 class TestLongSessionStress:
     """Tests for long-session invariants (large counters, checkpoint churn)."""
 
@@ -2038,6 +1988,7 @@ class TestProcessAudioDgRemapWiring:
         assert received_segments[0]['end'] == 7.0
 
 
+@pytest.mark.slow
 class TestDG1011KeepaliveGap:
     """Verify DG 1011 protection via SafeDeepgramSocket auto-keepalive.
 

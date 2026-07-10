@@ -270,7 +270,10 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                     Text(
                       context.l10n.howItWorks,
                       style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.8)),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(

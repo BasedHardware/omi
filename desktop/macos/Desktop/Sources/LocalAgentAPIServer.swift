@@ -1,16 +1,30 @@
+import CoreGraphics
 import Foundation
 import Network
+
+enum LocalAgentAPIError: LocalizedError {
+  case tokenStorageUnavailable
+
+  var errorDescription: String? {
+    switch self {
+    case .tokenStorageUnavailable:
+      return "Couldn't save the local agent token securely."
+    }
+  }
+}
 
 enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
   private static let enabledKey = "localAgentAPIEnabled"
-  // Local-agent tokens currently live in app preferences so setup prompts can
-  // be generated without a Keychain prompt. The API is loopback-only, but the
-  // token is still readable by same-user processes; use Keychain if this scope
-  // expands beyond local desktop automation.
   private static let tokenKey = "localAgentAPIToken"
+  private static let tokenKeychainAccount = "local-agent-api-token"
   private static let portKey = "localAgentAPIPort"
+  /// Team+bundle scoped so local Apple Development / named bundles cannot poison
+  /// each other or the notarized item. Never query the unscoped legacy service.
+  private static var tokenKeychainService: String {
+    DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyLocalAgentTokenService)
+  }
 
   static var isEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -34,29 +48,57 @@ enum LocalAgentAPISettings {
   }
 
   static func storedToken() -> String? {
+    if let token = DesktopKeychainStore.string(
+      service: tokenKeychainService,
+      account: tokenKeychainAccount
+    ) {
+      return token
+    }
     let token = UserDefaults.standard.string(forKey: tokenKey) ?? ""
-    return token.isEmpty ? nil : token
+    guard !token.isEmpty else { return nil }
+    if DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) {
+      UserDefaults.standard.removeObject(forKey: tokenKey)
+      log("LocalAgentAPISettings: migrated token from UserDefaults to Keychain")
+      return token
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
+    log("LocalAgentAPISettings: failed to migrate token to Keychain")
+    return nil
   }
 
-  static func ensureToken() -> String {
+  static func ensureToken() throws -> String {
     if let token = storedToken() {
       return token
     }
+    // No readable scoped/UserDefaults token. Mint a fresh one into the scoped
+    // service. We deliberately do NOT read the unscoped legacy Keychain item
+    // (that query can show the login-keychain password dialog). Callers that
+    // still hold the pre-scoping token must re-copy the new token from Settings.
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      log("LocalAgentAPISettings: failed to save token to Keychain")
+      throw LocalAgentAPIError.tokenStorageUnavailable
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
+    log("LocalAgentAPISettings: minted replacement local-agent token into scoped Keychain (re-copy token for clients)")
     return token
   }
 
-  static func createNewToken() -> String {
+  static func createNewToken() throws -> String {
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      isEnabled = false
+      log("LocalAgentAPISettings: failed to save replacement token to Keychain")
+      throw LocalAgentAPIError.tokenStorageUnavailable
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
   }
 
-  static func enable() -> String {
-    let token = ensureToken()
+  static func enable() throws -> String {
+    let token = try ensureToken()
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
@@ -82,6 +124,16 @@ final class LocalAgentAPIServer {
 
   func startIfNeeded() {
     guard LocalAgentAPISettings.isEnabled else { return }
+    // If the feature was enabled before team+bundle scoping, the old Keychain
+    // token is intentionally unread (to avoid password prompts). Mint a fresh
+    // scoped token so the server can authenticate again; clients must re-copy it.
+    do {
+      _ = try LocalAgentAPISettings.ensureToken()
+    } catch {
+      log("LocalAgentAPIServer: cannot start — token storage unavailable (\(error.localizedDescription))")
+      LocalAgentAPISettings.isEnabled = false
+      return
+    }
     guard listener == nil else { return }
 
     do {
@@ -201,6 +253,10 @@ final class LocalAgentAPIServer {
   }
 
   private func route(_ request: LocalHTTPRequest) async -> LocalHTTPResponse {
+    guard acceptsLoopbackHostAndOrigin(request.headers) else {
+      return errorResponse("invalid_host_or_origin", statusCode: 403)
+    }
+
     if request.method == "GET", request.path == "/health" || request.path == "/" {
       return jsonResponse([
         "ok": true,
@@ -257,6 +313,34 @@ final class LocalAgentAPIServer {
     return toolResponse(name: toolName, result: result)
   }
 
+  private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
+    if let host = headers["host"], !isAllowedLoopbackHost(host) {
+      return false
+    }
+    if let origin = headers["origin"], !origin.isEmpty {
+      guard let url = URL(string: origin), let host = url.host, let port = url.port else {
+        return false
+      }
+      guard (url.scheme == "http" || url.scheme == "https"), port == Int(LocalAgentAPISettings.port) else {
+        return false
+      }
+      guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
+        return false
+      }
+    }
+    return true
+  }
+
+  private func isAllowedLoopbackHost(_ hostHeader: String) -> Bool {
+    let value = hostHeader.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = [
+      "127.0.0.1:\(LocalAgentAPISettings.port)",
+      "localhost:\(LocalAgentAPISettings.port)",
+      "[::1]:\(LocalAgentAPISettings.port)",
+    ]
+    return allowed.contains(value)
+  }
+
   private func authenticate(_ authorization: String?) -> Bool {
     guard let token = LocalAgentAPISettings.storedToken(), let authorization else {
       return false
@@ -281,82 +365,21 @@ final class LocalAgentAPIServer {
   /// timeline of the last N minutes of on-screen activity. Read-only; composes
   /// existing Rewind data so agents stop asking the user to screenshot/re-explain.
   private func workContextResponse(arguments: [String: Any]) async -> LocalHTTPResponse {
-    let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
-    let now = Date()
-    let start = now.addingTimeInterval(-Double(minutes) * 60)
-    let formatter = ISO8601DateFormatter()
-
-    // 1) Screen now — most recent frame whose pixels are currently loadable.
-    //    Frames still buffering in the unflushed active video chunk can't be
-    //    decoded yet; skip them up front so we don't repeatedly attempt (and
-    //    fail) a load — each failed load re-inits storage, a real latency spike
-    //    since the newest frames are commonly in the active chunk.
-    var screenNow: [String: Any] = ["available": false]
-    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
-    if let recent = try? await RewindDatabase.shared.getRecentScreenshots(limit: 25) {
-      for shot in recent {
-        guard let sid = shot.id else { continue }
-        if shot.usesVideoStorage, let chunk = shot.videoChunkPath, chunk == activeChunk {
-          continue  // pending: still in the active, unflushed chunk
-        }
-        if let data = try? await loadScreenshotDataEnsuringStorage(for: shot) {
-          screenNow = [
-            "available": true,
-            "screenshot_id": sid,
-            "timestamp": formatter.string(from: shot.timestamp),
-            "app_name": shot.appName,
-            "window_title": shot.windowTitle ?? NSNull(),
-            "ocr_preview": String((shot.ocrText ?? "").prefix(800)),
-            "image_bytes": data.count,
-            "note":
-              "Latest available finalized frame (may be up to ~1 min old, and can predate window_minutes). Call get_screenshot with this screenshot_id to SEE the full-screen image.",
-          ]
-          break
-        }
-      }
-    }
-
-    // 2) Recent activity — sampled frames, consecutive (app, window) runs collapsed.
-    var timeline: [[String: Any]] = []
-    let calendar = Calendar.current
-    func clock(_ date: Date) -> String {
-      let c = calendar.dateComponents([.hour, .minute], from: date)
-      return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
-    }
-    if let shots = try? await RewindDatabase.shared.getScreenshotsSampled(
-      from: start, to: now, targetCount: 80)
-    {
-      var runs: [(app: String, window: String, start: String, end: String, frames: Int)] = []
-      for shot in shots {
-        let window = Self.normalizeWindow(shot.windowTitle ?? "")
-        let cl = clock(shot.timestamp)
-        if var last = runs.last, last.app == shot.appName, last.window == window {
-          last.end = cl
-          last.frames += 1
-          runs[runs.count - 1] = last
-        } else {
-          runs.append((shot.appName, window, cl, cl, 1))
-        }
-      }
-      for run in runs.reversed().prefix(20) {
-        timeline.append([
-          "start": run.start, "end": run.end, "app": run.app,
-          "window": run.window, "frames": run.frames,
-        ])
-      }
-    }
-
-    return jsonResponse([
-      "ok": true,
-      "name": "get_work_context",
-      "window_minutes": minutes,
-      "screen_now": screenNow,
-      "timeline": timeline,
-      "memories_hint":
-        "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-      "guidance":
-        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
-    ])
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
+    let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "get_work_context",
+      context: ScreenContextTelemetryContext(surface: "local_api"),
+      ok: telemetry.ok && telemetry.screenNowAvailable == true,
+      failureCode: telemetry.failureCode,
+      screenNowAvailable: telemetry.screenNowAvailable,
+      timelineCount: telemetry.timelineCount,
+      latestCaptureAgeSeconds: telemetry.latestCaptureAgeSeconds,
+      hasOCRPreview: telemetry.hasOCRPreview,
+      imageBytes: telemetry.imageBytes,
+      permissionTCCGranted: CGPreflightScreenCaptureAccess()
+    )
+    return jsonResponse(payload)
   }
 
   /// Strip Unicode format/control marks (bidi isolates apps like Telegram inject),
@@ -387,15 +410,36 @@ final class LocalAgentAPIServer {
       screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID)
     } catch {
       logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
+        ok: false,
+        failureCode: .databaseUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
     guard let screenshot else {
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
+        ok: false,
+        failureCode: .imageUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
     }
 
     do {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
+        ok: true,
+        imageBytes: imageData.count,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return jsonResponse([
         "ok": true,
         "name": toolName,
@@ -426,27 +470,33 @@ final class LocalAgentAPIServer {
     let reason: String
     let hint: String
 
-    if let rewindError = error as? RewindError, case .corruptedVideoChunk = rewindError {
-      code = "screenshot_chunk_corrupted"
-      reason = "The video chunk backing this screenshot is corrupted and cannot be decoded."
-      hint = "Pick a different screenshot_id; this frame's pixels are unrecoverable."
-    } else if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath, chunk == activeChunk {
-      code = "screenshot_pending"
-      reason = "The frame is in the active recording segment that has not been flushed to disk yet."
-      hint = "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized."
-    } else if !screenshot.usesVideoStorage, (screenshot.imagePath ?? "").isEmpty {
-      code = "screenshot_image_unavailable"
-      reason = "This screenshot row has no stored image (orphaned capture with no video chunk or image file)."
-      hint = "Pick a different screenshot_id from a recent search_screen_history result."
-    } else if error as? RewindError != nil {
-      code = "screenshot_file_missing"
-      reason = "The image data for this screenshot is no longer on disk (likely removed by retention/cleanup)."
-      hint = "Pick a more recent screenshot_id whose pixels are still retained."
+    if let classification = ScreenContextToolTelemetry.classifyScreenshotUnavailable(
+      screenshot: screenshot,
+      activeChunk: activeChunk,
+      error: error
+    ) {
+      code = classification.code.rawValue
+      reason = classification.reason
+      hint = classification.hint
     } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
+        ok: false,
+        failureCode: .unknown,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
 
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "get_screenshot",
+      context: ScreenContextTelemetryContext(surface: "local_api"),
+      ok: false,
+      failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,
+      permissionTCCGranted: CGPreflightScreenCaptureAccess()
+    )
     return jsonResponse([
       "ok": false,
       "error": code,

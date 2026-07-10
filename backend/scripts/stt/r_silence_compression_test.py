@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import websockets
 
@@ -38,12 +39,12 @@ PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
 SILENCE_DURATIONS = [0, 0.5, 1, 5, 10]
 
 
-def normalize(text):
+def normalize(text: str) -> str:
     text = PUNCT_RE.sub(' ', text).upper()
     return ' '.join(text.split())
 
 
-def compute_wer(ref, hyp):
+def compute_wer(ref: str, hyp: str) -> float:
     ref_words = ref.split()
     hyp_words = hyp.split()
     if not ref_words:
@@ -62,9 +63,9 @@ def compute_wer(ref, hyp):
     return d[len(ref_words)][len(hyp_words)] / len(ref_words)
 
 
-def build_playlist(target_s):
-    playlist = []
-    total_s = 0
+def build_playlist(target_s: float) -> Tuple[List[Dict[str, Any]], float]:
+    playlist: List[Dict[str, Any]] = []
+    total_s = 0.0
     for reader_dir in sorted(LIBRISPEECH_DIR.iterdir()):
         if not reader_dir.is_dir():
             continue
@@ -74,7 +75,7 @@ def build_playlist(target_s):
             trans_file = list(chapter_dir.glob('*.trans.txt'))
             if not trans_file:
                 continue
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for line in trans_file[0].read_text().strip().split('\n'):
                 parts = line.strip().split(' ', 1)
                 if len(parts) == 2:
@@ -104,7 +105,7 @@ def build_playlist(target_s):
     return playlist, total_s
 
 
-def convert_to_pcm16(flac_path):
+def convert_to_pcm16(flac_path: str) -> Optional[bytes]:
     result = subprocess.run(
         ['ffmpeg', '-y', '-i', flac_path, '-f', 's16le', '-ar', str(SAMPLE_RATE), '-ac', '1', 'pipe:1'],
         capture_output=True,
@@ -113,16 +114,16 @@ def convert_to_pcm16(flac_path):
 
 
 # Pre-convert all audio once
-_pcm_cache = {}
+_pcm_cache: Dict[str, Optional[bytes]] = {}
 
 
-def get_pcm(flac_path):
+def get_pcm(flac_path: str) -> Optional[bytes]:
     if flac_path not in _pcm_cache:
         _pcm_cache[flac_path] = convert_to_pcm16(flac_path)
     return _pcm_cache[flac_path]
 
 
-async def test_with_silence(playlist, silence_s, ref_text):
+async def test_with_silence(playlist: List[Dict[str, Any]], silence_s: float, ref_text: str) -> Dict[str, Any]:
     """Send audio to Modulate with specific silence duration between utterances."""
     params = {
         'api_key': MODULATE_API_KEY,
@@ -137,26 +138,26 @@ async def test_with_silence(playlist, silence_s, ref_text):
 
     ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
 
-    utterances = []
-    partials = []
+    utterances: List[Dict[str, Any]] = []
+    partials: List[Dict[str, Any]] = []
     last_partial_text = ''
     done_event = asyncio.Event()
     t0 = time.monotonic()
 
-    async def recv():
+    async def recv() -> None:
         nonlocal last_partial_text
         try:
             async for raw in ws:
-                msg = json.loads(raw)
+                msg: Dict[str, Any] = json.loads(raw)
                 mt = msg.get('type', '')
                 if mt == 'utterance':
                     utt = msg.get('utterance', msg)
-                    utterances.append(utt)
+                    utterances.append(cast(Dict[str, Any], utt))
                     last_partial_text = ''
                 elif mt == 'partial_utterance':
                     pu = msg.get('partial_utterance', msg)
-                    partials.append(pu)
-                    last_partial_text = pu.get('text', '').strip()
+                    partials.append(cast(Dict[str, Any], pu))
+                    last_partial_text = str(cast(Dict[str, Any], pu).get('text', '')).strip()
                 elif mt == 'done':
                     done_event.set()
                     break
@@ -176,7 +177,7 @@ async def test_with_silence(playlist, silence_s, ref_text):
     total_silence_bytes = 0
 
     for i, sample in enumerate(playlist):
-        pcm = get_pcm(sample['flac'])
+        pcm = get_pcm(str(sample['flac']))
         if not pcm:
             continue
 
@@ -220,7 +221,7 @@ async def test_with_silence(playlist, silence_s, ref_text):
     elapsed_total = time.monotonic() - t0
 
     # Build transcript
-    utt_text = ' '.join(u.get('text', '') for u in utterances).strip()
+    utt_text = ' '.join(str(u.get('text', '')) for u in utterances).strip()
     # Include last partial if not already in an utterance
     full_text = utt_text
     if last_partial_text and not utt_text.endswith(last_partial_text):
@@ -252,23 +253,23 @@ async def test_with_silence(playlist, silence_s, ref_text):
     }
 
 
-async def main():
+async def main() -> None:
     print('Building playlist (target: 30s)...')
     playlist, total_s = build_playlist(30)
     if not playlist:
         print('ERROR: No LibriSpeech data found. Download first.')
         sys.exit(1)
 
-    ref_text = ' '.join(s['ref'] for s in playlist)
+    ref_text = ' '.join(str(s['ref']) for s in playlist)
     ref_norm = normalize(ref_text)
     ref_words = len(ref_norm.split())
     print(f'  {len(playlist)} utterances, {total_s:.1f}s speech, {ref_words} ref words')
 
     # Pre-cache PCM
     for s in playlist:
-        get_pcm(s['flac'])
+        get_pcm(str(s['flac']))
 
-    results = []
+    results: List[Dict[str, Any]] = []
 
     for silence_s in SILENCE_DURATIONS:
         label = f'{silence_s}s' if silence_s > 0 else '0s (back-to-back)'

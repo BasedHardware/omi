@@ -26,8 +26,18 @@ def _read_source(rel_path):
 def _load_cloud_tasks():
     import importlib.util
 
+    mock = MagicMock()
     saved = sys.modules.get('google.cloud.tasks_v2')
-    sys.modules['google.cloud.tasks_v2'] = MagicMock()
+    sys.modules['google.cloud.tasks_v2'] = mock
+    # If another test already imported the real package, `from google.cloud
+    # import tasks_v2` resolves via the parent-package ATTRIBUTE and bypasses
+    # sys.modules — patch the attribute too so load order can't leak the real
+    # client into this module.
+    google_cloud_pkg = sys.modules.get('google.cloud')
+    sentinel = object()
+    saved_attr = getattr(google_cloud_pkg, 'tasks_v2', sentinel) if google_cloud_pkg else sentinel
+    if google_cloud_pkg is not None:
+        google_cloud_pkg.tasks_v2 = mock
     try:
         spec = importlib.util.spec_from_file_location(
             'cloud_tasks_audio_test', os.path.join(BACKEND_DIR, 'utils', 'cloud_tasks.py')
@@ -40,6 +50,14 @@ def _load_cloud_tasks():
             sys.modules.pop('google.cloud.tasks_v2', None)
         else:
             sys.modules['google.cloud.tasks_v2'] = saved
+        if google_cloud_pkg is not None:
+            if saved_attr is sentinel:
+                try:
+                    delattr(google_cloud_pkg, 'tasks_v2')
+                except AttributeError:
+                    pass
+            else:
+                google_cloud_pkg.tasks_v2 = saved_attr
 
 
 AUDIO_ENV = {
@@ -61,6 +79,20 @@ class TestEnqueueAudioMergeJob:
                     {'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'u', 'timestamps': [1.0]}
                 )
             client.task_path.assert_called_once_with('proj', 'us-central1', 'audio-merge', 'am-conv1-file1')
+            client.create_task.assert_called_once()
+
+    def test_schema_v2_task_named_by_conversation_and_fingerprint(self):
+        # Conversation-level artifact builds embed the audio_files fingerprint in
+        # the task name so rebuilds after late chunks get a fresh name instead of
+        # hitting the named-task tombstone.
+        ct = _load_cloud_tasks()
+        with patch.dict(os.environ, AUDIO_ENV):
+            client = MagicMock()
+            with patch.object(ct, '_get_tasks_client', return_value=client):
+                ct.enqueue_audio_merge_job(
+                    {'schema_version': 2, 'conversation_id': 'conv1', 'fingerprint': 'abc123def456', 'uid': 'u'}
+                )
+            client.task_path.assert_called_once_with('proj', 'us-central1', 'audio-merge', 'amc-conv1-abc123def456')
             client.create_task.assert_called_once()
 
     def test_incomplete_env_raises(self):

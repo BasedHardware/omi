@@ -2,14 +2,14 @@ import AppKit
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 /// Reusable chat input field with send button, extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 ///
 /// When `isSending` is true:
-///   - Input stays enabled so the user can type a follow-up
-///   - If input is empty, the button becomes a stop button
-///   - If input has text, pressing send calls `onFollowUp` (redirects the agent)
+///   - Input stays enabled so the user can draft the next message
+///   - The action button remains Stop until the current response ends
 ///
 /// Attachment support is opt-in: pass `attachments`, `onAttachmentsAdded`, and
 /// `onAttachmentRemoved` to enable the paperclip button, the staged-files row,
@@ -17,7 +17,6 @@ import UniformTypeIdentifiers
 /// before.
 struct ChatInputView: View {
     let onSend: (String) -> Void
-    var onFollowUp: ((String) -> Void)? = nil
     var onStop: (() -> Void)? = nil
     let isSending: Bool
     var isStopping: Bool = false
@@ -60,7 +59,7 @@ struct ChatInputView: View {
                 )
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 if attachmentsEnabled {
                     Button(action: pickFiles) {
                         Image(systemName: "paperclip")
@@ -123,7 +122,7 @@ struct ChatInputView: View {
                 }
 
                 // Send/Stop button — inline to the right of the input
-                if isSending && !hasText {
+                if isSending {
                     if isStopping {
                         ProgressView()
                             .controlSize(.small)
@@ -191,13 +190,9 @@ struct ChatInputView: View {
 
     private func handleSubmit() {
         guard canSend else { return }
+        guard !isSending else { return }
         let text = inputText
-        inputText = ""
-        if isSending {
-            onFollowUp?(text)
-        } else {
-            onSend(text)
-        }
+        onSend(text)
     }
 
     private func pickFiles() {
@@ -220,26 +215,7 @@ struct ChatInputView: View {
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        var urls: [URL] = []
-        let group = DispatchGroup()
-        for provider in providers {
-            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
-                continue
-            }
-            group.enter()
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                defer { group.leave() }
-                if let data = item as? Data,
-                    let url = URL(dataRepresentation: data, relativeTo: nil)
-                {
-                    urls.append(url)
-                } else if let url = item as? URL {
-                    urls.append(url)
-                }
-            }
-        }
-        // We can't make handleDrop async, so dispatch the callback once gathered.
-        group.notify(queue: .main) { [urls] in
+        ChatAttachmentDropHandler.collectURLs(from: providers) { [currentAttachments] urls in
             guard !urls.isEmpty else { return }
             let remaining = max(0, kMaxChatAttachments - currentAttachments.count)
             let allowed = Array(urls.prefix(remaining))
@@ -247,6 +223,37 @@ struct ChatInputView: View {
                 onAttachmentsAdded?(allowed)
             }
         }
+    }
+}
+
+// MARK: - File Drop Helper
+
+enum ChatAttachmentDropHandler {
+    static func collectURLs(from providers: [NSItemProvider], onComplete: @escaping ([URL]) -> Void) -> Bool {
+        var urls: [URL] = []
+        let lock = NSLock()
+        let group = DispatchGroup()
+        for provider in providers {
+            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                let loadedURL: URL?
+                if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    loadedURL = url
+                } else if let url = item as? URL {
+                    loadedURL = url
+                } else {
+                    loadedURL = nil
+                }
+                if let loadedURL {
+                    lock.lock()
+                    urls.append(loadedURL)
+                    lock.unlock()
+                }
+            }
+        }
+        group.notify(queue: .main) { onComplete(urls) }
         return !providers.isEmpty
     }
 }

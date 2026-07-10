@@ -6,6 +6,7 @@ import pytest
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_byok_credential_context, build_omi_managed_credential_context
 from llm_gateway.gateway.providers import (
+    AnthropicMessagesProvider,
     MAX_RESPONSE_BYTES_ENV_VAR,
     OpenAICompatibleChatCompletionProvider,
     ProviderFailure,
@@ -44,6 +45,75 @@ async def test_openai_compatible_provider_posts_chat_completion(monkeypatch):
     assert response['id'] == 'chatcmpl_test'
     assert seen_requests[0].url == 'https://api.openai.com/v1/chat/completions'
     assert seen_requests[0].headers['authorization'] == 'Bearer test-key'
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_streams_chat_completion_bytes(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    seen_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            content=b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n',
+            headers={'content-type': 'text/event-stream'},
+        )
+
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    chunks = [
+        chunk
+        async for chunk in provider.stream_chat_completion(
+            {'model': 'gpt-4.1-mini', 'messages': [], 'stream': True},
+            provider_ref=ProviderRef(provider='openai', model='gpt-4.1-mini'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=8000,
+        )
+    ]
+
+    assert b''.join(chunks).startswith(b'data:')
+    assert seen_requests[0].url == 'https://api.openai.com/v1/chat/completions'
+    assert seen_requests[0].headers['authorization'] == 'Bearer test-key'
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_flattens_system_text_parts_and_normalizes_finish_reason(monkeypatch):
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-key')
+    seen_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'id': 'msg_test',
+                'content': [{'type': 'text', 'text': 'ok'}],
+                'stop_reason': 'end_turn',
+            },
+        )
+
+    provider = AnthropicMessagesProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    response = await provider.create_chat_completion(
+        {
+            'model': 'claude-sonnet-4-6',
+            'messages': [
+                {'role': 'system', 'content': [{'type': 'text', 'text': 'A'}, {'type': 'text', 'text': 'B'}]},
+                {'role': 'user', 'content': 'hello'},
+            ],
+        },
+        provider_ref=ProviderRef(provider='anthropic', model='claude-sonnet-4-6'),
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        timeout_ms=8000,
+    )
+
+    assert b'"system":"A\\nB"' in seen_requests[0].content
+    assert response['choices'][0]['finish_reason'] == 'stop'
 
 
 @pytest.mark.asyncio
@@ -200,10 +270,52 @@ async def test_openai_compatible_provider_rejects_oversized_response(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_openai_compatible_provider_keeps_byok_failure_visible(monkeypatch):
-    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+async def test_openai_compatible_provider_uses_byok_key_and_succeeds(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-paid-key')
+    seen_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'id': 'chatcmpl_byok',
+                'object': 'chat.completion',
+                'model': 'gpt-4.1-mini',
+                'choices': [{'message': {'role': 'assistant', 'content': '{}'}}],
+            },
+        )
+
     provider = OpenAICompatibleChatCompletionProvider(
-        http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    response = await provider.create_chat_completion(
+        {'model': 'gpt-4.1-mini', 'messages': [], 'stream': False},
+        provider_ref=ProviderRef(provider='openai', model='gpt-4.1-mini'),
+        credentials=build_byok_credential_context(ServiceCaller(name='backend'), {'openai': 'sk-test'}),
+        timeout_ms=8000,
+    )
+
+    assert response['id'] == 'chatcmpl_byok'
+    assert seen_requests[0].headers['authorization'] == 'Bearer sk-test'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('status_code', 'failure_class'),
+    [
+        (401, FailureClass.BYOK_AUTH),
+        (403, FailureClass.BYOK_AUTH),
+        (429, FailureClass.BYOK_RATE_LIMIT),
+    ],
+)
+async def test_openai_compatible_provider_maps_byok_auth_and_rate_limit(monkeypatch, status_code, failure_class):
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-paid-key')
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(status_code, text='denied'))
+        ),
     )
 
     with pytest.raises(ProviderFailure) as exc_info:
@@ -214,4 +326,4 @@ async def test_openai_compatible_provider_keeps_byok_failure_visible(monkeypatch
             timeout_ms=8000,
         )
 
-    assert exc_info.value.failure_class == FailureClass.BYOK_UNSUPPORTED_PROVIDER
+    assert exc_info.value.failure_class == failure_class

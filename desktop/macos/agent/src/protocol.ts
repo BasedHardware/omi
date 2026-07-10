@@ -3,20 +3,18 @@
 
 // === Swift → Bridge (stdin) ===
 
-export type ProtocolVersion = 1 | 2;
+export const PROTOCOL_VERSION = 2 as const;
+export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
-  /** v1 omits this field; v2 sends 2. */
-  protocolVersion?: ProtocolVersion;
-  /** v1 `id` maps to requestId during the compatibility window. */
-  requestId?: string;
-  clientId?: string;
+  protocolVersion: ProtocolVersion;
+  requestId: string;
+  clientId: string;
   /** Signed-in Omi/Firebase uid used to scope persisted runtime state. */
   ownerId?: string;
 }
 
 export interface CanonicalCorrelation {
-  /** Canonical Omi IDs are optional until the Phase 1 kernel owns them. */
   sessionId?: string;
   runId?: string;
   attemptId?: string;
@@ -25,31 +23,27 @@ export interface CanonicalCorrelation {
 
 export interface QueryMessage extends ProtocolEnvelope, CanonicalCorrelation {
   type: "query";
-  id?: string;
   prompt: string;
   systemPrompt: string;
   adapterId?: string;
-  surfaceKind?: string;
-  externalRefKind?: string;
-  externalRefId?: string;
-  legacyClientScope?: string;
-  legacySessionKey?: string;
-  legacyAdapterSessionId?: string;
-  sessionKey?: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
   cwd?: string;
   mode?: "ask" | "act";
   model?: string;
-  resume?: string;
   imageBase64?: string;
+  attachmentMetadataJson?: string;
+  surfaceContextJson?: string;
 }
 
 export interface ToolResultMessage {
   type: "tool_result";
   callId: string;
   result: string;
-  requestId?: string;
-  clientId?: string;
-  protocolVersion?: ProtocolVersion;
+  protocolVersion: ProtocolVersion;
+  requestId: string;
+  clientId: string;
 }
 
 export interface ControlToolRequestMessage extends ProtocolEnvelope {
@@ -74,7 +68,37 @@ export interface InterruptMessage extends ProtocolEnvelope, CanonicalCorrelation
 
 export interface InvalidateSessionMessage extends ProtocolEnvelope {
   type: "invalidate_session";
-  sessionKey: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+}
+
+export interface ClearOwnerStateMessage extends ProtocolEnvelope {
+  type: "clear_owner_state";
+}
+
+export interface ImportLegacyMainChatSessionsMessage extends ProtocolEnvelope {
+  type: "import_legacy_main_chat_sessions";
+  entries: Array<{ chatId: string; agentSessionId: string }>;
+}
+
+export interface ImportConversationTurnsMessage extends ProtocolEnvelope {
+  type: "import_conversation_turns";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turns: Array<{
+    role?: string;
+    content?: string;
+    surfaceKind?: string;
+    createdAtMs?: number;
+    metadataJson?: string;
+  }>;
+}
+
+export interface MergeFloatingChatIntoMainChatMessage extends ProtocolEnvelope {
+  type: "merge_floating_chat_into_main_chat";
+  chatId?: string;
 }
 
 /** Swift tells the bridge which auth method the user chose */
@@ -93,9 +117,9 @@ export interface WarmupSessionConfig {
 export interface WarmupMessage extends ProtocolEnvelope {
   type: "warmup";
   cwd?: string;
-  model?: string;       // backward compat
-  models?: string[];    // backward compat
-  sessions?: WarmupSessionConfig[];  // new: per-session config with system prompts
+  model?: string;
+  models?: string[];
+  sessions?: WarmupSessionConfig[];
 }
 
 /** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
@@ -103,6 +127,48 @@ export interface RefreshTokenMessage {
   type: "refresh_token";
   token: string;
   ownerId?: string;
+}
+
+export interface RecordSurfaceTurnMessage extends ProtocolEnvelope {
+  type: "record_surface_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  interrupted?: boolean;
+  idempotencyKey?: string;
+}
+
+export interface GetVoiceSeedContextMessage extends ProtocolEnvelope {
+  type: "get_voice_seed_context";
+  conversationId?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+}
+
+export interface ClearOwnerSurfaceStateMessage extends ProtocolEnvelope {
+  type: "clear_owner_surface_state";
+  chatId?: string;
+}
+
+export interface GetKernelTurnTailMessage extends ProtocolEnvelope {
+  type: "get_kernel_turn_tail";
+  limit?: number;
+  chatId?: string;
+}
+
+export interface ProjectCrossSurfaceTurnMessage extends ProtocolEnvelope {
+  type: "project_cross_surface_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  idempotencyKey?: string;
 }
 
 export type InboundMessage =
@@ -113,6 +179,15 @@ export type InboundMessage =
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
+  | ClearOwnerStateMessage
+  | ImportLegacyMainChatSessionsMessage
+  | ImportConversationTurnsMessage
+  | MergeFloatingChatIntoMainChatMessage
+  | RecordSurfaceTurnMessage
+  | GetVoiceSeedContextMessage
+  | ClearOwnerSurfaceStateMessage
+  | GetKernelTurnTailMessage
+  | ProjectCrossSurfaceTurnMessage
   | AuthenticateMessage
   | WarmupMessage
   | RefreshTokenMessage;
@@ -120,19 +195,19 @@ export type InboundMessage =
 // === Bridge → Swift (stdout) ===
 
 export interface OutboundEnvelope {
-  protocolVersion?: ProtocolVersion;
+  protocolVersion: ProtocolVersion;
   requestId?: string;
   clientId?: string;
 }
 
 export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelation {
   adapterSessionId?: string;
-  legacyAdapterSessionId?: string;
 }
 
-export interface InitMessage extends OutboundEnvelope {
+export interface InitMessage {
   type: "init";
   sessionId: string;
+  agentControlTools: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {
@@ -158,6 +233,26 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  artifacts?: SerializedArtifact[];
+  completionDeltaArtifacts?: SerializedArtifact[];
+}
+
+export interface SerializedArtifact {
+  artifactId: string;
+  sessionId: string;
+  runId: string | null;
+  attemptId: string | null;
+  kind: string;
+  role: string;
+  uri: string;
+  displayName: string | null;
+  mimeType: string | null;
+  contentHash: string | null;
+  sizeBytes: number | null;
+  lifecycleState: string;
+  lifecycleUpdatedAtMs: number | null;
+  metadata: Record<string, unknown>;
+  createdAtMs: number;
 }
 
 export interface RuntimeFailurePayload {
@@ -229,6 +324,43 @@ export interface ControlToolResultMessage extends OutboundEnvelope {
   result: string;
 }
 
+export interface TurnRecordedMessage extends OutboundEnvelope {
+  type: "turn_recorded";
+  conversationId: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  interrupted: boolean;
+  idempotencyKey?: string;
+  userTurnId?: string;
+  assistantTurnId?: string;
+  recorded: boolean;
+  duplicate: boolean;
+}
+
+export interface VoiceSeedContextMessage extends OutboundEnvelope {
+  type: "voice_seed_context";
+  conversationId: string;
+  context: string;
+  idempotencyKeys: string[];
+}
+
+export interface KernelTurnTailMessage extends OutboundEnvelope {
+  type: "kernel_turn_tail";
+  conversationId: string;
+  turns: Array<{
+    role: string;
+    content: string;
+    surfaceKind: string;
+    createdAtMs: number;
+    metadataJson: string;
+    origin?: string;
+  }>;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -241,8 +373,39 @@ export type OutboundMessage =
   | AuthRequiredMessage
   | AuthSuccessMessage
   | CancelAckMessage
-  | ControlToolResultMessage;
+  | ControlToolResultMessage
+  | TurnRecordedMessage
+  | VoiceSeedContextMessage
+  | KernelTurnTailMessage;
 
-export function requestIdFor(message: ProtocolEnvelope & { id?: string }): string | undefined {
-  return message.requestId ?? message.id;
+type OutboundWithEnvelope = Exclude<OutboundMessage, InitMessage | AuthRequiredMessage | AuthSuccessMessage>;
+
+type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> & Partial<Pick<T, "protocolVersion">>;
+
+/** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
+export type OutboundMessageDraft =
+  | InitMessage
+  | AuthRequiredMessage
+  | AuthSuccessMessage
+  | DraftEnvelope<TextDeltaMessage>
+  | DraftEnvelope<ToolUseMessage>
+  | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ToolResultDisplayMessage>
+  | DraftEnvelope<ThinkingDeltaMessage>
+  | DraftEnvelope<ResultMessage>
+  | DraftEnvelope<ErrorMessage>
+  | DraftEnvelope<CancelAckMessage>
+  | DraftEnvelope<ControlToolResultMessage>
+  | DraftEnvelope<TurnRecordedMessage>
+  | DraftEnvelope<VoiceSeedContextMessage>
+  | DraftEnvelope<KernelTurnTailMessage>;
+
+export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
+  if (message.type === "init" || message.type === "auth_required" || message.type === "auth_success") {
+    return message;
+  }
+  if ("protocolVersion" in message && message.protocolVersion === PROTOCOL_VERSION) {
+    return message as OutboundMessage;
+  }
+  return { ...message, protocolVersion: PROTOCOL_VERSION } as OutboundMessage;
 }

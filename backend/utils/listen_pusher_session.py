@@ -7,12 +7,20 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple
 
+from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
+
+# Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
+# `callable` builtin as a parameter annotation; cast to the proper signature.
+_connect_to_trigger_pusher: Callable[..., Awaitable[Optional[WebSocketClientProtocol]]] = cast(
+    "Callable[..., Awaitable[Optional[WebSocketClientProtocol]]]", connect_to_trigger_pusher
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +61,10 @@ class ListenPusherSessionDeps:
     get_current_conversation_id: Callable[[], Optional[str]]
     is_active: Callable[[], bool]
     shutdown_event: asyncio.Event
-    get_byok_keys: Callable[[], dict]
+    get_byok_keys: Callable[[], Dict[str, Any]]
     on_conversation_processed: Callable[[str], None]
     wait_for_event: Callable[[asyncio.Event, float], Awaitable[bool]]
-    connect_to_pusher: Callable[..., Awaitable[object]] = connect_to_trigger_pusher
+    connect_to_pusher: Callable[..., Awaitable[Optional[WebSocketClientProtocol]]] = _connect_to_trigger_pusher
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     random: Callable[[], float] = random.random
     now: Callable[[], float] = time.time
@@ -67,19 +75,21 @@ class ListenPusherSession:
     def __init__(self, config: ListenPusherSessionConfig, deps: ListenPusherSessionDeps):
         self.config = config
         self.deps = deps
-        self.pusher_ws = None
+        self.pusher_ws: Optional[WebSocketClientProtocol] = None
         self.pusher_connect_lock = asyncio.Lock()
         self.pusher_connected = False
         self.reconnect_state = PusherReconnectState.CONNECTED
         self.reconnect_attempts = 0
-        self.reconnect_task = None
+        self.reconnect_task: Optional[asyncio.Task[None]] = None
         self.degraded_since: float = 0.0
-        self.segment_buffers: deque = deque(maxlen=config.max_segment_buffer_size)
-        self.last_synced_conversation_id = None
-        self.pending_conversation_requests: Dict[str, dict] = {}
+        self.segment_buffers: Deque[Dict[str, Any]] = deque(maxlen=config.max_segment_buffer_size)
+        self.last_synced_conversation_id: Optional[str] = None
+        self.pending_conversation_requests: Dict[str, Dict[str, Any]] = {}
         self.pending_request_event = asyncio.Event()
-        self.pending_speaker_sample_requests: deque = deque(maxlen=config.max_pending_speaker_sample_requests)
-        self.audio_chunks: deque = deque()
+        self.pending_speaker_sample_requests: Deque[Tuple[str, str, List[str]]] = deque(
+            maxlen=config.max_pending_speaker_sample_requests
+        )
+        self.audio_chunks: Deque[bytes] = deque()
         self.audio_total_size = 0
         self.audio_buffer_last_received: Optional[float] = None
 
@@ -91,7 +101,7 @@ class ListenPusherSession:
     def session_id(self):
         return self.config.session_id
 
-    def transcript_send(self, segments):
+    def transcript_send(self, segments: List[Dict[str, Any]]) -> None:
         self.segment_buffers.extend(segments)
 
     def _buffer_pending_conversation_request(self, conversation_id: str):
@@ -124,13 +134,13 @@ class ListenPusherSession:
             self._buffer_pending_conversation_request(conversation_id)
             data = bytearray()
             data.extend(struct.pack("I", 104))
-            payload = {
+            payload: Dict[str, Any] = {
                 "conversation_id": conversation_id,
                 "language": self.config.language,
                 "byok_keys": self.deps.get_byok_keys(),
             }
             data.extend(bytes(json.dumps(payload), "utf-8"))
-            await self.pusher_ws.send(data)
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
             return True
         except Exception as e:
@@ -154,7 +164,7 @@ class ListenPusherSession:
                     )
                 )
                 self.segment_buffers.clear()
-                await self.pusher_ws.send(data)
+                await self.pusher_ws.send(cast(bytes, data))
             except ConnectionClosed as e:
                 logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
                 self._mark_disconnected()
@@ -191,7 +201,7 @@ class ListenPusherSession:
                 data = bytearray()
                 data.extend(struct.pack("I", 103))
                 data.extend(bytes(current_conversation_id, "utf-8"))
-                await self.pusher_ws.send(data)
+                await self.pusher_ws.send(cast(bytes, data))
                 self.last_synced_conversation_id = current_conversation_id
             except ConnectionClosed as e:
                 logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
@@ -212,7 +222,7 @@ class ListenPusherSession:
                 self.audio_chunks.clear()
                 self.audio_total_size = 0
                 del audio_data
-                await self.pusher_ws.send(data)
+                await self.pusher_ws.send(cast(bytes, data))
             except ConnectionClosed as e:
                 logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
                 self._mark_disconnected()
@@ -240,7 +250,7 @@ class ListenPusherSession:
                 continue
 
             try:
-                msg = await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0)
+                msg = cast(bytes, await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0))
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
@@ -479,7 +489,7 @@ class ListenPusherSession:
                     "utf-8",
                 )
             )
-            await self.pusher_ws.send(data)
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )

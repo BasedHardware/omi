@@ -592,7 +592,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [IconButton(icon: FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
                   : null,
             )
           : null,
@@ -629,7 +629,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadGraph, child: Text(context.l10n.retry)),
+              // Explicit colors: the bare button resolved to theme primary/onPrimary
+              // (black-on-black on this theme), an invisible label.
+              ElevatedButton(
+                onPressed: _loadGraph,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
+                child: Text(context.l10n.retry),
+              ),
             ],
           ),
         ),
@@ -981,7 +987,10 @@ class GraphPainter3D extends CustomPainter {
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
           text: edge.label,
-          style: TextStyle(color: Colors.white54.withValues(alpha: alpha * 2), fontSize: (9 * avgScale).clamp(7, 11)),
+          style: TextStyle(
+            color: Colors.white54.withValues(alpha: alpha * 2),
+            fontSize: (9 * avgScale).clamp(7, 11),
+          ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();

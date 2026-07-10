@@ -159,19 +159,19 @@ class TestKnowledgeGraphMigration:
 
 
 class TestSyncHttpxMigration:
-    """Verify sync router uses httpx, not requests."""
+    """Verify sync pipeline uses httpx, not requests."""
 
     def test_sync_uses_httpx(self):
-        src = _read_source('routers/sync.py')
+        src = _read_source('utils/sync/pipeline.py')
         assert 'import httpx' in src
         assert 'import requests' not in src
 
     def test_download_audio_uses_httpx_get(self):
-        src = _read_source('routers/sync.py')
+        src = _read_source('utils/sync/pipeline.py')
         assert 'httpx.get(' in src
 
     def test_download_audio_has_float_timeout(self):
-        src = _read_source('routers/sync.py')
+        src = _read_source('utils/sync/pipeline.py')
         assert 'timeout=60.0' in src
 
 

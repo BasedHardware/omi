@@ -120,7 +120,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildExperimentalItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {
@@ -154,7 +154,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildWebhookItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool isEnabled,
     required ValueChanged<bool> onToggle,
     required TextEditingController controller,
@@ -343,7 +343,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
@@ -412,7 +412,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 24,
                   height: 24,
                   child: Center(child: FaIcon(FontAwesomeIcons.microchip, color: Colors.white, size: 16)),
@@ -442,7 +442,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               title: Text(
@@ -751,7 +751,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                                     final name = f.uri.pathSegments.last;
                                                     return ListTile(
                                                       title: Text(name, style: const TextStyle(color: Colors.white)),
-                                                      trailing: const FaIcon(
+                                                      trailing: FaIcon(
                                                         FontAwesomeIcons.chevronRight,
                                                         color: Color(0xFF3C3C43),
                                                         size: 14,
@@ -818,7 +818,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                   ),
                                   child: Row(
                                     children: [
-                                      const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
+                                      FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
                                       Text(
                                         context.l10n.clear,
@@ -1921,7 +1921,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
+        title: Text(context.l10n.flashFirmware, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -1936,7 +1936,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
               decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
-                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
+                  FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1991,9 +1991,9 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    'Flash Firmware',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  child: Text(
+                    context.l10n.flashFirmware,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

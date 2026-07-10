@@ -20,6 +20,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -64,6 +65,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
+  // Single conversation-level artifact mode: one dense MP3 (gaps collapsed),
+  // wall-clock timeline mapped through the spans manifest. Fallback stays on
+  // the per-part ConcatenatingAudioSource playlist.
+  bool _singleArtifact = false;
+  AudioTimelineMapper? _timelineMapper;
+
   List<AudioFile> _getSortedAudioFiles() {
     if (widget.conversation == null) return [];
     final files = List<AudioFile>.from(widget.conversation!.audioFiles);
@@ -99,6 +106,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   void _calculateTotalDuration() {
     if (widget.conversation == null) return;
+    final stamp = widget.conversation!.conversationAudio;
+    if (stamp != null && stamp.spans.isNotEmpty) {
+      // Wall-clock timeline: the total the user sees spans the whole
+      // conversation, with the collapsed gaps shaded on the scrubber.
+      _totalDuration = Duration(milliseconds: (stamp.duration * 1000).toInt());
+      return;
+    }
     double totalSeconds = 0;
     _trackStartOffsets = [];
     for (final audioFile in _getSortedAudioFiles()) {
@@ -109,6 +123,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
+    if (_singleArtifact) {
+      final wall = _timelineMapper!.artifactToWall(trackPosition.inMilliseconds / 1000.0);
+      return Duration(milliseconds: (wall * 1000).toInt());
+    }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
     }
@@ -183,8 +201,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
     if (!mounted || _audioPlayer == null) return;
 
-    // Calculate the correct file position
-    final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
+    // Single-artifact mode seeks on the wall timeline; the spans manifest maps
+    // it to the exact MP3 position (including across collapsed gaps).
+    final filePosition =
+        _singleArtifact ? segmentStartSeconds : _calculateFilePositionForTimestamp(segmentStartSeconds);
 
     // Ensure position is not negative
     final targetPosition = Duration(milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt());
@@ -240,7 +260,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       // endpoint that used to time out on long conversations.
       final deadline = DateTime.now().add(const Duration(seconds: 90));
       var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
-      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+      while (urlsResponse.files.isEmpty || !urlsResponse.playbackReady) {
         if (!mounted) return;
         if (DateTime.now().isAfter(deadline)) {
           Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
@@ -256,6 +276,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
         if (!mounted) return;
         urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final conversationAudio = urlsResponse.conversationAudio;
+      if (conversationAudio != null && conversationAudio.isCached && conversationAudio.spans.isNotEmpty) {
+        // One dense MP3 for the whole conversation: no playlist, no track
+        // offsets — position and seeks go through the spans mapper.
+        _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
+        _singleArtifact = true;
+        _totalDuration = Duration(milliseconds: (_timelineMapper!.wallDuration * 1000).toInt());
+        await _audioPlayer!.setAudioSource(AudioSource.uri(Uri.parse(conversationAudio.signedUrl!)), preload: true);
+        _isAudioInitialized = true;
+        return;
       }
 
       final sortedAudioFiles = _getSortedAudioFiles();
@@ -366,7 +398,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Row(
@@ -463,7 +499,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -480,7 +520,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent({
+    required FaIconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Container(
       height: 56,
       width: 56,
@@ -489,7 +533,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -570,7 +618,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -667,8 +719,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: Container(
               width: progressBarWidth,
               height: 4,
-              decoration:
-                  BoxDecoration(color: Colors.white.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -718,12 +772,31 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                         color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: progress,
-                        child: Container(
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-                        ),
+                      child: Stack(
+                        children: [
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: progress,
+                            child: Container(
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                            ),
+                          ),
+                          // Shade the collapsed capture gaps on the wall timeline.
+                          if (_singleArtifact)
+                            ..._timelineMapper!.gapRangesWall.map((gap) {
+                              final wallTotal = _timelineMapper!.wallDuration;
+                              if (wallTotal <= 0) return const SizedBox.shrink();
+                              final left = (gap.$1 / wallTotal).clamp(0.0, 1.0) * progressBarWidth;
+                              final width = ((gap.$2 - gap.$1) / wallTotal).clamp(0.0, 1.0) * progressBarWidth;
+                              return Positioned(
+                                left: left,
+                                top: 0,
+                                bottom: 0,
+                                width: width,
+                                child: Container(color: Colors.black.withValues(alpha: 0.45)),
+                              );
+                            }),
+                        ],
                       ),
                     ),
                   ),
@@ -744,6 +817,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Future<void> _seekToCombinedPosition(Duration targetPosition) async {
     if (_audioPlayer == null) return;
+
+    if (_singleArtifact) {
+      // targetPosition is on the wall timeline; map to the dense MP3. A seek
+      // into a collapsed gap snaps to the next captured span.
+      final artifactSeconds = _timelineMapper!.wallToArtifact(targetPosition.inMilliseconds / 1000.0);
+      PlatformManager.instance.analytics.audioPlaybackSeeked(
+        conversationId: widget.conversation?.id ?? '',
+        toPositionSeconds: targetPosition.inSeconds,
+      );
+      await _audioPlayer!.seek(Duration(milliseconds: (artifactSeconds * 1000).toInt()));
+      return;
+    }
 
     int targetIndex = 0;
     Duration positionInTrack = targetPosition;
@@ -777,7 +862,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Widget _buildCircularButton({
     Key? key,
-    required IconData icon,
+    required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -794,7 +879,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Material(

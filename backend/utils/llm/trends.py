@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List, Optional, cast
 from pydantic import BaseModel, Field
 
 import database.users as users_db
@@ -19,6 +19,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PersonRecord = dict[str, Any]
+
 
 class Item(BaseModel):
     category: TrendEnum = Field(description="The category identified")
@@ -31,12 +33,13 @@ class ExpectedOutput(BaseModel):
 
 
 def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]) -> List[Item]:
-    people = []
+    people: list[Person] = []
     if person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people_data: list[PersonRecord] = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    user_name = get_user_name(uid, use_default=False)
+    raw_user_name = cast(object, get_user_name(uid, use_default=False))
+    user_name: Optional[str] = raw_user_name if isinstance(raw_user_name, str) else None
     transcript = TranscriptSegment.segments_as_string(
         transcript_segments, include_timestamps=False, user_name=user_name, people=people
     )
@@ -66,8 +69,8 @@ def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], per
     '''.replace('    ', '').strip()
     try:
         with_parser = get_llm('trends').with_structured_output(ExpectedOutput)
-        response: ExpectedOutput = with_parser.invoke(prompt)
-        filtered = []
+        response = cast(ExpectedOutput, with_parser.invoke(prompt))
+        filtered: list[Item] = []
         for item in response.items:
             if item.topic not in [
                 e

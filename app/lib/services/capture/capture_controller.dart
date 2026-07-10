@@ -39,6 +39,7 @@ import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
@@ -145,6 +146,10 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({CaptureExternalActions? externalActions})
       : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+    // Restore a persisted device mute so it survives an app kill/restart. When
+    // the device reconnects, streamDeviceRecording() reads _isPaused as
+    // `wasPaused` and re-applies the mute instead of silently resuming.
+    _isPaused = SharedPreferencesUtil().deviceMuted;
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
@@ -300,6 +305,8 @@ class CaptureController extends ChangeNotifier
         return 'apple_watch';
       case DeviceType.limitless:
         return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'rayban_meta';
     }
   }
 
@@ -513,25 +520,51 @@ class CaptureController extends ChangeNotifier
     await _resetState();
   }
 
-  bool get deviceSupportsTranscribeLater {
-    final t = _recordingDevice?.type;
-    return t == DeviceType.omi || t == DeviceType.openglass || t == DeviceType.friendPendant;
+  static bool supportsTranscribeLater(DeviceType? type) {
+    return type == DeviceType.omi ||
+        type == DeviceType.openglass ||
+        type == DeviceType.friendPendant ||
+        type == DeviceType.limitless;
   }
 
-  Future<void> setBatchMode(bool enabled) async {
-    if (SharedPreferencesUtil().batchModeEnabled == enabled) return;
+  bool get deviceSupportsTranscribeLater => supportsTranscribeLater(_recordingDevice?.type);
+
+  Future<bool> setBatchMode(bool enabled) async {
+    if (SharedPreferencesUtil().batchModeEnabled == enabled) return true;
+    // With batch on the realtime socket is suppressed for every device type, so a
+    // device without a batch capture path would record nothing at all.
+    if (enabled && _recordingDevice != null && !deviceSupportsTranscribeLater) {
+      Logger.debug('[setBatchMode] refused: ${_recordingDevice?.type} has no Transcribe Later support');
+      return false;
+    }
     SharedPreferencesUtil().batchModeEnabled = enabled;
     PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
     final docs = await getApplicationDocumentsDirectory();
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     // Only re-enable native streaming when turning batch OFF, a device with a
     // native BLE route is connected, and background mode is opted in.
-    final enableNativeStreaming = !enabled && hasNativeBleAudioRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    final enableNativeStreaming =
+        !enabled && hasNativeBackgroundStreamRoute && SharedPreferencesUtil().backgroundModeEnabled;
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
+    await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
     } catch (_) {}
+    return true;
+  }
+
+  Future<void> _applyLimitlessRealtimeSuppression(bool suppressed) async {
+    final device = _recordingDevice;
+    if (device == null || device.type != DeviceType.limitless) return;
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection is LimitlessDeviceConnection) {
+        await connection.setRealtimeAudioSuppressed(suppressed);
+      }
+    } catch (e) {
+      Logger.debug('[batch] limitless realtime suppression toggle failed: $e');
+    }
   }
 
   // Interactive device onboarding needs the realtime transcript + voice paths, which Transcribe
@@ -543,6 +576,7 @@ class CaptureController extends ChangeNotifier
     if (!SharedPreferencesUtil().batchModeEnabled) return;
     SharedPreferencesUtil().batchModeSuspendedForOnboarding = true;
     SharedPreferencesUtil().batchModeEnabled = false;
+    await _applyLimitlessRealtimeSuppression(false);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
@@ -553,6 +587,7 @@ class CaptureController extends ChangeNotifier
     if (!SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
     SharedPreferencesUtil().batchModeSuspendedForOnboarding = false;
     SharedPreferencesUtil().batchModeEnabled = true;
+    await _applyLimitlessRealtimeSuppression(true);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
@@ -1023,8 +1058,11 @@ class CaptureController extends ChangeNotifier
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
     }
 
-    // Update state
-    if (SharedPreferencesUtil().batchModeEnabled && _offlineSessionStartSeconds == 0) {
+    // Update state (limitless is excluded: the pendant records on-device, so the
+    // capture card is driven by its stored-page count, not a live phone timer)
+    if (SharedPreferencesUtil().batchModeEnabled &&
+        _recordingDevice?.type != DeviceType.limitless &&
+        _offlineSessionStartSeconds == 0) {
       _offlineSessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       _offlineMuteStartedAt = null;
       if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
@@ -1070,7 +1108,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool(
       'nativeBleStreamingEnabled',
-      !batchMode && SharedPreferencesUtil().backgroundModeEnabled,
+      !batchMode && SharedPreferencesUtil().backgroundModeEnabled && device.type != DeviceType.limitless,
     );
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
@@ -1085,11 +1123,15 @@ class CaptureController extends ChangeNotifier
         return const MapEntry(omiServiceUuid, audioDataStreamCharacteristicUuid);
       case DeviceType.friendPendant:
         return const MapEntry(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid);
+      case DeviceType.limitless:
+        return const MapEntry(limitlessServiceUuid, limitlessRxCharUuid);
       case DeviceType.appleWatch:
       case DeviceType.bee:
       case DeviceType.fieldy:
-      case DeviceType.limitless:
       case DeviceType.plaud:
+      // Ray-Ban Meta audio is bridged from the platform HFP route, so there is
+      // no native BLE GATT target; capture runs on the foreground Dart path.
+      case DeviceType.raybanMeta:
         return null;
     }
   }
@@ -1106,6 +1148,11 @@ class CaptureController extends ChangeNotifier
     if (device.id.isEmpty) return false;
     return _nativeBleAudioTarget(device) != null;
   }
+
+  /// Background Mode's native realtime streamer supports a subset of the routed
+  /// devices: limitless has a route for batch capture (flash drain), but its
+  /// background streaming lands with the native drain engine follow-up.
+  bool get hasNativeBackgroundStreamRoute => hasNativeBleAudioRoute && _recordingDevice?.type != DeviceType.limitless;
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
   /// can validate against the actual native BLE route before committing prefs.
@@ -1141,8 +1188,8 @@ class CaptureController extends ChangeNotifier
       return true;
     }
 
-    // Enable: must have a concrete device with a native BLE audio route.
-    if (!hasNativeBleAudioRoute) {
+    // Enable: must have a concrete device the native streamer supports.
+    if (!hasNativeBackgroundStreamRoute) {
       Logger.debug(
         '[BackgroundMode] enable rejected — no device with native BLE route '
         '(device=${_recordingDevice?.id}, type=${_recordingDevice?.type})',
@@ -1869,8 +1916,7 @@ class CaptureController extends ChangeNotifier
     // band; on real failure we bump retryCount so orphan recovery / the next
     // sync retries (the local file is retained until confirmed synced).
     try {
-      final result = await uploadLocalFilesV2([file], conversationId: conversationId);
-      SyncRateLimiter.instance.clear();
+      final result = await SyncUploadGate.instance.upload([file], conversationId: conversationId);
       if (result.completed != null) {
         // 200 fast-path: server already produced the result.
         await phoneSync.markWalSyncedAndPersist(wal);
@@ -1881,11 +1927,9 @@ class CaptureController extends ChangeNotifier
         await phoneSync.persistRetryMetadata(wal); // persists the WAL list
         SyncReconciler.instance.poke();
       }
-    } on SyncRateLimitedException catch (e) {
-      // Fair-use throttle — pause uploads, do NOT bump retryCount (it's not a
-      // content failure). The WAL stays `miss`/'waiting' and syncs once the
-      // cooldown clears.
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+    } on SyncRateLimitedException {
+      // Account-level rate limit — do not bump retryCount. The WAL stays
+      // pending and the global upload gate owns the cooldown.
       Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
     } on SocketException {
       Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
@@ -2194,6 +2238,8 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     _isPaused = true;
+    // Persist so the mute survives an app kill/restart, not just a reconnect.
+    SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
   }
@@ -2201,6 +2247,8 @@ class CaptureController extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
+    // Clear the persisted mute so we don't re-mute on the next restart.
+    SharedPreferencesUtil().deviceMuted = false;
     // Update widget immediately — don't wait for streaming setup
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device

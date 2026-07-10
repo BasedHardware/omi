@@ -1,0 +1,9 @@
+{
+  "version": "0.11.582",
+  "date": "2026-07-01",
+  "changes": [
+    "Improved onboarding memory imports to save memories in batches and reduce rate-limit failures",
+    "Fixed named desktop dev bundles so they no longer ask for login keychain access to the shared device ID",
+    "Fixed Connect your AI rows showing Connected before Omi has evidence that the agent connection was completed"
+  ]
+}

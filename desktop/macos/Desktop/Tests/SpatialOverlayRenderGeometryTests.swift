@@ -307,6 +307,42 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
     XCTAssertLessThanOrEqual(frame.maxY, visible.maxY)
   }
 
+  @MainActor
+  func testFieldCopyCardUsesTallerHeaderForLongSubtitle() {
+    let compact = CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+      title: "Finish in ChatGPT",
+      subtitle: "Copy each value into the connector form.",
+      fieldCount: 7
+    )
+    let expanded = CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+      title: "Finish in ChatGPT",
+      subtitle:
+        "Turn on Developer mode in Settings → Apps, then copy each value into the connector form.",
+      fieldCount: 7
+    )
+
+    XCTAssertEqual(compact.width, 460)
+    XCTAssertEqual(compact.height, 96 + 7 * 30)
+    XCTAssertEqual(expanded.width, 460)
+    XCTAssertEqual(expanded.height, 118 + 7 * 30)
+    XCTAssertGreaterThan(expanded.height, compact.height)
+  }
+
+  func testCopyFieldMasksCommonSensitiveLabels() {
+    XCTAssertTrue(
+      CloudConnectorCopyField(id: "secret", label: "OAuth Client Secret", value: "abc").masksValue)
+    XCTAssertTrue(CloudConnectorCopyField(id: "key", label: "API Key", value: "abc").masksValue)
+    XCTAssertTrue(
+      CloudConnectorCopyField(id: "token", label: "Access Token", value: "abc").masksValue)
+    XCTAssertFalse(
+      CloudConnectorCopyField(id: "empty", label: "OAuth Client Secret", value: "").masksValue)
+    XCTAssertFalse(
+      CloudConnectorCopyField(id: "name", label: "Name", value: "Omi Memory").masksValue)
+    XCTAssertEqual(
+      CloudConnectorCopyField(id: "key2", label: "API Key", value: "secret").displayValue,
+      String(repeating: "•", count: 12))
+  }
+
   func testRealisticSceneFailsWhenApexIsBelowTheButton() {
     // Regression guard: a placement whose apex sits below the footer (the exact bad
     // screenshot) must be reported as an issue.
