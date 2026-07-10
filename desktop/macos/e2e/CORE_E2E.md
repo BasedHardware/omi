@@ -56,10 +56,10 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | --- | --- | --- | --- | --- |
 | **T0** | Linux + macOS, CI | <2 min | flow lint, gauntlet `--self-check`; backend contracts locally or in CI `contracts` job | `--tier 0` / `--self-check` |
 | **T1** | macOS agent-local | ~5 min | all flows with `tier: 1` metadata on bridge lane | `--tier 1` |
-| **T2** | macOS agent-local; **bless tier** | ~15 min | dev-up offline (enforced); all flows with `tier <= 2` + spatial overlay swift tests | `--tier 2` |
+| **T2** | macOS agent-local; **qualification tier** | ~15 min | dev-up offline (enforced); all flows with `tier <= 2` + spatial overlay swift tests | `--tier 2` |
 | **Fault** | macOS agent-local | ~5 min | `omi-fault-inject` + `omi-fault` bundle; `chat-fault-5xx.yaml` (backend 5xx → surfaced chat error) | `--fault-suite` |
 | **T3** | macOS opt-in | 30+ min | agent continuity gauntlet (live LLM/BYOK) | `--tier 3` |
-| **Live P2** | macOS agent-local | varies | `tier: manual` flows — walker / TCC / external URL / destructive gates; **not** bless tier | `omi-harness run e2e/flows/<name>.yaml --lane bridge` |
+| **Live P2** | macOS agent-local | varies | `tier: manual` flows — walker / TCC / external URL / destructive gates; **not** qualification tier | `omi-harness run e2e/flows/<name>.yaml --lane bridge` |
 
 ## Change → tier map
 
@@ -73,7 +73,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Memories / tasks CRUD surfaces | T2 |
 | Secondary surfaces (detail, vocabulary, goals, billing, privacy mutations) | T2 + Live P2 for manual-only |
 | Rust chat completions / API client | T0 + T1 |
-| Release promotion / blessing | T2 bless + gate |
+| Qualified-beta promotion | T2 qualification + gate |
 
 ## Flow audit baseline
 
@@ -149,7 +149,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Settings depth | T2 | bridge | About / Notifications / Rewind / Shortcuts / Advanced | ✅ dedicated flows + `settings-basic.yaml` |
 | AI Chat settings | T2 | bridge | non-prod section snapshot | ✅ `ai-chat-settings.yaml` |
 
-Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summary.md}` plus `latest-green` on pass. T2+ manifests include `provider_mode` (must be `offline` for bless-eligible runs).
+Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summary.md}` plus `latest-green` on pass. T2+ manifests include `provider_mode` (must be `offline` for qualification-eligible runs).
 
 ## Failure playbook
 
@@ -157,19 +157,19 @@ Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summa
 2. Read `summary.md` for human summary.
 3. For failed flows, open `flows/<name>/` for `omi-harness` step artifacts.
 4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on Rust backend, bridge `/health`. If a live stack is already up, the harness fails loudly instead of reusing it.
-5. **`dev-up failed: Port 8085 for firestore is already in use by a foreign process`:** Another harness instance (or stale Firebase emulator) owns the default ports. Either `make dev-down` on the owning worktree, or set a separate `OMI_INSTANCE` / harness state root before `PROVIDER_MODE=offline make dev-up`. If emulators are healthy but process records are stale, flows can still be blessed manually: launch `make desktop-run-local DESKTOP_APP_NAME=omi-core-e2e DESKTOP_USER=alice`, note the automation port, then run each T2 flow with `python3 scripts/omi-harness run e2e/flows/<name>.yaml --lane bridge --port <PORT>`.
+5. **`dev-up failed: Port 8085 for firestore is already in use by a foreign process`:** Another harness instance (or stale Firebase emulator) owns the default ports. Either `make dev-down` on the owning worktree, or set a separate `OMI_INSTANCE` / harness state root before `PROVIDER_MODE=offline make dev-up`. If emulators are healthy but process records are stale, flows can still be qualified manually: launch `make desktop-run-local DESKTOP_APP_NAME=omi-core-e2e DESKTOP_USER=alice`, note the automation port, then run each T2 flow with `python3 scripts/omi-harness run e2e/flows/<name>.yaml --lane bridge --port <PORT>`.
 6. T3 failures: check LLM credentials / quota; inspect gauntlet evidence under `.harness/agent-continuity-gauntlet/`.
 
-## Wave 8 bless (2026-07-09)
+## Wave 8 qualification (2026-07-09)
 
 - **Harness gate:** `desktop-core-harness.sh --tier 2` blocked on `dev-up` port 8085 conflict (foreign Firestore emulator); see playbook item 5.
-- **Manual T2 bless:** 32/32 tier-2 flows green via `omi-harness` bridge lane against `omi-core-e2e` on port 47877 (`make desktop-run-local` + seeded `happy_path` scenario).
+- **Manual T2 qualification:** 32/32 tier-2 flows green via `omi-harness` bridge lane against `omi-core-e2e` on port 47877 (`make desktop-run-local` + seeded `happy_path` scenario).
 - **Static gate:** `desktop-core-harness.sh --self-check --skip-backend-contracts` passed; `DesktopAutomationSecondaryActionTests` (17 tests) passed.
 
 ## Hermetic vs live
 
 - **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline` (verified via config digest + service health; non-offline stacks abort), Rust `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
-- **Live P2 (manual):** Walker or hybrid flows for TCC, external URLs, destructive gates, and OAuth-adjacent paths. Not included in bless-tier matrix.
+- **Live P2 (manual):** Walker or hybrid flows for TCC, external URLs, destructive gates, and OAuth-adjacent paths. Not included in the qualification-tier matrix.
 - **Live (T3):** Real provider credentials; agent continuity gauntlet.
 
 Release-candidate agent QA: launch a named bundle, then run

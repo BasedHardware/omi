@@ -1,7 +1,7 @@
 version: 2
 name: delete-account
 tier: manual
-description: Delete Account confirmation sheet only — never confirm deletion (Live P2; not bless tier)
+description: Delete Account confirmation sheet only — never confirm deletion (Live P2; not qualification tier)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift

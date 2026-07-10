@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Blessed v*-macos candidate to promote to beta'
+        description: 'Qualified v*-macos candidate to promote to beta'
         required: true
 
 permissions:

@@ -109,6 +109,12 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Check desktop release terminology
+        run: python3 .github/scripts/check-desktop-release-terminology.py
+
+      - name: Test desktop qualification metadata writer
+        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
+
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
 

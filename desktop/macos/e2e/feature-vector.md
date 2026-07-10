@@ -27,7 +27,7 @@ Prioritized feature map to guide desktop E2E coverage. Uses the same two-dimensi
 - 1 = needs system setup first (microphone permission, account linking), then walker can verify
 - 0 = unreachable (external OAuth popup, OS-level dialog, real payment)
 
-> **Lane preference:** Prefer bridge (T2 hermetic) over walker (manual Live P2). Walker reports below are historical flow-walker runs; bless-tier confidence comes from `desktop-core-harness.sh --tier 2`.
+> **Lane preference:** Prefer bridge (T2 hermetic) over walker (manual Live P2). Walker reports below are historical flow-walker runs; qualification-tier confidence comes from `desktop-core-harness.sh --tier 2`.
 
 ---
 
@@ -94,7 +94,7 @@ Prioritized feature map to guide desktop E2E coverage. Uses the same two-dimensi
 
 ## Live P2 Manual Lane
 
-Agent-local flows with `tier: manual` — **not** bless-tier (T2). Run individually with flow-walker / `agent-swift` on a signed-in named bundle.
+Agent-local flows with `tier: manual` — **not** qualification-tier (T2). Run individually with flow-walker / `agent-swift` on a signed-in named bundle.
 
 | Flow | Why manual | Destructive? |
 |------|------------|--------------|
@@ -108,7 +108,7 @@ Agent-local flows with `tier: manual` — **not** bless-tier (T2). Run individua
 | `apps.yaml` | Marketplace browse/filter (walker) | No |
 | `connector-import-progress.yaml` | Live import progress UI | No |
 
-Do **not** promote destructive flows (`delete-account`, `onboarding-smoke`) to T2 bless tier.
+Do **not** promote destructive flows (`delete-account`, `onboarding-smoke`) to the T2 qualification tier.
 
 ---
 
@@ -149,17 +149,17 @@ Wave 1/2 T2 hermetic flows landed for secondary surfaces:
 - `conversation-detail.yaml`, `memory-crud.yaml`, `vocabulary.yaml`, `goals-dashboard.yaml`, `plan-usage.yaml`, `privacy-settings.yaml`, `apps-marketplace.yaml`, `connector-import.yaml`, `conversation-folders.yaml`, `conversation-sharing.yaml`
 - Bridge actions power mutations and deep snapshots; Live P2 manual lane unchanged for prod auth, delete-account, logout, and refer-external.
 
-Waves 4–7 (code landed; Wave 8 live bless complete):
+Waves 4–7 (code landed; Wave 8 live qualification complete):
 
 - Wave 4: `tasks-crud.yaml`, `memory-depth.yaml`, language save, memory search/filter/visibility actions
 - Wave 5: `quick-note.yaml`, `about-settings.yaml`, `notifications-settings.yaml`, `rewind-settings.yaml`, `keyboard-shortcuts.yaml`, extended `settings-basic.yaml`
 - Wave 6: multi-speaker `inject_multi`, `speaker-naming.yaml` T2, `memory-graph.yaml`
 - Wave 7: `reset_onboarding` corruption fix, non-prod AI Chat section + `ai-chat-settings.yaml`; `onboarding-smoke.yaml` stays manual
-- Wave 8: 32/32 T2 flows green (manual bless via `omi-harness`; harness `dev-up` blocked on port 8085 conflict — see CORE_E2E Failure playbook)
+- Wave 8: 32/32 T2 flows green (manual qualification via `omi-harness`; harness `dev-up` blocked on port 8085 conflict — see CORE_E2E Failure playbook)
 
 ---
 
-## Coverage Summary (honest — 2026-07-09, post Wave 8 bless)
+## Coverage Summary (honest — 2026-07-09, post Wave 8 qualification)
 
 | Category | Total | ✅ deep flow | ⚠️ nav-only / manual / partial | ❌ / blocked |
 |----------|-------|-------------|--------------------------------|-------------|
@@ -168,7 +168,7 @@ Waves 4–7 (code landed; Wave 8 live bless complete):
 | Settings & System | 11 | 9 | 1 | 1 |
 | **Total** | **42** | **33** | **8** | **1** |
 
-T2 bless matrix: **32/32 flows green** (2026-07-09 manual bless via `omi-harness` bridge lane; full `desktop-core-harness.sh --tier 2` blocked on foreign Firestore port — see CORE_E2E Failure playbook). Manual Live P2 remains for TCC, OAuth, destructive gates, and partial sharing.
+T2 qualification matrix: **32/32 flows green** (2026-07-09 manual qualification via `omi-harness` bridge lane; full `desktop-core-harness.sh --tier 2` blocked on foreign Firestore port — see CORE_E2E Failure playbook). Manual Live P2 remains for TCC, OAuth, destructive gates, and partial sharing.
 
 ---
 

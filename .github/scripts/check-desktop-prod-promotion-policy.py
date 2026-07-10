@@ -8,7 +8,6 @@ we have already seen, without requiring PyYAML in CI.
 
 from pathlib import Path
 
-
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
 
 
@@ -71,32 +70,86 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
-    require("--override-unblessed", text, "workflow must expose override_unblessed for break-glass bless bypass")
-    require("--override-confirm", text, "workflow must expose override_confirm for break-glass bless bypass")
-    require("I-ACCEPT-UNBLESSED-PROD-RISK", text, "workflow must require typed override confirmation")
-    require("blessed_sha", text, "workflow must compare blessedSha to the promotion target")
-    require('git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"', text, "workflow must reject tags that cannot consume release identity env vars")
-    require('git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity")
-    require("Preflight Omi Bot token configuration", text, "workflow must verify GitHub App token secrets before prod mutations")
-    require("Preflight Omi Bot repository access", text, "workflow must verify GitHub App repository access before prod mutations")
-    require("Preflight Firestore bridge release", text, "workflow must verify the Firestore bridge release before prod deploy")
-    require("EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}", text, "workflow must compare Firestore bridge version to the release tag")
-    require("EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}", text, "workflow must compare Firestore bridge build number to the release tag")
-    require("Firestore bridge release version mismatch", text, "workflow must fail on mismatched Firestore bridge release")
-    require("Firestore bridge release build_number mismatch", text, "workflow must fail on mismatched Firestore bridge build number")
+    require("--break-glass", text, "workflow must expose an audited emergency bypass")
+    require("--break-glass-confirm", text, "workflow must require typed break-glass confirmation")
+    require("--break-glass-reason", text, "workflow must require a break-glass audit rationale")
+    require("I-ACCEPT-STABLE-PROMOTION-RISK", text, "workflow must require the stable-promotion risk phrase")
+    require("--target-sha", text, "workflow must validate qualification and nomination against the tag SHA")
+    require("Audited break glass by", text, "workflow must record the actor and break-glass reason")
+    require(
+        'git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"',
+        text,
+        "workflow must reject tags that cannot consume release identity env vars",
+    )
+    require(
+        'git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity"
+    )
+    require(
+        "Preflight Omi Bot token configuration",
+        text,
+        "workflow must verify GitHub App token secrets before prod mutations",
+    )
+    require(
+        "Preflight Omi Bot repository access",
+        text,
+        "workflow must verify GitHub App repository access before prod mutations",
+    )
+    require(
+        "Preflight Firestore bridge release",
+        text,
+        "workflow must verify the Firestore bridge release before prod deploy",
+    )
+    require(
+        "EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}",
+        text,
+        "workflow must compare Firestore bridge version to the release tag",
+    )
+    require(
+        "EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}",
+        text,
+        "workflow must compare Firestore bridge build number to the release tag",
+    )
+    require(
+        "Firestore bridge release version mismatch", text, "workflow must fail on mismatched Firestore bridge release"
+    )
+    require(
+        "Firestore bridge release build_number mismatch",
+        text,
+        "workflow must fail on mismatched Firestore bridge build number",
+    )
     require("Deploy Desktop Backend to Production", text, "guard should cover the prod deploy workflow")
-    require("Verify prod backend release identity", text, "prod deploy must verify the backend release identity before release metadata changes")
+    require(
+        "Verify prod backend release identity",
+        text,
+        "prod deploy must verify the backend release identity before release metadata changes",
+    )
     require("Promote Firestore release stable", text, "workflow must promote the Rust appcast Firestore release")
-    require("Generate Omi Bot token for release mutations", text, "workflow must mint the GitHub App token immediately before late release/tag mutations")
-    require("mark-desktop-release-stable.py", text, "workflow must mark the release stable only after backend verification")
-    require("Clear desktop update cache", text, "workflow should clear Python desktop update cache after stable metadata changes")
+    require(
+        "Generate Omi Bot token for release mutations",
+        text,
+        "workflow must mint the GitHub App token immediately before late release/tag mutations",
+    )
+    require(
+        "mark-desktop-release-stable.py", text, "workflow must mark the release stable only after backend verification"
+    )
+    require(
+        "Clear desktop update cache",
+        text,
+        "workflow should clear Python desktop update cache after stable metadata changes",
+    )
     require("Advance prod-tracking tag", text, "workflow must move the prod tracking tag after promotion succeeds")
-    require("This promotion workflow is roll-forward only", text, "workflow must reject older releases instead of force-rolling back")
+    require(
+        "This promotion workflow is roll-forward only",
+        text,
+        "workflow must reject older releases instead of force-rolling back",
+    )
     require("grep -qE '^v.+-macos$'", text, "prod deploys must be limited to macOS desktop release tags")
     require("OMI_DESKTOP_RELEASE_TAG=", text, "prod deploy must stamp release tag into Cloud Run")
     require("OMI_DESKTOP_RELEASE_SHA=", text, "prod deploy must stamp release sha into Cloud Run")
     require("OMI_DESKTOP_RELEASE_CHANNEL=stable", text, "prod deploy must stamp stable channel into Cloud Run")
-    require("RELEASE_SECRET=RELEASE_SECRET:latest", text, "prod deploy must expose release secret for Firestore promotion")
+    require(
+        "RELEASE_SECRET=RELEASE_SECRET:latest", text, "prod deploy must expose release secret for Firestore promotion"
+    )
     require_order(
         text,
         "Preflight Omi Bot repository access",
