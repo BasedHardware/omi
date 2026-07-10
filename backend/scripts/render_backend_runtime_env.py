@@ -38,6 +38,7 @@ def main() -> int:
         output_prefix = _output_prefix(service)
         _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
         _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
+        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {})))
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     for job, raw_job_config in jobs.items():
         job_config = _as_config_dict(raw_job_config)
@@ -46,6 +47,7 @@ def main() -> int:
         output_prefix = _output_prefix(job)
         _emit_output(f'{output_prefix}_env_vars', _render_env_vars(job_config.get('env', {})))
         _emit_output(f'{output_prefix}_secrets', _render_secrets(job_config.get('secrets', {})))
+        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {})))
     return 0
 
 
@@ -80,6 +82,10 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
         version = entry.get('version', 'latest')
         lines.append(f'{name}={entry["secret"]}:{version}')
     return '\n'.join(lines)
+
+
+def _render_secret_names(secret_entries: ConfigDict) -> str:
+    return ','.join(secret_entries.keys())
 
 
 def _render_flags(flag_entries: ConfigDict) -> str:

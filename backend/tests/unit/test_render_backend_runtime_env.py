@@ -96,6 +96,16 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
         'OPENAI_API_KEY=OPENAI_API_KEY:latest',
         'PINECONE_API_KEY=PINECONE_API_KEY:latest',
     }
+    secret_names_marker = '__BACKEND_RUNTIME_ENV_notifications_job_secret_names__'
+    names_start = out.index(f'notifications_job_secret_names<<{secret_names_marker}')
+    names_body_start = out.index('\n', names_start) + 1
+    names_body_end = out.index(secret_names_marker, names_body_start)
+    assert set(out[names_body_start:names_body_end].strip().split(',')) == {
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+        'PINECONE_API_KEY',
+    }
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):

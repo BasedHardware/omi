@@ -45,6 +45,7 @@ def process_external_integration_memory(
 ) -> List[MemoryDB]:
     memory_data.app_id = app_id
     saved_memories: List[MemoryDB] = []
+    explicit_memory_ids: set[str] = set()
     language = users_db.get_user_language_preference(uid)
 
     # Process explicit memories if provided
@@ -79,6 +80,7 @@ def process_external_integration_memory(
             memory_db.manually_added = False
             memory_db.app_id = app_id
             saved_memories.append(memory_db)
+            explicit_memory_ids.add(memory_db.id)
 
     # Extract memories from text if provided
     if memory_data.text and len(memory_data.text.strip()) > 0:
@@ -127,7 +129,18 @@ def process_external_integration_memory(
         ):
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
-                memory_service.write(uid, memory_db.model_dump())
+                if memory_db.id in explicit_memory_ids:
+                    memory_service.create_external_memory(
+                        uid,
+                        memory_db,
+                        memory_system=MemorySystem.CANONICAL,
+                        consumer=f"integration:{app_id}",
+                        operation="explicit_memory_create",
+                        upsert_vector=False,
+                        require_canonical_promotion=True,
+                    )
+                else:
+                    memory_service.write(uid, memory_db.model_dump())
         else:
             memories_db.save_memories(
                 uid,

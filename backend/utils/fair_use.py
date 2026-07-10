@@ -456,6 +456,29 @@ def _retry_after_seconds_from_restrict_until(restrict_until: Any) -> int | None:
     return max(seconds, 1) if seconds > 0 else None
 
 
+def normalize_expired_restriction_state(
+    uid: str, state: Dict[str, Any], *, now: datetime | None = None
+) -> Dict[str, Any]:
+    """Return effective state, persisting the existing restrict→throttle expiry transition."""
+    normalized_state = dict(state)
+    if normalized_state.get('stage', 'none') != 'restrict':
+        return normalized_state
+
+    restrict_until_raw = normalized_state.get('restrict_until')
+    if not isinstance(restrict_until_raw, datetime):
+        return normalized_state
+
+    restrict_until = _as_utc(restrict_until_raw)
+    effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+    if effective_now <= restrict_until:
+        return normalized_state
+
+    fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
+    invalidate_enforcement_cache(uid)
+    normalized_state.update({'stage': 'throttle', 'restrict_until': None})
+    return normalized_state
+
+
 def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
     """Return whether the user is hard-restricted and, when known, the retry window in seconds."""
     if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
@@ -465,23 +488,12 @@ def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
 
     # Single Firestore read — get_enforcement_stage uses cache, but we need
     # restrict_until too, so read the full state once and check stage from it.
-    state = fair_use_db.get_fair_use_state(uid)
+    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
     stage = state.get('stage', 'none')
     if stage != 'restrict':
         return False, None
 
-    # Check if restriction has expired
-    restrict_until_raw = state.get('restrict_until')
-    if restrict_until_raw and isinstance(restrict_until_raw, datetime):
-        # Normalize to aware UTC for comparison (Firestore may return naive datetimes)
-        restrict_until = _as_utc(restrict_until_raw)
-        if datetime.now(timezone.utc) > restrict_until:
-            # Restriction expired, reset to throttle
-            fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
-            invalidate_enforcement_cache(uid)
-            return False, None
-    else:
-        restrict_until = restrict_until_raw
+    restrict_until = state.get('restrict_until')
 
     # Check if speech is over hard cap
     speech = get_rolling_speech_ms(uid)

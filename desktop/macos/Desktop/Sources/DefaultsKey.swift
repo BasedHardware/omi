@@ -35,8 +35,12 @@ enum DefaultsKey: String {
     case chatBridgeMode = "chatBridgeMode"
     case multiChatEnabled = "multiChatEnabled"
     case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+    case hasCompletedOnboarding = "hasCompletedOnboarding"
     case onboardingStep = "onboardingStep"
+    case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
+    case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+    /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
     case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
 }
 
@@ -51,6 +55,7 @@ extension UserDefaults {
     func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+    func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
     func removeObject(forKey key: DefaultsKey) { removeObject(forKey: key.rawValue) }

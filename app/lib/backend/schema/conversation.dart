@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -272,6 +273,31 @@ TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegmen
   return TranscriptSegment.fromGenerated(generated);
 }
 
+/// Conversation-level dense playback artifact stamp: one MP3 per conversation
+/// (inter-part gaps collapsed) + the spans manifest for wall-clock mapping.
+class ConversationAudioInfo {
+  final double duration; // wall-clock seconds
+  final double capturedDuration; // seconds of actual audio
+  final List<ConversationAudioSpan> spans;
+
+  ConversationAudioInfo({required this.duration, required this.capturedDuration, this.spans = const []});
+
+  factory ConversationAudioInfo.fromGenerated(wire.GeneratedConversationAudio generated) {
+    return ConversationAudioInfo(
+      duration: generated.duration,
+      capturedDuration: generated.capturedDuration,
+      spans: generated.spans
+          .map((s) => ConversationAudioSpan(
+                fileId: s.fileId,
+                wallOffset: s.wallOffset,
+                artifactOffset: s.artifactOffset,
+                len: s.len,
+              ))
+          .toList(),
+    );
+  }
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -283,6 +309,7 @@ class ServerConversation {
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
+  final ConversationAudioInfo? conversationAudio;
 
   final List<AppResponse> appResults;
   final List<String> suggestedSummarizationApps;
@@ -317,6 +344,7 @@ class ServerConversation {
     this.geolocation,
     this.photos = const [],
     this.audioFiles = const [],
+    this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
     this.source,
@@ -364,6 +392,9 @@ class ServerConversation {
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      conversationAudio: generated.conversationAudio == null
+          ? null
+          : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
       source:
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,

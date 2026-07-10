@@ -282,6 +282,16 @@ def get_conversation(uid, conversation_id):
     return conversation_data
 
 
+def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
+    """Field-masked read of just the conversation_audio stamp — cheap enough for
+    the pusher's per-batch staleness check (the full doc carries transcripts)."""
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    snapshot = doc_ref.get(field_paths=['conversation_audio'])
+    if not snapshot.exists:
+        return None
+    return (snapshot.to_dict() or {}).get('conversation_audio')
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations(
@@ -519,9 +529,11 @@ def _finalize_audio_file_group(
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
-    # Estimate last chunk duration from blob size (PCM16 mono at 8kHz = 16000 bytes/sec)
+    # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
+    # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
+    # decoded PCM) is the display source of truth.
     last_chunk_size = chunk_group[-1].get('size', 0)
-    last_chunk_duration = last_chunk_size / 16000.0 if last_chunk_size > 0 else 5.0
+    last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
     duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
     return AudioFile(

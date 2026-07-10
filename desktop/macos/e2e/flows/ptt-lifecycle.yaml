@@ -4,9 +4,12 @@ tier: 2
 description: Real push-to-talk start/release lifecycle through the automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceTurnOutbox.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
 preconditions:

@@ -237,15 +237,17 @@ actor AgentBridge {
 
   func recordSurfaceTurn(
     surface: AgentSurfaceReference,
+    ownerID: String? = nil,
     userText: String,
     assistantText: String,
     origin: String,
     interrupted: Bool = false,
     idempotencyKey: String? = nil
-  ) async {
-    await runtime.recordSurfaceTurn(
+  ) async throws -> Bool {
+    try await runtime.recordSurfaceTurn(
       clientId: clientId,
       surface: surface,
+      ownerID: ownerID,
       userText: userText,
       assistantText: assistantText,
       origin: origin,
@@ -254,7 +256,7 @@ actor AgentBridge {
     )
   }
 
-  func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> (conversationId: String, context: String) {
+  func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> AgentRuntimeProcess.VoiceSeedContextResult {
     try await start()
     return try await runtime.getVoiceSeedContext(
       clientId: clientId,

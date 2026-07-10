@@ -198,10 +198,26 @@ struct RealtimeHubToolFailure: Equatable {
   }
 }
 
-private struct PendingBargeInReplacementTurn {
+struct PendingBargeInReplacementTurn {
+  static let maxBufferedAudioBytes = 3_840_000  // 120 s @ 16 kHz s16le
+
+  let turnID: VoiceTurnID
+  let responseID: VoiceResponseID
   var pendingBegin = true
   var pendingCommit = false
-  var audioBuffer: [Data] = []
+  private(set) var audioBuffer: [Data] = []
+  private(set) var bufferedAudioBytes = 0
+
+  @discardableResult
+  mutating func appendAudio(_ pcm16k: Data) -> Bool {
+    let remaining = Self.maxBufferedAudioBytes - bufferedAudioBytes
+    guard remaining > 0 else { return false }
+    let accepted = pcm16k.count <= remaining ? pcm16k : Data(pcm16k.prefix(remaining))
+    guard !accepted.isEmpty else { return false }
+    audioBuffer.append(accepted)
+    bufferedAudioBytes += accepted.count
+    return accepted.count == pcm16k.count
+  }
 }
 
 struct InterruptedTurnPayload: Equatable {
@@ -421,6 +437,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var turnIdempotencyKey = ""
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
+  private var prefetchedVoiceSeedIdempotencyKeys: Set<String> = []
   private var prefetchedFloatingAgentStatus = ""
   private var voiceTurnScreenContextSentEpoch: Int?
   /// Seed baked into the current warm session's system instructions.
@@ -431,13 +448,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var turnPreparationTask: Task<Void, Never>?
   private var turnPersistenceTask: Task<Void, Never>?
   private var turnPersistenceGeneration: UInt64 = 0
+  private let voiceTurnOutbox = RealtimeVoiceTurnOutbox.shared
+  private var voiceTurnOutboxDrainTask: Task<Void, Never>?
   private var deferredSessionRefreshTask: Task<Void, Never>?
   private var canceledTurnRewarmTask: Task<Void, Never>?
   private var cancelContinuityFenceActive = false
   private var cancelContinuityFenceTurnID: VoiceTurnID?
   private var bargeInContinuityTask: Task<Void, Never>?
+  private var bargeInReplacementGeneration: UInt64 = 0
   private var pendingBargeInProvider: RealtimeHubProvider?
   private var pendingBargeInAuth: HubAuth?
+  /// Gemini input-transcription events do not carry a stable per-item ID. Once a
+  /// turn completes, require a fresh provider session before accepting another PTT
+  /// turn so a late event from A can never be attributed to B.
+  private var geminiSessionNeedsTurnBoundary = false
 
   // Per-turn language identification (multi-language PTT).
   /// Local copy of this turn's mic audio (16 kHz s16le mono) for on-device language ID.
@@ -640,10 +664,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceResponseID = responseID
 
     if let key = APIKeyService.byokKey(alternate.byokProvider) {
+      pendingBargeInProvider = alternate
+      pendingBargeInAuth = .byokKey(key)
       startReplacementSessionForBargeIn(provider: alternate, auth: .byokKey(key))
       return true
     }
     guard AuthService.shared.isSignedIn else { return false }
+    pendingBargeInProvider = alternate
+    // Marker only: a newer PTT can rotate continuity while the real alternate
+    // one-use token is still minting. The start path always remints this case.
+    pendingBargeInAuth = .ephemeral("")
     remintReplacementSessionForBargeIn(provider: alternate)
     return true
   }
@@ -736,6 +766,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
     registerPTTLanguageTestAction()
+    registerRapidPTTBurstTestAction()
+    scheduleVoiceTurnOutboxDrain()
     // Load the multilingual language-ID model off the hot path so the first PTT turn's
     // early verdict (and the bubble-fallback decode) doesn't pay model-load latency.
     // Only for users who explicitly configured voice languages — the gate that keeps
@@ -782,6 +814,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         // interrupted turn, mark turnRecorded, and skip diagnostics on the real reply.
         responding = false
         realtimePlaybackActive = false
+        if let staleTurnID = VoiceTurnCoordinator.shared.activeTurnID {
+          _ = cancelTurn(turnID: staleTurnID)
+          VoiceTurnCoordinator.shared.send(.finish(turnID: staleTurnID, reason: .providerFailed))
+        }
       }
       ensureWarm()
       guard await waitUntilActive(timeout: 15) else {
@@ -794,7 +830,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return ["error": "hub session did not become active after voice seed prefetch"]
       }
       lastTurnDiagnostics = [:]
-      beginTurn()
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)
+      VoiceTurnCoordinator.shared.send(
+        .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      beginTurn(turnID: turnID)
       testProviderTranscriptOverride = forceTranscript
       let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
       if !textOnly {
@@ -835,6 +874,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       if let forceTranscript, !forceTranscript.isEmpty {
         _ = await session?.sendTestTextInput(forceTranscript)
       }
+      VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))
       _ = commitTurn()
       let deadline = Date().addingTimeInterval(timeout)
       var redrive = false
@@ -851,6 +891,62 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       try? await Task.sleep(nanoseconds: 1_000_000_000)
     }
     return ["error": "turn did not complete within \(Int(timeout))s"]
+  }
+
+  /// Non-production regression harness for the exact user report: commit several
+  /// PTT clips back-to-back without waiting for provider replies, then wait only
+  /// for the final reply. Earlier turns must be persisted and included in its seed.
+  private func registerRapidPTTBurstTestAction() {
+    DesktopAutomationActionRegistry.shared.register(
+      name: "ptt_test_burst",
+      summary: "Drive three back-to-back PCM PTT turns and return final diagnostics.",
+      params: ["pcm1", "pcm2", "pcm3", "timeout"]
+    ) { [weak self] params in
+      let paths = [params["pcm1"], params["pcm2"], params["pcm3"]]
+      let clips = paths.compactMap { path in
+        path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }
+      }
+      guard clips.count == 3, clips.allSatisfy({ !$0.isEmpty }) else {
+        return ["error": "pcm1, pcm2, and pcm3 must be readable PCM16/16k mono files"]
+      }
+      guard let self else { return ["error": "hub controller unavailable"] }
+      return await self.runHeadlessRapidPTTBurst(
+        clips: clips,
+        timeout: Double(params["timeout"] ?? "") ?? 60)
+    }
+  }
+
+  private func runHeadlessRapidPTTBurst(
+    clips: [Data],
+    timeout: Double
+  ) async -> [String: String] {
+    ensureWarm()
+    guard await waitUntilActive(timeout: 15) else {
+      return ["error": "hub session did not become active"]
+    }
+    lastTurnDiagnostics = [:]
+    for clip in clips {
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)
+      VoiceTurnCoordinator.shared.send(
+        .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      beginTurn(turnID: turnID)
+      var offset = 0
+      while offset < clip.count {
+        let end = min(offset + 3_200, clip.count)
+        feedAudio(clip.subdata(in: offset..<end), turnID: turnID)
+        offset = end
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))
+      _ = commitTurn()
+    }
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if !lastTurnDiagnostics.isEmpty { return lastTurnDiagnostics }
+      try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+    return ["error": "rapid PTT burst did not complete within \(Int(timeout))s"]
   }
 
   /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
@@ -1140,6 +1236,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !kernelSeed.isEmpty {
       sections.append(kernelSeed)
     }
+    if let ownerID = RuntimeOwnerIdentity.currentOwnerId() {
+      let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
+      let pendingKernelSeed = voiceTurnOutbox.seedContext(
+        ownerID: ownerID,
+        surface: surface,
+        excludingIdempotencyKeys: prefetchedVoiceSeedIdempotencyKeys)
+      if !pendingKernelSeed.isEmpty {
+        sections.append(pendingKernelSeed)
+      }
+    }
     let floatingAgents =
       prefetchedFloatingAgentStatus
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1155,7 +1261,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceSeedRefreshGeneration &+= 1
     let refreshGeneration = voiceSeedRefreshGeneration
     voiceSeedPrefetchTask = Task { [weak self] in
-      async let seed = FloatingControlBarManager.shared.kernelVoiceSeedContext()
+      async let seed = FloatingControlBarManager.shared.kernelVoiceSeedSnapshot()
       async let floatingStatus = FloatingControlBarManager.shared.floatingAgentStatusContext()
       let resolvedSeed = await seed
       let resolvedFloatingStatus = await floatingStatus
@@ -1163,7 +1269,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         guard let self, !Task.isCancelled,
           self.voiceSeedRefreshGeneration == refreshGeneration
         else { return }
-        self.prefetchedVoiceSeedContext = resolvedSeed
+        self.prefetchedVoiceSeedContext = resolvedSeed.context
+        self.prefetchedVoiceSeedIdempotencyKeys = Set(resolvedSeed.idempotencyKeys)
         self.prefetchedFloatingAgentStatus = resolvedFloatingStatus
       }
     }
@@ -1185,14 +1292,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceSeedPrefetchTask = nil
     voiceSeedRefreshGeneration &+= 1
     let refreshGeneration = voiceSeedRefreshGeneration
-    async let seed = FloatingControlBarManager.shared.kernelVoiceSeedContext()
+    async let seed = FloatingControlBarManager.shared.kernelVoiceSeedSnapshot()
     async let floatingStatus = FloatingControlBarManager.shared.floatingAgentStatusContext()
     let resolvedSeed = await seed
     let resolvedFloatingStatus = await floatingStatus
     guard !Task.isCancelled, voiceSeedRefreshGeneration == refreshGeneration else {
       return false
     }
-    prefetchedVoiceSeedContext = resolvedSeed
+    prefetchedVoiceSeedContext = resolvedSeed.context
+    prefetchedVoiceSeedIdempotencyKeys = Set(resolvedSeed.idempotencyKeys)
     prefetchedFloatingAgentStatus = resolvedFloatingStatus
     return true
   }
@@ -1292,21 +1400,129 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return task
   }
 
-  private func recordTurnToKernelAwaiting(
+  private func recordTurnToKernelAwaiting(_ entry: RealtimeVoiceTurnOutboxEntry) async -> Bool {
+    let surface = AgentSurfaceReference(
+      surfaceKind: entry.surfaceKind,
+      externalRefKind: entry.externalRefKind,
+      externalRefId: entry.externalRefID)
+    return await FloatingControlBarManager.shared.recordSurfaceTurn(
+      surface: surface,
+      ownerID: entry.ownerID,
+      userText: entry.userText,
+      assistantText: entry.assistantText,
+      origin: "realtime_voice",
+      interrupted: entry.interrupted,
+      idempotencyKey: entry.idempotencyKey
+    )
+  }
+
+  /// The kernel is the chat transcript authority. Foreground delivery is bounded;
+  /// an unacknowledged stable idempotency key stays in the durable outbox and is
+  /// replayed off the voice-session critical path.
+  private func persistTurnToKernelThroughTransientFailures(
     userText: String,
     assistantText: String,
     interrupted: Bool,
     idempotencyKey: String
   ) async {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+      log("RealtimeHub: cannot persist voice turn without an authenticated owner")
+      return
+    }
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
-    await FloatingControlBarManager.shared.recordSurfaceTurn(
-      surface: surface,
+    let entry = RealtimeVoiceTurnOutboxEntry(
+      ownerID: ownerID,
+      surfaceKind: surface.surfaceKind,
+      externalRefKind: surface.externalRefKind,
+      externalRefID: surface.externalRefId,
+      idempotencyKey: idempotencyKey,
       userText: userText,
       assistantText: assistantText,
-      origin: "realtime_voice",
       interrupted: interrupted,
-      idempotencyKey: idempotencyKey
+      createdAtMs: Int64(Date().timeIntervalSince1970 * 1000))
+    voiceTurnOutbox.enqueue(entry)
+    FloatingControlBarManager.shared.stageRealtimeVoiceTurn(
+      userText: userText,
+      assistantText: assistantText,
+      idempotencyKey: idempotencyKey)
+
+    let acknowledged = await drainVoiceTurnOutbox(
+      ownerID: ownerID,
+      through: idempotencyKey,
+      maximumAttempts: 2)
+    if acknowledged { return }
+    log(
+      "RealtimeHub: deferring unacknowledged kernel turn to durable outbox "
+        + "idempotency_key=\(idempotencyKey)"
     )
+    scheduleVoiceTurnOutboxDrain(delayNanoseconds: 1_000_000_000)
+  }
+
+  private func scheduleVoiceTurnOutboxDrain(delayNanoseconds: UInt64 = 0) {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      voiceTurnOutboxDrainTask == nil,
+      !voiceTurnOutbox.entries(ownerID: ownerID).isEmpty
+    else { return }
+    voiceTurnOutboxDrainTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      if delayNanoseconds > 0 {
+        try? await Task.sleep(nanoseconds: delayNanoseconds)
+      }
+      while !Task.isCancelled,
+        RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+        !self.voiceTurnOutbox.entries(ownerID: ownerID).isEmpty
+      {
+        if !(await self.drainVoiceTurnOutbox(
+          ownerID: ownerID,
+          through: nil,
+          maximumAttempts: 1))
+        {
+          try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+      }
+      self.voiceTurnOutboxDrainTask = nil
+    }
+  }
+
+  /// Only the oldest pending turn for an owner may write. Later turns cannot
+  /// overtake it, whether this is the bounded foreground path or background replay.
+  private func drainVoiceTurnOutbox(
+    ownerID: String,
+    through targetIdempotencyKey: String?,
+    maximumAttempts: Int
+  ) async -> Bool {
+    var attempts = 0
+    while !Task.isCancelled, attempts < max(1, maximumAttempts) {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+      guard let entry = voiceTurnOutbox.entries(ownerID: ownerID).first else { return true }
+      attempts += 1
+      let acknowledged = await recordTurnToKernelAwaiting(entry)
+      guard acknowledged else {
+        if attempts < maximumAttempts {
+          try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        continue
+      }
+      voiceTurnOutbox.acknowledge(idempotencyKey: entry.idempotencyKey)
+      if targetIdempotencyKey == nil { return true }
+      if entry.idempotencyKey == targetIdempotencyKey { return true }
+    }
+    if let targetIdempotencyKey {
+      return !voiceTurnOutbox.entries(ownerID: ownerID).contains {
+        $0.idempotencyKey == targetIdempotencyKey
+      }
+    }
+    return voiceTurnOutbox.entries(ownerID: ownerID).isEmpty
+  }
+
+  private func awaitTurnPersistenceFence() async {
+    while !Task.isCancelled {
+      let observedGeneration = turnPersistenceGeneration
+      if let persistence = turnPersistenceTask {
+        await persistence.value
+      }
+      guard observedGeneration != turnPersistenceGeneration else { return }
+    }
   }
 
   private func teardownSession() {
@@ -1321,6 +1537,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceSeedContextSnapshot = ""
+    geminiSessionNeedsTurnBoundary = false
     clearBargeInReplacementState()
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
@@ -1328,6 +1545,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func clearBargeInReplacementState() {
+    bargeInReplacementGeneration &+= 1
     pendingBargeInReplacement = nil
     pendingBargeInProvider = nil
     pendingBargeInAuth = nil
@@ -1337,14 +1555,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   @discardableResult
   private func prepareBargeInReplacement() -> Bool {
-    guard let provider = sessionProvider, let auth = sessionAuth else { return false }
+    guard let provider = sessionProvider ?? pendingBargeInProvider,
+      let auth = sessionAuth ?? pendingBargeInAuth,
+      let turnID = voiceOutputCoordinator.snapshot().turnID,
+      let responseID = voiceResponseID
+    else { return false }
     session?.detach()
     session?.stop()
     session = nil
     sessionProvider = nil
     sessionAuth = nil
     hubConnected = false
-    pendingBargeInReplacement = PendingBargeInReplacementTurn()
+    pendingBargeInReplacement = PendingBargeInReplacementTurn(
+      turnID: turnID,
+      responseID: responseID)
     pendingBargeInProvider = provider
     pendingBargeInAuth = auth
     return true
@@ -1354,35 +1578,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?
   ) {
     bargeInContinuityTask?.cancel()
+    bargeInReplacementGeneration &+= 1
+    let generation = bargeInReplacementGeneration
     bargeInContinuityTask = Task { @MainActor [weak self] in
       guard let self else { return }
       await RealtimeHubBargeInContinuity.prepareReplacementSession(
         resolveInterruptedTurn: {
+          guard generation == self.bargeInReplacementGeneration else { return nil }
           guard let interruptedTurnTask else { return nil }
           return await interruptedTurnTask.value
         },
         recordInterruptedTurn: { [weak self] turn in
-          guard
-            let task = self?.enqueueTurnPersistence({ [weak self] in
-              await self?.recordTurnToKernelAwaiting(
-                userText: turn.userText,
-                assistantText: turn.assistantText,
-                interrupted: true,
-                idempotencyKey: turn.idempotencyKey)
-            })
-          else { return }
+          guard let self, generation == self.bargeInReplacementGeneration else { return }
+          let task = self.enqueueTurnPersistence { [weak self] in
+            await self?.persistTurnToKernelThroughTransientFailures(
+              userText: turn.userText,
+              assistantText: turn.assistantText,
+              interrupted: true,
+              idempotencyKey: turn.idempotencyKey)
+          }
           await task.value
         },
         refreshVoiceSeed: { [weak self] in
-          await self?.refreshVoiceSeedContext() ?? false
+          guard let self, generation == self.bargeInReplacementGeneration else { return false }
+          await self.awaitTurnPersistenceFence()
+          guard generation == self.bargeInReplacementGeneration else { return false }
+          return await self.refreshVoiceSeedContext()
         },
         startReplacementSession: { [weak self] in
           guard let self,
+            generation == self.bargeInReplacementGeneration,
             let provider = self.pendingBargeInProvider,
             let auth = self.pendingBargeInAuth
           else { return }
-          self.pendingBargeInProvider = nil
-          self.pendingBargeInAuth = nil
           switch auth {
           case .byokKey:
             self.startReplacementSessionForBargeIn(provider: provider, auth: auth)
@@ -1410,11 +1638,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       )
       return
     }
+    let generation = bargeInReplacementGeneration
     minting = true
     let providerParam = provider == .openai ? "openai" : "gemini"
     log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
     Task { [weak self] in
       guard let self else { return }
+      if self.redriveReplacementMintIfStale(generation: generation) { return }
       guard self.pendingBargeInReplacement != nil else {
         self.minting = false
         return
@@ -1429,6 +1659,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       do {
         token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
       } catch let error as RealtimeTokenMintError {
+        if self.redriveReplacementMintIfStale(generation: generation) { return }
         self.minting = false
         self.recordRealtimeMintFailure(
           error,
@@ -1448,6 +1679,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch let error as CredentialHealthError {
+        if self.redriveReplacementMintIfStale(generation: generation) { return }
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
@@ -1468,6 +1700,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch {
+        if self.redriveReplacementMintIfStale(generation: generation) { return }
         self.minting = false
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
@@ -1481,8 +1714,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return
       }
       self.minting = false
+      if self.redriveReplacementMintIfStale(generation: generation) { return }
       self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
     }
+  }
+
+  /// A completed mint belongs to the replacement generation that started it.
+  /// Stale success and failure callbacks may only release the mint slot and
+  /// redrive the newest generation; they must not mutate that generation's state.
+  @discardableResult
+  private func redriveReplacementMintIfStale(generation: UInt64) -> Bool {
+    guard generation != bargeInReplacementGeneration else { return false }
+    minting = false
+    if pendingBargeInReplacement != nil, let currentProvider = pendingBargeInProvider {
+      remintReplacementSessionForBargeIn(provider: currentProvider)
+    }
+    return true
   }
 
   private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
@@ -1492,12 +1739,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func finishBargeInReplacementAfterSessionReady() {
     guard var pending = pendingBargeInReplacement else { return }
     pendingBargeInReplacement = nil
+    pendingBargeInProvider = nil
+    pendingBargeInAuth = nil
     if pending.pendingBegin {
       pending.pendingBegin = false
       if let live = session {
         live.beginInputTurn(
-          turnID: voiceOutputCoordinator.snapshot().turnID,
-          responseID: voiceResponseID,
+          turnID: pending.turnID,
+          responseID: pending.responseID,
           interrupting: false)
         attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
       }
@@ -1507,14 +1756,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pending.pendingCommit = false
       responding = true
       session?.commitInputTurn()
-      if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
-        let voiceSessionID
+      if let voiceSessionID
       {
         VoiceTurnCoordinator.shared.send(
           .hubCommitAccepted(
-            turnID: turnID,
+            turnID: pending.turnID,
             sessionID: voiceSessionID,
-            responseID: voiceResponseID))
+            responseID: pending.responseID))
       }
     }
   }
@@ -1623,6 +1871,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       providerResponseInFlight: providerResponseInFlight,
       playbackActive: realtimePlaybackActive || voicePlaybackActive,
       strategy: session?.bargeInStrategy ?? .inSessionCancel)
+    let supersedesPendingReplacement = pendingBargeInReplacement != nil
+    let requiresCompletedGeminiSessionBoundary =
+      sessionProvider == .gemini && geminiSessionNeedsTurnBoundary
     let interruptedTurnTask = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
     let turnID =
       requestedTurnID
@@ -1656,11 +1907,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     turnIdempotencyKey = UUID().uuidString
-    if let interruptedTurnTask {
+    if let interruptedTurnTask, !supersedesPendingReplacement {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
         enqueueTurnPersistence { [weak self] in
           guard let interruptedTurn = await interruptedTurnTask.value else { return }
-          await self?.recordTurnToKernelAwaiting(
+          await self?.persistTurnToKernelThroughTransientFailures(
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
             interrupted: true,
@@ -1689,27 +1940,46 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     responseGlowGate.clearImmediately()
-    switch bargeInAction {
-    case .cancelInSession:
-      // OpenAI exposes an explicit response.cancel path, so the warm socket and
-      // conversation context survive while the next input buffer starts clean.
-      log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
-      session?.cancelActiveResponse()
-    case .replaceSession:
-      // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
-      // that socket can leave the next PTT turn queued behind the old generation, so
-      // replace the connection and let the fresh session buffer this new turn while it opens.
+    if supersedesPendingReplacement {
       if restartSessionForBargeIn(interruptedTurnTask: interruptedTurnTask) {
         replacementSessionOwnsInputTurn = true
         deferredFreshSessionSeedPrefetch = true
-        log("RealtimeHub: barge-in — replacing session for clean next turn")
+        log("RealtimeHub[gemini]: rotating pending replacement to the newest PTT turn")
       } else {
         session?.cancelActiveResponse()
       }
-    case .stopPlaybackTail:
-      log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
-    case .none:
-      break
+    } else if requiresCompletedGeminiSessionBoundary {
+      if restartSessionForBargeIn(interruptedTurnTask: nil) {
+        replacementSessionOwnsInputTurn = true
+        deferredFreshSessionSeedPrefetch = true
+        geminiSessionNeedsTurnBoundary = false
+        log("RealtimeHub[gemini]: replacing completed-turn session before next PTT")
+      } else {
+        session?.cancelActiveResponse()
+      }
+    } else {
+      switch bargeInAction {
+      case .cancelInSession:
+        // OpenAI exposes an explicit response.cancel path, so the warm socket and
+        // conversation context survive while the next input buffer starts clean.
+        log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
+        session?.cancelActiveResponse()
+      case .replaceSession:
+        // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
+        // that socket can leave the next PTT turn queued behind the old generation, so
+        // replace the connection and let the fresh session buffer this new turn while it opens.
+        if restartSessionForBargeIn(interruptedTurnTask: interruptedTurnTask) {
+          replacementSessionOwnsInputTurn = true
+          deferredFreshSessionSeedPrefetch = true
+          log("RealtimeHub: barge-in — replacing session for clean next turn")
+        } else {
+          session?.cancelActiveResponse()
+        }
+      case .stopPlaybackTail:
+        log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
+      case .none:
+        break
+      }
     }
     if !deferredFreshSessionSeedPrefetch {
       let ownsInputTurn = !replacementSessionOwnsInputTurn
@@ -1825,7 +2095,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     bufferTurnAudio(pcm16k)
     if pendingBargeInReplacement != nil {
-      pendingBargeInReplacement?.audioBuffer.append(pcm16k)
+      if pendingBargeInReplacement?.appendAudio(pcm16k) == false {
+        log(
+          "RealtimeHub: replacement audio buffer reached "
+            + "\(PendingBargeInReplacementTurn.maxBufferedAudioBytes) bytes; truncating turn audio"
+        )
+      }
       return
     }
     guard let s = session else {
@@ -2006,7 +2281,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         && (providerLanguage.map { !preferredLanguages.contains($0) } ?? false))
     let verdict =
       needsLocal && localTask != nil
-      ? await value(of: localTask!, timeoutMs: 1500) : nil
+      ? await value(of: localTask!, timeoutMs: 20_000) : nil
     return RealtimeHubTranscriptPolicy.resolve(
       providerText: trimmedProvider,
       preferredLanguages: preferredLanguages,
@@ -2866,6 +3141,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     responding = false
     hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
+    if sessionProvider == .gemini {
+      geminiSessionNeedsTurnBoundary = true
+      pendingSessionRefreshReason = "voice_seed_changed"
+    }
     var heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     if let forced = testProviderTranscriptOverride {
       testProviderTranscriptOverride = nil
@@ -2902,7 +3181,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           handoff.map {
             "Started background agent \"\($0.title)\" for: \($0.brief)"
           } ?? reply
-        await self?.recordTurnToKernelAwaiting(
+        await self?.persistTurnToKernelThroughTransientFailures(
           userText: resolution.userText,
           assistantText: persistedReply,
           interrupted: false,

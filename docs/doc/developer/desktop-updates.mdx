@@ -21,7 +21,7 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 ## Release lifecycle
 
-The weekday/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`.
+The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`.
 
 | State | How to identify it | Customer visibility |
 | --- | --- | --- |

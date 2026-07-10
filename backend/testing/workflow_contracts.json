@@ -79,9 +79,11 @@
       "tests": ["tests/unit/test_ws_c_backfill.py"],
       "checks": ["no_large_tuple_results"],
       "invariants": [
-        "completed checkpoints still reconcile side effects",
+        "completed checkpoints recognize required-processing and quarantined pending-admission destinations without derived side effects",
         "partial checkpoints resume idempotently",
-        "legacy/domain timestamps are preserved across operational side effects"
+        "legacy/domain timestamps are preserved while rows await required processing",
+        "unreviewed bulk legacy rows remain hidden pending-admission candidates",
+        "legacy rows never reach long-term, vector, keyword, or KG without processing admission"
       ]
     },
     {
@@ -100,10 +102,42 @@
       ]
     },
     {
+      "id": "canonical_memory_admission",
+      "risk": "high",
+      "sources": [
+        "backend/models/memory_admission.py",
+        "backend/models/memory_apply.py",
+        "backend/utils/memory/canonical_required_processing.py",
+        "backend/utils/memory/required_promotion.py",
+        "backend/utils/memory/short_term_promotion.py",
+        "backend/utils/memory/canonical_memory_adapter.py"
+      ],
+      "tests": [
+        "tests/unit/test_ws_b_short_term_lifecycle.py",
+        "tests/unit/test_memory_read_api.py",
+        "tests/unit/test_developer_memory_adapter.py",
+        "tests/unit/test_mcp_memory_adapter.py",
+        "tests/unit/test_ws_m_atom_keyword_index.py",
+        "tests/unit/test_ws_n_graph_traversal.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "explicit submissions remain pending short-term until a content-bound processing receipt exists",
+        "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
+        "processing, review, and promotion use revision/content CAS and rebase after unrelated head advances",
+        "negative user review remains authoritative across all derived projection rebuilds"
+      ]
+    },
+    {
       "id": "sync_cloud_tasks",
       "risk": "high",
       "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
-      "tests": ["tests/unit/test_sync_v2.py", "tests/unit/test_sync_cloud_tasks.py", "tests/unit/test_audio_merge_tasks.py"],
+      "tests": [
+        "tests/unit/test_sync_v2.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_audio_merge_tasks.py",
+        "tests/unit/test_sync_fair_use_gate.py"
+      ],
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",

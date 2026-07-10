@@ -57,6 +57,36 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
   }
 
+  func testRapidPTTRoleProjectionsShowEveryUserTurnBeforeFinalReply() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+
+    for (index, text) in ["one two three", "A B C", "R G B"].enumerated() {
+      projection.apply(
+        .init(
+          conversationId: "conv-rapid-ptt",
+          surfaceKind: surface.surfaceKind,
+          externalRefKind: surface.externalRefKind,
+          externalRefId: surface.externalRefId,
+          userText: text,
+          assistantText: index == 2 ? "Red, green, blue." : "",
+          origin: "realtime_voice",
+          interrupted: index < 2,
+          idempotencyKey: "realtime_voice:turn-\(index):user",
+          userTurnId: "user-turn-\(index)",
+          assistantTurnId: nil
+        )
+      )
+    }
+
+    XCTAssertEqual(provider.messages.map(\.sender), [.user, .user, .user, .ai])
+    XCTAssertEqual(
+      provider.messages.map(\.text),
+      ["one two three", "A B C", "R G B", "Red, green, blue."]
+    )
+  }
+
   /// INV-6: one turn_recorded UI apply gate. Warm/restart re-attach replaces the
   /// single handler slot; one dispatched turn_recorded yields one message pair.
   func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout() async {
