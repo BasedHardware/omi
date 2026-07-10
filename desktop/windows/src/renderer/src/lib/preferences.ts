@@ -39,6 +39,16 @@ export type Preferences = {
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'
   onboardingCompletedAt?: number
+  // The onboarding step the user last reached, persisted so quitting mid-wizard
+  // resumes where they left off instead of restarting at step 0. Cleared when
+  // onboarding completes or is reset. Clamped on read (the step list can change
+  // between app versions).
+  onboardingStep?: number
+  // Set when the user acknowledges the one-time "Background & privacy"
+  // interstitial (existing users, post-update). Undefined = not yet shown. New
+  // users consent inline during onboarding instead, so this stays undefined for
+  // them and the interstitial never fires (it's gated on onboardingCompletedAt).
+  backgroundConsentAt?: number
 }
 
 const defaults: Preferences = {
@@ -107,7 +117,9 @@ export function consumePendingRoute(): string | null {
 }
 
 export function completeOnboarding(): void {
-  setPreferences({ onboardingCompletedAt: Date.now() })
+  // Clear the saved step so a future re-onboarding starts fresh rather than
+  // resuming at the (now stale) final step.
+  setPreferences({ onboardingCompletedAt: Date.now(), onboardingStep: undefined })
 }
 
 // Clear the completion flag so the startup wizard runs again. Keeps the rest of
@@ -116,6 +128,8 @@ export function completeOnboarding(): void {
 export function resetOnboarding(): void {
   const next = { ...current }
   delete next.onboardingCompletedAt
+  // Restart the wizard from the beginning, not the previously saved step.
+  delete next.onboardingStep
   current = next
   try {
     localStorage.setItem(KEY, JSON.stringify(current))

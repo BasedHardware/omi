@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { getPreferences, setPreferences, completeOnboarding, setPendingRoute } from '../lib/preferences'
+import {
+  getPreferences,
+  setPreferences,
+  completeOnboarding,
+  setPendingRoute
+} from '../lib/preferences'
+import { clampOnboardingStep } from '../lib/onboardingProgress'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
@@ -8,6 +14,7 @@ import { NameStep } from '../components/onboarding/NameStep'
 import { LanguageStep } from '../components/onboarding/LanguageStep'
 import { HowDidYouHearStep } from '../components/onboarding/HowDidYouHearStep'
 import { TrustStep } from '../components/onboarding/TrustStep'
+import { BackgroundPrivacyStep } from '../components/onboarding/BackgroundPrivacyStep'
 import { ScreenPermissionStep } from '../components/onboarding/ScreenPermissionStep'
 import { BuildProfileStep } from '../components/onboarding/BuildProfileStep'
 import { MicPermissionStep } from '../components/onboarding/MicPermissionStep'
@@ -31,10 +38,14 @@ import {
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 13
+const TOTAL_STEPS = 14
 
 export function Onboarding(): React.JSX.Element {
-  const [step, setStep] = useState(0)
+  // Resume where the user left off if they quit mid-onboarding. Clamped in case
+  // the step list changed between app versions.
+  const [step, setStep] = useState(() =>
+    clampOnboardingStep(getPreferences().onboardingStep, TOTAL_STEPS)
+  )
   const prefs = getPreferences()
 
   // First onboarding mount clears any prior local graph so the reveal starts
@@ -42,6 +53,12 @@ export function Onboarding(): React.JSX.Element {
   useEffect(() => {
     void resetOnboardingGraph()
   }, [])
+
+  // Persist the current step so a quit-and-relaunch resumes here. Cleared when
+  // onboarding completes (completeOnboarding) or is reset (resetOnboarding).
+  useEffect(() => {
+    setPreferences({ onboardingStep: step })
+  }, [step])
 
   const graph = useOnboardingGraph()
 
@@ -136,60 +153,63 @@ export function Onboarding(): React.JSX.Element {
       return <TrustStep stepIndex={3} totalSteps={TOTAL_STEPS} onContinue={next} onBack={back} />
     }
     if (step === 4) {
+      // Background/privacy consent: always-on listening, tray residence, and
+      // launch-at-login, established up front for this tray-resident companion.
+      return <BackgroundPrivacyStep stepIndex={4} totalSteps={TOTAL_STEPS} onContinue={next} />
+    }
+    if (step === 5) {
       return (
         <ScreenPermissionStep
-          stepIndex={4}
+          stepIndex={5}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onSkip={next}
         />
       )
     }
-    if (step === 5) {
+    if (step === 6) {
       // The old DiskAccessStep (button-driven file scan) is hidden; this
       // discovery step scans automatically with the orbit animation instead.
       return (
-        <BuildProfileStep stepIndex={5} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
-    }
-    if (step === 6) {
-      return (
-        <MicPermissionStep stepIndex={6} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <BuildProfileStep stepIndex={6} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     if (step === 7) {
       return (
+        <MicPermissionStep stepIndex={7} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+      )
+    }
+    if (step === 8) {
+      return (
         <AutomationPermissionStep
-          stepIndex={7}
+          stepIndex={8}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onSkip={next}
         />
       )
     }
-    if (step === 8) {
+    if (step === 9) {
       // Floating-bar shortcut setup: enables + warms the overlay so the user can
       // test the press here, then advances to the voice intro.
       return (
-        <ShortcutSetupStep stepIndex={8} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
-    }
-    if (step === 9) {
-      return (
-        <VoiceIntroStep stepIndex={9} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <ShortcutSetupStep stepIndex={9} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     if (step === 10) {
-      // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
-      // reveals, then advances to the goal step.
       return (
-        <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <VoiceIntroStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
     }
     if (step === 11) {
+      // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
+      // reveals, then advances to the goal step.
+      return <AskDemoStep stepIndex={11} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+    }
+    if (step === 12) {
       return (
         <GoalStep
-          stepIndex={11}
+          stepIndex={12}
           totalSteps={TOTAL_STEPS}
           apps={appNames}
           onContinue={handleGoal}
@@ -208,13 +228,20 @@ export function Onboarding(): React.JSX.Element {
   // navigation — only its data changes as the graph grows.
   // Steps that show the step card centered on the whole screen with NO brain
   // map: the name screen (0), the "I'm going to ask you for a few permissions"
-  // screen (3, TrustStep), the floating-bar steps (8 shortcut, 9 voice, 10 ask
-  // demo), and the final auto-created-tasks screen (12). The Goal step (11) keeps
-  // the map (it personalizes its suggestion from the revealed app nodes). The map
-  // is only hidden (display:none), never unmounted, so it persists and returns
-  // smoothly on the next steps.
+  // screen (3, TrustStep), the background/privacy consent screen (4), the
+  // floating-bar steps (9 shortcut, 10 voice, 11 ask demo), and the final
+  // auto-created-tasks screen (13). The Goal step (12) keeps the map (it
+  // personalizes its suggestion from the revealed app nodes). The map is only
+  // hidden (display:none), never unmounted, so it persists and returns smoothly
+  // on the next steps.
   const hideBrainMap =
-    step === 0 || step === 3 || step === 8 || step === 9 || step === 10 || step === 12
+    step === 0 ||
+    step === 3 ||
+    step === 4 ||
+    step === 9 ||
+    step === 10 ||
+    step === 11 ||
+    step === 13
 
   return (
     <div className="app-canvas relative flex h-full">
