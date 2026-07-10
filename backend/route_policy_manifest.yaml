@@ -72,3 +72,25 @@ routes:
       data_domain: user_profile
       deprecation:
         state: active
+  - route_type: http
+    method: GET
+    path: /v1/goals/{goal_id}
+    policy:
+      review_status: legacy_unreviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: unknown
+      deprecation:
+        state: active

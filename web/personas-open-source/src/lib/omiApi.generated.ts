@@ -4898,6 +4898,15 @@ export interface OmiApiPaths {
     };
   };
   "/v1/goals/{goal_id}": {
+    get: {
+      operationId: "get_goal_by_id_v1_goals__goal_id__get";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
     patch: {
       operationId: "update_goal_v1_goals__goal_id__patch";
       responses: {
@@ -9384,6 +9393,21 @@ export async function suggest_goal_v1_goals_suggest_get(init?: OmiApiClientInit)
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_goal_by_id_v1_goals__goal_id__get(path: { goal_id: string }, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function update_goal_v1_goals__goal_id__patch(path: { goal_id: string }, body: GoalUpdate, init?: OmiApiClientInit): Promise<GoalResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/${path.goal_id}`;
@@ -12413,4 +12437,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.
