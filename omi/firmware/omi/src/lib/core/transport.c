@@ -561,11 +561,11 @@ void broadcast_battery_level(struct k_work *work_item)
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
         if (is_connected && current_connection != NULL) {
-            if (storage_transfer_active()) {
-                k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
-                return;
-            }
-
+            /* Report battery even during an SD sync. It's 1 byte at most every few
+             * seconds and AUDIO_TX_RESERVED_SLOTS keeps TX buffers free for
+             * non-audio notifications, so it can't starve the sync/audio stream.
+             * The old storage_transfer_active() early-return meant the app never
+             * got a battery update for the whole (often long) duration of a sync. */
             (void) notify_charging_status(current_connection, false);
 
             // Use the Zephyr BAS function to set (and notify) the battery level
