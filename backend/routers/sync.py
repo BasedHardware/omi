@@ -7,7 +7,7 @@ import time
 import uuid as _uuid
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
