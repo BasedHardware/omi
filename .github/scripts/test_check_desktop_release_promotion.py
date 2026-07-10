@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for desktop release promotion gate."""
+"""Tests for the desktop stable-promotion gate."""
 
 from __future__ import annotations
 
@@ -8,89 +8,136 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / ".github/scripts/check-desktop-release-promotion.py"
+TAG = "v11.0+11000-macos"
+SHA = "a" * 40
+EVIDENCE = "qualification-evidence.json"
 
 
-def run_check(release: dict, tag: str, *extra: str) -> subprocess.CompletedProcess[str]:
+def run_check(release: dict, *extra: str) -> subprocess.CompletedProcess[str]:
     release_path = Path("/tmp/desktop-release-test.json")
     release_path.write_text(json.dumps(release), encoding="utf-8")
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "--release-json", str(release_path), "--release-tag", tag, *extra],
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--release-json",
+            str(release_path),
+            "--release-tag",
+            TAG,
+            "--target-sha",
+            SHA,
+            *extra,
+        ],
         text=True,
         capture_output=True,
     )
 
 
-def base_release(tag: str, metadata: dict[str, str]) -> dict:
+def base_release(metadata: dict[str, str]) -> dict:
     lines = ["KEY_VALUE_START", *[f"{key}: {value}" for key, value in metadata.items()], "KEY_VALUE_END"]
     return {
-        "tagName": tag,
+        "tagName": TAG,
         "isDraft": False,
         "isPrerelease": False,
         "body": "\n".join(lines),
-        "assets": [{"name": "Omi.zip"}, {"name": "omi.dmg"}],
+        "assets": [{"name": "Omi.zip"}, {"name": "omi.dmg"}, {"name": EVIDENCE}],
     }
 
 
-def test_unblessed_release_fails() -> None:
-    tag = "v11.0.0+11000-macos"
-    release = base_release(
-        tag,
-        {
-            "channel": "beta",
-            "isLive": "true",
-            "edSignature": "sig",
-        },
-    )
-    result = run_check(release, tag)
-    assert result.returncode != 0, result.stderr
-    assert "blessed" in result.stderr, result.stderr
+def common_metadata() -> dict[str, str]:
+    return {"channel": "beta", "isLive": "true", "edSignature": "sig"}
 
 
-def test_blessed_release_passes() -> None:
-    tag = "v11.0+11000-macos"
+def nomination_metadata() -> dict[str, str]:
+    return {
+        "stableCandidate": "true",
+        "stableCandidateTag": TAG,
+        "stableCandidateSha": SHA,
+        "stableCandidateAt": "2026-07-10T12:00:00Z",
+        "stableCandidateBy": "release-operator",
+        "stableCandidateRationale": "beta soak and launch criteria passed",
+        "stableCandidateQualificationEvidence": EVIDENCE,
+        "stableCandidateSoakReview": "24h beta soak reviewed",
+        "stableCandidateTelemetryReview": "crash and update telemetry reviewed",
+        "stableCandidateReleaseNotesReview": "stable rollup reviewed",
+    }
+
+
+def test_canonical_qualification_and_nomination_pass() -> None:
     release = base_release(
-        tag,
         {
-            "channel": "beta",
-            "isLive": "true",
-            "edSignature": "sig",
-            "blessed": "true",
-            "blessedAt": "2026-07-06T00:00:00Z",
-            "blessedSha": "abc123",
-            "blessedTier": "2",
-        },
+            **common_metadata(),
+            "qualifiedBeta": "true",
+            "qualifiedBetaAt": "2026-07-10T10:00:00Z",
+            "qualifiedBetaSha": SHA,
+            "qualifiedBetaTier": "2",
+            "qualifiedBetaEvidence": EVIDENCE,
+            **nomination_metadata(),
+        }
     )
-    result = run_check(release, tag)
+    result = run_check(release)
     assert result.returncode == 0, result.stderr
 
 
-def test_override_requires_typed_confirm() -> None:
-    tag = "v11.0+11000-macos"
+def test_legacy_qualification_remains_valid() -> None:
     release = base_release(
-        tag,
         {
-            "channel": "beta",
-            "isLive": "true",
-            "edSignature": "sig",
-        },
+            **common_metadata(),
+            "blessed": "true",
+            "blessedAt": "2026-07-10T10:00:00Z",
+            "blessedSha": SHA,
+            "blessedTier": "2",
+            "blessedEvidence": EVIDENCE,
+            **nomination_metadata(),
+        }
     )
-    result = run_check(release, tag, "--override-unblessed", "--override-confirm", "nope")
+    result = run_check(release)
+    assert result.returncode == 0, result.stderr
+
+
+def test_qualified_beta_without_nomination_fails() -> None:
+    release = base_release(
+        {
+            **common_metadata(),
+            "qualifiedBeta": "true",
+            "qualifiedBetaAt": "2026-07-10T10:00:00Z",
+            "qualifiedBetaSha": SHA,
+            "qualifiedBetaTier": "2",
+            "qualifiedBetaEvidence": EVIDENCE,
+        }
+    )
+    result = run_check(release)
     assert result.returncode != 0
-    override = run_check(
+    assert "nominated" in result.stderr, result.stderr
+
+
+def test_break_glass_requires_confirmation_and_reason() -> None:
+    release = base_release(common_metadata())
+    rejected = run_check(release, "--break-glass", "--break-glass-confirm", "nope")
+    assert rejected.returncode != 0
+    missing_reason = run_check(
         release,
-        tag,
-        "--override-unblessed",
-        "--override-confirm",
-        "I-ACCEPT-UNBLESSED-PROD-RISK",
+        "--break-glass",
+        "--break-glass-confirm",
+        "I-ACCEPT-STABLE-PROMOTION-RISK",
     )
-    assert override.returncode == 0, override.stderr
+    assert missing_reason.returncode != 0
+    accepted = run_check(
+        release,
+        "--break-glass",
+        "--break-glass-confirm",
+        "I-ACCEPT-STABLE-PROMOTION-RISK",
+        "--break-glass-reason",
+        "urgent security release",
+    )
+    assert accepted.returncode == 0, accepted.stderr
 
 
 if __name__ == "__main__":
-    test_unblessed_release_fails()
-    test_blessed_release_passes()
-    test_override_requires_typed_confirm()
+    test_canonical_qualification_and_nomination_pass()
+    test_legacy_qualification_remains_valid()
+    test_qualified_beta_without_nomination_fails()
+    test_break_glass_requires_confirmation_and_reason()
     print("check-desktop-release-promotion tests OK")

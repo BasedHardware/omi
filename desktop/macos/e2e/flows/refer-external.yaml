@@ -1,7 +1,7 @@
 version: 2
 name: refer-external
 tier: manual
-description: Refer a Friend — profile menu opens external affiliate URL (Live P2; not bless tier)
+description: Refer a Friend — profile menu opens external affiliate URL (Live P2; not qualification tier)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift

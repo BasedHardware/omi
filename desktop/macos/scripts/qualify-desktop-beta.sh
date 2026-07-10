@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Bless a macOS desktop candidate by rebuilding the tag and running T2 core E2E.
+# Qualify a macOS desktop candidate by rebuilding the tag and running T2 core E2E.
 #
 # Usage:
-#   ./scripts/bless-release.sh v11.0.0+11000-macos
-#   ./scripts/bless-release.sh --keep-stack v11.0.0+11000-macos
+#   ./scripts/qualify-desktop-beta.sh v11.0.0+11000-macos
+#   ./scripts/qualify-desktop-beta.sh --keep-stack v11.0.0+11000-macos
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,10 +17,10 @@ RELEASE_TAG=""
 
 usage() {
   cat <<'USAGE'
-Bless a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
+Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
 
 Usage:
-  bless-release.sh [--keep-stack] [--no-promote] <vX.Y.Z+BUILD-macos>
+  qualify-desktop-beta.sh [--keep-stack] [--no-promote] <vX.Y.Z+BUILD-macos>
 
 Options:
   --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
@@ -65,35 +65,35 @@ if [[ -z "$RELEASE_TAG" ]]; then
 fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "bless-release.sh requires macOS" >&2
+  echo "qualify-desktop-beta.sh requires macOS" >&2
   exit 1
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
-  echo "bless-release.sh requires gh CLI" >&2
+  echo "qualify-desktop-beta.sh requires gh CLI" >&2
   exit 1
 fi
 
 VERSION="${RELEASE_TAG#v}"
 VERSION="${VERSION%-macos}"
-BUNDLE="omi-bless-${VERSION}"
-WORKTREE="$REPO_ROOT/.bless-worktrees/$RELEASE_TAG"
+BUNDLE="omi-qualification-${VERSION}"
+WORKTREE="$REPO_ROOT/.qualification-worktrees/$RELEASE_TAG"
 LAUNCH_LOG=""
 DESKTOP_LAUNCH_PID=""
-BLESS_SUCCESS=0
+QUALIFICATION_SUCCESS=0
 BRIDGE_WAIT_SECS=900
 
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,body \
-  > /tmp/bless-release.json
+  > /tmp/desktop-qualification-release.json
 
-python3 "$KEYVALUE_PY" preflight-release /tmp/bless-release.json "$RELEASE_TAG"
+python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 
 rm -rf "$WORKTREE"
 git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
 
-LAUNCH_LOG="$WORKTREE/.bless-desktop-launch.log"
+LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
 
 resolve_automation_port() {
   (
@@ -127,7 +127,7 @@ kill_process_tree() {
   fi
 }
 
-terminate_bless_desktop() {
+terminate_qualification_desktop() {
   local bundle="$1"
   local bundle_id app_path=""
   bundle_id="$(derive_bundle_id "$bundle" 2>/dev/null || true)"
@@ -155,7 +155,7 @@ terminate_bless_desktop() {
   sleep 0.5
 
   if pgrep -f "$app_path" >/dev/null 2>&1; then
-    echo "bless cleanup: ${bundle}.app still running; sending SIGKILL" >&2
+    echo "qualification cleanup: ${bundle}.app still running; sending SIGKILL" >&2
     pkill -9 -f "$app_path" 2>/dev/null || true
   fi
   if [[ -n "$bundle_id" ]] && pgrep -f "$bundle_id" >/dev/null 2>&1; then
@@ -188,19 +188,19 @@ PY
       return 0
     fi
     if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
-      echo "bless failed: desktop launch process exited before bridge became healthy" >&2
+      echo "qualification failed: desktop launch process exited before bridge became healthy" >&2
       return 1
     fi
     sleep 5
   done
-  echo "bless failed: automation bridge not healthy within ${BRIDGE_WAIT_SECS}s (port $port)" >&2
+  echo "qualification failed: automation bridge not healthy within ${BRIDGE_WAIT_SECS}s (port $port)" >&2
   return 1
 }
 
 cleanup() {
   local exit_code=$?
   if [[ -n "$BUNDLE" ]]; then
-    terminate_bless_desktop "$BUNDLE"
+    terminate_qualification_desktop "$BUNDLE"
   elif [[ -n "$DESKTOP_LAUNCH_PID" ]]; then
     kill_process_tree "$DESKTOP_LAUNCH_PID"
     wait "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
@@ -208,7 +208,7 @@ cleanup() {
   if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
-  if [[ "$BLESS_SUCCESS" -eq 1 ]]; then
+  if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
     git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
   fi
   exit "$exit_code"
@@ -235,23 +235,23 @@ fi
 
 EVIDENCE=$(ls -td "$WORKTREE/desktop/macos/.harness/desktop-core"/* 2>/dev/null | head -1)
 if [[ -z "$EVIDENCE" || ! -f "$EVIDENCE/manifest.json" ]]; then
-  echo "bless failed: missing harness evidence" >&2
+  echo "qualification failed: missing harness evidence" >&2
   exit 1
 fi
 
 if ! python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"; then
-  echo "bless failed: tier 2 harness did not pass; evidence: $EVIDENCE" >&2
+  echo "qualification failed: tier 2 harness did not pass; evidence: $EVIDENCE" >&2
   exit 1
 fi
 
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ASSET="bless-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
+ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
 cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
 
-BODY_FILE=/tmp/bless-release-body.md
+BODY_FILE=/tmp/desktop-qualification-release-body.md
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
 
-python3 "$KEYVALUE_PY" update-blessed "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
+python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 
 gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
@@ -262,8 +262,8 @@ if [[ "$PROMOTE" -eq 1 ]]; then
     -f release_tag="$RELEASE_TAG"
 fi
 
-BLESS_SUCCESS=1
-echo "Blessed $RELEASE_TAG at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
+QUALIFICATION_SUCCESS=1
+echo "Qualified $RELEASE_TAG for beta at $SHA (evidence asset: $ASSET, automation port: $AUTOMATION_PORT)"
 if [[ "$PROMOTE" -eq 1 ]]; then
   echo "Dispatched qualified beta promotion for $RELEASE_TAG"
 fi

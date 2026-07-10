@@ -23,13 +23,22 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`.
 
+| State | How to identify it | Customer visibility |
+| --- | --- | --- |
+| Build candidate | `channel: candidate`, `isLive: false` | None |
+| Qualified beta | `channel: beta`, `isLive: true`, canonical `qualifiedBeta*` evidence (or legacy qualification aliases) | Beta only |
+| Stable candidate | Qualified beta plus complete `stableCandidate*` nomination metadata | Still beta only |
+| Stable | `channel: stable`, written only by `desktop_promote_prod.yml` after `confirm=promote-stable` | Stable |
+
 Run:
 
 ```bash
-desktop/macos/scripts/bless-release.sh vX.Y.Z+BUILD-macos
+desktop/macos/scripts/qualify-desktop-beta.sh vX.Y.Z+BUILD-macos
 ```
 
-The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and dispatches beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Stable remains a separate manual production workflow.
+The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and writes canonical `qualifiedBeta*` metadata before dispatching beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
+
+After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
 ## Developer head-of-main
 
@@ -56,7 +65,7 @@ Merging this control-plane change does not make a beta live. For the first rollo
 1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
 2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
 3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
-4. Run `desktop/macos/scripts/bless-release.sh <tag>` on macOS. A successful T2 run dispatches beta promotion.
-5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Leave stable unchanged until the separately planned stable rollout.
+4. Run `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` on macOS. A successful T2 run dispatches beta promotion.
+5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Nominate a stable candidate only after reviewing soak, telemetry, and the stable release-note rollup; leave stable unchanged until the separately planned stable rollout.
 
 After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.
