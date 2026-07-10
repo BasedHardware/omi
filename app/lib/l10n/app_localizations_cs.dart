@@ -9,6 +9,9 @@ class AppLocalizationsCs extends AppLocalizations {
   AppLocalizationsCs([String locale = 'cs']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Platnost relace vypršela — přihlaste se znovu.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

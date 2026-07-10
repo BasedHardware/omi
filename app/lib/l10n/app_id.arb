@@ -1,5 +1,6 @@
 {
     "@@locale": "id",
+    "sessionExpiredSignInAgain": "Sesi berakhir — masuk lagi.",
     "appTitle": "Omi",
     "conversationTab": "Percakapan",
     "transcriptTab": "Transkrip",

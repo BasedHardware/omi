@@ -151,6 +151,7 @@ export class KernelCore {
   protected readonly registry: AdapterRegistry;
   protected readonly runtimeNodeId: string;
   protected readonly artifactStorage?: OmiArtifactStorage;
+  protected readonly recoverRunInput?: AgentRuntimeKernelOptions["recoverRunInput"];
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
@@ -162,6 +163,7 @@ export class KernelCore {
     this.registry = options.registry;
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
+    this.recoverRunInput = options.recoverRunInput;
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -204,6 +206,16 @@ export class KernelCore {
   ): Promise<KernelRunResult> {
 
     const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    if (!input.recoverAfterError) {
+      const recovery = this.recoverRunInput?.(adapterId);
+      if (recovery) {
+        input = {
+          ...input,
+          maxAttempts: input.maxAttempts ?? recovery.maxAttempts,
+          recoverAfterError: recovery.recoverAfterError,
+        };
+      }
+    }
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;
@@ -712,6 +724,13 @@ export class KernelCore {
   }
 
   protected resolveSession(input: KernelSessionResolutionInput): AgentSession {
+    // An explicit canonical session is authoritative even when the caller also
+    // supplies a new surface reference. This is how one long-running thread can
+    // move between task scopes without silently forking its runtime identity.
+    if (input.sessionId) {
+      const existing = this.findExistingSession(input);
+      if (existing) return existing;
+    }
     if (input.surfaceKind && input.externalRefKind && input.externalRefId) {
       const resolved = resolveSurfaceSession(
         this.store,
@@ -727,7 +746,19 @@ export class KernelCore {
         },
         () => Date.now(),
       );
-      return this.readSession(resolved.agentSessionId);
+      const session = this.readSession(resolved.agentSessionId);
+      const hasCreationEvent = this.store.getOptionalRow(
+        "SELECT event_id FROM events WHERE session_id = ? AND type = 'session.created' LIMIT 1",
+        [session.sessionId],
+      );
+      if (!hasCreationEvent) {
+        this.appendEvent({
+          sessionId: session.sessionId,
+          type: "session.created",
+          payload: { sessionId: session.sessionId, ownerId: session.ownerId, surfaceKind: session.surfaceKind },
+        });
+      }
+      return session;
     }
     const existing = this.findExistingSession(input);
     if (existing) return existing;

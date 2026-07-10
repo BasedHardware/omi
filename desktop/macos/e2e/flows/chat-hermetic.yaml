@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift

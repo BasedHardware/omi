@@ -1,5 +1,6 @@
 {
     "@@locale": "de",
+    "sessionExpiredSignInAgain": "Deine Sitzung ist abgelaufen — melde dich erneut an.",
     "appTitle": "Omi",
     "conversationTab": "Unterhaltung",
     "transcriptTab": "Transkript",

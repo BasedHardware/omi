@@ -113,6 +113,10 @@ struct FloatingBarNotificationContext: Equatable {
     let detail: String?
 }
 
+enum FloatingBarNotificationAction: Equatable {
+    case openWhatMattersNow(recommendationID: String)
+}
+
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
     let id = UUID()
@@ -120,6 +124,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     let message: String
     let assistantId: String
     let context: FloatingBarNotificationContext?
+    let action: FloatingBarNotificationAction?
     /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
     let screenshotData: Data?
 
@@ -128,12 +133,14 @@ struct FloatingBarNotification: Identifiable, Equatable {
         message: String,
         assistantId: String,
         context: FloatingBarNotificationContext? = nil,
+        action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil
     ) {
         self.title = title
         self.message = message
         self.assistantId = assistantId
         self.context = context
+        self.action = action
         self.screenshotData = screenshotData
     }
 

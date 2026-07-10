@@ -1,5 +1,6 @@
 {
     "@@locale": "ro",
+    "sessionExpiredSignInAgain": "Sesiunea a expirat — autentifică-te din nou.",
     "appTitle": "Omi",
     "conversationTab": "Conversație",
     "transcriptTab": "Transcriere",

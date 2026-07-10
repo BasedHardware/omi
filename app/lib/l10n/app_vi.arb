@@ -1,5 +1,6 @@
 {
     "@@locale": "vi",
+    "sessionExpiredSignInAgain": "Phiên đã hết hạn — hãy đăng nhập lại.",
     "appTitle": "Omi",
     "conversationTab": "Cuộc trò chuyện",
     "transcriptTab": "Bản ghi",

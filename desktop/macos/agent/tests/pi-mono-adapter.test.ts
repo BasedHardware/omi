@@ -346,6 +346,71 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it("does not report success after a required agent-control operation fails", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn",
+      result: {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            ok: false,
+            error: { code: "missing_request_context", message: "missing active Omi request context" },
+          }),
+        }],
+      },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("I could not create the child, but I am done."));
+
+    await expect(prompt).rejects.toThrow("Required spawn_agent operation failed");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: expect.stringContaining("missing active Omi request context"),
+      })
+    );
+  });
+
+  it("allows a successful required-control retry to complete the parent turn", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-1",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "temporary failure" } }) }] },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-2",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child created"));
+
+    await expect(prompt).resolves.toMatchObject({ text: "child created" });
+  });
+
   it("resolves abort before turn_end and drops the late completion", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");

@@ -9,6 +9,9 @@ class AppLocalizationsTa extends AppLocalizations {
   AppLocalizationsTa([String locale = 'ta']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'அமர்வு காலாவதியானது — மீண்டும் உள்நுழையவும்.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

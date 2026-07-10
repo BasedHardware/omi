@@ -1,5 +1,6 @@
 {
     "@@locale": "ru",
+    "sessionExpiredSignInAgain": "Сеанс истёк — войдите снова.",
     "appTitle": "Omi",
     "conversationTab": "Разговор",
     "transcriptTab": "Расшифровка",

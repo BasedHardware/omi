@@ -1356,6 +1356,33 @@ describe("JsonlTransport", () => {
     store.close();
   });
 
+  it("passes the selected adapter to auth recovery without conflating providers", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const seen: string[] = [];
+    const authError = Object.assign(new Error("auth required during prompt"), { code: -32000 });
+    adapter.failNextExecutionError = authError;
+    const facade = new JsonlTransport({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+      isRecoverableError: (error, adapterId) => {
+        seen.push(`predicate:${adapterId}`);
+        return error === authError && adapterId === "fake";
+      },
+      onRecoverableError: async (_error, adapterId) => {
+        seen.push(`handler:${adapterId}`);
+      },
+      maxRecoverableRetries: 2,
+    });
+
+    await facade.handleQuery(v2Query({ requestId: "request-auth-adapter-scope" }));
+
+    expect(seen).toEqual(["predicate:fake", "handler:fake"]);
+    expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
   it("fails terminally when recoverable error handling fails", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];

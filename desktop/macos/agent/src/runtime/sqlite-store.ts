@@ -53,6 +53,7 @@ const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
 const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
 const CONVERSATION_TURNS_MIGRATION_VERSION = 11;
 const BINDING_TURN_DELIVERY_MIGRATION_VERSION = 12;
+const WORKSTREAM_CONTINUITY_MIGRATION_VERSION = 13;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -348,6 +349,8 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runActiveAttemptAuthorityMigration(db, Date.now());
     runSurfaceConversationsMigration(db, Date.now());
     runConversationTurnsMigration(db, Date.now());
+    runBindingTurnDeliveryMigration(db, Date.now());
+    runWorkstreamContinuityMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -434,6 +437,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(BINDING_TURN_DELIVERY_MIGRATION_VERSION)) {
       runBindingTurnDeliveryMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(WORKSTREAM_CONTINUITY_MIGRATION_VERSION)) {
+      runWorkstreamContinuityMigration(this.db, this.nowMs());
     }
   }
 
@@ -561,6 +567,14 @@ export class SqliteAgentStore implements AgentStore {
         ).run(now);
       }
 
+      const expiredContinuationCheckpointIds = this.allRows(
+        "SELECT checkpoint_id FROM workstream_continuation_checkpoints WHERE expires_at_ms <= ?",
+        [now],
+      ).map((row) => text(row.checkpoint_id));
+      if (expiredContinuationCheckpointIds.length > 0) {
+        this.db.prepare("DELETE FROM workstream_continuation_checkpoints WHERE expires_at_ms <= ?").run(now);
+      }
+
       this.db.prepare(
         `UPDATE desktop_dispatches
          SET status = ?, resolved_at_ms = COALESCE(resolved_at_ms, ?), resolved_by = COALESCE(resolved_by, ?), resolution_json = COALESCE(resolution_json, ?)
@@ -579,6 +593,19 @@ export class SqliteAgentStore implements AgentStore {
            SET delivery_status = ?, updated_at_ms = ?, error_json = json_set(COALESCE(error_json, '{}'), '$.reason', ?)
            WHERE delivery_status = ?`,
         ).run("failed", now, "daemon_startup_reconciliation", "retrying");
+      }
+
+      const failedTaskCandidateDeliveryIds = this.allRows(
+        "SELECT candidate_id FROM desktop_task_candidates WHERE delivery_status = ?",
+        ["delivering"],
+      ).map((row) => text(row.candidate_id));
+      if (failedTaskCandidateDeliveryIds.length > 0) {
+        this.db.prepare(
+          `UPDATE desktop_task_candidates
+           SET delivery_status = 'failed', updated_at_ms = ?,
+               last_delivery_error_json = json_object('reason', 'daemon_startup_reconciliation')
+           WHERE delivery_status = 'delivering'`,
+        ).run(now);
       }
 
       const recoveryDispatchIds: string[] = [];
@@ -644,7 +671,9 @@ export class SqliteAgentStore implements AgentStore {
         orphanedRunIds,
         staleBindingIds: staleBindings.map((row) => text(row.binding_id)),
         expiredContextPacketIds,
+        expiredContinuationCheckpointIds,
         failedArtifactDeliveryIds,
+        failedTaskCandidateDeliveryIds,
         recoveryDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
@@ -1129,17 +1158,38 @@ export class SqliteAgentStore implements AgentStore {
       proposedChangeJson: input.proposedChangeJson,
       evidenceRefsJson: input.evidenceRefsJson,
       confidence: input.confidence,
+      ownershipConfidence: input.ownershipConfidence ?? input.confidence,
       requiresApproval: input.requiresApproval,
+      goalRef: input.goalRef ?? null,
+      workstreamRef: input.workstreamRef ?? null,
+      sourceSurface: input.sourceSurface ?? "desktop_agent",
+      accountGeneration: input.accountGeneration ?? 0,
+      generationReconciled: input.generationReconciled ?? (input.accountGeneration === undefined ? 0 : 1),
       status: input.status ?? "pending",
+      deliveryStatus: input.deliveryStatus ?? "pending",
+      deliveryAttemptCount: input.deliveryAttemptCount ?? 0,
+      deliveryKey: input.deliveryKey ?? input.candidateId ?? "",
+      backendCandidateId: input.backendCandidateId ?? null,
+      backendReceiptJson: input.backendReceiptJson ?? null,
+      backendResolutionReceiptJson: input.backendResolutionReceiptJson ?? null,
+      backendResolutionStatus: input.backendResolutionStatus ?? null,
+      lastDeliveryErrorJson: input.lastDeliveryErrorJson ?? null,
       createdAtMs: input.createdAtMs ?? this.nowMs(),
+      updatedAtMs: input.updatedAtMs ?? input.createdAtMs ?? this.nowMs(),
+      deliveredAtMs: input.deliveredAtMs ?? null,
       resolvedAtMs: input.resolvedAtMs ?? null,
     };
+    if (!candidate.deliveryKey) candidate.deliveryKey = candidate.candidateId;
     this.db.prepare(
       `INSERT INTO desktop_task_candidates (
         candidate_id, owner_id, source_session_id, source_run_id, action,
         task_ref, proposed_change_json, evidence_refs_json, confidence,
-        requires_approval, status, created_at_ms, resolved_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ownership_confidence, requires_approval, goal_ref, workstream_ref,
+        source_surface, account_generation, generation_reconciled, status, delivery_status, delivery_attempt_count,
+        delivery_key, backend_candidate_id, backend_receipt_json,
+        backend_resolution_receipt_json, backend_resolution_status, last_delivery_error_json, created_at_ms,
+        updated_at_ms, delivered_at_ms, resolved_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(...desktopTaskCandidateValues(candidate));
     return candidate;
   }
@@ -1745,6 +1795,115 @@ function runBindingTurnDeliveryMigration(db: Pick<DatabaseSync, "exec" | "prepar
   });
 }
 
+function runWorkstreamContinuityMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      DROP INDEX IF EXISTS desktop_task_candidates_owner_status_idx;
+      DROP INDEX IF EXISTS desktop_task_candidates_task_idx;
+      ALTER TABLE desktop_task_candidates RENAME TO desktop_task_candidates_legacy;
+
+      CREATE TABLE desktop_task_candidates(
+        candidate_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        source_session_id TEXT REFERENCES sessions(session_id) ON DELETE SET NULL,
+        source_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+        action TEXT NOT NULL CHECK (action IN ('create','update','complete','delete','supersede')),
+        task_ref TEXT,
+        proposed_change_json TEXT NOT NULL CHECK (json_valid(proposed_change_json)),
+        evidence_refs_json TEXT NOT NULL CHECK (json_valid(evidence_refs_json)),
+        confidence REAL NOT NULL,
+        ownership_confidence REAL NOT NULL,
+        requires_approval INTEGER NOT NULL CHECK (requires_approval IN (0,1)),
+        goal_ref TEXT,
+        workstream_ref TEXT,
+        source_surface TEXT NOT NULL,
+        account_generation INTEGER NOT NULL CHECK (account_generation >= 0),
+        generation_reconciled INTEGER NOT NULL CHECK (generation_reconciled IN (0,1)),
+        status TEXT NOT NULL CHECK (status IN ('pending','forwarded','accepted','rejected','expired')),
+        delivery_status TEXT NOT NULL CHECK (delivery_status IN ('pending','delivering','delivered','failed','blocked')),
+        delivery_attempt_count INTEGER NOT NULL DEFAULT 0,
+        delivery_key TEXT NOT NULL UNIQUE,
+        backend_candidate_id TEXT UNIQUE,
+        backend_receipt_json TEXT CHECK (backend_receipt_json IS NULL OR json_valid(backend_receipt_json)),
+        backend_resolution_receipt_json TEXT CHECK (backend_resolution_receipt_json IS NULL OR json_valid(backend_resolution_receipt_json)),
+        backend_resolution_status TEXT,
+        last_delivery_error_json TEXT CHECK (last_delivery_error_json IS NULL OR json_valid(last_delivery_error_json)),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        delivered_at_ms INTEGER,
+        resolved_at_ms INTEGER
+      ) STRICT;
+
+      INSERT INTO desktop_task_candidates (
+        candidate_id, owner_id, source_session_id, source_run_id, action,
+        task_ref, proposed_change_json, evidence_refs_json, confidence,
+        ownership_confidence, requires_approval, goal_ref, workstream_ref,
+        source_surface, account_generation, generation_reconciled, status, delivery_status, delivery_attempt_count,
+        delivery_key, created_at_ms, updated_at_ms, resolved_at_ms
+      )
+      SELECT candidate_id, owner_id, source_session_id, source_run_id, action,
+             task_ref, proposed_change_json, evidence_refs_json, confidence,
+             confidence, requires_approval, NULL, NULL, 'desktop_agent', 0, 0,
+             status, 'blocked', 0, candidate_id,
+             created_at_ms, created_at_ms, resolved_at_ms
+      FROM desktop_task_candidates_legacy;
+
+      DROP TABLE desktop_task_candidates_legacy;
+
+      CREATE INDEX desktop_task_candidates_owner_status_idx
+        ON desktop_task_candidates(owner_id, status, created_at_ms DESC);
+      CREATE INDEX desktop_task_candidates_delivery_idx
+        ON desktop_task_candidates(owner_id, delivery_status, updated_at_ms ASC);
+      CREATE INDEX desktop_task_candidates_task_idx
+        ON desktop_task_candidates(task_ref, status, created_at_ms DESC)
+        WHERE task_ref IS NOT NULL;
+
+      CREATE TABLE workstream_artifact_versions(
+        session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        logical_key TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version > 0),
+        artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(artifact_id) ON DELETE CASCADE,
+        supersedes_artifact_id TEXT REFERENCES artifacts(artifact_id) ON DELETE SET NULL,
+        evidence_refs_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(evidence_refs_json)),
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(session_id, logical_key, version)
+      ) STRICT;
+
+      CREATE TABLE workstream_artifact_heads(
+        session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+        logical_key TEXT NOT NULL,
+        artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(artifact_id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version > 0),
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(session_id, logical_key),
+        FOREIGN KEY(session_id, logical_key, version)
+          REFERENCES workstream_artifact_versions(session_id, logical_key, version)
+          ON DELETE CASCADE
+      ) STRICT;
+
+      CREATE TABLE workstream_continuation_checkpoints(
+        owner_id TEXT NOT NULL,
+        workstream_id TEXT NOT NULL,
+        source_runtime_id TEXT NOT NULL,
+        checkpoint_id TEXT NOT NULL,
+        checkpoint_json TEXT NOT NULL CHECK (json_valid(checkpoint_json)),
+        last_event_sequence INTEGER NOT NULL CHECK (last_event_sequence >= 0),
+        expires_at_ms INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(owner_id, workstream_id, source_runtime_id)
+      ) STRICT;
+
+      CREATE INDEX workstream_continuation_expiry_idx
+        ON workstream_continuation_checkpoints(expires_at_ms);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      WORKSTREAM_CONTINUITY_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
 function runActiveAttemptAuthorityMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
   runTransaction(db, () => {
     const repairedAttempts = db.prepare(`
@@ -2095,9 +2254,25 @@ function desktopTaskCandidateValues(candidate: DesktopTaskCandidate): SQLInputVa
     candidate.proposedChangeJson,
     candidate.evidenceRefsJson,
     candidate.confidence,
+    candidate.ownershipConfidence,
     candidate.requiresApproval,
+    candidate.goalRef,
+    candidate.workstreamRef,
+    candidate.sourceSurface,
+    candidate.accountGeneration,
+    candidate.generationReconciled,
     candidate.status,
+    candidate.deliveryStatus,
+    candidate.deliveryAttemptCount,
+    candidate.deliveryKey,
+    candidate.backendCandidateId,
+    candidate.backendReceiptJson,
+    candidate.backendResolutionReceiptJson,
+    candidate.backendResolutionStatus,
+    candidate.lastDeliveryErrorJson,
     candidate.createdAtMs,
+    candidate.updatedAtMs,
+    candidate.deliveredAtMs,
     candidate.resolvedAtMs,
   ];
 }

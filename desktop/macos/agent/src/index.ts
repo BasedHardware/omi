@@ -56,7 +56,7 @@ import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
@@ -288,14 +288,15 @@ function startOmiToolsRelay(): Promise<string> {
               }
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
+                  const controlOwnerId = activeControlToolOwnerId({
+                    requestKey: controlRequestKey({ requestId, clientId }),
+                    ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                  });
                   const controlToolContext = agentControlToolContext
                     ? {
                         ...agentControlToolContext,
-                        getOwnerId: () =>
-                          activeControlToolOwnerId({
-                            requestKey: controlRequestKey({ requestId, clientId }),
-                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                          }),
+                        canSpawnAgents: !isLeafWorkerSession(resolvedCorrelation.sessionId, controlOwnerId),
+                        getOwnerId: () => controlOwnerId,
                       }
                     : undefined;
                   const result = controlToolContext
@@ -703,6 +704,16 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
 }
 
+function isLeafWorkerSession(sessionId: string | undefined, ownerId: string | undefined): boolean {
+  if (!sessionId || !ownerId || !agentControlToolContext) return false;
+  const session = agentControlToolContext.kernel
+    .listSessions({ ownerId, limit: 200 })
+    .find((candidate) => candidate.session.sessionId === sessionId)?.session;
+  return session?.surfaceKind === "delegated_agent"
+    || session?.surfaceKind === "background_agent"
+    || (session?.surfaceKind === "floating_bar" && session.externalRefKind === "pill");
+}
+
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
   return name === "spawn_background_agent" || name === "spawn_agent";
 }
@@ -833,10 +844,29 @@ async function main(): Promise<void> {
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
-  registry.register("acp", () => acpAdapter, 1);
+  // ACP reads the user's local Claude Code credential.  Do not even expose it
+  // to managed Omi runs; switching to User Claude restarts the bridge with
+  // `defaultAdapterId === "acp"` and registers it there.
+  if (defaultAdapterId === "acp") {
+    registry.register("acp", () => acpAdapter, 1);
+  }
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
+  const recoverRunInput = (adapterId: string) => {
+    if (adapterId !== "acp") return {};
+    let recoveries = 0;
+    return {
+      maxAttempts: 3,
+      recoverAfterError: async (error: unknown) => {
+        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
+        recoveries += 1;
+        logErr("ACP auth required during run; starting OAuth flow before retry");
+        await startAuthFlow();
+        return true;
+      },
+    };
+  };
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -932,11 +962,13 @@ async function main(): Promise<void> {
   };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
+  } else if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+    logErr("Pi-mono adapter unavailable; starting the non-production control-only runtime");
   }
   if (!hermesAvailable && defaultAdapterId === "hermes") {
     const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
@@ -952,8 +984,10 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    defaultAdapterId,
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
+    recoverRunInput,
   };
   const transport = new JsonlTransport({
     kernel,
@@ -961,8 +995,9 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error) => error instanceof AcpError && error.code === -32000,
-    onRecoverableError: async () => {
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    onRecoverableError: async (_error, adapterId) => {
+      if (adapterId !== "acp") return;
       logErr("ACP auth required during query; starting OAuth flow before retry");
       await startAuthFlow();
     },
@@ -1373,6 +1408,9 @@ async function main(): Promise<void> {
         const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
         const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
         const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        if (surfaceKind === "workstream" && externalRefKind === "workstream" && externalRefId.trim()) {
+          kernel.resolveWorkstreamSession({ ownerId, workstreamId: externalRefId });
+        }
         const turns = Array.isArray(msg.turns) ? msg.turns : [];
         const imported = kernel.importConversationTurns({
           ownerId,

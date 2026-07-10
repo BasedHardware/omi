@@ -2,7 +2,7 @@ import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
-import { AcpRuntimeAdapter } from "../src/adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "../src/adapters/acp.js";
 import {
   PiMonoAdapter,
   PiMonoRuntimeAdapter,
@@ -86,6 +86,34 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
     }),
   };
 }
+
+describe("ACP authentication recovery classification", () => {
+  it("accepts the canonical ACP auth-required error", () => {
+    expect(isRecoverableAcpAuthError(new AcpError("Authentication required", -32000))).toBe(true);
+  });
+
+  it("accepts the wrapped provider 401 returned during session/prompt", () => {
+    const error = new AcpError(
+      'Internal error: Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}',
+      -32603,
+    );
+
+    expect(isRecoverableAcpAuthError(error)).toBe(true);
+  });
+
+  it("accepts structured auth failure data when the message is generic", () => {
+    const error = new AcpError("Internal error", -32603, {
+      error: { type: "authentication_error", message: "token rejected" },
+    });
+
+    expect(isRecoverableAcpAuthError(error)).toBe(true);
+  });
+
+  it("leaves unrelated internal and non-ACP errors terminal", () => {
+    expect(isRecoverableAcpAuthError(new AcpError("Internal error: database unavailable", -32603))).toBe(false);
+    expect(isRecoverableAcpAuthError(new Error("Invalid authentication credentials"))).toBe(false);
+  });
+});
 
 describe("AcpRuntimeAdapter process spawning", () => {
   beforeEach(() => {

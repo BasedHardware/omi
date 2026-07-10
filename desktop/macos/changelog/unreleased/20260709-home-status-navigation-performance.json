@@ -1,3 +1,0 @@
-{
-  "change": "Made Home load instantly when returning from another page while keeping cached status isolated to the signed-in account"
-}
