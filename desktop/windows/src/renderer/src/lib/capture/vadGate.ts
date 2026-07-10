@@ -1,6 +1,7 @@
 // Pure speech-gate reducer: given the high-quality PCM stream (4096-sample chunks
-// from pcmPipeline) and a stream of VAD verdicts (from vadEngine), emit only the
-// audio around detected speech. NO onnx / Web Audio import — it is a deterministic
+// from pcmPipeline) and a stream of VAD verdicts (from the Silero detector wired in
+// captureEngine), emit only the audio around detected speech. NO onnx / Web Audio
+// import — it is a deterministic
 // state machine over a tick stream, so it is exhaustively unit-testable in node.
 //
 // Time is derived from the audio itself (sample counts at `sampleRate`), never a

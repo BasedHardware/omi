@@ -71,6 +71,9 @@ importers:
       lucide-react:
         specifier: ^1.16.0
         version: 1.17.0(react@19.2.7)
+      onnxruntime-web:
+        specifier: 1.27.0
+        version: 1.27.0
       react-router-dom:
         specifier: ^7.15.1
         version: 7.16.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

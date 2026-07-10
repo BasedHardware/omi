@@ -1,11 +1,11 @@
-// Pure mapping of a MicVAD init error to the AGENTS.md bounded fallback `reason`
-// enum — split out of vadEngine.ts (which imports onnxruntime) so it is node-
-// testable without dragging the wasm runtime into the test env.
+// Pure mapping of a Silero/onnxruntime init error to the AGENTS.md bounded fallback
+// `reason` enum — kept free of the onnx import (unlike vadModel.ts) so it is
+// node-testable without dragging the wasm runtime into the test env.
 
 export type VadFallbackReason = 'asset_load_failed' | 'wasm_init_failed' | 'other'
 
-/** Classify a MicVAD.new() failure message into the bounded reason set. Asset/
- *  fetch problems are checked first so a 404 on the wasm binary reads as an asset
+/** Classify a VAD init failure message into the bounded reason set. Asset/fetch
+ *  problems are checked first so a 404 on the wasm binary reads as an asset
  *  failure, not a runtime one. */
 export function classifyVadFailure(message: string): VadFallbackReason {
   const m = (message || '').toLowerCase()

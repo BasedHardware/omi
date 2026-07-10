@@ -33,11 +33,8 @@ export async function acquireMicStream(): Promise<MediaStream> {
   // The VB-Cable test lane deliberately feeds a known WAV in through a virtual
   // input; steering away from it would defeat the harness. window.omi.allowVirtualMic
   // (main-process opt-in under OMI_ALLOW_VIRTUAL_MIC) skips the guard for that lane
-  // only — default behavior is unchanged. Cast is a temporary integration seam until
-  // the field lands on OmiBridgeApi (Agent A).
-  const allowVirtualMic =
-    (window.omi as unknown as { allowVirtualMic?: boolean } | undefined)?.allowVirtualMic === true
-  if (allowVirtualMic || !VIRTUAL_INPUT_RE.test(label)) return stream
+  // only — default behavior is unchanged.
+  if (window.omi?.allowVirtualMic === true || !VIRTUAL_INPUT_RE.test(label)) return stream
   const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
     (d) =>
       d.kind === 'audioinput' &&
