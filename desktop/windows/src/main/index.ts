@@ -30,6 +30,7 @@ import {
   setBarEnabled,
   getBarWindow,
   getStripDiagnostics,
+  isBarInteractive,
   isBarVisible,
   showBar,
   hideBar
@@ -581,6 +582,9 @@ app.whenReady().then(async () => {
           visible: isBarVisible(),
           focused: !!win && !win.isDestroyed() && win.isFocused(),
           focusable: !!win && !win.isDestroyed() && win.isFocusable(),
+          // Real hit-testing state: must be false right after ANY present —
+          // only the cursor entering the visible surface enables it.
+          interactive: isBarInteractive(),
           id: win && !win.isDestroyed() ? win.id : null
         }
       }

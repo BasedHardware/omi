@@ -103,6 +103,16 @@ export const ORB_PRESETS: Record<string, OrbParams> = {
     orbitRadius: 0.62,
     dotRadius: 0.085,
     orbitPeriod: 4.2
+  },
+  // For SMALL mounts (≤ ~28px: the bar pill, the sidebar brand spot): at that
+  // size the default dots rasterize to ~1px and the anti-aliasing makes the
+  // ring read as a loading spinner (skeptical-review finding). Proportionally
+  // larger dots on a slightly tighter ring stay crisp.
+  compact: {
+    ...DEFAULT_ORB_PARAMS,
+    orbitRadius: 0.54,
+    dotRadius: 0.15,
+    sminK: 0.3
   }
 }
 

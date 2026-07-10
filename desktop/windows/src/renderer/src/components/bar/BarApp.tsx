@@ -196,6 +196,7 @@ export function BarApp(): React.JSX.Element {
             <div className="bar-pill">
               <Orb
                 size={26}
+                preset="compact"
                 state={orbState}
                 amplitudeSource={amplitudeSource}
                 genesisNonce={genesisNonce}
@@ -211,7 +212,9 @@ export function BarApp(): React.JSX.Element {
               row + orb — never a blank panel (bug backlog: idle blank card). */}
           <div className={`bar-content ${expanded ? 'bar-content-active' : ''}`}>
             <div ref={panelInnerRef}>
-              <div className="relative flex items-center justify-center pt-2">
+              {/* pt-3: give the orb breathing room from the flush top edge
+                  (skeptical-review finding — it sat against the ceiling). */}
+              <div className="relative flex items-center justify-center pt-3">
                 <Orb
                   size={34}
                   state={orbState}

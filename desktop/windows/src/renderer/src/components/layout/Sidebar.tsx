@@ -156,7 +156,7 @@ export function Sidebar(): React.JSX.Element {
           always-on mic is live, idle otherwise). */}
       <div className="flex items-center justify-between px-1.5 py-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Orb size={22} state={micOn && user ? 'listening' : 'idle'} />
+          <Orb size={22} preset="compact" state={micOn && user ? 'listening' : 'idle'} />
           <img
             src="https://personas.omi.me/omilogo.png"
             alt="omi"

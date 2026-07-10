@@ -107,11 +107,19 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   assert.equal(ptt.focusable, false, 'ptt bar must be unfocusable')
   assert.equal(ptt.focused, false, 'ptt bar must not be focused')
 
-  // (c) EXPANDED (hotkey tap / pill click): the one mode that takes focus.
+  // (c) EXPANDED (hotkey tap / pill click): the one mode that takes focus —
+  // but its window must STILL be click-through outside the visible surface
+  // (merge-blocker regression: a solid expanded window blocked clicks on
+  // everything under the invisible dead space around the panel).
   await app.evaluate(() => globalThis.__omiE2E.barHide())
   await new Promise((r) => setTimeout(r, 600))
   const expanded = await barShow(app, 'expanded')
   assert.equal(expanded.focusable, true, 'expanded bar must be focusable (chat typing)')
+  assert.equal(
+    expanded.interactive,
+    false,
+    'expanded bar must present CLICK-THROUGH — hit-testing only enables under the cursor'
+  )
 })
 
 test('bar hide returns cleanly and can re-reveal; strips exist per display', async (t) => {
@@ -136,12 +144,31 @@ test('bar hide returns cleanly and can re-reveal; strips exist per display', asy
   const again = await barShow(app, 'expanded')
   assert.equal(again.visible, true, 'bar should re-reveal after a hide')
 
-  // Trigger strips: one thin window at the top of every display (they exist
-  // even while the bar is hidden — that IS the zero-poll reveal path).
+  // Trigger strips: one thin window per display (they exist even while the
+  // bar is hidden — that IS the zero-poll reveal path), CENTERED over the
+  // bar's footprint and far from the screen corners (merge-blocker
+  // regression: a full-width strip hijacked ✕/minimize/tab-close targets).
   const diag = await app.evaluate(() => globalThis.__omiE2E.barStrips())
-  assert.equal(diag.strips.length, diag.displays, 'one trigger strip per display')
+  assert.equal(diag.strips.length, diag.displays.length, 'one trigger strip per display')
   for (const s of diag.strips) {
     assert.ok(s.bounds.height <= 2, `strip ${s.id} is ${s.bounds.height}px tall (want 1px)`)
+    // Find the display this strip belongs to (same y origin, x within bounds).
+    const d = diag.displays.find(
+      (dd) => s.bounds.x >= dd.bounds.x && s.bounds.x < dd.bounds.x + dd.bounds.width
+    )
+    assert.ok(d, `strip ${s.id} not on any display`)
+    assert.ok(
+      s.bounds.width < d.bounds.width / 2,
+      `strip ${s.id} spans ${s.bounds.width}px of a ${d.bounds.width}px display — too wide`
+    )
+    assert.ok(
+      s.bounds.x > d.bounds.x + d.bounds.width * 0.25,
+      `strip ${s.id} reaches the top-left corner region`
+    )
+    assert.ok(
+      s.bounds.x + s.bounds.width < d.bounds.x + d.bounds.width * 0.75,
+      `strip ${s.id} reaches the top-right corner region`
+    )
   }
 })
 

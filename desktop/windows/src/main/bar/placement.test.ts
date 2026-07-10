@@ -3,8 +3,10 @@ import {
   computeStripBounds,
   computeBarBounds,
   displayForPoint,
+  isCursorInPeekFootprint,
   shouldSuppressStrips,
   BAR_WINDOW_WIDTH,
+  STRIP_WIDTH,
   type DisplayLike
 } from './placement'
 
@@ -22,10 +24,54 @@ const secondary: DisplayLike = {
 }
 
 describe('computeStripBounds', () => {
-  it('spans the display top edge, 1px tall, in DIPs', () => {
-    expect(computeStripBounds(primary)).toEqual({ x: 0, y: 0, width: 2560, height: 1 })
-    // Negative-origin secondary display (above-left arrangement) keeps its own origin.
-    expect(computeStripBounds(secondary)).toEqual({ x: 2560, y: -200, width: 1920, height: 1 })
+  it('is a 1px-tall CENTERED footprint — never the display width (merge-blocker regression)', () => {
+    // Full-width strips hijacked the top edge: aiming at a maximized window's
+    // ✕/minimize or browser tab-close buttons summoned the bar.
+    const s = computeStripBounds(primary)
+    expect(s.height).toBe(1)
+    expect(s.width).toBe(STRIP_WIDTH)
+    expect(s.x).toBe(Math.round((2560 - STRIP_WIDTH) / 2))
+    // Corners are far outside the strip on every representative display.
+    for (const d of [
+      primary,
+      secondary,
+      { ...primary, bounds: { x: 0, y: 0, width: 1366, height: 768 } },
+      { ...primary, bounds: { x: 0, y: 0, width: 3440, height: 1440 } }
+    ]) {
+      const strip = computeStripBounds(d)
+      const b = d.bounds
+      expect(strip.x).toBeGreaterThan(b.x + b.width * 0.25) // top-left corner excluded
+      expect(strip.x + strip.width).toBeLessThan(b.x + b.width * 0.75) // top-right excluded
+      expect(strip.y).toBe(b.y)
+    }
+  })
+
+  it('keeps its own origin on a negative-origin secondary display', () => {
+    const s = computeStripBounds(secondary)
+    expect(s.y).toBe(-200)
+    expect(s.x).toBe(Math.round(2560 + (1920 - STRIP_WIDTH) / 2))
+  })
+})
+
+describe('isCursorInPeekFootprint (retract watchdog — merge-blocker regression)', () => {
+  it('screen corners with the bar open must NOT count as hovering (retract fires)', () => {
+    // Live bug: hovering top-left/right corners kept the bar open forever.
+    expect(isCursorInPeekFootprint({ x: 0, y: 0 }, primary)).toBe(false) // top-left
+    expect(isCursorInPeekFootprint({ x: 2559, y: 0 }, primary)).toBe(false) // top-right
+    expect(isCursorInPeekFootprint({ x: 2560, y: -200 }, secondary)).toBe(false)
+    expect(isCursorInPeekFootprint({ x: 4479, y: -200 }, secondary)).toBe(false)
+  })
+
+  it('the bar footprint itself keeps it open', () => {
+    // Top-center of the primary display, within the footprint height.
+    expect(isCursorInPeekFootprint({ x: 1280, y: 0 }, primary)).toBe(true)
+    expect(isCursorInPeekFootprint({ x: 1280, y: 40 }, primary)).toBe(true)
+    // …but below it, it retracts.
+    expect(isCursorInPeekFootprint({ x: 1280, y: 200 }, primary)).toBe(false)
+    // Just outside the footprint width, it retracts.
+    expect(isCursorInPeekFootprint({ x: 1280 - 300, y: 0 }, primary)).toBe(false)
+    // Centered footprint on the negative-origin secondary display.
+    expect(isCursorInPeekFootprint({ x: 2560 + 960, y: -190 }, secondary)).toBe(true)
   })
 })
 

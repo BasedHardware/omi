@@ -26,6 +26,7 @@ import { isQuitting } from '../lifecycle'
 import {
   computeBarBounds,
   computeStripBounds,
+  isCursorInPeekFootprint,
   shouldSuppressStrips,
   type DisplayLike
 } from './placement'
@@ -41,6 +42,10 @@ let barWindow: BrowserWindow | null = null
 let barReady = false
 let barEnabled = false
 let currentMode: BarMode | null = null
+/** Whether real hit-testing is currently enabled (cursor over the surface). */
+let barInteractive = false
+/** Display the bar is currently presented on (retract watchdog target). */
+let activeDisplayId: number | null = null
 let pendingShow: { mode: BarMode; reveal: BarReveal } | null = null
 let pendingPttDown = false
 let hideFallback: ReturnType<typeof setTimeout> | null = null
@@ -184,6 +189,7 @@ export function showBar(mode: BarMode, reveal: BarReveal, display?: Electron.Dis
   if (!barEnabled) return
   const win = ensureBarWindow()
   const target = display ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  activeDisplayId = target.id
   win.setBounds(computeBarBounds(displayLike(target)))
   if (!barReady) {
     pendingShow = { mode, reveal }
@@ -192,25 +198,80 @@ export function showBar(mode: BarMode, reveal: BarReveal, display?: Electron.Dis
   presentBar(win, mode, reveal)
 }
 
+// Hit-testing rule (merge-blocker fix): the bar window is ALWAYS click-through
+// (ignore + forward) except while the cursor is actually over the visible
+// surface — the renderer's mouseenter/mouseleave drives bar:setInteractive in
+// EVERY mode. Focus is orthogonal: expanded keeps keyboard focus for typing
+// while dead space around the panel stays fully click-through. (Making the
+// whole window solid in expanded mode blocked clicks on everything under the
+// invisible 560×~640 region — live bug.)
+function applyClickThrough(win: BrowserWindow): void {
+  barInteractive = false
+  win.setIgnoreMouseEvents(true, { forward: true })
+}
+
 function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void {
   if (hideFallback) {
     clearTimeout(hideFallback)
     hideFallback = null
   }
   currentMode = mode
+  applyClickThrough(win)
   if (mode === 'expanded') {
     win.setFocusable(true)
-    win.setIgnoreMouseEvents(false)
     win.showInactive()
     win.focus()
   } else {
     win.setFocusable(false)
-    win.setIgnoreMouseEvents(true, { forward: true })
     win.showInactive()
   }
+  if (mode === 'peek') startPeekWatch()
+  else stopPeekWatch()
   send('bar:show', { mode, reveal })
   send('overlay:shown')
   broadcastVisibility()
+}
+
+// --- Peek retract watchdog ----------------------------------------------------
+// A hover-revealed bar must retract when the cursor leaves its footprint. The
+// renderer CANNOT own this: with click-through + forwarded events, DOM
+// mouseleave never fires once the cursor exits the window region — the events
+// simply stop, so the bar got stuck open when hovering elsewhere along the
+// top edge (live bug). Main polls the cursor ONLY while a peek bar is visible
+// (a rare, brief state — idle remains strictly zero-poll) and hides after the
+// grace period once the cursor is outside (bar footprint ∪ strip footprint).
+const PEEK_WATCH_MS = 150
+const PEEK_GRACE_MS = 600
+let peekWatch: ReturnType<typeof setInterval> | null = null
+let peekOutsideSince: number | null = null
+
+function startPeekWatch(): void {
+  stopPeekWatch()
+  peekOutsideSince = null
+  peekWatch = setInterval(() => {
+    const win = barWindow
+    if (!win || win.isDestroyed() || !win.isVisible() || currentMode !== 'peek') {
+      stopPeekWatch()
+      return
+    }
+    const display =
+      screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
+    const inside = isCursorInPeekFootprint(screen.getCursorScreenPoint(), displayLike(display))
+    if (inside) {
+      peekOutsideSince = null
+    } else if (peekOutsideSince === null) {
+      peekOutsideSince = Date.now()
+    } else if (Date.now() - peekOutsideSince >= PEEK_GRACE_MS) {
+      stopPeekWatch()
+      hideBar()
+    }
+  }, PEEK_WATCH_MS)
+}
+
+function stopPeekWatch(): void {
+  if (peekWatch) clearInterval(peekWatch)
+  peekWatch = null
+  peekOutsideSince = null
 }
 
 /** Mode transition while visible (peek ⇄ expanded, ptt → expanded). */
@@ -221,12 +282,13 @@ export function setBarMode(mode: BarMode): void {
   currentMode = mode
   if (mode === 'expanded') {
     win.setFocusable(true)
-    win.setIgnoreMouseEvents(false)
     win.focus()
   } else {
     win.setFocusable(false)
-    win.setIgnoreMouseEvents(true, { forward: true })
+    applyClickThrough(win)
   }
+  if (mode === 'peek') startPeekWatch()
+  else stopPeekWatch()
   send('bar:mode', mode)
   broadcastVisibility()
 }
@@ -248,11 +310,12 @@ function hideBarNow(): void {
     clearTimeout(hideFallback)
     hideFallback = null
   }
+  stopPeekWatch()
   const win = barWindow
   if (!win || win.isDestroyed()) return
   if (win.isVisible()) win.hide()
   win.setFocusable(false)
-  win.setIgnoreMouseEvents(true, { forward: true })
+  applyClickThrough(win)
   currentMode = null
   broadcastVisibility()
 }
@@ -413,15 +476,22 @@ export function startBarStrips(): void {
 
 /** Diagnostics for the E2E harness: strips vs displays, with real bounds. */
 export function getStripDiagnostics(): {
-  displays: number
+  displays: { id: number; bounds: Electron.Rectangle }[]
   strips: { id: number; bounds: Electron.Rectangle; visible: boolean }[]
 } {
   return {
-    displays: screen.getAllDisplays().length,
+    displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds })),
     strips: [...strips.values()]
       .filter((w) => !w.isDestroyed())
       .map((w) => ({ id: w.id, bounds: w.getBounds(), visible: w.isVisible() }))
   }
+}
+
+/** E2E diagnostic: is real hit-testing currently enabled? Must be FALSE right
+ *  after any present (even expanded) — the window starts click-through and
+ *  only the cursor entering the visible surface enables interaction. */
+export function isBarInteractive(): boolean {
+  return barInteractive
 }
 
 // --- IPC ----------------------------------------------------------------------
@@ -443,12 +513,14 @@ export function registerBarIpc(): void {
   ipcMain.on('bar:requestHide', () => hideBarNow())
   ipcMain.on('bar:expand', () => setBarMode('expanded'))
   ipcMain.on('bar:collapse', () => setBarMode('peek'))
-  // Interactive islands: the renderer toggles real hit-testing as the cursor
-  // enters/leaves interactive elements (peek/ptt modes only — expanded is
-  // fully interactive).
+  // Interactive islands — EVERY mode: the renderer toggles real hit-testing
+  // as the cursor enters/leaves the visible surface, so the effective ignore
+  // region is always "window minus the bar's visual rect". The transparent
+  // dead space around the panel must never eat clicks (merge-blocker fix).
   ipcMain.on('bar:setInteractive', (_e, interactive: boolean) => {
     const win = barWindow
-    if (!win || win.isDestroyed() || currentMode === 'expanded') return
+    if (!win || win.isDestroyed()) return
+    barInteractive = !!interactive
     if (interactive) win.setIgnoreMouseEvents(false)
     else win.setIgnoreMouseEvents(true, { forward: true })
   })
@@ -471,6 +543,7 @@ export function registerBarIpc(): void {
 export function destroyBar(): void {
   gesture?.dispose()
   gesture = null
+  stopPeekWatch()
   if (hideFallback) clearTimeout(hideFallback)
   hideFallback = null
   unsubForeground?.()

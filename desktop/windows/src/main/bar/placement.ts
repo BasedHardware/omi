@@ -13,10 +13,42 @@ export const BAR_WINDOW_WIDTH = 560
 export const BAR_WINDOW_MAX_HEIGHT = 640
 export const BAR_MAX_HEIGHT_FRACTION = 0.7
 
-/** The trigger strip: 1px tall, spanning the display's top edge. */
+/** Trigger-strip width (DIP): the bar's own top-center footprint (collapsed
+ *  pill ≈148 + a forgiving aim margin) — NEVER the display width. A full-width
+ *  strip hijacked the top edge: aiming at a maximized window's ✕/minimize or a
+ *  browser's tab-close buttons summoned the bar (live bug, merge blocker). */
+export const STRIP_WIDTH = 280
+
+/** The trigger strip: 1px tall, centered over the bar's reveal position. The
+ *  screen corners (window controls, tab strips) must never trigger it. */
 export function computeStripBounds(display: DisplayLike): Rect {
   const b = display.bounds
-  return { x: b.x, y: b.y, width: b.width, height: 1 }
+  const width = Math.min(STRIP_WIDTH, b.width)
+  return { x: Math.round(b.x + (b.width - width) / 2), y: b.y, width, height: 1 }
+}
+
+/** Region that keeps a hover-revealed (peek) bar open: the bar's visible
+ *  top-center footprint (pill + aim margin, a little taller than the pill).
+ *  Cursor ANYWHERE else — including other top-edge positions like the screen
+ *  corners — must start the retract grace timer. (Live bug: hovering the
+ *  top-left/right corners kept the bar open indefinitely because DOM
+ *  mouseleave never fires once the cursor exits a forwarded-events window.) */
+export const PEEK_FOOTPRINT_WIDTH = 320
+export const PEEK_FOOTPRINT_HEIGHT = 72
+
+export function isCursorInPeekFootprint(
+  cursor: { x: number; y: number },
+  display: DisplayLike
+): boolean {
+  const b = display.bounds
+  const width = Math.min(PEEK_FOOTPRINT_WIDTH, b.width)
+  const x0 = b.x + (b.width - width) / 2
+  return (
+    cursor.x >= x0 &&
+    cursor.x <= x0 + width &&
+    cursor.y >= b.y &&
+    cursor.y <= b.y + PEEK_FOOTPRINT_HEIGHT
+  )
 }
 
 /**
