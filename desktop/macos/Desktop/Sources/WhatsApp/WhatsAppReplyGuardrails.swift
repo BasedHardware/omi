@@ -32,6 +32,7 @@ struct WhatsAppAuditEntry: Codable, Identifiable, Equatable, Sendable {
 
 @MainActor
 final class WhatsAppReplySettings: ObservableObject {
+  /// Production singleton. Owns rate-limit and duplicate-send state for the app.
   static let shared = WhatsAppReplySettings()
 
   @Published var mode: WhatsAppReplyMode {
@@ -76,7 +77,12 @@ final class WhatsAppReplySettings: ObservableObject {
     static let toneMatchEnabled = "whatsapp.reply.toneMatchEnabled"
   }
 
-  init(defaults: UserDefaults = .standard) {
+  /// Production entry point — always uses standard defaults and the shared instance path.
+  private convenience init() {
+    self.init(defaults: .standard)
+  }
+
+  private init(defaults: UserDefaults) {
     self.defaults = defaults
     self.mode = WhatsAppReplyMode(rawValue: defaults.string(forKey: Keys.mode) ?? "") ?? .draft
     self.killSwitchEnabled = defaults.bool(forKey: Keys.killSwitchEnabled)
@@ -89,6 +95,12 @@ final class WhatsAppReplySettings: ObservableObject {
     self.quietHoursStart = storedQuietStart ?? 22
     self.quietHoursEnd = storedQuietEnd ?? 7
     self.toneMatchEnabled = defaults.object(forKey: Keys.toneMatchEnabled) as? Bool ?? true
+  }
+
+  /// Test-only seam. Creates an isolated instance with its own in-memory
+  /// rate-limit and duplicate-send state. Production code must use `shared`.
+  static func makeForTesting(defaults: UserDefaults) -> WhatsAppReplySettings {
+    WhatsAppReplySettings(defaults: defaults)
   }
 
   func addAllowlistedJid(_ jid: String) {

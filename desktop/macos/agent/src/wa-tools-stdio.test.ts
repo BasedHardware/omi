@@ -19,21 +19,17 @@ const sendInput = {
   message: "hello",
 };
 
-function expectedClientMessageId(
-  input: Record<string, unknown>,
-  context: Record<string, unknown>,
-  mcpRequestId: string,
-): string {
-  const scope = {
-    mcpRequestId,
-    requestId: context.requestId,
-    clientId: context.clientId,
-    sessionId: context.sessionId,
-    runId: context.runId,
-    attemptId: context.attemptId,
+function expectedClientMessageId(input: Record<string, unknown>): string {
+  const to = typeof input.to === "string" ? input.to.trim() : "";
+  const message = typeof input.message === "string" ? input.message : "";
+  const logicalSend = {
+    to,
+    message,
+    reply_to: typeof input.reply_to === "string" ? input.reply_to : undefined,
+    reply_to_sender: typeof input.reply_to_sender === "string" ? input.reply_to_sender : undefined,
   };
   const hash = createHash("sha256")
-    .update(stableJSONStringify({ scope, input }))
+    .update(stableJSONStringify(logicalSend))
     .digest("hex")
     .slice(0, 32);
   return `wa-tool:${hash}`;
@@ -89,9 +85,9 @@ describe("requestScopeValue", () => {
 });
 
 describe("withIdempotencyKey", () => {
-  it("adds client_message_id for wa_send_message when request scope is present", () => {
+  it("adds client_message_id for wa_send_message from logical send fields", () => {
     const result = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, "rpc-1");
-    expect(result.client_message_id).toBe(expectedClientMessageId(sendInput, baseContext, "rpc-1"));
+    expect(result.client_message_id).toBe(expectedClientMessageId(sendInput));
     expect(result).toEqual({ ...sendInput, client_message_id: result.client_message_id });
   });
 
@@ -113,38 +109,60 @@ describe("withIdempotencyKey", () => {
     expect(withIdempotencyKey("wa_send_message", input, baseContext, "rpc-1")).toBe(input);
   });
 
-  it("returns input unchanged when request scope is missing", () => {
+  it("still generates a key when request scope is missing", () => {
     const input = { ...sendInput };
-    expect(withIdempotencyKey("wa_send_message", input, baseContext, null)).toBe(input);
-    expect(withIdempotencyKey("wa_send_message", input, baseContext, "")).toBe(input);
-    expect(withIdempotencyKey("wa_send_message", input, baseContext, "   ")).toBe(input);
+    const result = withIdempotencyKey("wa_send_message", input, baseContext, null);
+    expect(result.client_message_id).toBe(expectedClientMessageId(sendInput));
   });
 
-  it("produces deterministic hashes for the same scope and input", () => {
+  it("returns input unchanged when to/message are missing", () => {
+    expect(withIdempotencyKey("wa_send_message", { to: "x" }, baseContext, "rpc-1")).toEqual({ to: "x" });
+    expect(withIdempotencyKey("wa_send_message", { message: "hi" }, baseContext, "rpc-1")).toEqual({
+      message: "hi",
+    });
+  });
+
+  it("produces deterministic hashes for the same logical send", () => {
     const first = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, 99);
     const second = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, 99);
     expect(first.client_message_id).toBe(second.client_message_id);
     expect(first.client_message_id).toMatch(/^wa-tool:[0-9a-f]{32}$/);
   });
 
-  it("changes the hash when scope fields differ", () => {
-    const requestId = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, "rpc-1");
-    const otherRequest = withIdempotencyKey(
+  it("keeps the same key across different request scopes (retry-safe)", () => {
+    const first = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, "rpc-1");
+    const retried = withIdempotencyKey(
       "wa_send_message",
       { ...sendInput },
-      { ...baseContext, requestId: "req-2" },
-      "rpc-1",
+      { ...baseContext, requestId: "req-2", runId: "run-2", attemptId: "att-2" },
+      "rpc-2",
     );
-    const otherRpc = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, "rpc-2");
-    const otherInput = withIdempotencyKey(
+    expect(retried.client_message_id).toBe(first.client_message_id);
+  });
+
+  it("changes the hash when the logical send differs", () => {
+    const base = withIdempotencyKey("wa_send_message", { ...sendInput }, baseContext, "rpc-1");
+    const otherMessage = withIdempotencyKey(
       "wa_send_message",
       { ...sendInput, message: "goodbye" },
       baseContext,
       "rpc-1",
     );
+    const otherRecipient = withIdempotencyKey(
+      "wa_send_message",
+      { ...sendInput, to: "999@s.whatsapp.net" },
+      baseContext,
+      "rpc-1",
+    );
+    const withReply = withIdempotencyKey(
+      "wa_send_message",
+      { ...sendInput, reply_to: "msg-1" },
+      baseContext,
+      "rpc-1",
+    );
 
-    expect(otherRequest.client_message_id).not.toBe(requestId.client_message_id);
-    expect(otherRpc.client_message_id).not.toBe(requestId.client_message_id);
-    expect(otherInput.client_message_id).not.toBe(requestId.client_message_id);
+    expect(otherMessage.client_message_id).not.toBe(base.client_message_id);
+    expect(otherRecipient.client_message_id).not.toBe(base.client_message_id);
+    expect(withReply.client_message_id).not.toBe(base.client_message_id);
   });
 });

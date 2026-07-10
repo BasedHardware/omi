@@ -89,26 +89,26 @@ export function requestScopeValue(value: unknown): string | undefined {
 export function withIdempotencyKey(
   name: string,
   input: Record<string, unknown>,
-  context: Record<string, unknown>,
-  requestScope: unknown
+  _context: Record<string, unknown>,
+  _requestScope: unknown
 ): Record<string, unknown> {
   if (name !== "wa_send_message" || typeof input.client_message_id === "string" || typeof input.dedupe_id === "string") {
     return input;
   }
-  const mcpRequestId = requestScopeValue(requestScope);
-  if (!mcpRequestId) {
+  // Stable across retries/request scopes: hash the logical send, not request IDs.
+  const to = typeof input.to === "string" ? input.to.trim() : "";
+  const message = typeof input.message === "string" ? input.message : "";
+  if (!to || !message) {
     return input;
   }
-  const scope = {
-    mcpRequestId,
-    requestId: context.requestId,
-    clientId: context.clientId,
-    sessionId: context.sessionId,
-    runId: context.runId,
-    attemptId: context.attemptId,
+  const logicalSend = {
+    to,
+    message,
+    reply_to: typeof input.reply_to === "string" ? input.reply_to : undefined,
+    reply_to_sender: typeof input.reply_to_sender === "string" ? input.reply_to_sender : undefined,
   };
   const hash = createHash("sha256")
-    .update(stableJSONStringify({ scope, input }))
+    .update(stableJSONStringify(logicalSend))
     .digest("hex")
     .slice(0, 32);
   return { ...input, client_message_id: `wa-tool:${hash}` };

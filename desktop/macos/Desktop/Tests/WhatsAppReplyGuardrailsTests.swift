@@ -13,7 +13,7 @@ final class WhatsAppReplyGuardrailsTests: XCTestCase {
     suiteName = "WhatsAppReplyGuardrailsTests.\(UUID().uuidString)"
     defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
-    settings = WhatsAppReplySettings(defaults: defaults)
+    settings = WhatsAppReplySettings.makeForTesting(defaults: defaults)
   }
 
   override func tearDown() {
@@ -229,5 +229,16 @@ final class WhatsAppReplyGuardrailsTests: XCTestCase {
     XCTAssertEqual(settings.canAttemptManualSend(clientMessageID: nil), .allowed)
     XCTAssertEqual(settings.canAttemptManualSend(clientMessageID: ""), .allowed)
     XCTAssertEqual(settings.canAttemptManualSend(clientMessageID: ""), .allowed)
+  }
+
+  func testMakeForTestingCreatesIsolatedInstanceFromShared() {
+    let isolated = WhatsAppReplySettings.makeForTesting(defaults: defaults)
+    XCTAssertFalse(
+      isolated === WhatsAppReplySettings.shared,
+      "makeForTesting must not return the production singleton")
+    XCTAssertEqual(settings.canAttemptManualSend(clientMessageID: "iso-1"), .allowed)
+    XCTAssertEqual(isolated.canAttemptManualSend(clientMessageID: "iso-1"), .allowed)
+    XCTAssertEqual(settings.canAttemptManualSend(clientMessageID: "iso-1"), .duplicate)
+    XCTAssertEqual(isolated.canAttemptManualSend(clientMessageID: "iso-1"), .duplicate)
   }
 }
