@@ -377,9 +377,7 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // tighter with a quicker breath.
   const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.15) / 0.3)))
   const poolBase = thinking ? 0.34 : 0.42 * (0.92 + 0.14 * shaped)
-  const poolPulse = thinking
-    ? 0.13 * Math.sin(t * 4.6)
-    : (0.07 + 0.05 * shaped) * Math.sin(t * 1.7)
+  const poolPulse = thinking ? 0.13 * Math.sin(t * 4.6) : (0.07 + 0.05 * shaped) * Math.sin(t * 1.7)
   // Hard-zero below a visibility floor: smin INFLATES even a sub-pixel pool
   // into a faint center speck (review round 2), so the pool only exists once
   // it is genuinely visible; the smin blend masks the small pop.

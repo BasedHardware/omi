@@ -73,9 +73,12 @@ async function main() {
     const peak = Math.max(...v)
     const peakIdx = v.indexOf(peak)
     if (peak <= 0) failures.push('no motion detected in the rotate phase')
-    if (v[0] > 0.18 * peak) failures.push(`start velocity ${v[0].toFixed(3)} not near zero (peak ${peak.toFixed(3)})`)
+    if (v[0] > 0.18 * peak)
+      failures.push(`start velocity ${v[0].toFixed(3)} not near zero (peak ${peak.toFixed(3)})`)
     if (v[v.length - 1] > 0.18 * peak) {
-      failures.push(`end velocity ${v[v.length - 1].toFixed(3)} not near zero (peak ${peak.toFixed(3)})`)
+      failures.push(
+        `end velocity ${v[v.length - 1].toFixed(3)} not near zero (peak ${peak.toFixed(3)})`
+      )
     }
     if (peakIdx < v.length / 3 || peakIdx > (2 * v.length) / 3) {
       failures.push(`velocity peak at sample ${peakIdx}/${v.length} — not in the middle third`)
@@ -100,7 +103,8 @@ async function main() {
     }
     const ru = unwrap(rest)
     const restTravel = Math.abs(ru[ru.length - 1] - ru[0])
-    if (restTravel > 0.01) failures.push(`rest phase moved ${restTravel.toFixed(4)} rad (should be still)`)
+    if (restTravel > 0.01)
+      failures.push(`rest phase moved ${restTravel.toFixed(4)} rad (should be still)`)
 
     console.log(
       `[orb-motion] rotate travel ${travel.toFixed(3)} rad, peak v ${peak.toFixed(3)} rad/s at sample ${peakIdx + 1}/${v.length}, rest travel ${restTravel.toFixed(4)} rad`

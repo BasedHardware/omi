@@ -244,6 +244,14 @@ const PEEK_WATCH_MS = 150
 const PEEK_GRACE_MS = 600
 let peekWatch: ReturnType<typeof setInterval> | null = null
 let peekOutsideSince: number | null = null
+/** Harness-only (OMI_E2E hook): hold a peek bar open while screenshots are
+ *  captured — on a live desktop the cursor is legitimately outside the
+ *  footprint, so the watchdog would retract mid-capture. Never set in prod. */
+let peekWatchSuspended = false
+
+export function setPeekWatchSuspended(suspended: boolean): void {
+  peekWatchSuspended = suspended
+}
 
 function startPeekWatch(): void {
   stopPeekWatch()
@@ -256,7 +264,9 @@ function startPeekWatch(): void {
     }
     const display =
       screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
-    const inside = isCursorInPeekFootprint(screen.getCursorScreenPoint(), displayLike(display))
+    const inside =
+      peekWatchSuspended ||
+      isCursorInPeekFootprint(screen.getCursorScreenPoint(), displayLike(display))
     if (inside) {
       peekOutsideSince = null
     } else if (peekOutsideSince === null) {

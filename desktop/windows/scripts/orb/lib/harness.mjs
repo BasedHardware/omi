@@ -26,7 +26,10 @@ const MIME = {
 export async function buildHarness({ force = true } = {}) {
   // Rebuild by default — a stale dist silently checks old shader code (bit us
   // once). Set ORB_HARNESS_CACHE=1 to reuse an existing build.
-  if ((!force || process.env.ORB_HARNESS_CACHE === '1') && existsSync(path.join(dist, 'index.html')))
+  if (
+    (!force || process.env.ORB_HARNESS_CACHE === '1') &&
+    existsSync(path.join(dist, 'index.html'))
+  )
     return
   await build({
     configFile: false,

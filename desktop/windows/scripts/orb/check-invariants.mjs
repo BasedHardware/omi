@@ -25,7 +25,11 @@ const CASES = [
   { name: 'idle-a', spec: { t: 12, state: 'idle' }, blobs: 8 },
   { name: 'idle-b', spec: { t: 14.7, state: 'idle' }, blobs: 8 },
   // Quiet listening: identical calm ring even with ambient level present.
-  { name: 'listening-quiet', spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 }, blobs: 8 },
+  {
+    name: 'listening-quiet',
+    spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 },
+    blobs: 8
+  },
   // Speaking: the voice blob — wavy, solid, hole-free.
   {
     name: 'speaking-held',
@@ -35,12 +39,40 @@ const CASES = [
     wavy: true
   },
   // Conglomerate / dissolve mid-points (any 1..8 pieces, no holes, no specks).
-  { name: 'speaking-gather', spec: { t: 1.3, state: 'speaking', stateTime: 0.3, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
-  { name: 'speaking-mid', spec: { t: 1.45, state: 'speaking', stateTime: 0.45, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
-  { name: 'speaking-dissolve', spec: { t: 5.5, state: 'speaking', stateTime: 4.5, voiceDemo: true }, blobsBetween: [1, 8], noHoles: true, noSpecks: true },
+  {
+    name: 'speaking-gather',
+    spec: { t: 1.3, state: 'speaking', stateTime: 0.3, voiceDemo: true },
+    blobsBetween: [1, 8],
+    noHoles: true,
+    noSpecks: true
+  },
+  {
+    name: 'speaking-mid',
+    spec: { t: 1.45, state: 'speaking', stateTime: 0.45, voiceDemo: true },
+    blobsBetween: [1, 8],
+    noHoles: true,
+    noSpecks: true
+  },
+  {
+    name: 'speaking-dissolve',
+    spec: { t: 5.5, state: 'speaking', stateTime: 4.5, voiceDemo: true },
+    blobsBetween: [1, 8],
+    noHoles: true,
+    noSpecks: true
+  },
   // Thinking: the autonomous blob — solid at every ramp stage.
-  { name: 'thinking-early', spec: { t: 30.35, state: 'thinking', stateTime: 0.35 }, noHoles: true, noSpecks: true },
-  { name: 'thinking-mid', spec: { t: 30.6, state: 'thinking', stateTime: 0.6 }, noHoles: true, noSpecks: true },
+  {
+    name: 'thinking-early',
+    spec: { t: 30.35, state: 'thinking', stateTime: 0.35 },
+    noHoles: true,
+    noSpecks: true
+  },
+  {
+    name: 'thinking-mid',
+    spec: { t: 30.6, state: 'thinking', stateTime: 0.6 },
+    noHoles: true,
+    noSpecks: true
+  },
   { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1, noHoles: true },
   // Agents: four status pills.
   { name: 'agents', spec: { t: 40, state: 'agents', stateTime: 3 }, blobs: 4 },
@@ -85,16 +117,21 @@ async function main() {
 
         const purple = findPurple(img)
         if (purple.length) {
-          failures.push(`${tag}: ${purple.length} non-neutral pixel(s), e.g. ${JSON.stringify(purple[0])}`)
+          failures.push(
+            `${tag}: ${purple.length} non-neutral pixel(s), e.g. ${JSON.stringify(purple[0])}`
+          )
         }
         const edges = checkTransparentEdges(img)
         if (edges.length) {
-          failures.push(`${tag}: ${edges.length} non-transparent border pixel(s) (out of bounds / bg leak), e.g. ${JSON.stringify(edges[0])}`)
+          failures.push(
+            `${tag}: ${edges.length} non-transparent border pixel(s) (out of bounds / bg leak), e.g. ${JSON.stringify(edges[0])}`
+          )
         }
         if (c.empty) {
           let opaque = 0
           for (let i = 3; i < img.data.length; i += 4) if (img.data[i] !== 0) opaque++
-          if (opaque > 0) failures.push(`${tag}: expected an empty frame, found ${opaque} visible pixel(s)`)
+          if (opaque > 0)
+            failures.push(`${tag}: expected an empty frame, found ${opaque} visible pixel(s)`)
           continue
         }
         const comps = components(whiteMask(img))
@@ -113,11 +150,15 @@ async function main() {
         }
         if (c.noSpecks) {
           const speck = comps.find((k) => k.size < MIN_COMPONENT_PX)
-          if (speck) failures.push(`${tag}: stray ${speck.size}px speck at (${speck.cx | 0},${speck.cy | 0})`)
+          if (speck)
+            failures.push(
+              `${tag}: stray ${speck.size}px speck at (${speck.cx | 0},${speck.cy | 0})`
+            )
         }
         if (c.wavy) {
           const { cv } = contourWaviness(img)
-          if (cv < 0.015) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — blob reads as a plain ball`)
+          if (cv < 0.015)
+            failures.push(`${tag}: contour cv ${cv.toFixed(4)} — blob reads as a plain ball`)
           if (cv > 0.2) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — wobble past tasteful`)
         }
       }
@@ -153,10 +194,18 @@ async function main() {
           const comps = components(whiteMask(img))
           const tag = `amp-${name}/frame${i}`
           if (comps.length !== 1) failures.push(`${tag}: blob split into ${comps.length} pieces`)
-          if (mean > MAX_R) failures.push(`${tag}: contour mean ${mean.toFixed(1)}px exceeds max ${MAX_R.toFixed(1)}px`)
-          if (mean < MIN_R) failures.push(`${tag}: contour mean ${mean.toFixed(1)}px under min ${MIN_R.toFixed(1)}px`)
-          if (cv < 0.008) failures.push(`${tag}: cv ${cv.toFixed(4)} — flatlined to a hard circle mid-speech`)
-          if (cv > 0.22) failures.push(`${tag}: cv ${cv.toFixed(4)} — wave spiked past the designed range`)
+          if (mean > MAX_R)
+            failures.push(
+              `${tag}: contour mean ${mean.toFixed(1)}px exceeds max ${MAX_R.toFixed(1)}px`
+            )
+          if (mean < MIN_R)
+            failures.push(
+              `${tag}: contour mean ${mean.toFixed(1)}px under min ${MIN_R.toFixed(1)}px`
+            )
+          if (cv < 0.008)
+            failures.push(`${tag}: cv ${cv.toFixed(4)} — flatlined to a hard circle mid-speech`)
+          if (cv > 0.22)
+            failures.push(`${tag}: cv ${cv.toFixed(4)} — wave spiked past the designed range`)
           const holes = countHolePixels(img)
           if (holes > 3) failures.push(`${tag}: ${holes} hole pixel(s)`)
         }
@@ -182,8 +231,14 @@ async function main() {
       const lo = Math.min(...means)
       const hi = Math.max(...means)
       const swing = (hi - lo) / ((hi + lo) / 2)
-      if (swing < 0.025) failures.push(`thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — invisible (<2.5%)`)
-      if (swing > 0.12) failures.push(`thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — past tasteful (>12%)`)
+      if (swing < 0.025)
+        failures.push(
+          `thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — invisible (<2.5%)`
+        )
+      if (swing > 0.12)
+        failures.push(
+          `thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — past tasteful (>12%)`
+        )
     }
 
     // --- 6. Agents transition never bridges rows -------------------------------
@@ -200,11 +255,15 @@ async function main() {
         const comps = components(whiteMask(img))
         const tag = `agents-transition/t${stateTime.toFixed(2)}`
         if (comps.length < 4 || comps.length > 8) {
-          failures.push(`${tag}: ${comps.length} components (want 4..8 — a cross-row bridge collapses below 4)`)
+          failures.push(
+            `${tag}: ${comps.length} components (want 4..8 — a cross-row bridge collapses below 4)`
+          )
         }
         const biggest = comps[0]?.size ?? 0
         if (biggest > pillArea * 1.4) {
-          failures.push(`${tag}: component ${biggest}px > 1.4× pill area ${pillArea.toFixed(0)}px — rows bridged`)
+          failures.push(
+            `${tag}: component ${biggest}px > 1.4× pill area ${pillArea.toFixed(0)}px — rows bridged`
+          )
         }
       }
     }
@@ -212,7 +271,9 @@ async function main() {
     await close()
   }
 
-  console.log(`[orb-invariants] ${checked} frames checked (${PRESETS.length} presets + extremes + transitions)`)
+  console.log(
+    `[orb-invariants] ${checked} frames checked (${PRESETS.length} presets + extremes + transitions)`
+  )
   if (failures.length) {
     console.error(`[orb-invariants] FAIL — ${failures.length} violation(s):`)
     for (const f of failures) console.error('  - ' + f)

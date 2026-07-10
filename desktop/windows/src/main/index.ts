@@ -28,6 +28,7 @@ import {
   handleSummonPress,
   setSummonGestureAccelerator,
   setBarEnabled,
+  setPeekWatchSuspended,
   getBarWindow,
   getStripDiagnostics,
   isBarInteractive,
@@ -573,6 +574,9 @@ app.whenReady().then(async () => {
       },
       barEnable: () => setBarEnabled(true),
       barStrips: () => getStripDiagnostics(),
+      // Screenshot capture on a live desktop: the cursor is outside the peek
+      // footprint, so the retract watchdog would hide the bar mid-capture.
+      barHoldPeekOpen: (hold: boolean) => setPeekWatchSuspended(!!hold),
       barHide: () => hideBar(),
       barSummonFire: () => handleSummonPress(),
       barState: () => {

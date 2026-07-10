@@ -71,7 +71,10 @@ export function computeBarBounds(display: DisplayLike): Rect {
 
 /** The display whose bounds contain the point, else the nearest by center
  *  distance (mirrors screen.getDisplayNearestPoint for unit tests). */
-export function displayForPoint(displays: DisplayLike[], pt: { x: number; y: number }): DisplayLike {
+export function displayForPoint(
+  displays: DisplayLike[],
+  pt: { x: number; y: number }
+): DisplayLike {
   for (const d of displays) {
     const b = d.bounds
     if (pt.x >= b.x && pt.x < b.x + b.width && pt.y >= b.y && pt.y < b.y + b.height) return d

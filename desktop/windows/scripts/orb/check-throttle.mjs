@@ -28,7 +28,8 @@ async function main() {
     await page.evaluate(() => window.orb.liveSetState('thinking'))
     await page.waitForTimeout(SETTLE_MS)
     const activeFps = await measure(page)
-    if (activeFps < 48 || activeFps > 75) failures.push(`active fps ${activeFps.toFixed(1)} not ~60`)
+    if (activeFps < 48 || activeFps > 75)
+      failures.push(`active fps ${activeFps.toFixed(1)} not ~60`)
 
     await page.evaluate(() => window.orb.liveSetVisible(false))
     await page.waitForTimeout(SETTLE_MS)

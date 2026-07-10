@@ -181,6 +181,10 @@ test('bar screenshots (collapsed / expanded) for the skeptical review', async (t
     const { app, cleanup } = await launch(args)
     t.after(cleanup)
     await app.firstWindow()
+    // Live-desktop capture: the cursor sits outside the peek footprint, so the
+    // retract watchdog would (correctly) hide the bar mid-screenshot — hold it
+    // open for the duration of the capture.
+    await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
     await barShow(app, 'peek')
     // The bar page is the window whose URL hash is #/bar.
     let barPage = null

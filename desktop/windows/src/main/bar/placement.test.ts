@@ -118,7 +118,11 @@ describe('shouldSuppressStrips', () => {
   it('suppresses when the foreground rect covers the display (physical px)', () => {
     expect(
       shouldSuppressStrips(
-        { rect: { x: 0, y: 0, width: 2560, height: 1440 }, className: 'UnityWndClass', exePath: 'C:\\g\\game.exe' },
+        {
+          rect: { x: 0, y: 0, width: 2560, height: 1440 },
+          className: 'UnityWndClass',
+          exePath: 'C:\\g\\game.exe'
+        },
         primary,
         self
       )
@@ -134,18 +138,36 @@ describe('shouldSuppressStrips', () => {
     // A merely maximized window (short of the taskbar) does not suppress.
     const maxed = { ...rect, height: 1550 }
     expect(
-      shouldSuppressStrips({ rect: maxed, className: 'X', exePath: 'C:\\g\\game.exe' }, secondary, self)
+      shouldSuppressStrips(
+        { rect: maxed, className: 'X', exePath: 'C:\\g\\game.exe' },
+        secondary,
+        self
+      )
     ).toBe(false)
   })
 
   it('never suppresses for shell surfaces, our own exe, or no rect', () => {
     const full = { x: 0, y: 0, width: 2560, height: 1440 }
     expect(
-      shouldSuppressStrips({ rect: full, className: 'WorkerW', exePath: 'C:\\Windows\\explorer.exe' }, primary, self)
+      shouldSuppressStrips(
+        { rect: full, className: 'WorkerW', exePath: 'C:\\Windows\\explorer.exe' },
+        primary,
+        self
+      )
     ).toBe(false)
-    expect(shouldSuppressStrips({ rect: full, className: 'Chrome_WidgetWin_1', exePath: self }, primary, self)).toBe(
-      false
-    )
-    expect(shouldSuppressStrips({ rect: null, className: 'X', exePath: 'C:\\g\\game.exe' }, primary, self)).toBe(false)
+    expect(
+      shouldSuppressStrips(
+        { rect: full, className: 'Chrome_WidgetWin_1', exePath: self },
+        primary,
+        self
+      )
+    ).toBe(false)
+    expect(
+      shouldSuppressStrips(
+        { rect: null, className: 'X', exePath: 'C:\\g\\game.exe' },
+        primary,
+        self
+      )
+    ).toBe(false)
   })
 })

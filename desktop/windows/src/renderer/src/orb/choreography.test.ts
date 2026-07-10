@@ -132,7 +132,13 @@ describe('bounded amplitude (voice → wave)', () => {
 
   it('waveAmp is bounded for ANY amplitude input (fixed design range)', () => {
     for (const amp of [0, 0.2, 1, 3, 100]) {
-      const f = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 2, speechMerge: 1, amplitude: amp })
+      const f = computeOrbFrame({
+        t: 9,
+        state: 'speaking',
+        stateTime: 2,
+        speechMerge: 1,
+        amplitude: amp
+      })
       expect(f.waveAmp).toBeGreaterThanOrEqual(P.noiseAmp * WAVE_GAIN_MIN)
       expect(f.waveAmp).toBeLessThanOrEqual(P.noiseAmp * WAVE_GAIN_MAX)
       expect(f.amplitude).toBeGreaterThanOrEqual(AMP_FLOOR)
@@ -209,7 +215,13 @@ describe('computeOrbFrame', () => {
   })
 
   it('speaking conglomerates: full speechMerge pulls every dot to the center pool', () => {
-    const f = computeOrbFrame({ t: 100, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.6 })
+    const f = computeOrbFrame({
+      t: 100,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: 0.6
+    })
     expect(f.merge).toBe(1)
     expect(f.centerR).toBeGreaterThan(0)
     for (const d of f.dots) {
@@ -219,8 +231,20 @@ describe('computeOrbFrame', () => {
   })
 
   it('the speech wave tracks amplitude; the pool swells with the voice', () => {
-    const quiet = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0 })
-    const loud = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 1 })
+    const quiet = computeOrbFrame({
+      t: 9,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: 0
+    })
+    const loud = computeOrbFrame({
+      t: 9,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: 1
+    })
     expect(loud.waveAmp).toBeGreaterThan(quiet.waveAmp)
     expect(loud.centerR).toBeGreaterThan(quiet.centerR)
   })
@@ -228,7 +252,13 @@ describe('computeOrbFrame', () => {
   it('thinking is DISTINCT from the speech blob: tighter pool, fixed lower wave, no audio coupling', () => {
     const think0 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 0 })
     const think1 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 1 })
-    const speak = computeOrbFrame({ t: 9, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.9 })
+    const speak = computeOrbFrame({
+      t: 9,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: 0.9
+    })
     // Zero audio coupling.
     expect(think1.waveAmp).toBe(think0.waveAmp)
     expect(think1.centerR).toBe(think0.centerR)
