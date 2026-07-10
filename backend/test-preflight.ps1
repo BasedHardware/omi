@@ -147,7 +147,7 @@ Write-Host ""
 Write-Host "Python packages:"
 
 $missingPackages = @()
-foreach ($pkg in @("pydantic", "fastapi", "firebase_admin", "google.cloud.firestore", "redis", "deepgram_sdk", "openpipe", "pytest_asyncio", "fake_firestore", "fakeredis")) {
+foreach ($pkg in @("pydantic", "fastapi", "firebase_admin", "google.cloud.firestore", "redis", "deepgram", "openpipe", "pytest_asyncio", "fake_firestore", "fakeredis")) {
     if (-not $Script:PythonLauncher) {
         $missingPackages += $pkg
         Add-Warn "$pkg not checked because python is missing"

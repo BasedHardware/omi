@@ -9,3 +9,10 @@ def test_windows_preflight_points_to_existing_dependency_sync_script():
     assert 'sync-python-deps.ps1' not in script
     assert 'bash ./scripts/sync-python-deps.sh' in script
     assert (BACKEND_DIR / 'scripts' / 'sync-python-deps.sh').is_file()
+
+
+def test_windows_preflight_uses_deepgram_import_name():
+    script = (BACKEND_DIR / 'test-preflight.ps1').read_text(encoding='utf-8')
+
+    assert '"deepgram"' in script
+    assert 'deepgram_sdk' not in script
