@@ -1039,6 +1039,21 @@ static void on_audio_tx_done(struct bt_conn *conn, void *user_data)
     k_sem_give(&audio_tx_sem);
 }
 
+// Shared TX-slot reservation. The storage-sync path takes/releases the same
+// semaphore as the audio pusher, so audio + sync together never consume the
+// last AUDIO_TX_RESERVED_SLOTS buffers -> they stay free for short control
+// notifications (battery/charging/status), which were otherwise starved (-ENOMEM)
+// during a sync.
+int transport_bulk_tx_acquire(k_timeout_t timeout)
+{
+    return k_sem_take(&audio_tx_sem, timeout);
+}
+
+void transport_bulk_tx_release(void)
+{
+    k_sem_give(&audio_tx_sem);
+}
+
 // Thread
 K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;

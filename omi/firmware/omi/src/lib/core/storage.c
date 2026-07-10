@@ -229,6 +229,47 @@ static int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
     return bt_gatt_notify(conn, &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX], data, len);
 }
 
+/* Completion callback: a bulk DATA notification was sent, free its throttle slot. */
+static void storage_data_tx_done(struct bt_conn *conn, void *user_data)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(user_data);
+    transport_bulk_tx_release();
+}
+
+/* Send a bulk DATA notification through the shared TX throttle so the sync
+ * stream never consumes the TX buffers reserved for short control notifications
+ * (battery / charging / status). Returns the same codes as storage_notify():
+ * 0 on success, -EAGAIN if unsubscribed, -ENOMEM if no throttle slot / no buffer
+ * (caller yields and retries). */
+static int storage_notify_data(struct bt_conn *conn, const void *data, uint16_t len)
+{
+    if (!storage_notify_ready(conn)) {
+        return -EAGAIN;
+    }
+
+    /* Reserve a shared slot; short timeout so a stalled link doesn't hang the
+     * transfer -> falls back to the -ENOMEM yield/retry path. */
+    if (transport_bulk_tx_acquire(K_MSEC(200)) != 0) {
+        return -ENOMEM;
+    }
+
+    struct bt_gatt_notify_params params = {
+        .attr = &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX],
+        .data = data,
+        .len = len,
+        .func = storage_data_tx_done,
+        .user_data = NULL,
+    };
+
+    int err = bt_gatt_notify_cb(conn, &params);
+    if (err) {
+        /* Callback will not fire -> release the slot we just took. */
+        transport_bulk_tx_release();
+    }
+    return err;
+}
+
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     ARG_UNUSED(attr);
@@ -454,7 +495,7 @@ static void write_to_gatt(struct bt_conn *conn)
             data_notify_buf[0] = NOTIFY_DATA;
             memcpy(data_notify_buf + 1, storage_buffer + bytes_sent, payload);
 
-            int err = storage_notify(conn, data_notify_buf, payload + 1U);
+            int err = storage_notify_data(conn, data_notify_buf, payload + 1U);
             if (err == -ENOMEM) {
                 k_yield();
                 if (consume_stop_request()) {
