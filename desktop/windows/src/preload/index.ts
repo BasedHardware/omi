@@ -35,6 +35,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
     ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
+    ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)

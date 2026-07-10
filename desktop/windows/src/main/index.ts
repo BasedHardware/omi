@@ -209,7 +209,8 @@ import {
   listLocalConversations,
   deleteLocalConversation,
   updateLocalConversationTitle,
-  updateLocalConversationSync
+  updateLocalConversationSync,
+  claimConversationForPosting
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -455,6 +456,9 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
+  )
+  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
+    claimConversationForPosting(id, resetAttempts)
   )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window

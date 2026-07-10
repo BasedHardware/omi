@@ -165,12 +165,19 @@ export type SyncDeps = {
   listRecent: () => Promise<CloudConversationLite[]>
   /** Persist an outbox transition (IPC → SQLite in production). */
   persist: (id: string, patch: ConversationSyncPatch) => Promise<void>
+  /** Atomically flip pending/failed/unconfirmed → posting; resolve true iff THIS
+   * call won. The compare-and-swap that gates the one POST: a stale-snapshot
+   * second driver loses the claim and backs off instead of duplicating. */
+  claim: (id: string) => Promise<boolean>
 }
 
 export type SyncOutcome =
   | { status: 'done'; cloudId: string; deduped: boolean }
   | { status: 'failed'; error: string }
   | { status: 'unconfirmed'; error: string }
+  // Another driver won the CAS claim (or the row moved on) — this call did
+  // nothing and must not POST. Not an error.
+  | { status: 'skipped' }
 
 /**
  * Drive one conversation through the outbox to a terminal-ish state. Accepts
@@ -218,7 +225,10 @@ export async function syncConversation(
     // No cloud twin — the earlier POST never landed; safe to re-post.
   }
 
-  await deps.persist(conv.id, { syncState: 'posting', incrementAttempts: true })
+  // CAS: only one driver may flip this row to 'posting'. A stale-snapshot
+  // second driver (or one racing the same row) loses here and backs off — this
+  // is what prevents a duplicate POST when prod ignores client_session_id.
+  if (!(await deps.claim(conv.id))) return { status: 'skipped' }
   try {
     const { id: cloudId } = await deps.post(buildFromSegmentsRequest(conv, language))
     await deps.persist(conv.id, { syncState: 'done', cloudId, syncError: null })

@@ -37,6 +37,7 @@ function makeDeps(over: Partial<SyncDeps> = {}): SyncDeps & { persisted: Persist
     persist: vi.fn(async (id: string, patch: ConversationSyncPatch) => {
       persisted.push({ id, patch })
     }),
+    claim: vi.fn().mockResolvedValue(true),
     ...over
   }
 }
@@ -117,9 +118,18 @@ describe('syncConversation', () => {
     const deps = makeDeps()
     const out = await syncConversation(conv(), deps)
     expect(out).toEqual({ status: 'done', cloudId: 'cloud-1', deduped: false })
-    expect(deps.persisted.map((p) => p.patch.syncState)).toEqual(['posting', 'done'])
-    expect(deps.persisted[0].patch.incrementAttempts).toBe(true)
-    expect(deps.persisted[1].patch).toMatchObject({ cloudId: 'cloud-1', syncError: null })
+    // The posting flip is the CAS claim (not a persist); persist only records done.
+    expect(deps.claim).toHaveBeenCalledWith('local-abc')
+    expect(deps.persisted.map((p) => p.patch.syncState)).toEqual(['done'])
+    expect(deps.persisted.at(-1)!.patch).toMatchObject({ cloudId: 'cloud-1', syncError: null })
+  })
+
+  it('lost CAS claim → skipped, no POST, no state churn (the duplicate-prevention property)', async () => {
+    const deps = makeDeps({ claim: vi.fn().mockResolvedValue(false) })
+    const out = await syncConversation(conv(), deps)
+    expect(out).toEqual({ status: 'skipped' })
+    expect(deps.post).not.toHaveBeenCalled()
+    expect(deps.persisted).toHaveLength(0)
   })
 
   it('a definite HTTP failure lands in failed (safe to re-post later)', async () => {
@@ -172,11 +182,13 @@ describe('syncConversation', () => {
     expect(deps.persisted).toHaveLength(0) // no state churn — retry later re-runs the check
   })
 
-  it('local_only (backfill) passes through pending before posting', async () => {
+  it('local_only (backfill) passes through pending before claiming', async () => {
     const deps = makeDeps()
     const out = await syncConversation(conv({ syncState: 'local_only' }), deps)
     expect(out.status).toBe('done')
-    expect(deps.persisted.map((p) => p.patch.syncState)).toEqual(['pending', 'posting', 'done'])
+    // pending persisted, then the CAS claim flips to posting, then done persisted.
+    expect(deps.persisted.map((p) => p.patch.syncState)).toEqual(['pending', 'done'])
+    expect(deps.claim).toHaveBeenCalledOnce()
   })
 
   it('done input is a no-op; a row already posting throws (caller bug)', async () => {

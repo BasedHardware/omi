@@ -225,6 +225,16 @@ const SYNC_STATES: ConversationSyncState[] = [
   'unconfirmed'
 ]
 
+function parseSegments(json: string | null): SyncSegment[] | null {
+  if (!json) return null
+  try {
+    const v = JSON.parse(json)
+    return Array.isArray(v) ? (v as SyncSegment[]) : null
+  } catch {
+    return null
+  }
+}
+
 function mapLocalConversation(row: LocalConversationRow): LocalConversation {
   return {
     id: row.id,
@@ -238,7 +248,9 @@ function mapLocalConversation(row: LocalConversationRow): LocalConversation {
     syncState: SYNC_STATES.includes(row.syncState as ConversationSyncState)
       ? (row.syncState as ConversationSyncState)
       : 'local_only',
-    segments: row.segmentsJson ? (JSON.parse(row.segmentsJson) as SyncSegment[]) : null,
+    // Tolerate a corrupt segments blob: one bad row must not throw and break the
+    // whole listLocalConversations() read.
+    segments: parseSegments(row.segmentsJson),
     cloudId: row.cloudId ?? null,
     syncAttempts: row.syncAttempts ?? 0,
     syncError: row.syncError ?? null
@@ -290,6 +302,29 @@ export function updateLocalConversationSync(id: string, patch: ConversationSyncP
   get()
     .prepare(`UPDATE local_conversation SET ${sets.join(', ')} WHERE id = ?`)
     .run(...params)
+}
+
+/**
+ * Atomically claim a row for POSTing: flip it to 'posting' (and bump attempts)
+ * ONLY if it is still in a claimable state. Returns true iff this call won the
+ * claim. This is the compare-and-swap that makes the pending→posting transition
+ * safe against a stale-snapshot second driver (e.g. the Conversations retry pass
+ * running with a row it read before an earlier sync moved it on): the loser sees
+ * `changes === 0` and backs off instead of re-POSTing (which prod would
+ * duplicate, since it ignores client_session_id). 'posting' is intentionally
+ * excluded — a row already posting is owned by a live driver; a genuinely
+ * crash-orphaned 'posting' row is first recovered to 'unconfirmed' (which IS
+ * claimable) by the caller. Optionally resets sync_attempts (manual re-sync).
+ */
+export function claimConversationForPosting(id: string, resetAttempts = false): boolean {
+  const attemptsExpr = resetAttempts ? '1' : 'sync_attempts + 1'
+  const r = get()
+    .prepare(
+      `UPDATE local_conversation SET sync_state = 'posting', sync_attempts = ${attemptsExpr}
+         WHERE id = ? AND sync_state IN ('pending', 'failed', 'unconfirmed')`
+    )
+    .run(id)
+  return r.changes > 0
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {

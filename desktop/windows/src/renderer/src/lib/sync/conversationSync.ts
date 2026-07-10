@@ -16,8 +16,9 @@ import {
 } from './outbox'
 import type { ConversationSyncState, LocalConversation } from '../../../../shared/types'
 
-/** Give up on automatic retries after this many attempts; the row stays visible
- * as failed/unconfirmed and backfill's explicit "sync" action can still push it. */
+/** Give up on AUTOMATIC retries after this many attempts. The row stays visible
+ * as 'Sync failed'; the user can push it again with the explicit per-row "Retry
+ * sync" action (resyncConversation), which resets the attempt counter. */
 export const MAX_AUTO_SYNC_ATTEMPTS = 10
 
 const RETRYABLE: ConversationSyncState[] = ['pending', 'posting', 'failed', 'unconfirmed']
@@ -68,16 +69,25 @@ export function isAwaitingSync(c: LocalConversation): boolean {
 
 /**
  * Drive one local conversation through the outbox against the real backend.
- * Returns null when it's already being synced by this process.
+ * Returns null when it's already being synced by THIS process (inFlight guard).
+ *
+ * The passed `c` may be a STALE snapshot (e.g. read by a list load that raced an
+ * earlier sync of the same row), so we re-read the row's current state from the
+ * DB before deciding, and the pending→posting flip is a DB-level compare-and-swap
+ * (claimConversationForPosting). Together these ensure exactly one POST even when
+ * two drivers (stop's fire-and-forget + the list retry pass) target one row.
  */
 export async function syncLocalConversation(c: LocalConversation): Promise<SyncOutcome | null> {
   if (inFlight.has(c.id)) return null
-  let state = c.syncState ?? 'local_only'
   inFlight.add(c.id)
   try {
+    // Re-read fresh — never act on the caller's possibly-stale syncState/segments.
+    const fresh = (await window.omi.getLocalConversation(c.id)) ?? c
+    let state = fresh.syncState ?? 'local_only'
     if (state === 'posting') {
-      // Crash recovery (see inFlight note above).
-      await window.omi.updateLocalConversationSync(c.id, {
+      // A 'posting' row with no in-process owner is a crash mid-POST (ambiguous):
+      // recover to 'unconfirmed' so the dedupe check runs before any re-post.
+      await window.omi.updateLocalConversationSync(fresh.id, {
         syncState: 'unconfirmed',
         syncError: 'recovered: app closed during a previous post'
       })
@@ -85,22 +95,62 @@ export async function syncLocalConversation(c: LocalConversation): Promise<SyncO
     }
     return await syncConversation(
       {
-        id: c.id,
-        startedAt: c.startedAt,
-        endedAt: c.endedAt,
-        segments: c.segments ?? [],
+        id: fresh.id,
+        startedAt: fresh.startedAt,
+        endedAt: fresh.endedAt,
+        segments: fresh.segments ?? [],
         syncState: state,
-        cloudId: c.cloudId
+        cloudId: fresh.cloudId
       },
       {
         post: postFromSegments,
         listRecent: listRecentCloud,
-        persist: (id, patch) => window.omi.updateLocalConversationSync(id, patch)
+        persist: (id, patch) => window.omi.updateLocalConversationSync(id, patch),
+        claim: (id) => window.omi.claimConversationForPosting(id)
       },
       getPreferences().language
     )
   } finally {
     inFlight.delete(c.id)
+  }
+}
+
+/**
+ * Manual per-row re-sync for a wedged row (auto-retries exhausted, or the user
+ * wants to force it): reset the attempt counter and drive it once more. Returns
+ * the outcome, or null if the row can't be re-synced (already syncing / gone /
+ * no segments).
+ */
+export async function resyncConversation(id: string): Promise<SyncOutcome | null> {
+  if (inFlight.has(id)) return null
+  const row = await window.omi.getLocalConversation(id)
+  if (!row || (row.segments?.length ?? 0) === 0) return null
+  // Reset attempts so the auto-retry cap no longer skips it; keep the current
+  // state (failed/unconfirmed) so the outbox still runs the dedupe path.
+  await window.omi.updateLocalConversationSync(id, {
+    syncState: row.syncState === 'done' ? 'done' : (row.syncState ?? 'pending')
+  })
+  inFlight.add(id)
+  try {
+    return await syncConversation(
+      {
+        id: row.id,
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        segments: row.segments ?? [],
+        syncState: row.syncState === 'posting' ? 'unconfirmed' : (row.syncState ?? 'pending'),
+        cloudId: row.cloudId
+      },
+      {
+        post: postFromSegments,
+        listRecent: listRecentCloud,
+        persist: (pid, patch) => window.omi.updateLocalConversationSync(pid, patch),
+        claim: (pid) => window.omi.claimConversationForPosting(pid, true) // reset attempts
+      },
+      getPreferences().language
+    )
+  } finally {
+    inFlight.delete(id)
   }
 }
 

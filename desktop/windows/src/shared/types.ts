@@ -325,6 +325,11 @@ export type OmiBridgeApi = {
   updateLocalConversationTitle: (id: string, title: string) => Promise<void>
   /** Persist an outbox transition for a local conversation (cloud sync). */
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) => Promise<void>
+  /** Atomically claim a row for POSTing (pending/failed/unconfirmed → posting).
+   *  Returns true iff this call won the claim; the compare-and-swap that keeps a
+   *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
+   *  attempt counter (manual re-sync of a wedged row). */
+  claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
   // The mic record chord (default Ctrl+Space, rebindable via setRecordHotkey)
   // fires on channel 'recorder:hotkey' from main; the callback receives the
   // capture mode to toggle ('mic'). Returns an unsubscribe function.

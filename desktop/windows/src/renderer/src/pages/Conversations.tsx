@@ -23,7 +23,7 @@ import {
   type ConversationRow
 } from '../lib/pageCache'
 import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
-import { retryUnsyncedConversations } from '../lib/sync/conversationSync'
+import { resyncConversation, retryUnsyncedConversations } from '../lib/sync/conversationSync'
 import { backfillCandidates, runBackfill, type BackfillProgress } from '../lib/sync/backfill'
 import type { CloudConversationLite } from '../lib/sync/outbox'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -75,13 +75,31 @@ function localToRow(c: LocalConversation): ConversationRow {
 
 // Right-hand badge for a list row. Local recordings surface their sync-outbox
 // state: queued/in-flight/unconfirmed → "Sync pending" (neutral — it resolves
-// itself), a definitive failure → "Sync failed", legacy pre-sync rows →
-// "Not synced" (the backfill banner offers to push those).
-function RowBadge({ r }: { r: ConversationRow }): React.JSX.Element | null {
+// itself), a definitive failure → "Sync failed" with a Retry action, legacy
+// pre-sync rows → "Not synced" (the backfill banner offers to push those).
+function RowBadge({ r, onRetry }: { r: ConversationRow; onRetry?: (id: string) => void }): React.JSX.Element | null {
   if (r.localKind === 'chat') return <span className="badge shrink-0">Chat</span>
   if (r.source !== 'local') return null
   if (r.sync === 'pending') return <span className="badge shrink-0">Sync pending</span>
-  if (r.sync === 'failed') return <span className="badge-warning shrink-0">Sync failed</span>
+  if (r.sync === 'failed') {
+    return (
+      <span className="flex shrink-0 items-center gap-1.5">
+        <span className="badge-warning">Sync failed</span>
+        {onRetry && (
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onRetry(r.id)
+            }}
+            className="text-xs font-medium text-white/70 transition-colors hover:text-white"
+          >
+            Retry
+          </button>
+        )}
+      </span>
+    )
+  }
   return <span className="badge-warning shrink-0">Not synced</span>
 }
 
@@ -218,6 +236,14 @@ export function Conversations(): React.JSX.Element {
   // Legacy local-only recordings eligible for backfill; recomputed only when
   // the local set actually changes.
   const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
+
+  // Manual per-row re-sync of a wedged 'Sync failed' row (resets the attempt cap).
+  const handleRetrySync = useCallback((id: string): void => {
+    void resyncConversation(id).then((out) => {
+      if (out?.status === 'done') refreshCloudConversations()
+      invalidateConversationsCache()
+    })
+  }, [])
 
   // One-time, user-confirmed backfill of pre-sync local recordings (paced to
   // stay under the from-segments rate limit; resumable across runs).
@@ -525,7 +551,7 @@ export function Conversations(): React.JSX.Element {
                           {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
                           {r.title || <span className="italic text-text-tertiary">loading…</span>}
                         </div>
-                        <RowBadge r={r} />
+                        <RowBadge r={r} onRetry={handleRetrySync} />
                       </div>
                       {r.subtitle && (
                         <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
