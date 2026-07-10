@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// A tappable card displaying a citation source (conversation or memory)
 struct CitationCardView: View {

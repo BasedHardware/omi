@@ -7,7 +7,7 @@ import json
 import re
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List
+from typing import Any, Dict, List, Optional, Set, cast
 
 import database.goals as goals_db
 import database.memories as memories_db
@@ -31,8 +31,8 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
 
     Returns dict with conversation_context, chat_context, memory_context
     """
-    conv_summaries = []
-    seen_ids = set()
+    conv_summaries: List[str] = []
+    seen_ids: Set[str] = set()
 
     # 1. Vector search: Find conversations semantically related to the goal
     try:
@@ -43,7 +43,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                 conv_id = conv.get('id')
                 if conv_id and conv_id not in seen_ids:
                     seen_ids.add(conv_id)
-                    overview = conv.get('structured', {}).get('overview', '')
+                    overview = cast(Dict[str, Any], conv.get('structured', {})).get('overview', '')
                     if overview:
                         conv_summaries.append(f"[Relevant] {overview[:300]}")
     except Exception as e:
@@ -62,7 +62,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                 # Check if within last 7 days
                 if created and isinstance(created, datetime) and created > week_ago:
                     seen_ids.add(conv_id)
-                    overview = conv.get('structured', {}).get('overview', '')
+                    overview = cast(Dict[str, Any], conv.get('structured', {})).get('overview', '')
                     if overview:
                         conv_summaries.append(f"[Recent] {overview[:250]}")
                         if len(conv_summaries) >= 10:
@@ -75,7 +75,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     try:
         recent_messages = chat_db.get_messages(uid, limit=15, app_id=None)
         if recent_messages:
-            chat_lines = []
+            chat_lines: List[str] = []
             for msg in reversed(recent_messages):  # Chronological order
                 sender = "User" if msg.get('sender') == 'human' else "Omi"
                 text = msg.get('text', '')[:200]
@@ -103,7 +103,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     }
 
 
-def suggest_goal(uid: str) -> Dict:
+def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
         # Get user's memories for context
@@ -121,7 +121,9 @@ def suggest_goal(uid: str) -> Dict:
             }
 
         # Prepare memory context for AI — exclude locked memories
-        memory_texts = [m.get('content', '') for m in memories[:50] if m.get('content') and not m.get('is_locked')]
+        memory_texts = [
+            cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
+        ]
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
@@ -147,7 +149,7 @@ Choose a goal type:
 Make the goal specific, measurable, and relevant to their interests."""
 
         with track_usage(uid, Features.GOALS):
-            response = get_llm('goals').invoke(prompt).content
+            response = cast(str, cast(Any, get_llm('goals').invoke(prompt)).content)
 
         # Find JSON in response
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
@@ -227,7 +229,7 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 
         # Use the better model for high-quality advice
         with track_usage(uid, Features.GOALS):
-            advice = get_llm('goals_advice').invoke(prompt).content
+            advice = cast(str, cast(Any, get_llm('goals_advice').invoke(prompt)).content)
 
         # Clean up quotes but keep full text
         advice = advice.strip().strip('"').strip("'")
@@ -240,7 +242,7 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
         return 'Focus on the next small step toward your goal.'
 
 
-def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
+def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict[str, Any]]:
     """
     Extract goal progress from text and update if found.
     Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
@@ -251,8 +253,8 @@ def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
             return None
 
         # Build a single prompt that evaluates all goals at once
-        goals_list = []
-        goals_by_id = {}
+        goals_list: List[str] = []
+        goals_by_id: Dict[str, Any] = {}
         for goal in goals:
             goal_id = goal.get('id', '')
             if not goal_id:
@@ -264,7 +266,7 @@ def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
             goals_list.append(
                 f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
             )
-            goals_by_id[goal_id] = goal
+            goals_by_id[cast(str, goal_id)] = goal
 
         if not goals_list:
             return None
@@ -290,27 +292,28 @@ Example output: [{{"goal_id": "goal_abc123", "found": true, "value": 2500, "reas
 Only include a goal if you're confident the message is about that SPECIFIC goal."""
 
         with track_usage(uid, Features.GOALS):
-            response = get_llm('goals').invoke(prompt).content
+            response = cast(str, cast(Any, get_llm('goals').invoke(prompt)).content)
 
         # Parse JSON array from response using non-greedy extraction
         results = _parse_json_array(response)
         if results is None:
             return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
 
-        updates = []
-        seen_goal_ids = set()
+        updates: List[Dict[str, Any]] = []
+        seen_goal_ids: Set[str] = set()
         for result in results:
+            result_dict = cast(Dict[str, Any], result)
             try:
-                if not isinstance(result, dict) or not result.get('found') or result.get('value') is None:
+                if not isinstance(result, dict) or not result_dict.get('found') or result_dict.get('value') is None:
                     continue
-                goal_id = result.get('goal_id', '')
+                goal_id = cast(str, result_dict.get('goal_id', ''))
                 if not goal_id or goal_id in seen_goal_ids:
                     continue
                 seen_goal_ids.add(goal_id)
                 goal = goals_by_id.get(goal_id)
                 if not goal:
                     continue
-                new_value = float(result['value'])
+                new_value = float(result_dict['value'])
                 # Validate: reject NaN, inf, and negative values
                 if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
                     continue
@@ -319,7 +322,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                     goals_db.update_goal_progress(uid, goal_id, new_value)
                     goal_title = goal.get('title', '')
                     logger.info(
-                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result_dict.get('reasoning', 'N/A')})"
                     )
                     updates.append(
                         {
@@ -327,7 +330,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                             "goal_title": goal_title,
                             "old_value": old_value,
                             "new_value": new_value,
-                            "reasoning": result.get('reasoning'),
+                            "reasoning": result_dict.get('reasoning'),
                         }
                     )
             except (ValueError, TypeError, KeyError):
@@ -341,7 +344,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
         return {"status": "error", "message": str(e)}
 
 
-def _parse_json_array(text: str) -> Optional[List]:
+def _parse_json_array(text: str) -> Optional[List[Any]]:
     """Extract and parse the first JSON array from LLM response text."""
     # Find the first '[' and try to parse from there
     start = text.find('[')
@@ -351,7 +354,7 @@ def _parse_json_array(text: str) -> Optional[List]:
         decoder = json.JSONDecoder()
         result, _ = decoder.raw_decode(text, start)
         if isinstance(result, list):
-            return result
+            return cast(List[Any], result)
         return [result]
     except (json.JSONDecodeError, ValueError):
         return None

@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import OmiTheme
 
 /// SwiftUI view for editing the task extraction prompt
 struct TaskPromptEditorView: View {
@@ -145,6 +146,8 @@ extension TaskPromptEditorWindow: NSWindowDelegate {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     TaskPromptEditorView()
 }
+#endif

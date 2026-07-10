@@ -5,14 +5,20 @@ Provides endpoints for listing Google Calendar events for the event picker UI.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.users as users_db
-from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_sync_attempted,
+    emit_sync_failed,
+    emit_sync_succeeded,
+)
 from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -32,7 +38,7 @@ class GoogleCalendarEvent(BaseModel):
     html_link: Optional[str] = Field(default=None, description="Link to open event in Google Calendar")
 
 
-def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
+def _get_google_calendar_token(uid: str) -> tuple[str, Dict[str, Any]]:
     """Get and validate Google Calendar access token for a user.
 
     Returns (access_token, integration_dict).
@@ -47,7 +53,7 @@ def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
     return access_token, integration
 
 
-def _event_to_response(event: dict) -> Optional[GoogleCalendarEvent]:
+def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
     """Convert a raw Google Calendar event to our response model."""
     start_time, end_time = parse_event_times(event)
     if start_time is None or end_time is None:
@@ -76,6 +82,9 @@ async def list_google_calendar_events(
     time_max: Optional[datetime] = Query(None, description="Maximum time for events (ISO format)"),
     q: Optional[str] = Query(None, description="Search query to filter events"),
     max_results: int = Query(20, ge=1, le=100, description="Maximum number of events to return"),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """List Google Calendar events within a time range.
@@ -83,6 +92,15 @@ async def list_google_calendar_events(
     Used by the event picker UI when manually linking a conversation to a calendar event.
     """
     access_token, integration = _get_google_calendar_token(uid)
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=GOOGLE_CALENDAR,
+        operation='fetch_events',
+        uid=uid,
+        app_platform=x_app_platform,
+        app_version=x_app_version,
+        app_build=x_app_build,
+    )
+    emit_sync_attempted(telemetry_context)
 
     if time_min and time_min.tzinfo is None:
         time_min = time_min.replace(tzinfo=timezone.utc)
@@ -111,10 +129,15 @@ async def list_google_calendar_events(
                         search_query=q,
                     )
                 except Exception as retry_error:
+                    emit_sync_failed(telemetry_context, retry_error)
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
             else:
+                emit_sync_failed(telemetry_context, e)
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
+            emit_sync_failed(telemetry_context, e)
             raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {error_msg}")
 
-    return [converted for event in events if (converted := _event_to_response(event))]
+    converted_events = [converted for event in events if (converted := _event_to_response(event))]
+    emit_sync_succeeded(telemetry_context, item_count=len(converted_events))
+    return converted_events

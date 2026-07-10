@@ -20,7 +20,11 @@ use crate::AppState;
 async fn deprecated_handler(req: Request) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().to_string();
-    tracing::warn!("Deprecated endpoint called: {} {} — returning 410 Gone", method, path);
+    tracing::warn!(
+        "Deprecated endpoint called: {} {} — returning 410 Gone",
+        method,
+        path
+    );
     (
         StatusCode::GONE,
         Json(json!({
@@ -41,7 +45,10 @@ pub fn deprecated_routes() -> Router<AppState> {
         .route("/v2/chat/initial-message", post(deprecated_handler))
         .route("/v2/chat/generate-title", post(deprecated_handler))
         // ── Chat sessions (0 traffic) ─────────────────────────────────────────
-        .route("/v2/chat-sessions", get(deprecated_handler).post(deprecated_handler))
+        .route(
+            "/v2/chat-sessions",
+            get(deprecated_handler).post(deprecated_handler),
+        )
         .route(
             "/v2/chat-sessions/:id",
             get(deprecated_handler)
@@ -49,7 +56,10 @@ pub fn deprecated_routes() -> Router<AppState> {
                 .delete(deprecated_handler),
         )
         // ── Advice (0 traffic) ────────────────────────────────────────────────
-        .route("/v1/advice", get(deprecated_handler).post(deprecated_handler))
+        .route(
+            "/v1/advice",
+            get(deprecated_handler).post(deprecated_handler),
+        )
         .route(
             "/v1/advice/:id",
             patch(deprecated_handler).delete(deprecated_handler),
@@ -77,10 +87,7 @@ pub fn deprecated_routes() -> Router<AppState> {
             post(deprecated_handler),
         )
         // Move-to-folder was owned by folders.rs, not conversations.rs
-        .route(
-            "/v1/conversations/:id/folder",
-            patch(deprecated_handler),
-        )
+        .route("/v1/conversations/:id/folder", patch(deprecated_handler))
         // ── Goals (0 traffic) ─────────────────────────────────────────────────
         .route("/v1/goals", post(deprecated_handler))
         .route("/v1/goals/all", get(deprecated_handler))
@@ -149,26 +156,14 @@ pub fn deprecated_routes() -> Router<AppState> {
         .route("/v1/conversations/count", get(deprecated_handler))
         .route("/v1/conversations/search", post(deprecated_handler))
         .route("/v1/conversations/merge", post(deprecated_handler))
-        .route(
-            "/v1/conversations/from-segments",
-            post(deprecated_handler),
-        )
-        .route(
-            "/v1/conversations/:id/reprocess",
-            post(deprecated_handler),
-        )
-        .route(
-            "/v1/conversations/:id/starred",
-            patch(deprecated_handler),
-        )
+        .route("/v1/conversations/from-segments", post(deprecated_handler))
+        .route("/v1/conversations/:id/reprocess", post(deprecated_handler))
+        .route("/v1/conversations/:id/starred", patch(deprecated_handler))
         .route(
             "/v1/conversations/:id/visibility",
             patch(deprecated_handler),
         )
-        .route(
-            "/v1/conversations/:id/shared",
-            get(deprecated_handler),
-        )
+        .route("/v1/conversations/:id/shared", get(deprecated_handler))
         .route(
             "/v1/conversations/:id",
             get(deprecated_handler)
@@ -202,10 +197,7 @@ pub fn deprecated_routes() -> Router<AppState> {
                 .patch(deprecated_handler)
                 .delete(deprecated_handler),
         )
-        .route(
-            "/v1/action-items/:id/soft-delete",
-            post(deprecated_handler),
-        )
+        .route("/v1/action-items/:id/soft-delete", post(deprecated_handler))
         // ── Memories (legacy — current app uses Python) ──────────────────────
         .route(
             "/v3/memories",
@@ -274,10 +266,7 @@ pub fn deprecated_routes() -> Router<AppState> {
         )
         .route("/v1/users/delete-account", delete(deprecated_handler))
         // ── Deepgram proxy (removed #7137, was deprecated since 2026-04-05) ──
-        .route(
-            "/v1/proxy/deepgram/v1/listen",
-            post(deprecated_handler),
-        )
+        .route("/v1/proxy/deepgram/v1/listen", post(deprecated_handler))
         .route(
             "/v1/proxy/deepgram/ws/v1/listen",
             get(deprecated_handler).post(deprecated_handler),

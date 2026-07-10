@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
+import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -16,20 +18,23 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, St
     body: jsonEncode(body),
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+    final generated = wire.GeneratedPaymentCheckoutSessionResponse.fromJson(jsonResponse);
     Logger.debug('createCheckoutSession response: ${response.body}');
 
     // Check if this is a reactivation response
-    if (jsonResponse.containsKey('status') && jsonResponse['status'] == 'reactivated') {
-      return {
-        'status': jsonResponse['status'] as String,
-        'message': jsonResponse['message'] as String?,
-        'next_billing_date': jsonResponse['next_billing_date'],
-      };
+    if (generated.status == 'reactivated') {
+      if (generated.message == null || generated.nextBillingDate == null) {
+        return null;
+      }
+      return {'status': generated.status, 'message': generated.message, 'next_billing_date': generated.nextBillingDate};
     }
 
     // Otherwise, it's a checkout session
-    return {'url': jsonResponse['url'] as String, 'session_id': jsonResponse['session_id'] as String};
+    if (generated.url == null || generated.sessionId == null) {
+      return null;
+    }
+    return {'url': generated.url, 'session_id': generated.sessionId};
   }
   return null;
 }
@@ -42,7 +47,10 @@ Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
     body: reason != null ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
   );
   if (response != null && response.statusCode == 200) {
-    return true;
+    final generated = wire.GeneratedPaymentStatusMessageResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return generated.status == 'ok';
   }
   return false;
 }
@@ -60,14 +68,16 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    final generated = wire.GeneratedPaymentUpgradeSubscriptionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
     Logger.debug('upgradeSubscription response: ${response.body}');
-    return jsonResponse;
+    return generated.toJson();
   }
   if (response.statusCode == 400) {
     try {
-      final errorBody = jsonDecode(response.body);
-      return {'error': true, 'detail': errorBody['detail']};
+      final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'error': true, 'detail': errorBody.detail};
     } catch (_) {
       return {'error': true};
     }
@@ -83,7 +93,9 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAppSubscriptionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('getAppSubscription response: ${response.body}');
     return jsonResponse;
   }
@@ -98,7 +110,9 @@ Future<Map<String, dynamic>?> getAvailablePlans() async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAvailablePlansResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('getAvailablePlans response: ${response.body}');
     return jsonResponse;
   }
@@ -113,9 +127,11 @@ Future<Map<String, String>?> createCustomerPortalSession() async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    final generated = wire.GeneratedCustomerPortalSessionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
     Logger.debug('createCustomerPortalSession response: ${response.body}');
-    return {'url': jsonResponse['url'] as String};
+    return {'url': generated.url};
   }
   return null;
 }
@@ -128,7 +144,9 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
     body: '',
   );
   if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
+    var jsonResponse = wire.GeneratedAppSubscriptionCancelResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
     Logger.debug('cancelAppSubscription response: ${response.body}');
     return jsonResponse;
   }

@@ -3,6 +3,9 @@ kind: BackendConfig
 metadata:
   name: parakeet-backend-config
 spec:
+  timeoutSec: 120
+  connectionDraining:
+    drainingTimeoutSec: 130
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5

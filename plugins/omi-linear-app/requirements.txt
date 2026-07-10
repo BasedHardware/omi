@@ -1,4 +1,5 @@
 fastapi==0.111.1
+../omi-plugin-sdk
 uvicorn==0.30.3
 python-dotenv==1.2.2
 requests==2.34.2
@@ -7,4 +8,3 @@ Jinja2==3.1.6
 python-multipart==0.0.29
 aiohttp==3.13.5
 redis==5.0.1
-

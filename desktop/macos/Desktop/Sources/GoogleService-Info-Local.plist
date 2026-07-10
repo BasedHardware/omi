@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>local-firebase-auth-emulator-api-key</string>
+	<key>BUNDLE_ID</key>
+	<string>com.omi.desktop-dev</string>
+	<key>CLIENT_ID</key>
+	<string>local-omi-dev-local.apps.localhost</string>
+	<key>GCM_SENDER_ID</key>
+	<string>000000000000</string>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:000000000000:ios:omi-dev-local</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<false/>
+	<key>IS_GCM_ENABLED</key>
+	<false/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>PROJECT_ID</key>
+	<string>demo-omi-local</string>
+	<key>STORAGE_BUCKET</key>
+	<string>demo-omi-local.localhost</string>
+</dict>
+</plist>

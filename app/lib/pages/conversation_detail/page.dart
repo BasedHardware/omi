@@ -417,10 +417,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           TextButton(
             onPressed: () {
               Navigator.pop(c);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const IntegrationsPage()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const IntegrationsPage()));
             },
             child: const Text('Connect', style: TextStyle(color: Colors.white)),
           ),
@@ -471,6 +468,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
+  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
+  // throws a PlatformException without it.
+  Rect _shareSheetOrigin() {
+    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
     if (!mounted) return;
 
@@ -498,7 +505,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       isDismissible: false,
       enableDrag: false,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           updateSheet = setState;
@@ -544,7 +551,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)]);
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: mimeType)],
+          sharePositionOrigin: _shareSheetOrigin(),
+        );
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -690,7 +700,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               width: 36,
               height: 36,
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
                 onPressed: () {
@@ -707,7 +717,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     Navigator.pop(context);
                   }
                 },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
             title: Align(
@@ -805,7 +815,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             onPressed: _isSharing
@@ -833,17 +843,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      final RenderBox? box =
-                                          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                      final shareOrigin = box != null
-                                          ? Rect.fromLTWH(
-                                              box.localToGlobal(Offset.zero).dx,
-                                              box.localToGlobal(Offset.zero).dy,
-                                              box.size.width,
-                                              box.size.height,
-                                            )
-                                          : null;
-                                      shareConversationLink(provider.conversation, sharePositionOrigin: shareOrigin);
+                                      shareConversationLink(provider.conversation,
+                                          sharePositionOrigin: _shareSheetOrigin());
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {
@@ -864,7 +865,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                                : FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
                         // Search button (second) - only show on transcript and summary tabs
@@ -874,7 +875,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             height: 36,
                             margin: const EdgeInsets.only(right: 8),
                             decoration: BoxDecoration(
-                              color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                              color: _isSearching
+                                  ? Colors.deepPurple.withValues(alpha: 0.8)
+                                  : Colors.grey.withValues(alpha: 0.3),
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
@@ -895,7 +898,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 });
                                 HapticFeedback.mediumImpact();
                               },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                              icon: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                             ),
                           ),
                         // Developer Tools button (third) - iOS style pull-down menu
@@ -923,7 +926,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
-                                  iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                  iconWidget: FaIcon(FontAwesomeIcons.share, size: 16),
                                   onTap: _isDownloadingAudio
                                       ? null
                                       : () => _handleMenuSelection(context, 'download_audio', provider),
@@ -975,8 +978,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               child: Container(
                                 width: 36,
                                 height: 36,
-                                decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
-                                child: const Center(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
                                   child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                                 ),
                               ),
@@ -1174,7 +1180,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               //          color: const Color(0xFF1F1F25),
               //          boxShadow: [
               //            BoxShadow(
-              //              color: Colors.black.withOpacity(0.3),
+              //              color: Colors.black.withValues(alpha: 0.3),
               //              spreadRadius: 1,
               //              blurRadius: 2,
               //              offset: const Offset(0, 1),
@@ -1208,7 +1214,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               //            ),
               //            ElevatedButton(
               //              style: ElevatedButton.styleFrom(
-              //                backgroundColor: Colors.deepPurple.withOpacity(0.5),
+              //                backgroundColor: Colors.deepPurple.withValues(alpha: 0.5),
               //                shape: RoundedRectangleBorder(
               //                  borderRadius: BorderRadius.circular(16),
               //                ),
@@ -1286,7 +1292,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.withOpacity(0.3),
+                                                  color: Colors.grey.withValues(alpha: 0.3),
                                                   borderRadius: BorderRadius.circular(8),
                                                 ),
                                                 child: Text(
@@ -1360,7 +1366,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       )
                                     : null,
                                 filled: true,
-                                fillColor: const Color(0xFF1C1C1E).withOpacity(0.95),
+                                fillColor: const Color(0xFF1C1C1E).withValues(alpha: 0.95),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide.none,
@@ -1569,17 +1575,13 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
 
     if (linked != null) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Linked to "${event.title}"')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Linked to "${event.title}"')));
     } else {
       setState(() {
         _isLinking = false;
         _linkingEventId = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to link calendar event')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to link calendar event')));
     }
   }
 
@@ -1600,10 +1602,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                 Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1613,19 +1612,13 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                       Container(
                         height: 14,
                         width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
                       ),
                       const SizedBox(height: 10),
                       Container(
                         height: 12,
                         width: 140,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
                       ),
                     ],
                   ),
@@ -1634,10 +1627,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                 Container(
                   width: 22,
                   height: 22,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 ),
               ],
             ),
@@ -1671,11 +1661,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                 children: [
                   Text(
                     event.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1689,20 +1675,13 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                       ),
                       child: const Text(
                         'Suggested',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     )
                   else
                     Text(
                       '${_formatDate(event.startTime)}, ${_formatTime(event.startTime)} – ${_formatTime(event.endTime)}',
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                     ),
                 ],
               ),
@@ -1714,11 +1693,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
                   )
-                : Icon(
-                    Icons.add_circle_outline,
-                    color: _isLinking ? Colors.grey.shade700 : Colors.grey,
-                    size: 22,
-                  ),
+                : Icon(Icons.add_circle_outline, color: _isLinking ? Colors.grey.shade700 : Colors.grey, size: 22),
           ],
         ),
       ),
@@ -1740,10 +1715,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             margin: const EdgeInsets.only(top: 12),
             width: 36,
             height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade600,
-              borderRadius: BorderRadius.circular(2),
-            ),
+            decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -1751,11 +1723,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
               children: [
                 const Text(
                   'Link Event',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 GestureDetector(
@@ -1784,12 +1752,8 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                         shrinkWrap: true,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemCount: _events.length,
-                        separatorBuilder: (_, __) => const Divider(
-                          color: Color(0xFF2A2A2E),
-                          height: 1,
-                          indent: 16,
-                          endIndent: 16,
-                        ),
+                        separatorBuilder: (_, __) =>
+                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
                         itemBuilder: (context, index) {
                           final event = _events[index];
                           final isLinkingThis = _linkingEventId == event.eventId;

@@ -66,13 +66,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
 
   static bool _isSupportedPeripheral(BlePeripheral p) {
-    return _isBee(p) ||
-        _isPlaud(p) ||
-        _isFieldy(p) ||
-        _isFriendPendant(p) ||
-        _isLimitless(p) ||
-        _isOmi(p) ||
-        _isFrame(p);
+    return _isBee(p) || _isPlaud(p) || _isFieldy(p) || _isFriendPendant(p) || _isLimitless(p) || _isOmi(p);
   }
 
   static bool _isBee(BlePeripheral p) {
@@ -101,10 +95,6 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     return _hasService(p, omiServiceUuid);
   }
 
-  static bool _isFrame(BlePeripheral p) {
-    return _hasService(p, frameServiceUuid);
-  }
-
   static bool _hasService(BlePeripheral p, String serviceUuid) {
     final target = serviceUuid.toLowerCase();
     return p.serviceUuids.any((uuid) => uuid.toLowerCase() == target);
@@ -124,8 +114,6 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
       type = DeviceType.limitless;
     } else if (_isOmi(p)) {
       type = DeviceType.omi;
-    } else if (_isFrame(p)) {
-      type = DeviceType.frame;
     } else {
       type = DeviceType.omi;
     }

@@ -36,13 +36,19 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
   cp setup/prebuilt/GoogleService-Info.plist macos/Config/Prod/
 
-  echo "API_BASE_URL=https://api.omiapi.com/" > .dev.env
+  if [[ -n "${OMI_APP_TEST_API_BASE_URL:-}" ]]; then
+    echo "API_BASE_URL=${OMI_APP_TEST_API_BASE_URL}" > .dev.env
+  elif [[ "${OMI_APP_TEST_USE_PROD_API_DEFAULT:-}" == "1" ]]; then
+    echo "API_BASE_URL=https://api.omiapi.com/" > .dev.env
+  else
+    echo "API_BASE_URL=" > .dev.env
+  fi
   echo "USE_WEB_AUTH=true" >> .dev.env
   echo "USE_AUTH_CUSTOM_TOKEN=true" >> .dev.env
   echo "STAGING_API_URL=" >> .dev.env
 
   flutter pub get
-  dart run build_runner build --delete-conflicting-outputs
+  flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
 flutter test

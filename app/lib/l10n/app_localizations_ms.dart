@@ -9,6 +9,9 @@ class AppLocalizationsMs extends AppLocalizations {
   AppLocalizationsMs([String locale = 'ms']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesi tamat tempoh — log masuk semula.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7787,6 +7790,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Kembangkan';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override
@@ -9360,7 +9366,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
+      'Buat masa ini berfungsi dengan peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9386,4 +9392,210 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
+
+  @override
+  String get memoryThisDevice => 'Peranti ini';
+
+  @override
+  String get memoryThisIphone => 'iPhone ini';
+
+  @override
+  String get memoryThisPhone => 'Telefon ini';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Cara Menggunakan Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Bercakap dengan Omi Anda';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Sebut beberapa patah perkataan dan lihat ia muncul secara langsung';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Syabas!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Mula bercakap...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tanya Omi Satu Soalan';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tekan butang sekali, sebut soalan anda, kemudian tekan sekali lagi apabila selesai';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Memproses soalan anda...';
+
+  @override
+  String get deviceOnboardingListening => 'Mendengar...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Matikan';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Hidupkan';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tekan dan tahan butang selama 3 saat';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekan butang untuk menghidupkannya semula';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tekan dan tahan butang dengan kemas sehingga lampu padam';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bersambung';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bersambung!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Terputus';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Sedang dimatikan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Sesuaikan Ketuk Dua Kali';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Tamatkan Perbualan';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Simpan dan tamatkan perbualan semasa';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Senyap / Nyahsenyap';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Hidupkan atau matikan mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Bintangkan Perbualan Semasa';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Tandakan perbualan sebagai penting';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Itu satu ketukan sahaja — cuba ketuk dua kali dengan pantas!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Cuba sekarang! Ketuk Omi anda dua kali';
+
+  @override
+  String get deviceOnboardingContinue => 'Teruskan';
+
+  @override
+  String get deviceOnboardingFinish => 'Selesai';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
+
+  @override
+  String get jumpToLatestMessage => 'Lompat ke mesej terkini';
+
+  @override
+  String get latest => 'Terkini';
+
+  @override
+  String get flashFirmware => 'Flash Perisian Tegar';
+
+  @override
+  String get pendantRecordingTitle => 'Merakam pada loket';
+
+  @override
+  String get pendantRecordingNote =>
+      'Loket anda merakam dengan sendirinya. Rakaman disegerakkan ke telefon anda semasa aplikasi dibuka.';
+
+  @override
+  String get pendantSyncingRecordings => 'Menyegerakkan rakaman daripada loket anda…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min disimpan';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.';
+
+  @override
+  String get connectRayBanMeta => 'Sambungkan Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Gunakan cermin mata Ray-Ban Meta anda sebagai peranti tangkapan Omi untuk perbualan dan konteks visual. Omi akan membuka aplikasi Meta AI untuk memautkan cermin mata anda.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Sambung melalui Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Selesaikan penyambungan dalam aplikasi Meta AI, kemudian kembali ke sini.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Semak Semula';
+
+  @override
+  String get raybanMetaAllowCamera => 'Benarkan Kamera pada Cermin Mata';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi menggunakan kamera cermin mata anda untuk menambah foto pada perbualan anda. Anda boleh melangkau ini dan menggunakan audio sahaja.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Langkau Buat Masa Ini';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mod audio sahaja Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Versi Omi ini boleh menggunakan mikrofon cermin mata anda melalui Bluetooth. Tangkapan foto memerlukan binaan pembangun Meta bagi Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Muzik pada telefon anda dijeda semasa mikrofon cermin mata sedang digunakan.';
+
+  @override
+  String get raybanMetaContinue => 'Teruskan';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Tangkap Foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto diminta — ia akan muncul dalam perbualan anda.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon sedia';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Tangkapan imej sedia';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Tidak tersedia dalam mod audio sahaja';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ralat semasa menyambung ke Ray-Ban Meta: $error';
+  }
 }

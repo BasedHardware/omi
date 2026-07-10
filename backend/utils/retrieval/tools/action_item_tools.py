@@ -2,20 +2,22 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone, tzinfo
+from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.action_items as action_items_db
+import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
     sync_action_item_reminder,
 )
+from utils.conversations.render import resolve_display_tz
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,61 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _format_local(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
+    """Render a stored timestamp in the user's local timezone with a tz label.
+
+    Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
+    UTC defensively so the chat model never sees an unlabeled wall-clock time and
+    mislabels the time of day (issue #4643).
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+# Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
+# model's context and make it freeze or refuse (issue #4927; the same fix already shipped for the
+# conversations tool in #8503). A single page can hold up to 500 items, each rendered over several
+# lines, which runs to tens of thousands of characters, so cap both the row count and the raw
+# character size and tell the model to summarize what it has and offer to narrow.
+MAX_ACTION_ITEMS_FOR_LLM = 200
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_action_items_for_llm(items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
+    """Keep at most ``MAX_ACTION_ITEMS_FOR_LLM`` action items for the chat model.
+
+    Items arrive in the order the database returned them, so this keeps the first ones. Returns
+    ``(capped_list, truncated)`` where ``truncated`` is True when some rows were dropped.
+    """
+    if len(items) > MAX_ACTION_ITEMS_FOR_LLM:
+        return items[:MAX_ACTION_ITEMS_FOR_LLM], True
+    return list(items), False
+
+
+def _bounded_action_items_result(result: str, truncated: bool) -> str:
+    """Apply a hard character budget and, when the set was truncated, append a note telling the
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    The note deliberately does not claim a total count: the database query is capped by ``limit``,
+    so the rows in hand are a page and not necessarily the full set, and stating a total would
+    mislead. When clipping for size, cut back to the last complete line so a record is not sliced
+    mid-field.
+    """
+    if len(result) > MAX_RESULT_CHARS:
+        clipped = result[:MAX_RESULT_CHARS]
+        boundary = clipped.rfind("\n")
+        result = clipped[:boundary] if boundary > 0 else clipped
+        truncated = True
+    if truncated:
+        result += (
+            "\n\n[Only the most relevant action items are shown here to stay within limits; more may exist. "
+            "Summarize what is shown and tell the user they can ask about a narrower topic or date range, "
+            "or page with the offset, for the rest.]"
+        )
+    return result
+
+
 @tool
 def get_action_items_tool(
     limit: int = 50,
@@ -38,7 +95,7 @@ def get_action_items_tool(
     end_date: Optional[str] = None,
     due_start_date: Optional[str] = None,
     due_end_date: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve the user's action items (tasks, to-dos) with optional filters.
@@ -76,7 +133,8 @@ def get_action_items_tool(
     - Use completed=True to get only completed tasks
     - Use conversation_id to get tasks from a specific conversation
     - Default limit is 50, which is suitable for most queries
-    - Use higher limit (up to 500) for comprehensive task reviews
+    - Prefer date or status filters over a large limit: only the most relevant items are returned to
+      stay within the chat context, and a broad pull is summarized rather than listed in full
 
     Args:
         limit: Number of action items to retrieve (default: 50, max: 500)
@@ -99,31 +157,34 @@ def get_action_items_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 get_action_items_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            config = None
+            cfg = None
 
     # Safely access config
     try:
-        if config is None:
+        if cfg is None:
             logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
-        if 'configurable' not in config:
+        if 'configurable' not in cfg:
             logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(config.keys()) if config else 'None'}"
+                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
             )
             return "Error: Configuration format invalid"
 
-        uid = config['configurable'].get('user_id')
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
         if not uid:
             logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(config['configurable'].keys()) if config.get('configurable') else 'None'}"
+                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
             )
             return "Error: User ID not found in configuration"
 
@@ -134,9 +195,6 @@ def get_action_items_tool(
 
         traceback.print_exc()
         return f"Error: Configuration error - {str(config_error)}"
-
-    # Get safety guard from config if available
-    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap at 500 per call
     if limit > 500:
@@ -194,7 +252,7 @@ def get_action_items_tool(
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date} - {str(e)}"
 
     # Get action items
-    action_items = []
+    action_items: List[Dict[str, Any]] = []
     try:
         logger.info(f"🔍 Calling action_items_db.get_action_items with:")
         logger.info(f"   uid: {uid}")
@@ -257,8 +315,22 @@ def get_action_items_tool(
         logger.info(f"✅ get_action_items_tool END - returning early (no items found)")
         return msg
 
-    # Format action items
-    result = f"User Action Items ({len(action_items)} total):\n\n"
+    # Bound how much goes back to the chat model so a broad request cannot overflow its context
+    # (issue #4927). A full page (len == limit) may mean more rows exist beyond it, so flag the
+    # result as truncated in that case too, not only when the per-call row cap trims it.
+    more_in_db = len(action_items) >= limit
+    action_items, capped_for_llm = _cap_action_items_for_llm(action_items)
+    results_truncated = capped_for_llm or more_in_db
+
+    # Format action items. Render timestamps in the user's local timezone so the
+    # chat model labels the time of day correctly (issue #4643). A timezone lookup
+    # failure must never abort retrieval, so fall back to UTC formatting.
+    try:
+        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
+        display_tz, tz_label = timezone.utc, "UTC"
+    result = f"User Action Items ({len(action_items)} shown):\n\n"
 
     for i, item in enumerate(action_items, 1):
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
@@ -267,18 +339,15 @@ def get_action_items_tool(
         # Add ID for reference in updates
         result += f"   ID: {item.get('id')}\n"
 
-        # Add dates if available
+        # Add dates if available (rendered in the user's local timezone)
         if item.get('created_at'):
-            created = item['created_at']
-            result += f"   Created: {created.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Created: {_format_local(item['created_at'], display_tz, tz_label)}\n"
 
         if item.get('due_at'):
-            due = item['due_at']
-            result += f"   Due: {due.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Due: {_format_local(item['due_at'], display_tz, tz_label)}\n"
 
         if item.get('completed_at'):
-            completed_at = item['completed_at']
-            result += f"   Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Completed: {_format_local(item['completed_at'], display_tz, tz_label)}\n"
 
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
@@ -286,7 +355,7 @@ def get_action_items_tool(
         result += "\n"
 
     logger.info(f"✅ get_action_items_tool END - returning {len(action_items)} items")
-    return result.strip()
+    return _bounded_action_items_result(result.strip(), results_truncated)
 
 
 @tool
@@ -294,7 +363,7 @@ def create_action_item_tool(
     description: str,
     due_at: Optional[str] = None,
     conversation_id: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Create a new action item (task/to-do) for the user.
@@ -330,22 +399,25 @@ def create_action_item_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 create_action_item_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ create_action_item_tool - config not found in context variable")
-            config = None
+            cfg = None
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ create_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ create_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -356,9 +428,8 @@ def create_action_item_tool(
     # Validate description
     if not description or not description.strip():
         return "Error: Description is required to create an action item."
-
     # Prepare action item data
-    action_item_data = {
+    action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
         'conversation_id': conversation_id,
@@ -443,7 +514,7 @@ def update_action_item_tool(
     completed: Optional[bool] = None,
     description: Optional[str] = None,
     due_at: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Update an action item's status, description, or due date.
@@ -482,22 +553,25 @@ def update_action_item_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
         try:
-            config = agent_config_context.get()
-            if config:
+            ctx_cfg: object = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
                 logger.info(f"🔧 update_action_item_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ update_action_item_tool - config not found in context variable")
-            config = None
+            cfg = None
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ update_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ update_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -511,8 +585,8 @@ def update_action_item_tool(
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
 
     # Prepare update data
-    update_data = {}
-    changes = []
+    update_data: Dict[str, Any] = {}
+    changes: List[str] = []
 
     if completed is not None:
         update_data['completed'] = completed
@@ -563,6 +637,8 @@ def update_action_item_tool(
 
         # Get updated item for confirmation
         updated_item = action_items_db.get_action_item(uid, action_item_id)
+        if not updated_item:
+            return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
 

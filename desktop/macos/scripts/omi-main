@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Developer-only installer/updater for a named Omi build tracking origin/main.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_REPOSITORY="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPOSITORY="${OMI_MAIN_REPOSITORY:-$DEFAULT_REPOSITORY}"
+WORKTREE="${OMI_MAIN_WORKTREE:-$HOME/.omi/worktrees/omi-main}"
+STATE_DIR="${OMI_MAIN_STATE_DIR:-$HOME/.omi/omi-main}"
+APP_NAME="omi-main"
+
+usage() {
+  cat <<'USAGE'
+Developer-only Omi build that follows origin/main.
+
+Usage:
+  omi-main install   Create/update the dedicated worktree, build, and launch
+  omi-main update    Fetch origin/main, rebuild, and launch
+  omi-main run       Launch the currently installed named bundle
+  omi-main status    Show source, installed, and available commits
+
+This never modifies or launches the production Omi or Omi Beta bundles.
+USAGE
+}
+
+require_git_repository() {
+  git -C "$REPOSITORY" rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "Not a git repository: $REPOSITORY" >&2
+    exit 1
+  }
+}
+
+refresh_worktree() {
+  require_git_repository
+  git -C "$REPOSITORY" fetch origin main
+  if [[ ! -e "$WORKTREE/.git" ]]; then
+    mkdir -p "$(dirname "$WORKTREE")"
+    git -C "$REPOSITORY" worktree add --detach "$WORKTREE" origin/main
+  else
+    if [[ -n "$(git -C "$WORKTREE" status --porcelain)" ]]; then
+      echo "omi-main worktree has local changes; refusing to replace them: $WORKTREE" >&2
+      exit 1
+    fi
+    git -C "$WORKTREE" checkout --detach origin/main
+  fi
+}
+
+build_and_launch() {
+  mkdir -p "$STATE_DIR"
+  (
+    cd "$WORKTREE/desktop/macos"
+    OMI_APP_NAME="$APP_NAME" ./run.sh --yolo
+  )
+  git -C "$WORKTREE" rev-parse HEAD > "$STATE_DIR/installed-sha"
+}
+
+status() {
+  require_git_repository
+  git -C "$REPOSITORY" fetch --quiet origin main
+  local installed="not installed"
+  local source="not checked out"
+  if [[ -f "$STATE_DIR/installed-sha" ]]; then
+    installed="$(<"$STATE_DIR/installed-sha")"
+  fi
+  if [[ -e "$WORKTREE/.git" ]]; then
+    source="$(git -C "$WORKTREE" rev-parse HEAD)"
+  fi
+  local available
+  available="$(git -C "$REPOSITORY" rev-parse origin/main)"
+  printf 'bundle:    /Applications/%s.app\n' "$APP_NAME"
+  printf 'worktree:  %s\n' "$WORKTREE"
+  printf 'installed: %s\n' "$installed"
+  printf 'source:    %s\n' "$source"
+  printf 'available: %s\n' "$available"
+  if [[ "$installed" != "$available" ]]; then
+    printf 'update:    available\n'
+  else
+    printf 'update:    current\n'
+  fi
+}
+
+command="${1:-}"
+case "$command" in
+  install|update)
+    refresh_worktree
+    build_and_launch
+    ;;
+  run)
+    if [[ ! -d "/Applications/$APP_NAME.app" ]]; then
+      echo "omi-main is not installed; run: omi-main install" >&2
+      exit 1
+    fi
+    open -a "/Applications/$APP_NAME.app"
+    ;;
+  status)
+    status
+    ;;
+  help|--help|-h)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

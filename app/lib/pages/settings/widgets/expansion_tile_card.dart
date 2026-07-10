@@ -189,8 +189,7 @@ class ExpansionTileCardState extends State<ExpansionTileCard> with SingleTickerP
                       turns: widget.trailing == null || widget.animateTrailing
                           ? _iconTurns
                           : const AlwaysStoppedAnimation(0),
-                      child:
-                          widget.trailing ??
+                      child: widget.trailing ??
                           Icon(
                             Icons.expand_more,
                             color: _isExpanded ? widget.expandedTextStyle.color : widget.collapsedTextStyle.color,

@@ -1,0 +1,7 @@
+{
+  "version": "0.11.575",
+  "date": "2026-06-30",
+  "changes": [
+    "Improved agent MCP setup so generated Hermes and OpenClaw instructions use the current app backend stage"
+  ]
+}

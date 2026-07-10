@@ -2,6 +2,17 @@ import XCTest
 @testable import Omi_Computer
 
 final class APIClientConversationCountTests: XCTestCase {
+  func testCreateConversationFromSegmentsResponseDefaultsOptionalFields() throws {
+    let response = try JSONDecoder().decode(
+      APIClient.CreateConversationFromSegmentsResponse.self,
+      from: Data(#"{"id":"conversation-1"}"#.utf8)
+    )
+
+    XCTAssertEqual(response.id, "conversation-1")
+    XCTAssertEqual(response.status, "processing")
+    XCTAssertFalse(response.discarded)
+  }
+
   func testConversationCountEndpointIncludesVisibleFilters() throws {
     let formatter = ISO8601DateFormatter()
     let start = try XCTUnwrap(formatter.date(from: "2026-06-01T00:00:00Z"))

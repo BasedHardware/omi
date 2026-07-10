@@ -1,0 +1,9 @@
+{
+  "version": "0.11.589",
+  "date": "2026-07-02",
+  "changes": [
+    "Fixed OpenClaw and Hermes memory-bank setup so local installs are detected safely and Omi MCP wiring is updated deterministically",
+    "Fixed floating subagent chats so stale completed tool calls do not duplicate around text, and added a Stop control for running subagents",
+    "Added a semantic Gmail connector probe and updated the Google connector checklist to reflect the shared browser-session path."
+  ]
+}

@@ -2,6 +2,32 @@ import Foundation
 import Combine
 import GRDB
 
+protocol LiveNoteGenerating {
+    func generateNote(prompt: String, systemPrompt: String) async throws -> String
+}
+
+extension GeminiClient: LiveNoteGenerating {
+    func generateNote(prompt: String, systemPrompt: String) async throws -> String {
+        try await sendTextRequest(prompt: prompt, systemPrompt: systemPrompt)
+    }
+}
+
+protocol LiveNoteStoring {
+    func createNote(
+        sessionId: Int64,
+        text: String,
+        timestamp: Date,
+        isAiGenerated: Bool,
+        segmentStartOrder: Int?,
+        segmentEndOrder: Int?
+    ) async throws -> LiveNoteRecord
+    func updateNote(id: Int64, text: String) async throws
+    func deleteNote(id: Int64) async throws
+    func getLiveNotes(sessionId: Int64) async throws -> [LiveNote]
+}
+
+extension NoteStorage: LiveNoteStoring {}
+
 /// Dedicated monitor for live notes generation during recording sessions.
 /// Accumulates transcript words and triggers AI note generation at word thresholds.
 /// Only views that explicitly observe this class will update when notes change.
@@ -21,32 +47,15 @@ class LiveNotesMonitor: ObservableObject {
     /// Current recording session ID
     private var currentSessionId: Int64?
 
-    /// Word buffer for tracking transcript content
-    private var wordBuffer: [String] = []
+    /// Pure transcript/note policy state for deciding when AI generation should run.
+    private var accumulator = LiveNotesAccumulator()
 
-    /// Segment order tracking for note context
-    private var lastProcessedSegmentOrder: Int = -1
+    /// AI note generator (lazily initialized)
+    private var noteGenerator: LiveNoteGenerating?
 
-    /// Current segment order being processed
-    private var currentSegmentOrder: Int = 0
+    private let noteGeneratorFactory: () throws -> LiveNoteGenerating
 
-    /// End time of the last segment we extracted words from (cursor for incremental processing)
-    private var lastProcessedSegmentEnd: Double?
-
-    /// Minimum words before triggering AI generation
-    private let wordThreshold = 50
-
-    /// Max words to keep in buffer (older words are trimmed)
-    private let maxWordBufferSize = 500
-
-    /// Max existing notes to keep for context (oldest trimmed)
-    private let maxExistingNotesContext = 20
-
-    /// Existing notes for context (to avoid repetition)
-    private var existingNotesContext: [String] = []
-
-    /// GeminiClient for AI generation (lazily initialized)
-    private var geminiClient: GeminiClient?
+    private let noteStorage: LiveNoteStoring
 
     /// Cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -62,14 +71,31 @@ class LiveNotesMonitor: ObservableObject {
         avoid repeating information from existing notes.
         """
 
-    private init() {
-        // Subscribe to transcript changes
-        LiveTranscriptMonitor.shared.$segments
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] segments in
-                self?.handleSegmentsUpdate(segments)
-            }
-            .store(in: &cancellables)
+    private convenience init() {
+        self.init(
+            noteGeneratorFactory: { try GeminiClient() },
+            noteStorage: NoteStorage.shared,
+            subscribeToTranscript: true
+        )
+    }
+
+    init(
+        noteGeneratorFactory: @escaping () throws -> LiveNoteGenerating,
+        noteStorage: LiveNoteStoring,
+        subscribeToTranscript: Bool = false
+    ) {
+        self.noteGeneratorFactory = noteGeneratorFactory
+        self.noteStorage = noteStorage
+
+        if subscribeToTranscript {
+            // Subscribe to transcript changes
+            LiveTranscriptMonitor.shared.$segments
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] segments in
+                    self?.handleSegmentsUpdate(segments)
+                }
+                .store(in: &cancellables)
+        }
     }
 
     // MARK: - Session Lifecycle
@@ -79,17 +105,14 @@ class LiveNotesMonitor: ObservableObject {
         log("LiveNotesMonitor: Starting session \(sessionId)")
         currentSessionId = sessionId
         notes = []
-        wordBuffer = []
-        lastProcessedSegmentOrder = -1
-        currentSegmentOrder = 0
-        lastProcessedSegmentEnd = nil
-        existingNotesContext = []
+        isGenerating = false
+        accumulator.reset()
 
-        // Initialize Gemini client if not already done
-        if geminiClient == nil {
+        // Initialize AI generator if not already done
+        if noteGenerator == nil {
             do {
                 // Use Gemini Flash for note generation (text-only, no tool loop — Flash-safe)
-                geminiClient = try GeminiClient()
+                noteGenerator = try noteGeneratorFactory()
                 log("LiveNotesMonitor: GeminiClient initialized with default model (Flash)")
             } catch {
                 logError("LiveNotesMonitor: Failed to initialize GeminiClient", error: error)
@@ -98,7 +121,7 @@ class LiveNotesMonitor: ObservableObject {
 
         // Load any existing notes from DB (for crash recovery)
         Task {
-            await loadExistingNotes()
+            await loadExistingNotes(for: sessionId)
         }
     }
 
@@ -106,20 +129,15 @@ class LiveNotesMonitor: ObservableObject {
     func endSession() {
         log("LiveNotesMonitor: Ending session \(currentSessionId ?? -1) with \(notes.count) notes")
         currentSessionId = nil
-        wordBuffer = []
-        lastProcessedSegmentOrder = -1
-        currentSegmentOrder = 0
-        lastProcessedSegmentEnd = nil
+        isGenerating = false
+        accumulator.reset()
     }
 
     /// Clear all notes (used when recording stops)
     func clear() {
         notes = []
-        wordBuffer = []
-        existingNotesContext = []
-        lastProcessedSegmentOrder = -1
-        currentSegmentOrder = 0
-        lastProcessedSegmentEnd = nil
+        isGenerating = false
+        accumulator.reset()
     }
 
     // MARK: - Note Operations
@@ -133,21 +151,20 @@ class LiveNotesMonitor: ObservableObject {
 
         Task {
             do {
-                let record = try await NoteStorage.shared.createNote(
+                let record = try await noteStorage.createNote(
                     sessionId: sessionId,
                     text: text,
+                    timestamp: Date(),
                     isAiGenerated: false,
-                    segmentStartOrder: currentSegmentOrder
+                    segmentStartOrder: accumulator.currentSegmentOrder,
+                    segmentEndOrder: nil
                 )
 
                 if let note = record.toLiveNote() {
                     await MainActor.run {
+                        guard self.currentSessionId == sessionId else { return }
                         self.notes.append(note)
-                        self.existingNotesContext.append(text)
-                        // Trim context to prevent unbounded growth
-                        if self.existingNotesContext.count > self.maxExistingNotesContext {
-                            self.existingNotesContext.removeFirst(self.existingNotesContext.count - self.maxExistingNotesContext)
-                        }
+                        self.accumulator.appendExistingNote(text)
                     }
                 }
             } catch {
@@ -160,7 +177,7 @@ class LiveNotesMonitor: ObservableObject {
     func updateNote(id: Int64, text: String) {
         Task {
             do {
-                try await NoteStorage.shared.updateNote(id: id, text: text)
+                try await noteStorage.updateNote(id: id, text: text)
 
                 await MainActor.run {
                     if let index = self.notes.firstIndex(where: { $0.id == id }) {
@@ -168,6 +185,7 @@ class LiveNotesMonitor: ObservableObject {
                         updatedNote.text = text
                         updatedNote.updatedAt = Date()
                         self.notes[index] = updatedNote
+                        self.accumulator.seedExistingNotes(self.notes.map { $0.text })
                     }
                 }
             } catch {
@@ -180,10 +198,13 @@ class LiveNotesMonitor: ObservableObject {
     func deleteNote(id: Int64) {
         Task {
             do {
-                try await NoteStorage.shared.deleteNote(id: id)
+                try await noteStorage.deleteNote(id: id)
 
                 await MainActor.run {
-                    self.notes.removeAll { $0.id == id }
+                    if let index = self.notes.firstIndex(where: { $0.id == id }) {
+                        self.notes.remove(at: index)
+                        self.accumulator.seedExistingNotes(self.notes.map { $0.text })
+                    }
                 }
             } catch {
                 logError("LiveNotesMonitor: Failed to delete note", error: error)
@@ -194,14 +215,13 @@ class LiveNotesMonitor: ObservableObject {
     // MARK: - Private Methods
 
     /// Load existing notes from DB (for crash recovery)
-    private func loadExistingNotes() async {
-        guard let sessionId = currentSessionId else { return }
-
+    private func loadExistingNotes(for sessionId: Int64) async {
         do {
-            let existingNotes = try await NoteStorage.shared.getLiveNotes(sessionId: sessionId)
+            let existingNotes = try await noteStorage.getLiveNotes(sessionId: sessionId)
             await MainActor.run {
+                guard self.currentSessionId == sessionId else { return }
                 self.notes = existingNotes
-                self.existingNotesContext = existingNotes.map { $0.text }
+                self.accumulator.seedExistingNotes(existingNotes.map { $0.text })
             }
             log("LiveNotesMonitor: Loaded \(existingNotes.count) existing notes from DB")
         } catch {
@@ -210,78 +230,34 @@ class LiveNotesMonitor: ObservableObject {
     }
 
     /// Handle transcript segments update
-    private func handleSegmentsUpdate(_ segments: [SpeakerSegment]) {
+    func handleSegmentsUpdate(_ segments: [SpeakerSegment]) {
         guard currentSessionId != nil, isAiEnabled else { return }
 
-        // Track segment order
-        currentSegmentOrder = segments.count
-
-        // Only extract words from segments we haven't processed yet.
-        // Use the last processed segment's end time as a cursor to find new content.
-        let newSegments: ArraySlice<SpeakerSegment>
-        if let lastEnd = lastProcessedSegmentEnd {
-            // Find segments that are new or were updated (end time > last processed)
-            if let startIdx = segments.firstIndex(where: { $0.end > lastEnd }) {
-                newSegments = segments[startIdx...]
-            } else {
-                return  // No new segments
-            }
-        } else {
-            newSegments = segments[...]
-        }
-
-        let newWords = newSegments.flatMap { $0.text.split(separator: " ").map(String.init) }
-        guard !newWords.isEmpty else { return }
-
-        // Update cursor to the end of the last segment we processed
-        if let lastSeg = segments.last {
-            lastProcessedSegmentEnd = lastSeg.end
-        }
-
-        wordBuffer.append(contentsOf: newWords)
-
-        // Trim word buffer to prevent unbounded growth (keep most recent words)
-        if wordBuffer.count > maxWordBufferSize {
-            wordBuffer.removeFirst(wordBuffer.count - maxWordBufferSize)
-        }
-
-        // Check if we have enough words to generate a note
-        let wordsSinceLastNote = wordBuffer.count - (lastProcessedSegmentOrder >= 0 ? lastProcessedSegmentOrder : 0)
-        if wordsSinceLastNote >= wordThreshold && !isGenerating {
-            generateNote(from: segments)
+        if let request = accumulator.handleSegmentsUpdate(segments, isGenerating: isGenerating) {
+            generateNote(for: request)
         }
     }
 
     /// Generate an AI note from recent transcript
-    private func generateNote(from segments: [SpeakerSegment]) {
+    private func generateNote(for request: LiveNotesGenerationRequest) {
         guard let sessionId = currentSessionId,
-              let client = geminiClient,
+              let generator = noteGenerator,
               !isGenerating else { return }
 
         isGenerating = true
 
-        // Get recent transcript text (last ~50 words)
-        let recentText = wordBuffer.suffix(wordThreshold).joined(separator: " ")
-        let segmentStartOrder = max(0, currentSegmentOrder - 3)
-        let segmentEndOrder = currentSegmentOrder
-
-        // Build context from existing notes
-        let existingNotesText = existingNotesContext.isEmpty
-            ? "No existing notes yet."
-            : "Existing notes:\n" + existingNotesContext.map { "- \($0)" }.joined(separator: "\n")
-
         let prompt = """
             Transcript segment:
-            \(recentText)
+            \(request.recentText)
 
-            \(existingNotesText)
+            \(request.existingNotesText)
 
             \(noteGenerationPrompt)
             """
 
         Task {
             do {
-                let response = try await client.sendTextRequest(
+                let response = try await generator.generateNote(
                     prompt: prompt,
                     systemPrompt: "You are a concise note-taker. Generate a single short note (3-10 words) about the key point in the transcript. Do not use quotes. Be direct and specific."
                 )
@@ -293,42 +269,44 @@ class LiveNotesMonitor: ObservableObject {
                     .replacingOccurrences(of: "'", with: "")
 
                 guard !noteText.isEmpty else {
-                    await MainActor.run { self.isGenerating = false }
+                    await MainActor.run { self.finishGeneration(for: sessionId) }
                     return
                 }
 
                 // Save to DB
-                let record = try await NoteStorage.shared.createNote(
+                let record = try await noteStorage.createNote(
                     sessionId: sessionId,
                     text: noteText,
+                    timestamp: Date(),
                     isAiGenerated: true,
-                    segmentStartOrder: segmentStartOrder,
-                    segmentEndOrder: segmentEndOrder
+                    segmentStartOrder: request.segmentStartOrder,
+                    segmentEndOrder: request.segmentEndOrder
                 )
 
                 if let note = record.toLiveNote() {
                     await MainActor.run {
+                        guard self.currentSessionId == sessionId else { return }
                         self.notes.append(note)
-                        self.existingNotesContext.append(noteText)
-                        // Trim context to prevent unbounded growth (keep most recent notes)
-                        if self.existingNotesContext.count > self.maxExistingNotesContext {
-                            self.existingNotesContext.removeFirst(self.existingNotesContext.count - self.maxExistingNotesContext)
-                        }
-                        self.lastProcessedSegmentOrder = self.wordBuffer.count
+                        self.accumulator.markGenerationSucceeded(noteText: noteText)
                         self.isGenerating = false
                     }
                 } else {
-                    await MainActor.run { self.isGenerating = false }
+                    await MainActor.run { self.finishGeneration(for: sessionId) }
                 }
             } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
                 // Session was deleted during async AI generation — not an error
                 log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
-                await MainActor.run { self.isGenerating = false }
+                await MainActor.run { self.finishGeneration(for: sessionId) }
             } catch {
                 logError("LiveNotesMonitor: Failed to generate note", error: error)
-                await MainActor.run { self.isGenerating = false }
+                await MainActor.run { self.finishGeneration(for: sessionId) }
             }
         }
+    }
+
+    private func finishGeneration(for sessionId: Int64) {
+        guard currentSessionId == sessionId else { return }
+        isGenerating = false
     }
 
     // MARK: - Computed Properties
@@ -351,8 +329,8 @@ class LiveNotesMonitor: ObservableObject {
     // MARK: - Diagnostics
 
     /// Word buffer size (for memory diagnostics)
-    var wordBufferCount: Int { wordBuffer.count }
+    var wordBufferCount: Int { accumulator.wordBuffer.count }
 
     /// Existing notes context size (for memory diagnostics)
-    var existingNotesContextCount: Int { existingNotesContext.count }
+    var existingNotesContextCount: Int { accumulator.existingNotesContext.count }
 }

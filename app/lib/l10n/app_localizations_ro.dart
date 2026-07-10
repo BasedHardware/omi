@@ -9,6 +9,9 @@ class AppLocalizationsRo extends AppLocalizations {
   AppLocalizationsRo([String locale = 'ro']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesiunea a expirat — autentifică-te din nou.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7802,6 +7805,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get viewAll => 'Vezi tot';
 
   @override
+  String get expand => 'Extinde';
+
+  @override
   String get addTask => 'Adaugă sarcină';
 
   @override
@@ -9382,7 +9388,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+      'Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9408,4 +9414,210 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
+
+  @override
+  String get memoryThisDevice => 'Acest dispozitiv';
+
+  @override
+  String get memoryThisIphone => 'Acest iPhone';
+
+  @override
+  String get memoryThisPhone => 'Acest telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Cum să folosești Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Spune câteva cuvinte și privește-le cum apar în timp real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bravo!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Începe să vorbești...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Pune-i o întrebare lui Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Apasă butonul o dată, rostește întrebarea, apoi apasă din nou când ai terminat';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Se procesează întrebarea ta...';
+
+  @override
+  String get deviceOnboardingListening => 'Ascultă...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Oprire';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Pornire';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Ține butonul apăsat 3 secunde';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Apasă butonul pentru a-l porni din nou';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Ține butonul apăsat ferm până se stinge lumina';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Conectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Conectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Deconectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Se oprește...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizează dublul tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Încheie conversația';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvează și încheie conversația curentă';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Dezactivează / Activează sunetul';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Pornește sau oprește microfonul';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Marchează conversația în curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marchează conversația ca importantă';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'A fost un singur tap — încearcă să atingi de două ori rapid!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Încearcă acum! Atinge Omi de două ori';
+
+  @override
+  String get deviceOnboardingContinue => 'Continuă';
+
+  @override
+  String get deviceOnboardingFinish => 'Termină';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tur rapid și practic prin tot ce poate face Omi-ul tău.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
+
+  @override
+  String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
+
+  @override
+  String get latest => 'Recent';
+
+  @override
+  String get flashFirmware => 'Instalați firmware-ul';
+
+  @override
+  String get pendantRecordingTitle => 'Înregistrare pe pandantiv';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.';
+
+  @override
+  String get pendantSyncingRecordings => 'Se sincronizează înregistrările de pe pandantivul tău…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stocat(e)';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare.';
+
+  @override
+  String get connectRayBanMeta => 'Conectează Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Folosește ochelarii Ray-Ban Meta ca dispozitiv de captură Omi pentru conversații și context vizual. Omi va deschide aplicația Meta AI pentru a-ți conecta ochelarii.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Conectează prin Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Finalizează conectarea în aplicația Meta AI, apoi revino aici.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Verifică din nou';
+
+  @override
+  String get raybanMetaAllowCamera => 'Permite camera pe ochelari';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi folosește camera ochelarilor tăi pentru a adăuga fotografii la conversațiile tale. Poți sări peste acest pas și folosi doar audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Omite deocamdată';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mod doar audio Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Această versiune de Omi poate folosi microfonul ochelarilor tăi prin Bluetooth. Captura de fotografii necesită versiunea Omi pentru dezvoltatori Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Muzica de pe telefonul tău se întrerupe cât timp este utilizat microfonul ochelarilor.';
+
+  @override
+  String get raybanMetaContinue => 'Continuă';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fă o fotografie';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotografie solicitată — va apărea în conversația ta.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microfon pregătit';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Captură de imagine pregătită';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Indisponibil în modul doar audio';
+
+  @override
+  String get raybanMetaCamera => 'Cameră';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Eroare la conectarea la Ray-Ban Meta: $error';
+  }
 }

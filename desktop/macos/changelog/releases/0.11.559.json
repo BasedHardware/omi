@@ -1,0 +1,7 @@
+{
+  "version": "0.11.559",
+  "date": "2026-06-28",
+  "changes": [
+    "Fixed Omi Beta desktop chat failing before answering when agent control tools are available."
+  ]
+}

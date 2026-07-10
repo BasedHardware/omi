@@ -1,0 +1,9 @@
+{
+  "version": "0.12.13",
+  "date": "2026-07-04",
+  "changes": [
+    "The floating bar's notch island now stays in sync while a voice reply is warming up, so it no longer briefly flickers back to the pill during that gap",
+    "The floating bar now grows into the notch island while Omi is listening, thinking (spinning Omi mark + \"Thinking\"), or answering — on external monitors too — and collapses back to the compact pill when idle",
+    "Reduced the macOS app bundle footprint by trimming packaged agent runtimes and adding bundle-size checks for future releases."
+  ]
+}

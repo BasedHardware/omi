@@ -86,7 +86,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                       provider.removeActionByType(actionType.id);
                                     }
                                   },
-                                  activeColor: const Color(0xFF6366F1),
+                                  activeThumbColor: const Color(0xFF6366F1),
                                 ),
                               ],
                             ),
@@ -109,7 +109,7 @@ class ActionFieldsWidget extends StatelessWidget {
     );
   }
 
-  IconData _getIconForAction(String actionId) {
+  FaIconData _getIconForAction(String actionId) {
     switch (actionId) {
       case 'create_conversation':
         return FontAwesomeIcons.solidComment;

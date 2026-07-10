@@ -236,7 +236,7 @@ Folder: `GKE` (folder UID: `aev9igt5fwgsgc`)
 | Pusher | `c758b698-01a0-4b5c-b58c-e81e4ff33ccd` | Audio pusher service |
 | VAD | `72cfe240-ae8c-4076-845e-c58e28f12d87` | Voice activity detection GPU service |
 
-### Omi Services (4) — cross-cutting dashboards
+### Omi Services (5) — cross-cutting dashboards
 
 Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 
@@ -246,15 +246,16 @@ Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 | Cloud Run Services - Logs | `d2d782ef-f537-46b8-969d-f73561ec7d07` | Aggregated Cloud Run logs view |
 | Global External ALB | `59aa0de7-15c6-413f-acba-b7e99296ad75` | External load balancer metrics |
 | Omi Kubernetes Events | `3714dbfa-114b-47a0-99ca-1a26354e792a` | K8s event stream (OOM kills, pod evictions) |
+| Resilience / Fallbacks | `omi-resilience-fallbacks` | Fallback rates, sync/pusher SLOs, gateway ticket tier — see `backend/docs/runbooks/resilience-dashboards.md` |
 
 ### Dashboard Summary
 
 | Category | Count | Source | Version-controlled |
 |----------|------:|--------|--------------------|
 | Bundled (kube-prometheus-stack) | 28 | Helm chart sidecar | Yes (via chart defaults) |
-| Custom (Omi-specific) | 16 | Exported from Grafana UI | Yes — `dashboards/` directory |
+| Custom (Omi-specific) | 17 | Exported from Grafana UI | Yes — `dashboards/` directory |
 
-All 16 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
+All 17 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
 
 ## Developer Guide
 
@@ -468,7 +469,7 @@ git add dashboards/parakeet-asr-monitoring.json
 git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 ```
 
-**Bulk sync (all 16 custom dashboards):**
+**Bulk sync (all 17 custom dashboards):**
 ```bash
 export GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
@@ -495,6 +496,7 @@ declare -A DASHBOARDS=(
   ["d2d782ef-f537-46b8-969d-f73561ec7d07"]="omi-services"
   ["59aa0de7-15c6-413f-acba-b7e99296ad75"]="omi-services"
   ["3714dbfa-114b-47a0-99ca-1a26354e792a"]="omi-services"
+  ["omi-resilience-fallbacks"]="omi-services"
 )
 
 for uid in "${!DASHBOARDS[@]}"; do
@@ -584,7 +586,8 @@ backend/charts/monitoring/
 │       ├── cloud-armor-denied-requests.json
 │       ├── cloud-run-services-logs.json
 │       ├── global-external-alb.json
-│       └── omi-kubernetes-events.json
+│       ├── omi-kubernetes-events.json
+│       └── resilience-fallbacks.json
 ├── alerts/                              # (proposed) PrometheusRule or Grafana alert YAML
 │   └── ...
 ├── kube-prometheus-stack/               # existing

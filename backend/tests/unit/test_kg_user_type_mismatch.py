@@ -6,243 +6,281 @@ code treated it as a user dict and called .get('name', 'User') on it.
 
 Fix: use get_user_name() from database/auth.py which reads display_name
 from Firebase Auth — the canonical way to get user names in this codebase.
+
+utils.conversations.process_conversation pulls in a large chain of heavy
+database.* / utils.* modules (pinecone, typesense, langchain, …) that are not
+import-pure yet, so the module is exec'd fresh inside a module-scoped
+stub_modules block (the sanctioned Tier-2 reserve seam — see
+backend/docs/test_isolation.md and testing/import_isolation.load_module_fresh).
+models.memories is pre-imported outside the block so that
+@patch("models.memories.MemoryDB.from_memory") patches the same class object
+that the freshly-loaded process_conversation binds.
 """
 
+import importlib
 import os
 import sys
-import types
 from contextlib import contextmanager
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+_BACKEND = Path(__file__).resolve().parents[2]
 
-
-def _stub_module(name: str) -> types.ModuleType:
-    if name not in sys.modules:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    return sys.modules[name]
-
-
-def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
-    mod = _stub_module(name)
-    mod.__path__ = [str(path)]
-    if "." in name:
-        parent_name, child_name = name.rsplit(".", 1)
-        parent = _stub_module(parent_name)
-        setattr(parent, child_name, mod)
-    return mod
+# Populated by the ``_load_process_conversation`` module-scoped fixture so the
+# test bodies can reference the freshly-loaded module and its stubbed
+# dependencies by their original names.
+process_conversation = None
+auth_mod = None
+llm_kg = None
+memories_mod = None
+vector_db_mod = None
+llm_memories = None
+utils_analytics = None
 
 
-# Stub database package and submodules
-database_mod = _stub_module("database")
-if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
-for submodule in [
-    "redis_db",
-    "memories",
-    "conversations",
-    "notifications",
-    "users",
-    "tasks",
-    "trends",
-    "action_items",
-    "folders",
-    "calendar_meetings",
-    "vector_db",
-    "apps",
-    "llm_usage",
-    "_client",
-    "auth",
-    "chat",
-]:
-    mod = _stub_module(f"database.{submodule}")
-    setattr(database_mod, submodule, mod)
+def _build_fakes() -> dict[str, ModuleType]:
+    """Build the sys.modules fakes consumed by ``stub_modules``."""
+    fakes: dict[str, ModuleType] = {}
 
-users_mod = sys.modules["database.users"]
-users_mod.get_user_language_preference = MagicMock(return_value='en')
-users_mod.get_people_by_ids = MagicMock(return_value=[])
+    def add(name: str) -> AutoMockModule:
+        mod = AutoMockModule(name)
+        fakes[name] = mod
+        return mod
 
-vector_db_mod = sys.modules["database.vector_db"]
-for attr in [
-    "find_similar_memories",
-    "upsert_memory_vector",
-    "delete_memory_vector",
-    "upsert_action_item_vectors_batch",
-    "delete_action_item_vectors_batch",
-    "find_similar_action_items",
-    "upsert_vector2",
-    "update_vector_metadata",
-    "upsert_transcript_chunk_vectors",
-]:
-    setattr(vector_db_mod, attr, MagicMock())
+    # database._client — real attrs the code under test binds by name.
+    client_mod = ModuleType("database._client")
+    client_mod.db = MagicMock()
+    client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+    fakes["database._client"] = client_mod
 
-apps_mod = sys.modules["database.apps"]
-for attr in ["record_app_usage", "get_omi_personas_by_uid_db", "get_app_by_id_db"]:
-    setattr(apps_mod, attr, MagicMock())
+    # database.auth — stub with the canonical user-name function under test.
+    auth = add("database.auth")
+    auth.get_user_name = MagicMock(return_value="The User")
+    auth.get_user_from_uid = MagicMock()
 
-llm_usage_mod = sys.modules["database.llm_usage"]
-llm_usage_mod.record_llm_usage = MagicMock()
+    users = add("database.users")
+    users.get_user_language_preference = MagicMock(return_value='en')
+    users.get_people_by_ids = MagicMock(return_value=[])
 
-client_mod = sys.modules["database._client"]
-client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+    vector_db = add("database.vector_db")
+    for attr in [
+        "find_similar_memories",
+        "upsert_memory_vector",
+        "delete_memory_vector",
+        "upsert_action_item_vectors_batch",
+        "delete_action_item_vectors_batch",
+        "find_similar_action_items",
+        "upsert_vector2",
+        "update_vector_metadata",
+        "upsert_transcript_chunk_vectors",
+    ]:
+        setattr(vector_db, attr, MagicMock())
 
-# Stub database.auth with get_user_name (the canonical user name function)
-auth_mod = sys.modules["database.auth"]
-auth_mod.get_user_name = MagicMock(return_value="The User")
-auth_mod.get_user_from_uid = MagicMock()
-# Redis stubs needed by database.auth
-redis_mod = sys.modules["database.redis_db"]
-redis_mod.cache_user_name = MagicMock()
-redis_mod.get_cached_user_name = MagicMock(return_value=None)
+    apps = add("database.apps")
+    for attr in ["record_app_usage", "get_omi_personas_by_uid_db", "get_app_by_id_db"]:
+        setattr(apps, attr, MagicMock())
 
-memories_mod = sys.modules["database.memories"]
-memories_mod.set_memory_kg_extracted = MagicMock()
-memories_mod.get_memory_ids_for_conversation = MagicMock(return_value=[])
-memories_mod.delete_memories_for_conversation = MagicMock()
-memories_mod.get_memory = MagicMock(return_value=None)
-memories_mod.save_memories = MagicMock()
-memories_mod.delete_memory = MagicMock()
+    llm_usage = add("database.llm_usage")
+    llm_usage.record_llm_usage = MagicMock()
 
-# Stub utils modules
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
-for name in [
-    "utils.apps",
-    "utils.analytics",
-    "utils.llm.memories",
-    "utils.llm.conversation_processing",
-    "utils.llm.external_integrations",
-    "utils.llm.trends",
-    "utils.llm.goals",
-    "utils.llm.chat",
-    "utils.llm.clients",
-    "utils.llm.knowledge_graph",
-    "utils.llm.usage_tracker",
-    "utils.notifications",
-    "utils.subscription",
-    "utils.other.hume",
-    "utils.retrieval.rag",
-    "utils.webhooks",
-    "utils.task_sync",
-    "utils.other.storage",
-    "utils.conversations.calendar_linking",
-]:
-    if name not in sys.modules:
-        sys.modules[name] = types.ModuleType(name)
+    # Redis stubs needed transitively by database.auth.
+    redis_mod = add("database.redis_db")
+    redis_mod.cache_user_name = MagicMock()
+    redis_mod.get_cached_user_name = MagicMock(return_value=None)
 
-utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt", "sync_update_persona_prompt"]:
-    setattr(utils_apps, attr, MagicMock())
+    memories = add("database.memories")
+    memories.set_memory_kg_extracted = MagicMock()
+    memories.get_memory_ids_for_conversation = MagicMock(return_value=[])
+    memories.delete_memories_for_conversation = MagicMock()
+    memories.get_memory = MagicMock(return_value=None)
+    memories.save_memories = MagicMock()
+    memories.delete_memory = MagicMock()
 
-utils_analytics = sys.modules["utils.analytics"]
-utils_analytics.record_usage = MagicMock()
+    entities = add("database.entities")
+    entities.USER_ENTITY_ID = "entity:user"
+    entities.person_entity_id = MagicMock(side_effect=lambda person_id: f"entity:person:{person_id}")
 
-llm_memories = sys.modules["utils.llm.memories"]
-for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
-    setattr(llm_memories, attr, MagicMock())
+    # database.* modules imported by process_conversation but not overridden above.
+    for name in [
+        "database.conversations",
+        "database.notifications",
+        "database.tasks",
+        "database.action_items",
+        "database.folders",
+        "database.calendar_meetings",
+    ]:
+        add(name)
 
-llm_conv = sys.modules["utils.llm.conversation_processing"]
-for attr in [
-    "get_transcript_structure",
-    "get_app_result",
-    "should_discard_conversation",
-    "select_best_app_for_conversation",
-    "get_suggested_apps_for_conversation",
-    "get_reprocess_transcript_structure",
-    "assign_conversation_to_folder",
-    "extract_action_items",
-]:
-    setattr(llm_conv, attr, MagicMock())
+    # utils.apps
+    utils_apps = add("utils.apps")
+    for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt", "sync_update_persona_prompt"]:
+        setattr(utils_apps, attr, MagicMock())
 
-llm_external = sys.modules["utils.llm.external_integrations"]
-for attr in ["summarize_experience_text", "get_message_structure"]:
-    setattr(llm_external, attr, MagicMock())
+    utils_analytics = add("utils.analytics")
+    utils_analytics.record_usage = MagicMock()
 
-llm_trends = sys.modules["utils.llm.trends"]
-llm_trends.trends_extractor = MagicMock()
+    llm_memories = add("utils.llm.memories")
+    for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
+        setattr(llm_memories, attr, MagicMock())
 
-llm_goals = sys.modules["utils.llm.goals"]
-llm_goals.extract_and_update_goal_progress = MagicMock()
+    llm_conv = add("utils.llm.conversation_processing")
+    llm_conv_folder = add("utils.llm.conversation_folder")
+    llm_conv_folder.assign_conversation_to_folder = MagicMock()
+    for attr in [
+        "get_transcript_structure",
+        "get_app_result",
+        "should_discard_conversation",
+        "select_best_app_for_conversation",
+        "get_suggested_apps_for_conversation",
+        "get_reprocess_transcript_structure",
+        "assign_conversation_to_folder",
+        "extract_action_items",
+    ]:
+        setattr(llm_conv, attr, MagicMock())
 
-llm_chat = sys.modules["utils.llm.chat"]
-for attr in [
-    "retrieve_metadata_from_text",
-    "retrieve_metadata_from_message",
-    "retrieve_metadata_fields_from_transcript",
-    "obtain_emotional_message",
-]:
-    setattr(llm_chat, attr, MagicMock())
+    llm_external = add("utils.llm.external_integrations")
+    for attr in ["summarize_experience_text", "get_message_structure"]:
+        setattr(llm_external, attr, MagicMock())
 
-llm_clients = sys.modules["utils.llm.clients"]
-llm_clients.generate_embedding = MagicMock()
+    llm_trends = add("utils.llm.trends")
+    llm_trends.trends_extractor = MagicMock()
 
-llm_kg = sys.modules["utils.llm.knowledge_graph"]
-llm_kg.extract_knowledge_from_memory = MagicMock()
+    llm_goals = add("utils.llm.goals")
+    llm_goals.extract_and_update_goal_progress = MagicMock()
 
-llm_usage_tracker = sys.modules["utils.llm.usage_tracker"]
+    llm_chat = add("utils.llm.chat")
+    for attr in [
+        "retrieve_metadata_from_text",
+        "retrieve_metadata_from_message",
+        "retrieve_metadata_fields_from_transcript",
+        "obtain_emotional_message",
+    ]:
+        setattr(llm_chat, attr, MagicMock())
+
+    llm_clients = add("utils.llm.clients")
+    llm_clients.generate_embedding = MagicMock()
+
+    llm_kg = add("utils.llm.knowledge_graph")
+    llm_kg.extract_knowledge_from_memory = MagicMock()
+
+    @contextmanager
+    def _track_usage_stub(*_args, **_kwargs):
+        yield
+
+    llm_usage_tracker = add("utils.llm.usage_tracker")
+    llm_usage_tracker.track_usage = _track_usage_stub
+    llm_usage_tracker.Features = SimpleNamespace(
+        CONVERSATION_STRUCTURE="conversation_structure",
+        CONVERSATION_ACTION_ITEMS="conversation_action_items",
+        CONVERSATION_DISCARD="conversation_discard",
+        CONVERSATION_APPS="conversation_apps",
+        CONVERSATION_FOLDER="conversation_folder",
+        GOALS="goals",
+        MEMORIES="memories",
+        TRENDS="trends",
+    )
+
+    utils_notifications = add("utils.notifications")
+    for attr in ["send_notification", "send_important_conversation_message", "send_action_item_data_message"]:
+        setattr(utils_notifications, attr, MagicMock())
+
+    utils_subscription = add("utils.subscription")
+    utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
+    utils_subscription.should_defer_desktop_processing = MagicMock(return_value=False)
+
+    utils_hume = add("utils.other.hume")
+    for attr in ["get_hume", "HumeJobCallbackModel", "HumeJobModelPredictionResponseModel"]:
+        setattr(utils_hume, attr, MagicMock())
+
+    utils_rag = add("utils.retrieval.rag")
+    utils_rag.retrieve_rag_conversation_context = MagicMock()
+
+    utils_webhooks = add("utils.webhooks")
+    utils_webhooks.conversation_created_webhook = MagicMock()
+
+    utils_task_sync = add("utils.task_sync")
+    utils_task_sync.auto_sync_action_items_batch = MagicMock()
+
+    utils_storage = add("utils.other.storage")
+    utils_storage.precache_conversation_audio = MagicMock()
+
+    utils_cloud_tasks = add("utils.cloud_tasks")
+    utils_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+
+    utils_calendar_linking = add("utils.conversations.calendar_linking")
+    utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
+    utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
+
+    # utils.conversations.* and utils.memory.* leaves imported by process_conversation.
+    subjects = add("utils.conversations.subjects")
+    subjects.infer_subject_from_segments = lambda segments: (None, None)
+    for name in [
+        "utils.conversations.factory",
+        "utils.conversations.transcript_chunks",
+        "utils.memory.canonical_activation",
+        "utils.memory.memory_service",
+        "utils.memory.memory_system",
+        "utils.memory.memory_system_pin",
+        "utils.memory.canonical_memory_adapter",
+        "utils.memory.memory_api_contract",
+        "utils.executors",
+    ]:
+        add(name)
+
+    # Parent packages — empty __path__ so no disk fallback pulls heavy chains.
+    for pkg in [
+        "database",
+        "utils",
+        "utils.llm",
+        "utils.conversations",
+        "utils.memory",
+        "utils.retrieval",
+        "utils.other",
+    ]:
+        if pkg not in fakes:
+            m = ModuleType(pkg)
+            m.__path__ = []  # type: ignore[attr-defined]
+            fakes[pkg] = m
+
+    return fakes
 
 
-@contextmanager
-def _track_usage_stub(*_args, **_kwargs):
-    yield
+@pytest.fixture(scope="module", autouse=True)
+def _load_process_conversation():
+    """Load a fresh utils.conversations.process_conversation against stubbed deps."""
+    # Pre-import models.memories OUTSIDE the stub block so it is in the
+    # stub_modules saved_keys set (not evicted on teardown). This keeps the
+    # MemoryDB class object identical for @patch("models.memories.MemoryDB.from_memory")
+    # and the reference process_conversation binds at fresh-load time.
+    importlib.import_module("models.memories")
+    # Ensure the models package attribute points at the pre-imported module.
+    setattr(sys.modules["models"], "memories", sys.modules["models.memories"])
 
-
-llm_usage_tracker.track_usage = _track_usage_stub
-llm_usage_tracker.Features = types.SimpleNamespace(
-    CONVERSATION_STRUCTURE="conversation_structure",
-    CONVERSATION_ACTION_ITEMS="conversation_action_items",
-    CONVERSATION_DISCARD="conversation_discard",
-    CONVERSATION_APPS="conversation_apps",
-    CONVERSATION_FOLDER="conversation_folder",
-    GOALS="goals",
-    MEMORIES="memories",
-    TRENDS="trends",
-)
-
-utils_notifications = sys.modules["utils.notifications"]
-for attr in ["send_notification", "send_important_conversation_message", "send_action_item_data_message"]:
-    setattr(utils_notifications, attr, MagicMock())
-
-utils_subscription = sys.modules["utils.subscription"]
-utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
-
-utils_hume = sys.modules["utils.other.hume"]
-for attr in ["get_hume", "HumeJobCallbackModel", "HumeJobModelPredictionResponseModel"]:
-    setattr(utils_hume, attr, MagicMock())
-
-utils_rag = sys.modules["utils.retrieval.rag"]
-utils_rag.retrieve_rag_conversation_context = MagicMock()
-
-utils_webhooks = sys.modules["utils.webhooks"]
-utils_webhooks.conversation_created_webhook = MagicMock()
-
-utils_task_sync = sys.modules["utils.task_sync"]
-utils_task_sync.auto_sync_action_items_batch = MagicMock()
-
-utils_storage = sys.modules["utils.other.storage"]
-utils_storage.precache_conversation_audio = MagicMock()
-
-utils_calendar_linking = sys.modules["utils.conversations.calendar_linking"]
-utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
-utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
-
-import importlib
-
-process_conversation = importlib.import_module("utils.conversations.process_conversation")
-from models.memories import MemoryDB
+    fakes = _build_fakes()
+    with stub_modules(fakes):
+        pc = load_module_fresh(
+            "utils.conversations.process_conversation",
+            os.path.join(str(_BACKEND), "utils", "conversations", "process_conversation.py"),
+        )
+        global process_conversation, auth_mod, llm_kg, memories_mod, vector_db_mod, llm_memories, utils_analytics
+        process_conversation = pc
+        auth_mod = fakes["database.auth"]
+        llm_kg = fakes["utils.llm.knowledge_graph"]
+        memories_mod = fakes["database.memories"]
+        vector_db_mod = fakes["database.vector_db"]
+        llm_memories = fakes["utils.llm.memories"]
+        utils_analytics = fakes["utils.analytics"]
+        yield
 
 
 @pytest.fixture(autouse=True)
 def _restore_module_bindings():
+    """Re-bind get_user_name onto process_conversation before each test."""
     if "models.memories" not in sys.modules:
         importlib.import_module("models.memories")
     setattr(sys.modules["models"], "memories", sys.modules["models.memories"])
@@ -295,7 +333,7 @@ class TestKnowledgeGraphUserLookup:
         """The KG extraction path must call get_user_name(), not get_user_store_recording_permission."""
         import inspect
 
-        source = inspect.getsource(process_conversation._extract_memories_inner)
+        source = inspect.getsource(process_conversation._extract_memories_legacy)
         # Must NOT call the bool-returning function
         assert (
             "get_user_store_recording_permission" not in source

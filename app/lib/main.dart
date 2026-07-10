@@ -25,6 +25,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
@@ -67,14 +68,17 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Background message handler for FCM data messages
@@ -126,6 +130,7 @@ Future _init() async {
 
   // Service manager
   await ServiceManager.init();
+  LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
   if (Firebase.apps.isEmpty) {
@@ -167,18 +172,13 @@ Future _init() async {
     }
   }
 
-  // DEBUG: Log Firebase Auth state before getIdToken
-  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      print('DEBUG main: Restoring onboarding state from server...');
       await AuthService.instance.restoreOnboardingState();
-      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
     }
   }
   initOpus(await opus_flutter.load());
@@ -263,6 +263,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // Resume the upload reconciler at fast cadence and check immediately.
       SyncReconciler.instance.onForeground();
+      SyncUploadGate.instance.reconcileFairUseStatus();
     } else if (state == AppLifecycleState.paused) {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
@@ -294,8 +295,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
           create: (context) => CaptureProvider(),
-          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
-              (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
+          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
+            final externalActions = ProviderCaptureExternalActions(
+              conversationProvider: conversation,
+              messageProvider: message,
+              peopleProvider: people,
+              usageProvider: usage,
+            );
+            return (previous?..updateExternalActions(externalActions)) ??
+                CaptureProvider(externalActions: externalActions);
+          },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(
           create: (context) => LocalRecordingsProvider(),
@@ -365,7 +374,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               useMaterial3: false,
               colorScheme: const ColorScheme.dark(
                 primary: Colors.black,
-                secondary: Colors.deepPurple,
+                secondary: Color(0xFF35343B),
                 surface: Colors.black38,
               ),
               snackBarTheme: const SnackBarThemeData(
@@ -380,7 +389,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
               textSelectionTheme: const TextSelectionThemeData(
                 cursorColor: Colors.white,
-                selectionColor: Colors.deepPurple,
+                selectionColor: Colors.white24,
                 selectionHandleColor: Colors.white,
               ),
               cupertinoOverrideTheme: const CupertinoThemeData(
@@ -398,9 +407,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
+              Widget content;
               if (Env.isUsingStagingApi) {
                 final topPadding = MediaQuery.of(context).padding.top;
-                return Column(
+                content = Column(
                   children: [
                     GestureDetector(
                       onTap: () {
@@ -429,8 +439,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     ),
                   ],
                 );
+              } else {
+                content = child!;
               }
-              return child!;
+              return PlatformService.isIOS && Env.posthogApiKey != null
+                  ? RageClickContextTracker(child: content)
+                  : content;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

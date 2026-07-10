@@ -1,0 +1,69 @@
+version: 2
+name: memory-crud
+tier: 2
+description: Hermetic memory create and delete via bridge API actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S2
+    name: Baseline memories snapshot
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "true"
+      result.detail.memory_count_valid: "true"
+
+  - id: S3
+    name: Create hermetic test memory
+    bridge.action:
+      name: create_test_memory
+      params:
+        content: "[[MARKER:memory-crud]] hermetic desktop memory"
+        source: harness
+    expect:
+      result.detail.created: "true"
+
+  - id: S4
+    name: Edit hermetic test memory by marker
+    bridge.action:
+      name: edit_test_memory
+      params:
+        marker: "[[MARKER:memory-crud]]"
+        content: "[[MARKER:memory-crud]] edited hermetic desktop memory"
+    expect:
+      result.detail.edited: { exists: true }
+
+  - id: S5
+    name: Delete hermetic test memory by marker
+    bridge.action:
+      name: delete_test_memory
+      params:
+        marker: "[[MARKER:memory-crud]]"
+    expect:
+      ok: true
+
+  - id: S6
+    name: Memories snapshot after delete
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.memory_count_valid: "true"
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

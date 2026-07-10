@@ -6,9 +6,13 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import db
+from database.memory_app_key_grants import (
+    remove_developer_api_key_memory_grant,
+    seed_developer_api_key_memory_grant,
+)
 from models.dev_api_key import DevApiKey
 from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
-from utils.scopes import READ_ONLY_SCOPES
+from utils.scopes import READ_ONLY_SCOPES, Scopes
 
 
 def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, DevApiKey]:
@@ -37,6 +41,19 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
     }
 
     db.collection("dev_api_keys").document(key_id).set(api_key_doc)
+
+    # Seed the matching app/key memory grant so a freshly created Developer key
+    # with memories:read and/or memories:write is immediately usable through
+    # the grant gate. Legacy scopes that do not map to memory scopes are skipped.
+    grant_default_read = Scopes.MEMORIES_READ in (scopes or [])
+    grant_write = Scopes.MEMORIES_WRITE in (scopes or [])
+    if grant_default_read or grant_write:
+        seed_developer_api_key_memory_grant(
+            user_id,
+            key_id,
+            default_read=grant_default_read,
+            write=grant_write,
+        )
 
     api_key_data = DevApiKey(
         id=key_id,
@@ -82,6 +99,9 @@ def delete_dev_key(user_id: str, key_id: str):
             if hashed_key:
                 redis_db.delete_cached_dev_api_key(hashed_key)
             key_ref.delete()
+            # Remove the persisted app/key memory grant for this key so a
+            # deleted key can no longer pass the memory grant gate.
+            remove_developer_api_key_memory_grant(user_id, key_id)
 
 
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:
@@ -110,7 +130,12 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
     # Check cache first
     cached_data = redis_db.get_cached_dev_api_key_data(hashed_key)
     if cached_data:
-        return cached_data
+        # Legacy Redis entries predate app/key identity and only contain
+        # user_id/scopes. Do not return those for memory authorization paths:
+        # fall through to Firestore so otherwise-valid keys recover their real
+        # key_id/app_id immediately instead of 403ing until cache TTL expiry.
+        if cached_data.get("key_id") and cached_data.get("app_id"):
+            return cached_data
 
     # If not in cache, query database
     keys_ref = db.collection("dev_api_keys").where("hashed_key", "==", hashed_key).limit(1)
@@ -122,13 +147,15 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
     key_doc = docs[0]
     key_data = key_doc.to_dict()
     user_id = key_data.get("user_id")
+    key_id = key_data.get("id") or getattr(key_doc, "id", None)
+    app_id = key_data.get("app_id") or "developer_api"
     # If scopes field doesn't exist, return None (will be treated as read-only)
     scopes = key_data.get("scopes")
 
     if user_id:
-        # Cache the key with scopes (None if not present) and update last_used_at
-        redis_db.cache_dev_api_key(hashed_key, user_id, scopes)
+        # Cache the key with scopes/app/key context (None scopes remain read-only compatible) and update last_used_at
+        redis_db.cache_dev_api_key(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)
         key_ref = key_doc.reference
         key_ref.update({"last_used_at": datetime.utcnow()})
 
-    return {"user_id": user_id, "scopes": scopes}
+    return {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}

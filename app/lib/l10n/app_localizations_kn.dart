@@ -9,6 +9,9 @@ class AppLocalizationsKn extends AppLocalizations {
   AppLocalizationsKn([String locale = 'kn']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.';
+
+  @override
   String get appTitle => 'ಓಮಿ';
 
   @override
@@ -7793,6 +7796,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get viewAll => 'ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ';
 
   @override
+  String get expand => 'ವಿಸ್ತರಿಸಿ';
+
+  @override
   String get addTask => 'ಕಾರ್ಯ ಸೇರಿಸಿ';
 
   @override
@@ -9368,7 +9374,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9394,4 +9400,208 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String get memoryThisDevice => 'ಈ ಸಾಧನ';
+
+  @override
+  String get memoryThisIphone => 'ಈ iPhone';
+
+  @override
+  String get memoryThisPhone => 'ಈ ಫೋನ್';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'ಕೆಲವು ಪದಗಳನ್ನು ಹೇಳಿ, ಅವು ತಕ್ಷಣವೇ ಕಾಣಿಸುವುದನ್ನು ನೋಡಿ';
+
+  @override
+  String get deviceOnboardingGoodJob => 'ಭೇಷ್‌!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'ಮಾತನಾಡಲು ಆರಂಭಿಸಿ...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi ಗೆ ಪ್ರಶ್ನೆ ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'ಬಟನ್ ಒಮ್ಮೆ ಒತ್ತಿ, ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ, ಮುಗಿದ ಮೇಲೆ ಮತ್ತೆ ಒತ್ತಿ';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingListening => 'ಆಲಿಸುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'ಆನ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'ಬಟನ್ ಅನ್ನು 3 ಸೆಕೆಂಡ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'ಮತ್ತೆ ಆನ್ ಮಾಡಲು ಬಟನ್ ಒತ್ತಿ';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'ಬೆಳಕು ಆರಿ ಹೋಗುವವರೆಗೆ ಬಟನ್ ಅನ್ನು ಗಟ್ಟಿಯಾಗಿ ಒತ್ತಿ ಹಿಡಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'ಸಂಪರ್ಕಗೊಂಡಿದೆ';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'ಸಂಪರ್ಕಗೊಂಡಿದೆ!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'ಆಫ್ ಆಗುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ಡಬಲ್ ಟ್ಯಾಪ್ ಕಸ್ಟಮೈಸ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingEndConversation => 'ಸಂಭಾಷಣೆ ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ಪ್ರಸ್ತುತ ಸಂಭಾಷಣೆಯನ್ನು ಉಳಿಸಿ ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'ಮ್ಯೂಟ್ / ಅನ್‌ಮ್ಯೂಟ್';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ಆನ್ ಅಥವಾ ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingStarConversation => 'ನಡೆಯುತ್ತಿರುವ ಸಂಭಾಷಣೆಗೆ ಸ್ಟಾರ್ ಹಾಕಿ';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'ಸಂಭಾಷಣೆಯನ್ನು ಮುಖ್ಯ ಎಂದು ಗುರುತಿಸಿ';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'ಅದು ಒಂದೇ ಟ್ಯಾಪ್ ಆಗಿತ್ತು — ವೇಗವಾಗಿ ಎರಡು ಬಾರಿ ಟ್ಯಾಪ್ ಮಾಡಿ ನೋಡಿ!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'ಈಗಲೇ ಪ್ರಯತ್ನಿಸಿ! ನಿಮ್ಮ Omi ಅನ್ನು ಡಬಲ್ ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingContinue => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get deviceOnboardingFinish => 'ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'ನಿಮ್ಮ Omi ಮಾಡಬಲ್ಲ ಎಲ್ಲದರ ತ್ವರಿತ, ಪ್ರಾಯೋಗಿಕ ಪರಿಚಯ.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
+
+  @override
+  String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';
+
+  @override
+  String get latest => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get flashFirmware => 'ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ';
+
+  @override
+  String get pendantRecordingTitle => 'ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get pendantRecordingNote =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.';
+
+  @override
+  String get pendantSyncingRecordings => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'ಸಂವಾದಗಳು ಮತ್ತು ದೃಶ್ಯ ಸನ್ನಿವೇಶಕ್ಕಾಗಿ ನಿಮ್ಮ Ray-Ban Meta ಕನ್ನಡಕವನ್ನು ನಿಮ್ಮ Omi ಸೆರೆಹಿಡಿಯುವ ಸಾಧನವಾಗಿ ಬಳಸಿ. ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಲಿಂಕ್ ಮಾಡಲು Omi Meta AI ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತೆರೆಯುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI ಮೂಲಕ ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ ಇಲ್ಲಿಗೆ ಹಿಂತಿರುಗಿ.';
+
+  @override
+  String get raybanMetaCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String get raybanMetaAllowCamera => 'ಕನ್ನಡಕದಲ್ಲಿ ಕ್ಯಾಮೆರಾವನ್ನು ಅನುಮತಿಸಿ';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'ನಿಮ್ಮ ಸಂವಾದಗಳಿಗೆ ಫೋಟೋಗಳನ್ನು ಸೇರಿಸಲು Omi ನಿಮ್ಮ ಕನ್ನಡಕದ ಕ್ಯಾಮೆರಾವನ್ನು ಬಳಸುತ್ತದೆ. ನೀವು ಇದನ್ನು ಬಿಟ್ಟುಬಿಟ್ಟು ಕೇವಲ ಆಡಿಯೊವನ್ನು ಬಳಸಬಹುದು.';
+
+  @override
+  String get raybanMetaSkipForNow => 'ಸದ್ಯಕ್ಕೆ ಬಿಟ್ಟುಬಿಡಿ';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi ನ ಈ ಆವೃತ್ತಿಯು ಬ್ಲೂಟೂತ್ ಮೂಲಕ ನಿಮ್ಮ ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಅನ್ನು ಬಳಸಬಹುದು. ಫೋಟೋ ಸೆರೆಹಿಡಿಯಲು Omi ನ Meta ಡೆವಲಪರ್ ಬಿಲ್ಡ್ ಅಗತ್ಯವಿದೆ.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಬಳಕೆಯಲ್ಲಿರುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿನ ಸಂಗೀತವು ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaContinue => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get raybanMetaCapturePhoto => 'ಫೋಟೋ ಸೆರೆಹಿಡಿಯಿರಿ';
+
+  @override
+  String get raybanMetaPhotoRequested => 'ಫೋಟೋ ವಿನಂತಿಸಲಾಗಿದೆ — ಇದು ನಿಮ್ಮ ಸಂವಾದದಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'ಮೈಕ್ರೋಫೋನ್ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'ಚಿತ್ರ ಸೆರೆಹಿಡಿಯುವಿಕೆ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get raybanMetaCamera => 'ಕ್ಯಾಮೆರಾ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: $error';
+  }
 }

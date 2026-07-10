@@ -1,89 +1,11 @@
-import os
-import sys
-from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock, patch
-
-from tests.unit.twilio_stub import install_twilio_stub, prepare_twilio_service_import
-
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
-os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
-os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
-os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
-os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-def _ensure_package(name, path):
-    module = sys.modules.get(name)
-    if not isinstance(module, ModuleType):
-        module = ModuleType(name)
-        sys.modules[name] = module
-    module.__path__ = [str(path)]
-
-    if "." in name:
-        parent_name, attr_name = name.rsplit(".", 1)
-        parent = sys.modules.get(parent_name)
-        if parent is not None:
-            setattr(parent, attr_name, module)
-
-    return module
-
-
-def _install_module(name):
-    module = ModuleType(name)
-    sys.modules[name] = module
-    parent_name, _, attr_name = name.rpartition(".")
-    parent = sys.modules.get(parent_name)
-    if parent is not None:
-        setattr(parent, attr_name, module)
-    return module
-
-
-_ensure_package("database", BACKEND_DIR / "database")
-_ensure_package("utils", BACKEND_DIR / "utils")
-_ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
-
-_install_module("database.phone_calls")
-_install_module("database.phone_call_usage")
-
-_phone_utils = _install_module("utils.phone_calls")
-_phone_utils.check_call_access = MagicMock()
-_phone_utils.check_destination_allowed = MagicMock()
-_phone_utils.get_quota_snapshot = MagicMock()
-
-_endpoints = _install_module("utils.other.endpoints")
-_endpoints.get_current_user_uid = lambda: "test-uid-123"
-
-
-def _rate_limit_dependency(**_kwargs):
-    def _dependency():
-        return None
-
-    return _dependency
-
-
-_endpoints.rate_limit_dependency = _rate_limit_dependency
-
-# Mock modules that initialize GCP/Firebase clients at import time
-_mock_firebase = MagicMock()
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("firebase_admin", _mock_firebase)
-sys.modules.setdefault("firebase_admin.auth", _mock_firebase.auth)
-install_twilio_stub()
-prepare_twilio_service_import()
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from routers.phone_calls import router, _redact_phone, E164_PATTERN
-
-# ---------------------------------------------------------------------------
-# App / client fixtures
-# ---------------------------------------------------------------------------
+from utils.other import endpoints as auth
 
 TEST_UID = 'test-uid-123'
 TEST_UID_OTHER = 'test-uid-other'
@@ -108,10 +30,6 @@ def _make_app():
 @pytest.fixture()
 def client():
     app = _make_app()
-
-    # Override auth dependency to return a fixed uid
-    from utils.other import endpoints as auth
-
     app.dependency_overrides[auth.get_current_user_uid] = lambda: TEST_UID
     return TestClient(app)
 
@@ -119,8 +37,6 @@ def client():
 @pytest.fixture()
 def client_other_uid():
     app = _make_app()
-    from utils.other import endpoints as auth
-
     app.dependency_overrides[auth.get_current_user_uid] = lambda: TEST_UID_OTHER
     return TestClient(app)
 

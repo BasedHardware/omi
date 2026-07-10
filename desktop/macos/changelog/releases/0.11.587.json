@@ -1,0 +1,10 @@
+{
+  "version": "0.11.587",
+  "date": "2026-07-02",
+  "changes": [
+    "Apple Notes import now reports actionable permission and folder errors instead of a generic unavailable state",
+    "Google Calendar connection checks now preserve specific network failure details and can be verified through the same real connector path the app uses",
+    "Fixed Gmail import getting stuck while reading large email histories",
+    "Improved Apple Notes connection checks so existing folder access keeps working and database read errors show the right recovery message"
+  ]
+}

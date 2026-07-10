@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canonical Memory Architecture</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #5b9fd4;
+      --l1: #3d6b4f;
+      --l2: #6b4f8a;
+      --lt: #8a6b3d;
+      --read: #3d5a8a;
+      --warn: #c9a227;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    header {
+      padding: 2rem 2rem 1rem;
+      border-bottom: 1px solid var(--border);
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 { margin: 0 0 0.5rem; font-size: 1.75rem; font-weight: 600; }
+    .subtitle { color: var(--muted); margin: 0; }
+    .links { margin-top: 0.75rem; font-size: 0.9rem; }
+    .links a { color: var(--accent); }
+    main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+    h2 { font-size: 1.25rem; margin: 2rem 0 1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+    p { margin: 0.5rem 0; }
+    .flow-wrap { overflow-x: auto; margin: 1.5rem 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Canonical Memory Architecture</h1>
+    <p class="subtitle">Two-layer memory: capture liberally, consolidate before long-term. Branch <code>memory-canonical-rollout</code>.</p>
+    <p class="links">Markdown source of truth: <a href="canonical_memory_architecture.md">canonical_memory_architecture.md</a> &middot; Domain model: <a href="../../../memory/domain_model.md">docs/memory/domain_model.md</a></p>
+  </header>
+  <main>
+
+    <h2>End-to-end flow</h2>
+    <div class="flow-wrap">
+      <svg viewBox="0 0 920 520" width="920" height="520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Memory pipeline flow">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#8b9cb3"/></marker>
+          <style>
+            .box { fill: #1a2332; stroke: #2d3a4f; stroke-width: 1.5; rx: 8; }
+            .l1 { fill: #1e3328; stroke: #3d6b4f; }
+            .l2 { fill: #2a2238; stroke: #6b4f8a; }
+            .lt { fill: #332a1e; stroke: #8a6b3d; }
+            .read { fill: #1e2838; stroke: #3d5a8a; }
+            .gate { fill: #2a2818; stroke: #c9a227; stroke-dasharray: 4 3; }
+            .title { fill: #e7ecf3; font: 600 13px system-ui,sans-serif; }
+            .body { fill: #8b9cb3; font: 11px system-ui,sans-serif; }
+            .ev { fill: #5b9fd4; font: 10px monospace; }
+            .line { stroke: #8b9cb3; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+          </style>
+        </defs>
+
+        <!-- Raw -->
+        <rect class="box" x="310" y="10" width="300" height="44"/>
+        <text class="title" x="460" y="32" text-anchor="middle">Raw inputs (conversation, chat, OCR, manual)</text>
+        <text class="body" x="460" y="48" text-anchor="middle">Not memory — upstream of extraction</text>
+
+        <!-- L1 -->
+        <rect class="box l1" x="240" y="80" width="440" height="72"/>
+        <text class="title" x="460" y="104" text-anchor="middle">Layer 1 — Short-term capture</text>
+        <text class="body" x="460" y="122" text-anchor="middle">MemoryService.write → memory_items (tier=short_term)</text>
+        <text class="ev" x="460" y="142" text-anchor="middle">canonical_memory_adapter.py:476 · memory_service.py:432</text>
+
+        <!-- Cron -->
+        <rect class="box" x="340" y="178" width="240" height="40"/>
+        <text class="title" x="460" y="203" text-anchor="middle">Hourly maintenance cron (env-gated)</text>
+        <text class="ev" x="460" y="216" text-anchor="middle">canonical_short_term_maintenance_cron.py:45</text>
+
+        <!-- Consolidation -->
+        <rect class="box l2" x="60" y="244" width="360" height="88"/>
+        <text class="title" x="240" y="268" text-anchor="middle">Batched LLM consolidation</text>
+        <text class="body" x="240" y="286" text-anchor="middle">merge · supersede · corroborate · review_queue</text>
+        <text class="ev" x="240" y="306" text-anchor="middle">canonical_consolidation.py:771</text>
+        <text class="ev" x="240" y="322" text-anchor="middle">invoke_consolidation_agent :360</text>
+
+        <!-- Gate -->
+        <rect class="box gate" x="500" y="258" width="200" height="60"/>
+        <text class="title" x="600" y="282" text-anchor="middle">Promotion gate</text>
+        <text class="body" x="600" y="300" text-anchor="middle">blocked if watermark failed</text>
+        <text class="ev" x="600" y="314" text-anchor="middle">short_term_promotion.py:365</text>
+
+        <!-- Promotion -->
+        <rect class="box l2" x="500" y="340" width="360" height="72"/>
+        <text class="title" x="680" y="364" text-anchor="middle">Promotion short_term → long_term</text>
+        <text class="body" x="680" y="382" text-anchor="middle">same memory_id · apply_long_term_patch_firestore</text>
+        <text class="ev" x="680" y="402" text-anchor="middle">short_term_promotion.py:206</text>
+
+        <!-- LT + derived -->
+        <rect class="box lt" x="200" y="430" width="520" height="72"/>
+        <text class="title" x="460" y="454" text-anchor="middle">Long-term row + derived indexes</text>
+        <text class="body" x="460" y="472" text-anchor="middle">Pinecone vector · Firestore KG · Typesense keyword</text>
+        <text class="ev" x="460" y="492" text-anchor="middle">canonical_kg_promotion.py:25 · canonical_vector_sync · atom_keyword_index</text>
+
+        <!-- Arrows -->
+        <path class="line" d="M460 54 L460 80"/>
+        <path class="line" d="M460 152 L460 178"/>
+        <path class="line" d="M460 218 L240 244"/>
+        <path class="line" d="M420 288 L500 288"/>
+        <path class="line" d="M600 318 L600 340"/>
+        <path class="line" d="M240 332 L460 430"/>
+        <path class="line" d="M680 412 L520 466"/>
+
+        <!-- Read -->
+        <rect class="box read" x="280" y="360" width="180" height="56"/>
+        <text class="title" x="370" y="384" text-anchor="middle">Read / search</text>
+        <text class="ev" x="370" y="404" text-anchor="middle">memory_service.py:396</text>
+        <path class="line" d="M370 360 L370 340" style="marker-end:none"/>
+        <path class="line" d="M370 340 L200 466" style="stroke-dasharray:4 3"/>
+      </svg>
+    </div>
+
+    <h2>Two layers</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div style="background:var(--surface);border:1px solid #3d6b4f;border-radius:8px;padding:1rem;">
+        <h3 style="margin-top:0;color:#6dbf8a;">Layer 1 — Extract liberally</h3>
+        <p>Capture every plausible fact into <code>memory_items</code> as short-term. Noise is OK; recall matters.</p>
+        <p class="ev" style="color:var(--accent);font-size:0.85rem;">write_canonical_extraction_memory · canonical_memory_adapter.py:476</p>
+      </div>
+      <div style="background:var(--surface);border:1px solid #6b4f8a;border-radius:8px;padding:1rem;">
+        <h3 style="margin-top:0;color:#b08cd4;">Layer 2 — Consolidate in code + LLM</h3>
+        <p>Dedup, merge, supersede, corroborate <em>before</em> promotion. Promotion gate blocks if consolidation failed.</p>
+        <p class="ev" style="color:var(--accent);font-size:0.85rem;">run_canonical_consolidation · canonical_consolidation.py:771</p>
+      </div>
+    </div>
+
+    <h2>Cohort gating</h2>
+    <p>Only UIDs in <code>CANONICAL_MEMORY_USERS</code> use this path. Everyone else stays on legacy <code>memories</code> routing. Removing a UID from the whitelist is the global kill-switch.</p>
+    <ul style="color:var(--muted);">
+      <li><code>resolve_memory_system</code> — memory_system.py:36</li>
+      <li><code>MemoryService._resolve_backend</code> — memory_service.py:390</li>
+      <li>Request pin — memory_system_pin.py:17</li>
+    </ul>
+
+    <h2>Stages (plain English)</h2>
+
+    <h3>1. Capture</h3>
+    <p>Conversation/chat/OCR/manual writers call <code>MemoryService</code>. Canonical users get hash-idempotent rows in <code>memory_items</code> with evidence and TTL.</p>
+    <p style="color:var(--accent);font-size:0.85rem;">process_conversation.py:460 · product_memory.py:93</p>
+
+    <h3>2. Maintenance pass</h3>
+    <p>Per whitelisted user each hour (when enabled): TTL audit, then consolidation, then promotion — in that order.</p>
+    <p style="color:var(--accent);font-size:0.85rem;">run_canonical_short_term_maintenance · short_term_promotion.py:472</p>
+
+    <h3>3. LLM consolidation</h3>
+    <p>Code gathers candidates; one batched LLM call is the sole decider. Applies patches atomically; partial supersede failures block the watermark and defer promotion.</p>
+    <p style="color:var(--accent);font-size:0.85rem;">apply_consolidation_decision :618 · _should_advance_consolidation_watermark :411</p>
+
+    <h3>4. Promotion</h3>
+    <p>Batch-or-daily gate (25 items or 24h). Flips layer on the same row. Syncs vector, keyword index, and KG extraction.</p>
+    <p style="color:var(--accent);font-size:0.85rem;">promote_short_term_item_via_apply :206 · extract_kg_for_promoted_memory · canonical_kg_promotion.py:25</p>
+
+    <h3>5. Read / search</h3>
+    <p>Default-visible short+long-term. Search = Typesense keywords + Pinecone vectors, RRF reranked (long-term active only).</p>
+    <p style="color:var(--accent);font-size:0.85rem;">search_canonical_memories · canonical_memory_adapter.py:192</p>
+
+    <h2>Known gaps (review these)</h2>
+    <div style="background:#2a2218;border:1px solid var(--warn);border-radius:8px;padding:1rem 1.25rem;">
+      <ul style="margin:0;padding-left:1.25rem;color:var(--muted);">
+        <li><strong style="color:var(--warn);">Fast-track bypass</strong> — <code>MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED</code> lets <code>user_asserted</code> items skip batch/daily gate (short_term_promotion.py:383)</li>
+        <li><strong style="color:var(--warn);">LLM invoke exceptions</strong> — parse failures are handled; raw invoke errors may bubble uncaught (canonical_consolidation.py:374)</li>
+        <li><strong style="color:var(--warn);">Corroboration re-bump</strong> — repeat consolidation on same short-term duplicate may increment count again (canonical_consolidation.py:705)</li>
+        <li><strong style="color:var(--warn);">review_queue cascade</strong> — not fully wired on conversation/account delete (domain_model.md matrix)</li>
+        <li><strong style="color:var(--warn);">Cron off by default</strong> — needs <code>MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true</code></li>
+        <li><strong style="color:var(--warn);">Legacy stack</strong> — <code>LegacyMemoryBackend</code> retained until WS-H decommission</li>
+      </ul>
+    </div>
+
+    <p style="margin-top:2rem;color:var(--muted);font-size:0.85rem;">Generated from codebase on <code>memory-canonical-rollout</code>. See markdown doc for full evidence table.</p>
+  </main>
+</body>
+</html>

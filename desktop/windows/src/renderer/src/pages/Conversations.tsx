@@ -24,20 +24,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import type { LocalConversation } from '../../../shared/types'
-
-type CloudConversation = {
-  id: string
-  title?: string | null
-  overview?: string | null
-  created_at?: string
-  finished_at?: string
-  status?: string
-  transcript_segments?: { text: string }[]
-  structured?: {
-    title?: string | null
-    emoji?: string | null
-  } | null
-}
+import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
 function summarize(segments: { text: string }[] | undefined): string {
   if (!segments || segments.length === 0) return ''
@@ -111,10 +98,10 @@ export function Conversations(): React.JSX.Element {
         const created = c.created_at ? new Date(c.created_at).getTime() : 0
         out.push({
           id: c.id,
-          title: c.structured?.title || c.title || 'Untitled conversation',
+          title: c.structured?.title || 'Untitled conversation',
           emoji: c.structured?.emoji || undefined,
           subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview: c.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
+          preview: c.structured?.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
           source: 'cloud',
           sortAt: created
         })
@@ -142,6 +129,7 @@ export function Conversations(): React.JSX.Element {
 
   useEffect(() => {
     if (conversationsCache.loaded) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void loadAll()
   }, [loadAll])
 

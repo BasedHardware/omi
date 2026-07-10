@@ -1,0 +1,7 @@
+{
+  "version": "0.11.563",
+  "date": "2026-06-29",
+  "changes": [
+    "Made the floating bar use Notch Mode automatically on Macs with a notch"
+  ]
+}

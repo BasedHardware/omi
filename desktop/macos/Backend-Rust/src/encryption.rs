@@ -44,7 +44,9 @@ impl fmt::Display for DecryptionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DecryptionError::InvalidBase64 => write!(f, "invalid base64 encoding"),
-            DecryptionError::PayloadTooShort => write!(f, "payload too short to contain nonce and auth tag"),
+            DecryptionError::PayloadTooShort => {
+                write!(f, "payload too short to contain nonce and auth tag")
+            }
             DecryptionError::DecryptionFailed => write!(f, "AES-GCM decryption failed"),
             DecryptionError::InvalidUtf8 => write!(f, "decrypted bytes are not valid UTF-8"),
         }
@@ -71,7 +73,8 @@ pub fn encrypt(data: &str, uid: &str, master_secret: &[u8]) -> Result<String, En
     let cipher = Aes256Gcm::new_from_slice(&key).expect("Key is 32 bytes");
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-    let ciphertext = cipher.encrypt(&nonce, data.as_bytes())
+    let ciphertext = cipher
+        .encrypt(&nonce, data.as_bytes())
         .map_err(|_| EncryptionError::EncryptionFailed)?;
 
     // Format: base64(nonce + ciphertext)
@@ -83,13 +86,18 @@ pub fn encrypt(data: &str, uid: &str, master_secret: &[u8]) -> Result<String, En
 /// Decrypts a base64 encoded string using a user-specific key.
 /// Format: base64(12-byte nonce + ciphertext + auth tag)
 /// Returns the decrypted string, or an error describing the failure.
-pub fn decrypt(encrypted_data: &str, uid: &str, master_secret: &[u8]) -> Result<String, DecryptionError> {
+pub fn decrypt(
+    encrypted_data: &str,
+    uid: &str,
+    master_secret: &[u8],
+) -> Result<String, DecryptionError> {
     if encrypted_data.is_empty() {
         return Ok(String::new());
     }
 
     // Decode base64
-    let encrypted_payload = BASE64.decode(encrypted_data)
+    let encrypted_payload = BASE64
+        .decode(encrypted_data)
         .map_err(|_| DecryptionError::InvalidBase64)?;
 
     // Need at least 12 bytes nonce + 16 bytes auth tag
@@ -107,19 +115,25 @@ pub fn decrypt(encrypted_data: &str, uid: &str, master_secret: &[u8]) -> Result<
     let cipher = Aes256Gcm::new_from_slice(&key).expect("Key is 32 bytes");
     let nonce = Nonce::from_slice(nonce_bytes);
 
-    let plaintext = cipher.decrypt(nonce, ciphertext)
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
         .map_err(|_| DecryptionError::DecryptionFailed)?;
 
     String::from_utf8(plaintext).map_err(|_| DecryptionError::InvalidUtf8)
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_decrypt_returns_error_on_invalid_base64() {
-        let result = decrypt("not valid base64!!!", "test-uid", b"testsecret12345678901234567890123");
+        let result = decrypt(
+            "not valid base64!!!",
+            "test-uid",
+            b"testsecret12345678901234567890123",
+        );
         assert!(matches!(result, Err(DecryptionError::InvalidBase64)));
     }
 

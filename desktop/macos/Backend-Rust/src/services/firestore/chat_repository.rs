@@ -244,7 +244,7 @@ impl FirestoreService {
         let where_clause = if filters.is_empty() {
             None
         } else if filters.len() == 1 {
-            Some(filters.into_iter().next().unwrap())
+            filters.into_iter().next()
         } else {
             Some(json!({
                 "compositeFilter": {
@@ -917,9 +917,10 @@ mod tests {
     }
 
     fn timestamp() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-06-26T12:34:56Z")
-            .unwrap()
-            .with_timezone(&Utc)
+        match DateTime::parse_from_rfc3339("2026-06-26T12:34:56Z") {
+            Ok(value) => value.with_timezone(&Utc),
+            Err(error) => panic!("test timestamp should parse: {}", error),
+        }
     }
 
     #[test]
@@ -945,7 +946,10 @@ mod tests {
             }
         });
 
-        let session = service().parse_chat_session(&doc).unwrap();
+        let session = match service().parse_chat_session(&doc) {
+            Ok(session) => session,
+            Err(error) => panic!("chat session should parse: {}", error),
+        };
 
         assert_eq!(session.id, "session-1");
         assert_eq!(session.title, "A chat");
@@ -975,7 +979,10 @@ mod tests {
             }
         });
 
-        let session = service().parse_chat_session(&doc).unwrap();
+        let session = match service().parse_chat_session(&doc) {
+            Ok(session) => session,
+            Err(error) => panic!("chat session should parse: {}", error),
+        };
 
         assert_eq!(session.id, "main");
         assert_eq!(session.title, "Omi");
@@ -996,7 +1003,10 @@ mod tests {
             }
         });
 
-        let session = service().parse_chat_session(&doc).unwrap();
+        let session = match service().parse_chat_session(&doc) {
+            Ok(session) => session,
+            Err(error) => panic!("chat session should parse: {}", error),
+        };
 
         assert_eq!(session.title, "New Chat");
         assert_eq!(session.app_id.as_deref(), Some("plugin-legacy"));
@@ -1016,6 +1026,25 @@ mod tests {
 
         assert!(!chat_session_matches_app(&task_chat_fields, None));
         assert!(chat_session_matches_app(&main_chat_fields, None));
+    }
+
+    #[test]
+    fn app_matching_accepts_legacy_main_shapes_and_requires_exact_plugin() {
+        let absent_fields = json!({});
+        let empty_fields = json!({
+            "plugin_id": {"stringValue": ""},
+            "app_id": {"stringValue": ""}
+        });
+        let plugin_fields = json!({
+            "plugin_id": {"stringValue": "plugin-a"},
+            "app_id": {"stringValue": "plugin-a"}
+        });
+
+        assert!(chat_session_matches_app(&absent_fields, None));
+        assert!(chat_session_matches_app(&empty_fields, None));
+        assert!(chat_session_matches_app(&plugin_fields, Some("plugin-a")));
+        assert!(!chat_session_matches_app(&plugin_fields, Some("plugin-b")));
+        assert!(!chat_session_matches_app(&plugin_fields, None));
     }
 
     #[test]

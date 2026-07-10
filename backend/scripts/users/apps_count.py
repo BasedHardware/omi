@@ -8,48 +8,34 @@ from dotenv import load_dotenv
 from models.app import UsageHistoryType
 
 load_dotenv('../../.env')
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
 
 import firebase_admin
 
-firebase_admin.initialize_app()
+firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
-# noinspection PyUnresolvedReferences
-from typing import List
+from typing import Dict, List
 from database.apps import record_app_usage
 
-# noinspection PyUnresolvedReferences
-import numpy as np
 
-# noinspection PyUnresolvedReferences
-import plotly.graph_objects as go
-
-# noinspection PyUnresolvedReferences
-import umap
-
-# noinspection PyUnresolvedReferences
-from plotly.subplots import make_subplots
-
-# noinspection PyUnresolvedReferences
-from models.conversation import Conversation
 from database.redis_db import get_enabled_apps, set_app_installs_count
 from database._client import get_users_uid
 import database.conversations as conversations_db
 import database.chat as chat_db
 
 
-def single(uid, data):
+def single(uid: str, data: Dict[str, int]) -> List[str]:
     pids = get_enabled_apps(uid)
     for pid in pids:
         data[pid] += 1
     return pids
 
 
-def execute():
+def execute() -> None:
     uids = get_users_uid()
-    data = defaultdict(int)
+    data: Dict[str, int] = defaultdict(int)
 
-    threads = []
+    threads: List[threading.Thread] = []
     for uid in uids:
         threads.append(
             threading.Thread(
@@ -63,7 +49,7 @@ def execute():
 
     count = 20
     chunks = [threads[i : i + count] for i in range(0, len(threads), count)]
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]
 
@@ -72,10 +58,10 @@ def execute():
         set_app_installs_count(pid, count)
 
 
-def count_memory_prompt_plugins_trigger():
+def count_memory_prompt_plugins_trigger() -> None:
     uids = get_users_uid()
 
-    def single(uid):
+    def single(uid: str) -> None:
         memories = conversations_db.get_conversations(uid, limit=1000)
         print('user', uid, 'conversations', len(memories))
         for memory in memories:
@@ -88,7 +74,7 @@ def count_memory_prompt_plugins_trigger():
                     uid,
                     trigger['plugin_id'],
                     UsageHistoryType.memory_created_prompt,
-                    memory_id=memory['id'],
+                    conversation_id=memory['id'],
                     timestamp=created_at,
                 )
 
@@ -104,13 +90,13 @@ def count_memory_prompt_plugins_trigger():
                     timestamp=message['created_at'],
                 )
 
-    threads = []
+    threads: List[threading.Thread] = []
     for uid in uids:
         threads.append(threading.Thread(target=single, args=(uid,)))
 
     count = 20
     chunks = [threads[i : i + count] for i in range(0, len(threads), count)]
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]
 

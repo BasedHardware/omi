@@ -125,19 +125,31 @@ def _read_chat_source() -> str:
     return (backend_dir / "utils" / "llm" / "chat.py").read_text(encoding="utf-8")
 
 
+def _read_model_config_source() -> str:
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+    return (backend_dir / "utils" / "llm" / "model_config.py").read_text(encoding="utf-8")
+
+
 def test_qos_cache_key_in_clients():
     """Omi QoS get_llm() should support cache_key parameter for prompt cache routing."""
     source = _read_clients_source()
     assert "cache_key" in source, "clients.py get_llm() should accept cache_key parameter"
-    assert "_CACHE_KEY_MODELS" in source, "clients.py should define _CACHE_KEY_MODELS for model-safe cache key handling"
+    # prompt_cache_key routing is gated by capability, not an exact-name set.
+    assert (
+        "supports_prompt_cache" in source
+    ), "clients.py should gate prompt_cache_key by capability (supports_prompt_cache)"
+    cfg = _read_model_config_source()
+    assert (
+        "_CACHE_KEY_MODEL_PREFIXES" in cfg
+    ), "model_config.py should define _CACHE_KEY_MODEL_PREFIXES for family-based cache routing"
 
 
 def test_qos_medium_tier_uses_extra_body_for_cache_retention():
-    """prompt_cache_retention must use extra_body (not model_kwargs) for gpt-5.1."""
-    source = _read_clients_source()
+    """prompt_cache_retention must use extra_body (not model_kwargs) for retention-capable models."""
+    source = _read_clients_source() + _read_model_config_source()
     assert (
         'extra_body={"prompt_cache_retention"' in source or '"prompt_cache_retention": "24h"' in source
-    ), "prompt_cache_retention should be set via extra_body for gpt-5.1"
+    ), "prompt_cache_retention should be set via extra_body for retention-capable models"
 
 
 def test_core_tools_constant_exists():

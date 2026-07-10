@@ -7,20 +7,35 @@ streams AI responses.
 """
 
 import logging
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Callable, List, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.chat as chat_db
+import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
+from models.chat import Message
+from models.chat_session import (
+    ChatSessionResponse,
+    DeleteMessagesResponse,
+    GenerateTitleResponse,
+    InitialMessageResponse,
+    SaveMessageResponse,
+)
+from models.shared import StatusResponse
+from utils.chat import initial_message_util
+from utils.llm.clients import get_llm
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
+# parameter; route access through a cast so this strict-checked file sees a
+# concrete callable type instead of `Unknown`.
+_auth_module = cast(Any, auth)
 
 
 # ============================================================================
@@ -44,6 +59,8 @@ class SaveMessageRequest(BaseModel):
     app_id: str | None = Field(None, max_length=200)
     session_id: str | None = Field(None, max_length=200)
     metadata: str | None = None
+    client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
+    message_source: str = Field('desktop_chat', pattern=r'^(desktop_chat|realtime_voice)$')
 
 
 class RateMessageRequest(BaseModel):
@@ -66,12 +83,16 @@ class GenerateTitleRequest(BaseModel):
     messages: List[TitleMessageInput] = Field(..., min_length=1, max_length=50)
 
 
+class ChatMessageCountResponse(BaseModel):
+    count: int
+
+
 # ============================================================================
 # CHAT SESSION ENDPOINTS
 # ============================================================================
 
 
-@router.post('/v2/chat-sessions', tags=['chat-sessions'])
+@router.post('/v2/chat-sessions', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def create_chat_session(
     request: CreateChatSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -79,7 +100,7 @@ def create_chat_session(
     return chat_db.create_chat_session(uid, title=request.title, app_id=request.app_id)
 
 
-@router.get('/v2/chat-sessions', tags=['chat-sessions'])
+@router.get('/v2/chat-sessions', tags=['chat-sessions'], response_model=list[ChatSessionResponse])
 def get_chat_sessions(
     app_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
@@ -90,7 +111,7 @@ def get_chat_sessions(
     return chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
 
 
-@router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def get_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -101,7 +122,7 @@ def get_chat_session(
     return result
 
 
-@router.patch('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.patch('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
 def update_chat_session(
     session_id: str,
     request: UpdateChatSessionRequest,
@@ -113,7 +134,7 @@ def update_chat_session(
     return result
 
 
-@router.delete('/v2/chat-sessions/{session_id}', tags=['chat-sessions'])
+@router.delete('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=StatusResponse)
 def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -129,22 +150,38 @@ def delete_chat_session(
 # ============================================================================
 
 
-@router.post('/v2/desktop/messages', tags=['chat-sessions'])
+@router.post('/v2/desktop/messages', tags=['chat-sessions'], response_model=SaveMessageResponse)
 def save_message(
     request: SaveMessageRequest,
+    x_app_platform: str | None = Header(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return chat_db.save_message(
+    saved = chat_db.save_message(
         uid,
         text=request.text,
         sender=request.sender,
         app_id=request.app_id,
         session_id=request.session_id,
         metadata=request.metadata,
+        client_message_id=request.client_message_id,
+        message_source=request.message_source,
     )
+    if request.sender == 'human' and request.message_source == 'desktop_chat':
+        try:
+            llm_usage_db.record_chat_quota_question(
+                uid,
+                idempotency_key=f'desktop_messages:{saved["id"]}',
+                source='desktop_messages',
+                message_id=saved['id'],
+                chat_session_id=saved.get('session_id'),
+                platform=x_app_platform,
+            )
+        except Exception:
+            logger.exception('Failed to record desktop chat quota question uid=%s message_id=%s', uid, saved['id'])
+    return saved
 
 
-@router.get('/v2/desktop/messages', tags=['chat-sessions'])
+@router.get('/v2/desktop/messages', tags=['chat-sessions'], response_model=list[Message])
 def get_messages(
     app_id: str | None = Query(None),
     session_id: str | None = Query(None),
@@ -155,7 +192,7 @@ def get_messages(
     return chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset)
 
 
-@router.delete('/v2/desktop/messages', tags=['chat-sessions'])
+@router.delete('/v2/desktop/messages', tags=['chat-sessions'], response_model=DeleteMessagesResponse)
 def delete_messages(
     app_id: str | None = Query(None),
     session_id: str | None = Query(None),
@@ -165,7 +202,7 @@ def delete_messages(
     return {'status': 'ok', 'deleted_count': count}
 
 
-@router.patch('/v2/desktop/messages/{message_id}/rating', tags=['chat-sessions'])
+@router.patch('/v2/desktop/messages/{message_id}/rating', tags=['chat-sessions'], response_model=StatusResponse)
 def rate_message(
     message_id: str,
     request: RateMessageRequest,
@@ -187,37 +224,41 @@ def rate_message(
 # ============================================================================
 
 
-@router.post('/v2/chat/initial-message', tags=['chat-sessions'])
+@router.post('/v2/chat/initial-message', tags=['chat-sessions'], response_model=InitialMessageResponse)
 def create_initial_message(
     request: InitialMessageRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "chat:initial"))
+    ),
 ):
     """Generate an initial greeting message for a chat session.
 
-    Delegates to the existing initial_message_util in routers/chat.py which
+    Delegates to the shared chat helper which
     handles persona detection, previous message context, and LLM generation.
     """
-    from routers.chat import initial_message_util
-
     ai_message = initial_message_util(uid, request.app_id, chat_session_id=request.session_id)
     return {'message': ai_message.text, 'message_id': ai_message.id}
 
 
-@router.post('/v2/chat/generate-title', tags=['chat-sessions'])
+@router.post('/v2/chat/generate-title', tags=['chat-sessions'], response_model=GenerateTitleResponse)
 def generate_session_title(
     request: GenerateTitleRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "chat:initial"))
+    ),
 ):
     """Generate a title for a chat session based on its messages."""
-    from utils.llm.clients import get_llm
-
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
         "Generate a short, descriptive title (max 6 words) for this chat conversation. "
         "Return ONLY the title text, no quotes or punctuation.\n\n"
         f"{conversation}"
     )
-    title = get_llm('session_titles').invoke(prompt).content.strip().strip('"\'')
+    # `BaseChatModel.invoke(...).content` is typed `str | list[str | dict]` by
+    # langchain's stubs; session-title responses are plain strings, so reach
+    # the response through `Any` and annotate the result as `str`.
+    response = cast(Any, get_llm('session_titles').invoke(prompt))
+    title: str = response.content.strip().strip('"\'')
     if not title:
         title = 'New Chat'
 
@@ -225,7 +266,7 @@ def generate_session_title(
     return {'title': title}
 
 
-@router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'])
+@router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'], response_model=ChatMessageCountResponse)
 def get_chat_message_count(
     uid: str = Depends(auth.get_current_user_uid),
 ):

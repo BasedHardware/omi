@@ -21,7 +21,7 @@ export type RewindState = {
 export function useRewind(): RewindState {
   const [frames, setFrames] = useState<RewindFrame[]>([])
   const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null)
-  const [cursorTs, setCursorTs] = useState<number>(Date.now())
+  const [cursorTs, setCursorTs] = useState<number>(() => Date.now())
   const [playing, setPlaying] = useState(false)
   const [results, setResults] = useState<RewindSearchGroup[]>([])
   const playTimer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -41,6 +41,7 @@ export function useRewind(): RewindState {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void reload()
   }, [reload])
 

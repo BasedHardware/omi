@@ -12,6 +12,7 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
 
 import logging
 import os
+from typing import Any, Callable, Dict, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,10 +23,16 @@ from models.tts import TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.executors import run_blocking, critical_executor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
+# parameter; route access through a cast so this strict-checked file sees a
+# concrete callable type instead of `Unknown`.
+_auth_module = cast(Any, auth)
 
 # Limits mirror desktop/macos/Backend-Rust/src/routes/tts.rs
 _TTS_BURST_PER_MINUTE = 50
@@ -43,10 +50,22 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
-@router.post('/v2/tts/synthesize', tags=['tts'])
+@router.post(
+    '/v2/tts/synthesize',
+    tags=['tts'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "MP3 audio stream.",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 async def tts_synthesize(
     req: TtsSynthesizeRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "tts:synthesize"))
+    ),
 ):
     """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
     api_key = os.getenv('ELEVENLABS_API_KEY')
@@ -68,7 +87,9 @@ async def tts_synthesize(
             detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters",
         )
 
-    status, retry_after = redis_db.check_tts_rate_limit(
+    status, retry_after = await run_blocking(
+        critical_executor,
+        redis_db.check_tts_rate_limit,
         uid,
         char_count=char_count,
         burst_limit=_TTS_BURST_PER_MINUTE,
@@ -91,7 +112,7 @@ async def tts_synthesize(
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
 
-    body: dict = {
+    body: Dict[str, Any] = {
         "text": text,
         "model_id": req.model_id,
         "output_format": req.output_format,

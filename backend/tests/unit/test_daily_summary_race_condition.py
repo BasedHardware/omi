@@ -231,8 +231,9 @@ models_notif.NotificationMessage = mock_notification_message
 models_convo = sys.modules["models.conversation"]
 models_convo.Conversation = MagicMock()
 
-# utils.executors / utils.subscription are imported by notifications.py and pull firebase_admin
-# transitively; stub them (neither is used by _send_summary_notification).
+# utils.executors is imported by notifications.py and pulls firebase_admin transitively; stub it.
+# utils.subscription is stubbed defensively in case a transitive import reaches it — the daily
+# recap itself no longer references it (the desktop paywall gate was removed, #9357).
 exec_mod = _stub_module("utils.executors")
 exec_mod.postprocess_executor = MagicMock()
 exec_mod.run_blocking = MagicMock()
@@ -474,3 +475,49 @@ class TestSendSummaryNotificationLockIntegration:
         # Lock denied, so no downstream work
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
+
+
+class TestDailyRecapNotDesktopPaywalled:
+    """#9357: the daily recap is a cross-platform, server-initiated cron that does not know the
+    originating platform. It must NOT be gated on the *desktop* trial paywall — doing so (via a
+    hardcoded 'macos' platform) suppressed the recap on mobile/web for any trial-expired user."""
+
+    def test_send_summary_does_not_gate_on_trial_paywall(self):
+        import inspect
+
+        # Ignore comments (the fix documents *why* the gate was removed); only executable code counts.
+        code_lines = [
+            line
+            for line in inspect.getsource(_send_summary_notification).splitlines()
+            if not line.strip().startswith('#')
+        ]
+        assert not any(
+            'is_trial_paywalled' in line for line in code_lines
+        ), "daily recap must not gate on the desktop trial paywall (regressed #9357)"
+
+    def test_module_no_longer_imports_desktop_paywall(self):
+        # The import was removed with the gate; re-adding it would signal the gate is back.
+        assert not hasattr(notifications_module, 'is_trial_paywalled')
+
+    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=True)
+    def test_trial_expired_user_still_gets_recap(self, mock_lock):
+        convos_db = _CONVERSATIONS_DB
+        convos_db.get_conversations = MagicMock(return_value=[{'id': 'c1'}])
+
+        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
+
+        daily_db = _DAILY_SUMMARIES_DB
+        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
+        daily_db.create_daily_summary = MagicMock(return_value='summary-123')
+
+        send_mock = _SEND_NOTIFICATION
+        send_mock.reset_mock()
+
+        # Even if this user's desktop trial has expired, the recap must still be generated + sent.
+        user_data = ('uid1', ['token1'], 'America/New_York')
+        _send_summary_notification(user_data)
+
+        gen_mock.assert_called_once()
+        daily_db.create_daily_summary.assert_called_once()
+        send_mock.assert_called_once()

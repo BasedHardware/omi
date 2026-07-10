@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Playful, compact mic visualizer shown in the floating control bar while
 /// push-to-talk is active — a few chunky bars that bounce to the user's voice

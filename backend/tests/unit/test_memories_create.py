@@ -68,6 +68,12 @@ class TestMemoriesRateLimitPolicies:
         assert max_req == 2
         assert window == 3600
 
+    def test_memories_review_policy_exists(self):
+        assert "memories:review" in RATE_POLICIES
+        max_req, window = RATE_POLICIES["memories:review"]
+        assert max_req == 120
+        assert window == 3600
+
 
 # ---------------------------------------------------------------------------
 # Rate limit wiring tests (source-level grep)
@@ -92,14 +98,19 @@ class TestMemoriesRateLimitWiring:
         assert len(matches) == 1, f"DELETE /v3/memories must have memories:delete_all, found: {matches}"
 
     def test_review_endpoint_has_rate_limit(self):
+        matches = _grep_router(r"with_rate_limit.*memories:review")
+        assert len(matches) == 3, f"Review queue endpoints must have memories:review, found: {matches}"
+
+    def test_modify_endpoints_have_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:modify")
-        assert len(matches) >= 1, f"Review/edit/visibility must have memories:modify, found: {matches}"
+        assert len(matches) >= 1, f"Edit/visibility must have memories:modify, found: {matches}"
 
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
         matches = _grep_router(r"with_rate_limit.*memories:")
-        # create, batch, delete, delete_all, modify(review), modify(edit), modify(visibility) = 7
-        assert len(matches) == 7, f"Expected 7 rate-limited endpoints, got {len(matches)}: {matches}"
+        # create, batch, review queue list/get/resolve, delete, delete_all,
+        # modify(review), modify(edit), modify(visibility) = 10
+        assert len(matches) == 10, f"Expected 10 rate-limited endpoints, got {len(matches)}: {matches}"
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +120,16 @@ class TestMemoriesRateLimitWiring:
 
 class TestCreateMemoryErrorHandling:
     """Verify error handling structure in create_memory source code."""
+
+    def test_single_and_batch_create_stamp_request_device_provenance(self):
+        source = _read_router()
+        create_body = source.split("async def create_memory(", 1)[1].split("\n@router.", 1)[0]
+        batch_body = source.split("async def create_memories_batch(", 1)[1].split("\n@router.", 1)[0]
+
+        assert "resolve_client_device_from_request(request)" in create_body
+        assert "client_device_id=device_context.client_device_id" in create_body
+        assert "resolve_client_device_from_request(request_context)" in batch_body
+        assert "client_device_id=device_context.client_device_id" in batch_body
 
     def test_create_memory_is_async(self):
         """create_memory must be async def (prevents threadpool exhaustion)."""
@@ -145,6 +166,16 @@ class TestCreateMemoryErrorHandling:
         """Vector upsert failure must be caught and logged (not 500)."""
         source = _read_router()
         assert 'Vector upsert failed' in source, "Vector upsert failure must be logged"
+
+    def test_batch_vector_upsert_has_error_handling(self):
+        """Batch vector upsert failure must be caught after Firestore commit."""
+        source = _read_router()
+        match = re.search(r'(async def create_memories_batch\(.+?)(?=\n@router\.)', source, re.DOTALL)
+        assert match, "create_memories_batch function not found"
+        fn_body = match.group(1)
+        assert 'memories_db.save_memories' in fn_body
+        assert 'Batch vector upsert failed' in fn_body
+        assert fn_body.find('memories_db.save_memories') < fn_body.find('upsert_memory_vectors_batch')
 
     def test_vector_delete_has_error_handling(self):
         """Vector delete in delete_memory must be caught (not 500)."""
@@ -199,6 +230,13 @@ class TestPolicyBoundaries:
 
     def test_all_memory_policies_use_1h_window(self):
         """All memory policies should use consistent 1-hour windows."""
-        for name in ["memories:create", "memories:batch", "memories:modify", "memories:delete", "memories:delete_all"]:
+        for name in [
+            "memories:create",
+            "memories:batch",
+            "memories:modify",
+            "memories:review",
+            "memories:delete",
+            "memories:delete_all",
+        ]:
             _, window = RATE_POLICIES[name]
             assert window == 3600, f"{name} window is {window}, expected 3600"

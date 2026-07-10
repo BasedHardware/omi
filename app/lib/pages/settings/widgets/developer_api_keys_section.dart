@@ -36,7 +36,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   Widget _buildCreateKeyButton(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.1),
+      color: Colors.white.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: () {
@@ -49,7 +49,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+              FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
               const SizedBox(width: 6),
               Text(
                 context.l10n.createKey,

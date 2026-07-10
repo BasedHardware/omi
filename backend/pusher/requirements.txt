@@ -14,6 +14,8 @@ python-multipart==0.0.27
 pydantic==2.11.10
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
+jsonschema==4.23.0
+jsonschema-specifications==2023.12.1
 
 # Google Cloud
 firebase-admin==6.5.0

@@ -1,0 +1,38 @@
+name: Desktop Backend Rust
+
+on:
+  pull_request:
+    paths:
+      - "desktop/macos/Backend-Rust/**"
+      - ".github/workflows/desktop-backend-rust.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "desktop/macos/Backend-Rust/**"
+      - ".github/workflows/desktop-backend-rust.yml"
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/macos/Backend-Rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/macos/Backend-Rust
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test --locked

@@ -1,0 +1,49 @@
+version: 1
+name: subagent-row-benchmark
+tier: 3
+description: Cursor-free timing for selecting subagent rows and returning to main Ask Omi.
+app: non-prod
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Seed Subagents
+    bridge.action:
+      name: seed_subagents
+      count: "3"
+    wait:
+      state.askOmiOpen: true
+
+  - id: S2
+    name: Open Subagent 1
+    bridge.action:
+      name: open_seeded_subagent
+      index: "0"
+      wait: "true"
+
+  - id: S3
+    name: Back To Main Chat 1
+    bridge.action:
+      name: back_from_subagent
+      wait: "true"
+
+  - id: S4
+    name: Open Subagent 2
+    bridge.action:
+      name: open_seeded_subagent
+      index: "1"
+      wait: "true"
+
+  - id: S5
+    name: Back To Main Chat 2
+    bridge.action:
+      name: back_from_subagent
+      wait: "true"
+
+  - id: S6
+    name: Assert Logs Are Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"
