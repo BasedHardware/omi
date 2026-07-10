@@ -161,6 +161,13 @@ export type OmiOverlayApi = {
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
 export type OverlayVisibility = { open: boolean; active: boolean }
 
+/** Listening state the renderer reports to the tray (drives icon/tooltip/menu).
+ *  Mirrors the main-process TrayState in main/trayState.ts. */
+export type TrayListeningState = 'idle' | 'listening' | 'paused'
+
+/** The mic record chord and whether the OS accepted its registration. */
+export type RecordHotkeyState = { accelerator: string; registered: boolean }
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -169,9 +176,9 @@ export type OmiBridgeApi = {
   listLocalConversations: () => Promise<LocalConversation[]>
   deleteLocalConversation: (id: string) => Promise<void>
   updateLocalConversationTitle: (id: string, title: string) => Promise<void>
-  // Recording hotkeys the main process must intercept (Alt+Space, which Windows
-  // would otherwise consume for the system menu). The callback receives the
-  // capture mode to toggle. Returns an unsubscribe function.
+  // The mic record chord (default Ctrl+Space, rebindable via setRecordHotkey)
+  // fires on channel 'recorder:hotkey' from main; the callback receives the
+  // capture mode to toggle ('mic'). Returns an unsubscribe function.
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => () => void
   // Omi v4/listen WebSocket sessions (main-process owned).
   listenStart: (args: ListenStartArgs) => Promise<void>
@@ -312,6 +319,38 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  // --- Tray + lifecycle (Phase 1) ---
+  /** Report the current listening state so main drives the tray icon/menu/tooltip. */
+  trayReportState: (state: TrayListeningState) => void
+  /** Tray Pause/Resume clicked — flip the continuousRecording pref, then report
+   *  the new state via trayReportState. Returns an unsubscribe fn. */
+  onTrayToggleListening: (cb: () => void) => () => void
+  /** Tray Settings clicked (the window is already surfaced) — route to Settings.
+   *  Returns an unsubscribe fn. */
+  onTrayOpenSettings: (cb: () => void) => () => void
+  /** Whether the app is set to launch at login, and whether the OS setting is
+   *  even writable in this build (`supported` is false in unpackaged dev, where
+   *  execPath is the bare electron.exe and a Run entry would be bogus). */
+  getLoginItemSettings: () => Promise<{ openAtLogin: boolean; supported: boolean }>
+  /** Enable/disable launch-at-login (writes the HKCU Run key via Electron). */
+  setLaunchAtLogin: (enabled: boolean) => Promise<void>
+  /** Quit for real (sets the quitting flag so windows don't just hide, then quits). */
+  quitApp: () => void
+  /** An auto-update finished downloading and is staged to install on next quit.
+   *  Returns an unsubscribe fn. */
+  onUpdateReady: (cb: (info: { version: string }) => void) => () => void
+  /** The current mic record chord and whether the OS accepted the registration. */
+  getRecordHotkey: () => Promise<RecordHotkeyState>
+  /** Rebind the record chord (persisted). Never throws on a conflict — returns
+   *  registered=false when the chord is owned by another app. */
+  setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** The update staged for install-on-quit, if any (query on Settings mount —
+   *  the one-shot update:ready event usually fires while Settings is unmounted). */
+  getPendingUpdate: () => Promise<{ version: string } | null>
+  /** Release all global chords while a rebind UI captures raw keys (pressing the
+   *  current chord must be captured, not fire the shortcut). Always pair with resume. */
+  suspendShortcutCapture: () => void
+  resumeShortcutCapture: () => void
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>

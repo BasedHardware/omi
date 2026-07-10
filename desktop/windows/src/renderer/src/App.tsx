@@ -24,6 +24,15 @@ import { ContinuousRecordingHost } from './components/recording/ContinuousRecord
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
+import { TrayStateHost } from './components/tray/TrayStateHost'
+import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
+import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
+
+// The overlay and insight-toast windows load this same bundle at their own hash
+// routes. Window-singleton hosts (tray state) must run only in the main window,
+// so gate on the initial hash — set by main at load time, before routing.
+const IS_SECONDARY_WINDOW =
+  window.location.hash.startsWith('#/overlay') || window.location.hash.startsWith('#/insight-toast')
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -85,6 +94,9 @@ function AppShellInner(): React.JSX.Element {
       <RewindCaptureHost />
       {/* Always-on mic capture for continuous recording mode. */}
       <ContinuousRecordingHost />
+      {/* One-time background/privacy consent for existing (already-onboarded)
+          users. Self-gates via shouldShowBackgroundConsent. */}
+      <BackgroundConsentInterstitial />
     </div>
   )
 }
@@ -141,6 +153,10 @@ function App(): React.JSX.Element {
   return (
     <HashRouter>
       <SandboxBadge />
+      {/* Tray state reporting + tray-driven pause. Main window only (not the
+          overlay/insight-toast windows sharing this bundle). */}
+      {!IS_SECONDARY_WINDOW && <TrayStateHost />}
+      {!IS_SECONDARY_WINDOW && <RecordHotkeyHost />}
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
         <Route path="/overlay" element={<OverlayApp />} />

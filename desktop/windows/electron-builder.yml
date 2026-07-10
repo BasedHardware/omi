@@ -72,16 +72,15 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 
-# --- AUTO-UPDATE (NOT configured today) ---
-# Finding: the Windows app has no updater — `electron-updater` is not a
-# dependency, there is no `autoUpdater` wiring in src/main, and no `publish`
-# target. Shipped users cannot receive fixes without a manual re-download.
-# To enable (do this deliberately, then test on a real release channel):
-#   1. pnpm add electron-updater
-#   2. wire autoUpdater.checkForUpdatesAndNotify() in src/main (guarded to
-#      packaged builds), with a NSIS differential-update-friendly flow.
-#   3. uncomment and point this at your release host:
-# publish:
-#   - provider: github
-#     owner: BasedHardware
-#     repo: omi
+# --- AUTO-UPDATE ---
+# electron-updater is wired in src/main/updater.ts (packaged builds only; silent
+# download + install-on-next-quit; NSIS differential updates stay default-on).
+# The production feed is the GitHub releases where the macOS beta channel lives.
+# Local testing uses dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig)
+# instead of this feed. releaseType 'release' means only non-prerelease GitHub
+# releases are served as updates.
+publish:
+  - provider: github
+    owner: BasedHardware
+    repo: omi
+    releaseType: release
