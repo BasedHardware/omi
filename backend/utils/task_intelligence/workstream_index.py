@@ -22,7 +22,7 @@ def refresh_workstream_association_index(
     firestore_client=None,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
-    delete_index: Callable[[str, str], bool] = delete_workstream_association_vector,
+    delete_index: Callable[..., bool] = delete_workstream_association_vector,
 ) -> bool:
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return False
@@ -59,7 +59,7 @@ def rebuild_workstream_association_index(
     *,
     firestore_client=None,
     list_source: Callable[..., list[Workstream]] = workstreams_db.list_open_workstreams,
-    reset_index: Callable[[str], bool] = reset_workstream_association_vectors,
+    reset_index: Callable[..., bool] = reset_workstream_association_vectors,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
 ) -> WorkstreamIndexRebuildReport:
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:

@@ -1,6 +1,6 @@
 """Canonical task feedback and What Matters Now APIs."""
 
-from typing import Annotated, Optional
+from typing import Annotated, NoReturn, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
@@ -37,7 +37,7 @@ def _live_judgment() -> LiveRecommendationJudgment:
     return LiveRecommendationJudgment(lambda: get_llm('what_matters_now'))
 
 
-def _raise_store_error(exc: Exception) -> None:
+def _raise_store_error(exc: Exception) -> NoReturn:
     if isinstance(exc, recommendation_db.InterventionNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Intervention not found') from exc
     if isinstance(exc, recommendation_db.AttributionChainNotFoundError):

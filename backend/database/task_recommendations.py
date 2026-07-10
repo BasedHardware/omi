@@ -398,7 +398,6 @@ def create_feedback(
     client = _get_db(firestore_client)
     user_ref = _user_ref(uid, firestore_client=client)
     feedback_id = _stable_id('feedback', uid, account_generation, idempotency_key)
-    intervention: Optional[dict[str, Any]] = None
     attribution_chain_id = _stable_id('attr', uid, account_generation, request.subject_kind.value, request.subject_id)
     dedupe_key: Optional[str] = None
     proposed_completion = request.reason is not None and request.reason.value == 'already_handled'
