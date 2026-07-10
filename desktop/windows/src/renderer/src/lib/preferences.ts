@@ -81,7 +81,13 @@ export function getPreferences(): Preferences {
 }
 
 export function setPreferences(patch: Partial<Preferences>): void {
-  current = { ...current, ...patch }
+  // Read-modify-write against the LIVE stored value, not this window's cache:
+  // several windows (main, overlay, toast, capture) share the key, and the
+  // `storage`-event cache refresh is asynchronous — writing `current` here can
+  // resurrect a stale blob and silently drop another window's recent write
+  // (lost-update clobber, found live during Phase 2 verification). Merging the
+  // patch onto a fresh load makes writes field-granular.
+  current = { ...load(), ...patch }
   try {
     localStorage.setItem(KEY, JSON.stringify(current))
   } catch {
@@ -140,7 +146,7 @@ export function completeOnboarding(): void {
 // the saved preferences (name, language, consent). Subscribers are notified, so
 // App's reactive onboarding gate re-routes to the wizard immediately.
 export function resetOnboarding(): void {
-  const next = { ...current }
+  const next = { ...load() }
   delete next.onboardingCompletedAt
   // Restart the wizard from the beginning, not the previously saved step.
   delete next.onboardingStep
