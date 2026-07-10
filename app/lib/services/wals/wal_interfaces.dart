@@ -12,7 +12,8 @@ export 'package:omi/backend/http/api/conversations.dart'
         fetchSyncJobStatus,
         SyncJobFetch,
         SyncJobFetchOutcome,
-        SyncRateLimitedException;
+        SyncRateLimitedException,
+        SyncRateLimitKind;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(

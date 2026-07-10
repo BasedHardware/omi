@@ -1,10 +1,9 @@
-from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
-from pydantic import BaseModel, Field, computed_field, validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from config.memory_confidence import (
     CONFIDENCE_BANDS,
@@ -91,8 +90,8 @@ CATEGORY_BOOSTS = {
 class Memory(BaseModel):
     content: str = Field(description="The content of the memory")
     category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
-    visibility: str = Field(description="The visibility of the memory", default='private')
-    tags: List[str] = Field(description="The tags of the memory and learning", default=[])
+    visibility: Optional[str] = Field(description="The visibility of the memory", default='private')
+    tags: List[str] = Field(description="The tags of the memory and learning", default_factory=list)
     headline: Optional[str] = Field(description="Short headline for notification preview (max 5 words)", default=None)
     predicate: Optional[str] = Field(
         description="Canonical relation for the fact, e.g. resides_in, works_at, prefers", default=None
@@ -122,8 +121,9 @@ class Memory(BaseModel):
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
 
-    @validator('category', pre=True)
-    def map_legacy_categories(cls, v):
+    @field_validator('category', mode='before')
+    @classmethod
+    def map_legacy_categories(cls, v: Any) -> Any:
         """Map legacy categories to new ones when creating memories"""
         if isinstance(v, MemoryCategory):
             return v
@@ -158,15 +158,17 @@ class Memory(BaseModel):
         return 'interesting'
 
     @staticmethod
-    def get_memories_as_str(memories: List):
+    def get_memories_as_str(memories: Sequence[Any]) -> str:
         result = ''
         for f in memories:
+            content = getattr(f, 'content', '')
+            created_at = getattr(f, 'created_at', None)
             # Include created_at if available (for MemoryDB objects)
-            if hasattr(f, 'created_at') and f.created_at:
-                date_str = f.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
-                result += f"- {f.content} ({date_str})\n"
+            if isinstance(created_at, datetime):
+                date_str = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+                result += f"- {content} ({date_str})\n"
             else:
-                result += f"- {f.content}\n"
+                result += f"- {content}\n"
 
         return result
 
@@ -178,7 +180,7 @@ def _clean_argument(value: str) -> str:
     return value.strip().strip('.').strip()
 
 
-def _default_subject(category: Optional[MemoryCategory]) -> Optional[str]:
+def _default_subject(category: Optional[MemoryCategory | str]) -> Optional[str]:
     if isinstance(category, str):
         category = MemoryCategory(category) if category in MemoryCategory._value2member_map_ else None
     if category in [MemoryCategory.system, MemoryCategory.manual, MemoryCategory.workflow]:
@@ -186,7 +188,7 @@ def _default_subject(category: Optional[MemoryCategory]) -> Optional[str]:
     return None
 
 
-def propositionize(content: str, category: Optional[MemoryCategory] = None) -> Dict[str, Any]:
+def propositionize(content: str, category: Optional[MemoryCategory | str] = None) -> Dict[str, Any]:
     text = _clean_argument(content)
     lower = text.lower()
     subject = _default_subject(category)
@@ -249,23 +251,36 @@ def propositionize(content: str, category: Optional[MemoryCategory] = None) -> D
 
 def _coerce_proposition(memory: Any) -> Dict[str, Any]:
     if isinstance(memory, dict):
-        content = memory.get('content', '')
-        category = memory.get('category')
-        predicate = memory.get('predicate')
-        arguments = memory.get('arguments') or {}
-        subject_entity_id = memory.get('subject_entity_id')
-        subject_attribution = memory.get('subject_attribution', SubjectAttribution.unknown)
-        object_entity_ids = memory.get('object_entity_ids') or []
-        qualifiers = memory.get('qualifiers') or {}
+        memory_dict = cast(Mapping[str, Any], memory)
+        content_value = memory_dict.get('content', '')
+        content = content_value if isinstance(content_value, str) else str(content_value)
+        category = memory_dict.get('category')
+        predicate = memory_dict.get('predicate')
+        arguments_value: Any = memory_dict.get('arguments') or {}
+        arguments = cast(Dict[str, Any], arguments_value) if isinstance(arguments_value, dict) else {}
+        subject_entity_id = memory_dict.get('subject_entity_id')
+        subject_attribution = memory_dict.get('subject_attribution', SubjectAttribution.unknown)
+        object_entity_ids_value: Any = memory_dict.get('object_entity_ids') or []
+        object_entity_ids = (
+            cast(List[str], object_entity_ids_value) if isinstance(object_entity_ids_value, list) else []
+        )
+        qualifiers_value: Any = memory_dict.get('qualifiers') or {}
+        qualifiers = cast(Dict[str, Any], qualifiers_value) if isinstance(qualifiers_value, dict) else {}
     else:
-        content = getattr(memory, 'content', '')
+        content_value = getattr(memory, 'content', '')
+        content = content_value if isinstance(content_value, str) else str(content_value)
         category = getattr(memory, 'category', None)
         predicate = getattr(memory, 'predicate', None)
-        arguments = getattr(memory, 'arguments', {}) or {}
+        arguments_value = getattr(memory, 'arguments', {}) or {}
+        arguments = cast(Dict[str, Any], arguments_value) if isinstance(arguments_value, dict) else {}
         subject_entity_id = getattr(memory, 'subject_entity_id', None)
         subject_attribution = getattr(memory, 'subject_attribution', SubjectAttribution.unknown)
-        object_entity_ids = getattr(memory, 'object_entity_ids', []) or []
-        qualifiers = getattr(memory, 'qualifiers', {}) or {}
+        object_entity_ids_value = getattr(memory, 'object_entity_ids', []) or []
+        object_entity_ids = (
+            cast(List[str], object_entity_ids_value) if isinstance(object_entity_ids_value, list) else []
+        )
+        qualifiers_value = getattr(memory, 'qualifiers', {}) or {}
+        qualifiers = cast(Dict[str, Any], qualifiers_value) if isinstance(qualifiers_value, dict) else {}
 
     if predicate:
         return {
@@ -282,10 +297,15 @@ def _coerce_proposition(memory: Any) -> Dict[str, Any]:
 
 
 def render_memory(memory: Any) -> str:
-    content = memory.get('content', '') if isinstance(memory, dict) else getattr(memory, 'content', '')
+    if isinstance(memory, dict):
+        content_value = cast(Mapping[str, Any], memory).get('content', '')
+    else:
+        content_value = getattr(memory, 'content', '')
+    content = content_value if isinstance(content_value, str) else str(content_value)
     proposition = _coerce_proposition(memory)
     predicate = proposition.get('predicate')
-    arguments = proposition.get('arguments') or {}
+    arguments_value: Any = proposition.get('arguments') or {}
+    arguments = cast(Dict[str, Any], arguments_value) if isinstance(arguments_value, dict) else {}
     if not predicate:
         return content
 
@@ -318,8 +338,10 @@ def structurally_conflicts(left: Any, right: Any) -> bool:
     if left_subject and right_subject and left_subject != right_subject:
         return False
 
-    left_args = left_prop.get('arguments') or {}
-    right_args = right_prop.get('arguments') or {}
+    left_args_value: Any = left_prop.get('arguments') or {}
+    right_args_value: Any = right_prop.get('arguments') or {}
+    left_args = cast(Dict[str, Any], left_args_value) if isinstance(left_args_value, dict) else {}
+    right_args = cast(Dict[str, Any], right_args_value) if isinstance(right_args_value, dict) else {}
     for slot in set(left_args).intersection(right_args):
         if left_args[slot] != right_args[slot]:
             return True
@@ -330,7 +352,7 @@ class Evidence(BaseModel):
     evidence_id: str
     source_id: Optional[str] = None
     source_type: str = "unknown"
-    artifact_ref: Dict[str, Any] = Field(default_factory=dict)
+    artifact_ref: Dict[str, Any] = Field(default_factory=dict[str, Any])
     source_signal: str = "unknown"
     extractor_id: str = "unknown"
     extractor_version: str = "unknown"
@@ -401,26 +423,30 @@ def confidence_band(value: float) -> str:
     return band
 
 
-def _model_or_dict_to_dict(item: Any) -> Any:
-    if hasattr(item, 'model_dump'):
+EvidenceInput = Evidence | Mapping[str, Any]
+
+
+def _model_or_dict_to_dict(item: EvidenceInput) -> Dict[str, Any]:
+    if isinstance(item, BaseModel):
         return item.model_dump()
-    if hasattr(item, 'dict'):
-        return item.dict()
-    return item
+    return dict(item)
 
 
 def compute_veracity(
-    evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
+    evidence_set: Optional[Sequence[EvidenceInput]],
+    subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown,
 ) -> float:
     evidence_items = [
         _model_or_dict_to_dict(item)
         for item in evidence_set or []
-        if item and _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
+        if _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
     ]
     groups = {
-        item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
+        group
+        for item in evidence_items
+        for group in [item.get('independence_group') or item.get('source_id')]
+        if isinstance(group, str) and group
     }
-    groups = {group for group in groups if group}
     if not groups:
         return VERACITY_PRIORS['base']
 
@@ -429,9 +455,10 @@ def compute_veracity(
         score += (len(groups) - 1) * VERACITY_PRIORS['additional_independent_group']
 
     capture_values = [
-        item.get('capture_confidence')
+        capture
         for item in evidence_items
-        if isinstance(item, dict) and item.get('capture_confidence') is not None
+        for capture in [item.get('capture_confidence')]
+        if isinstance(capture, (float, int))
     ]
     max_capture = max(capture_values) if capture_values else SOURCE_SIGNAL_CAPTURE_PRIORS['unknown']
     if max_capture >= HIGH_CAPTURE_THRESHOLD:
@@ -448,24 +475,26 @@ def compute_veracity(
 
 
 def uncertainty_reasons_for(
-    evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
+    evidence_set: Optional[Sequence[EvidenceInput]],
+    subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown,
 ) -> List[str]:
-    reasons = []
+    reasons: List[str] = []
     evidence_items = [
         _model_or_dict_to_dict(item)
         for item in evidence_set or []
-        if item and _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
+        if _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
     ]
     groups = {
-        item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
+        group
+        for item in evidence_items
+        for group in [item.get('independence_group') or item.get('source_id')]
+        if isinstance(group, str) and group
     }
-    groups = {group for group in groups if group}
     if len(groups) <= 1:
         reasons.append(UncertaintyReason.single_source.value)
     if any(
-        isinstance(item, dict)
-        and item.get('capture_confidence') is not None
-        and item.get('capture_confidence') < LOW_CAPTURE_THRESHOLD
+        isinstance(item.get('capture_confidence'), (float, int))
+        and cast(float, item.get('capture_confidence')) < LOW_CAPTURE_THRESHOLD
         for item in evidence_items
     ):
         reasons.append(UncertaintyReason.low_capture_signal.value)
@@ -478,15 +507,16 @@ def uncertainty_reasons_for(
 
 
 def confidence_fields_for_evidence(
-    evidence_set: List[dict],
+    evidence_set: Optional[Sequence[EvidenceInput]],
     subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown,
     existing_capture_confidence: Optional[float] = None,
 ) -> Dict[str, Any]:
-    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or []]
     capture = existing_capture_confidence
     if capture is None and evidence_items:
         first = evidence_items[0]
-        capture = first.get('capture_confidence') if isinstance(first, dict) else None
+        first_capture = first.get('capture_confidence')
+        capture = float(first_capture) if isinstance(first_capture, (float, int)) else None
     if capture is None:
         capture = SOURCE_SIGNAL_CAPTURE_PRIORS['unknown']
     return {
@@ -496,15 +526,13 @@ def confidence_fields_for_evidence(
     }
 
 
-def merge_evidence_sets(existing: List[dict], incoming: List[dict]) -> List[dict]:
-    merged = []
+def merge_evidence_sets(existing: Sequence[EvidenceInput], incoming: Sequence[EvidenceInput]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
     seen: dict[str, int] = {}
     for item in list(existing) + list(incoming):
         item = _model_or_dict_to_dict(item)
-        if not isinstance(item, dict):
-            continue
         evidence_id = item.get('evidence_id')
-        if evidence_id and evidence_id in seen:
+        if isinstance(evidence_id, str) and evidence_id in seen:
             existing_index = seen[evidence_id]
             existing_item = merged[existing_index]
             if (
@@ -513,7 +541,7 @@ def merge_evidence_sets(existing: List[dict], incoming: List[dict]) -> List[dict
             ):
                 merged[existing_index] = item
             continue
-        if evidence_id:
+        if isinstance(evidence_id, str):
             seen[evidence_id] = len(merged)
         merged.append(item)
     return merged
@@ -547,7 +575,7 @@ class MemoryDB(Memory):
     # so non-cohort users cannot receive Short-term/Long-term rollout state.
     memory_tier: Optional[MemoryTier] = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def layer(self) -> Optional[str]:
         """Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only."""
@@ -569,7 +597,7 @@ class MemoryDB(Memory):
     primary_capture_device: Optional[str] = None
     capture_device_ids: List[str] = Field(default_factory=list)
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         # Deprecated alias for legacy clients: always mirror `id`. Older code stored
         # `memory_id = conversation_id` on the doc; serving that stored value makes
@@ -583,7 +611,7 @@ class MemoryDB(Memory):
         return self.invalid_at is None
 
     @staticmethod
-    def calculate_score(memory: 'MemoryDB') -> 'MemoryDB':
+    def calculate_score(memory: 'MemoryDB') -> str:
         cat_boost = (999 - CATEGORY_BOOSTS[memory.category.value]) if memory.category.value in CATEGORY_BOOSTS else 0
 
         user_manual_added_boost = 1
@@ -716,7 +744,8 @@ class ShortTermMemory(Memory):
             created_at=now,
         )
         confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
-        qualifiers = proposition.get('qualifiers') or {}
+        qualifiers_value: Any = proposition.get('qualifiers') or {}
+        qualifiers = cast(Dict[str, Any], qualifiers_value) if isinstance(qualifiers_value, dict) else {}
         qualifiers.setdefault('valid_from', now)
         short_term = ShortTermMemory(
             id=document_id_from_seed(f"short-term|{uid}|{source_id}|{memory.content}"),

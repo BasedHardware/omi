@@ -32,11 +32,11 @@ import { usePeople } from '@/hooks/usePeople';
 import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
 import type {
   Conversation,
-  ActionItem,
   AppResponse,
   TranscriptSegment,
-  AudioFile,
+  AudioFileUrlInfo,
   Geolocation,
+  StructuredActionItem,
 } from '@/types/conversation';
 
 // Dynamic import for Leaflet map (SSR not supported)
@@ -96,7 +96,7 @@ function calculateDuration(start: string | null, end: string | null): number {
 /**
  * Action item component
  */
-function ActionItemRow({ item }: { item: ActionItem }) {
+function ActionItemRow({ item }: { item: StructuredActionItem }) {
   return (
     <div
       className={cn(
@@ -325,7 +325,7 @@ function SummaryTab({
 /**
  * Action items tab content
  */
-function ActionItemsTab({ items }: { items: ActionItem[] }) {
+function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
   const completedCount = items.filter((i) => i.completed).length;
 
   return (
@@ -409,7 +409,7 @@ export function ConversationDetailPanel({
   // Audio state
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const [audioAvailable, setAudioAvailable] = useState(false);
-  const [fetchedAudioFiles, setFetchedAudioFiles] = useState<AudioFile[]>([]);
+  const [fetchedAudioFiles, setFetchedAudioFiles] = useState<AudioFileUrlInfo[]>([]);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number | undefined>(
     undefined,
   );
@@ -504,7 +504,7 @@ export function ConversationDetailPanel({
     (segmentIds: string[], personId: string | null, isUser: boolean) => {
       if (!conversation || !onConversationUpdate) return;
 
-      const updatedSegments = conversation.transcript_segments.map((seg) => {
+      const updatedSegments = (conversation.transcript_segments ?? []).map((seg) => {
         if (seg.id && segmentIds.includes(seg.id)) {
           return {
             ...seg,

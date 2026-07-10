@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 // MARK: - NSHostingView sizingOptions access
 
@@ -17,11 +18,10 @@ struct DesktopHomeView: View {
   private let minimumWindowHeight: CGFloat = 680
   private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
-  @StateObject private var appState = AppState()
+  @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
-  @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
@@ -43,10 +43,12 @@ struct DesktopHomeView: View {
   @State private var lastActivationRefresh = Date.distantPast
   @State private var didScheduleAgentVMProvisioning = false
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
+  // Anchor for the proactive-monitoring warmup budget. Captured at view
+  // creation (≈ launch) so the delay is spent once per session, not once per
+  // trigger — see StartupWarmupPolicy.remainingProactiveAssistantsStartDelay.
+  @State private var proactiveMonitoringWarmupAnchor = Date()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
-  // Dismiss state for the Neo "no desktop access" banner (resets each launch).
-  @State private var neoDesktopBannerDismissed = false
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -80,6 +82,11 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing auth loading splash")
         }
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
         SignInView(authState: authState)
@@ -222,12 +229,12 @@ struct DesktopHomeView: View {
                 sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
               )
 
-              // Set up floating control bar (only show if user hasn't disabled it)
+              // Set up floating control bar. Product invariant: normal signed-in
+              // launches must show the enabled bar immediately; hide-until-PTT is
+              // only for explicit onboarding/demo/minimal-mode contexts.
               FloatingControlBarManager.shared.setup(
                 appState: appState, chatProvider: viewModelContainer.chatProvider)
-              if FloatingControlBarManager.shared.isEnabled {
-                FloatingControlBarManager.shared.show()
-              }
+              FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
 
               // Set up push-to-talk voice input
               if let barState = FloatingControlBarManager.shared.barState {
@@ -291,7 +298,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.reset()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil
@@ -562,6 +569,7 @@ struct DesktopHomeView: View {
 
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
+    if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"
@@ -573,6 +581,8 @@ struct DesktopHomeView: View {
     let currentWindow = NSApp.windows.first(where: {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
+    let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
+    let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
@@ -583,6 +593,7 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
@@ -618,10 +629,15 @@ struct DesktopHomeView: View {
       }
     }
 
-    if let sectionRaw = settingsSectionRaw,
-      let section = SettingsContentView.SettingsSection(rawValue: sectionRaw)
-    {
-      selectedSettingsSection = section
+    if let sectionRaw = settingsSectionRaw {
+      // Tolerant match (SET-01): omi-ctl sends the caller's casing verbatim (docs use
+      // lowercase, raw values are Title Case), so a strict rawValue init silently left
+      // navigation on General for every sub-section command.
+      if let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw) {
+        selectedSettingsSection = section
+      } else {
+        log("AutomationNavigation: unknown settings section '\(sectionRaw)'")
+      }
     }
     highlightedSettingId = settingId
 
@@ -770,9 +786,14 @@ struct DesktopHomeView: View {
   private func scheduleProactiveMonitoringStart(reason: String) {
     guard proactiveMonitoringStartGate.reserve() else { return }
 
+    let delay = StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(
+      elapsedSinceLaunch: Date().timeIntervalSince(proactiveMonitoringWarmupAnchor))
+    log(
+      "DesktopHomeView: Scheduling screen analysis start in \(String(format: "%.1f", delay))s (\(reason))"
+    )
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .proactiveAssistantsStart,
-      delay: StartupWarmupPolicy.proactiveAssistantsStartDelay,
+      delay: delay,
       onCancel: { proactiveMonitoringStartGate.finishAttempt() }
     ) {
       let plugin = ProactiveAssistantsPlugin.shared
@@ -904,27 +925,12 @@ struct DesktopHomeView: View {
             selectedTabIndex: $selectedIndex
           )
         }
+        .onExitCommand {
+          navigateHomeOnEscapeIfNeeded()
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
-    }
-    .safeAreaInset(edge: .top, spacing: 0) {
-      if usageLimiter.neoNeedsDesktopUpgrade && !neoDesktopBannerDismissed {
-        NeoDesktopBanner(
-          onUpgrade: {
-            selectedSettingsSection = .planUsage
-            withAnimation(Self.pageNavigationAnimation) {
-              selectedIndex = SidebarNavItem.settings.rawValue
-            }
-          },
-          onDismiss: {
-            withAnimation(Self.pageNavigationAnimation) {
-              neoDesktopBannerDismissed = true
-            }
-          }
-        )
-        .transition(.move(edge: .top).combined(with: .opacity))
-      }
     }
     .overlay {
       // Goal completion celebration overlay
@@ -1027,6 +1033,15 @@ struct DesktopHomeView: View {
       restorePreChatWindowWidth()
     }
   }
+
+  private func navigateHomeOnEscapeIfNeeded() {
+    guard !useLegacyHomeDesign else { return }
+    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
+    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    withAnimation(Self.pageNavigationAnimation) {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
+    }
+  }
 }
 
 private struct PageChromeBar: View {
@@ -1075,54 +1090,6 @@ private struct PageChromeButton: View {
   }
 }
 
-/// Dismissible top banner shown when a Neo (unlimited) user opens the desktop app.
-/// Neo is a mobile/web plan with no desktop access; the CTA routes to Settings →
-/// Plan & Usage where the existing Operator upgrade flow lives.
-private struct NeoDesktopBanner: View {
-  var onUpgrade: () -> Void
-  var onDismiss: () -> Void
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 14, weight: .semibold)
-        .foregroundColor(OmiColors.warning)
-
-      Text("Neo doesn't include desktop access. Upgrade to Operator to use Omi on Mac.")
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Spacer(minLength: 12)
-
-      Button(action: onUpgrade) {
-        Text("Upgrade to Operator")
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(.white)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 7)
-          .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.purplePrimary))
-      }
-      .buttonStyle(.plain)
-
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: 12, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 10)
-    .frame(maxWidth: .infinity)
-    .background(OmiColors.backgroundSecondary)
-    .overlay(
-      Rectangle().fill(OmiColors.border.opacity(0.4)).frame(height: 1),
-      alignment: .bottom
-    )
-  }
-}
-
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
@@ -1140,6 +1107,7 @@ private struct PageContentView: View {
       case 0:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
@@ -1152,7 +1120,9 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
@@ -1165,7 +1135,10 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        AppsPage(
+          appProvider: viewModelContainer.appProvider,
+          appState: appState,
+          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore)
       case 9:
         SettingsPage(
           appState: appState,
@@ -1180,6 +1153,7 @@ private struct PageContentView: View {
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
@@ -1204,5 +1178,6 @@ private struct ConversationsPageHost: View {
 #if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
+    .environmentObject(AppState())
 }
 #endif

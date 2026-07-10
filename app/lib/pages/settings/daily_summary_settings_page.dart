@@ -312,7 +312,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
+  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(

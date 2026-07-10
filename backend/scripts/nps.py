@@ -1,19 +1,17 @@
-import os
 from collections import defaultdict
+from typing import Any, Dict, List
 
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 llm_mini = ChatOpenAI(model="gpt-4o-mini")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 from database.users import get_all_ratings
-from database.auth import get_user_from_uid
 
 
 def calculate_nps():
     ratings = get_all_ratings(rating_type="chat_message")
-    uid_to_ratings = defaultdict(list)
+    uid_to_ratings: defaultdict[str, List[Dict[str, Any]]] = defaultdict(list)
     shown = len(ratings)
     good = bad = 0
     for r in ratings:

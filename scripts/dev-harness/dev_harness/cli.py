@@ -98,6 +98,75 @@ def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object
     return None
 
 
+def _typesense_container_running(cfg: config.HarnessConfig) -> bool:
+    result = subprocess.run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"name={_typesense_container_name(cfg)}",
+            "--filter",
+            "status=running",
+            "-q",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    return bool(result.stdout.strip())
+
+
+def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]:
+    if service == "redis":
+        if _port_open("127.0.0.1", cfg.redis_port):
+            return True, "port-open"
+        return False, "port-closed"
+    if service == "firestore":
+        return _http_ok(f"http://{cfg.firestore_host}/")
+    if service == "auth":
+        return _http_ok(f"http://{cfg.auth_host}/")
+    if service == "typesense":
+        url = f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections"
+        headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
+        ok, detail = _http_ok(url, headers=headers)
+        if ok:
+            return True, detail
+        if not _typesense_container_running(cfg):
+            return False, "container-not-running"
+        return False, detail
+    if service == "backend":
+        return _http_ok(f"{cfg.backend_url}/docs")
+    if service == "desktop-backend":
+        return _http_ok(f"{cfg.desktop_backend_url}/health")
+    return False, f"unknown service {service!r}"
+
+
+def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -> None:
+    pid = int(record.get("pid", -1))
+    service = str(record.get("service"))
+    if not safety.process_exists(pid):
+        return
+    try:
+        safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
+        _signal_owned_process_group(pid, service)
+    except safety.SafetyError as exc:
+        print(f"{service}: not stopped before restart: {exc}")
+        return
+    if service == "typesense":
+        _remove_stale_typesense_container(cfg)
+    deadline = time.time() + 8
+    while time.time() < deadline and safety.process_exists(pid):
+        time.sleep(0.25)
+    if safety.process_exists(pid):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    remaining = [entry for entry in _process_records(cfg) if entry.get("service") != service]
+    _save_manifests(cfg, remaining)
+
+
 def _require_port_available_or_owned(cfg: config.HarnessConfig, service: str, port: int) -> None:
     if not _port_open("127.0.0.1", port):
         return
@@ -355,9 +424,14 @@ def _start_process(
     port: int,
     env: dict[str, str] | None = None,
 ) -> None:
-    if _service_record(cfg, service) is not None:
-        print(f"{service}: already recorded as running")
-        return
+    existing = _service_record(cfg, service)
+    if existing is not None:
+        healthy, detail = _service_health(cfg, service)
+        if healthy:
+            print(f"{service}: already recorded as running")
+            return
+        print(f"{service}: recorded process unhealthy ({detail}); restarting")
+        _stop_single_service(cfg, existing)
     _require_port_available_or_owned(cfg, service, port)
     marker = _marker(cfg, service)
     log_path = cfg.layout.logs_dir / log_name
@@ -550,7 +624,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
     )
 
 
-def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[str]:
+def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 45.0) -> list[str]:
     typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
     checks = {
         "firestore": (f"http://{cfg.firestore_host}/", None),

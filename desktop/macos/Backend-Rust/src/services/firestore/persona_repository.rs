@@ -428,6 +428,7 @@ impl FirestoreService {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod contract_tests {
     use super::*;
     use chrono::TimeZone;

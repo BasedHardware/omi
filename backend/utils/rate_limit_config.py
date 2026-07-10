@@ -102,6 +102,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
     "dev:conversations_read": (60, 3600),
+    "dev:conversation_detail_read": (60, 3600),
+    "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
     "dev:memories": (120, 3600),

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
@@ -20,10 +20,15 @@ from database.announcements import (
     get_recent_changelogs,
     update_announcement,
 )
-from models.announcement import Announcement, AnnouncementType, Display, Targeting, TriggerType
+from models.announcement import Announcement, AnnouncementType, Display, Targeting
 from utils.other import endpoints as auth_endpoints
 
 router = APIRouter()
+
+
+class AnnouncementDeleteResponse(BaseModel):
+    success: bool
+    message: str
 
 
 @router.get("/v1/announcements/changelogs", response_model=List[Announcement])
@@ -156,7 +161,16 @@ class DismissAnnouncementRequest(BaseModel):
     cta_clicked: bool = False
 
 
-@router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
+class DismissAnnouncementResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post(
+    "/v1/announcements/{announcement_id}/dismiss",
+    tags=["announcements"],
+    response_model=DismissAnnouncementResponse,
+)
 def dismiss_announcement_endpoint(
     announcement_id: str,
     data: DismissAnnouncementRequest,
@@ -203,7 +217,7 @@ class CreateAnnouncementRequest(BaseModel):
     # New flexible targeting and display options
     targeting: Optional[Targeting] = None
     display: Optional[Display] = None
-    content: dict
+    content: Dict[str, Any]
 
 
 class UpdateAnnouncementRequest(BaseModel):
@@ -218,7 +232,7 @@ class UpdateAnnouncementRequest(BaseModel):
     # New fields
     targeting: Optional[Targeting] = None
     display: Optional[Display] = None
-    content: Optional[dict] = None
+    content: Optional[Dict[str, Any]] = None
 
 
 @router.get("/v1/announcements/all", response_model=List[Announcement], tags=["admin"])
@@ -317,7 +331,7 @@ def update_announcement_endpoint(
         raise HTTPException(status_code=404, detail="Announcement not found")
 
     # Build updates dict with only non-None values
-    updates = {}
+    updates: Dict[str, Any] = {}
     if data.active is not None:
         updates["active"] = data.active
     if data.app_version is not None:
@@ -342,7 +356,7 @@ def update_announcement_endpoint(
     return updated
 
 
-@router.delete("/v1/announcements/{announcement_id}", tags=["admin"])
+@router.delete("/v1/announcements/{announcement_id}", tags=["admin"], response_model=AnnouncementDeleteResponse)
 def delete_announcement_endpoint(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),

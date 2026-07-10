@@ -812,7 +812,7 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
-        app_id=app_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

@@ -9,6 +9,9 @@ class AppLocalizationsKo extends AppLocalizations {
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => '세션이 만료되었습니다. 다시 로그인하세요.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9188,7 +9191,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
 
   @override
-  String get transcribeLaterNote => '현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+  String get transcribeLaterNote => '현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
 
   @override
   String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
@@ -9336,4 +9339,82 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get flashFirmware => '펌웨어 플래시';
+
+  @override
+  String get pendantRecordingTitle => '펜던트에서 녹음 중';
+
+  @override
+  String get pendantRecordingNote => '펜던트가 자동으로 녹음하고 있습니다. 앱이 열려 있는 동안 녹음이 휴대폰으로 동기화됩니다.';
+
+  @override
+  String get pendantSyncingRecordings => '펜던트에서 녹음을 동기화하는 중…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes분 저장됨';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta 연결';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta 안경을 대화 및 시각적 컨텍스트를 위한 Omi 캡처 기기로 사용하세요. Omi가 Meta AI 앱을 열어 안경을 연결합니다.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI를 통해 연결';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI 앱에서 연결을 완료한 후 여기로 돌아오세요.';
+
+  @override
+  String get raybanMetaCheckAgain => '다시 확인';
+
+  @override
+  String get raybanMetaAllowCamera => '안경 카메라 허용';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi는 안경 카메라를 사용하여 대화에 사진을 추가합니다. 이 단계를 건너뛰고 오디오만 사용할 수 있습니다.';
+
+  @override
+  String get raybanMetaSkipForNow => '지금은 건너뛰기';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 오디오 전용 모드';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      '이 버전의 Omi는 Bluetooth를 통해 안경 마이크를 사용할 수 있습니다. 사진 촬영에는 Omi의 Meta 개발자 빌드가 필요합니다.';
+
+  @override
+  String get raybanMetaMusicPauseNote => '안경 마이크를 사용하는 동안 휴대폰의 음악이 일시 정지됩니다.';
+
+  @override
+  String get raybanMetaContinue => '계속';
+
+  @override
+  String get raybanMetaCapturePhoto => '사진 촬영';
+
+  @override
+  String get raybanMetaPhotoRequested => '사진을 요청했습니다 — 대화에 표시됩니다.';
+
+  @override
+  String get raybanMetaMicrophoneReady => '마이크 준비됨';
+
+  @override
+  String get raybanMetaImageCaptureReady => '이미지 캡처 준비됨';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '오디오 전용 모드에서는 사용할 수 없음';
+
+  @override
+  String get raybanMetaCamera => '카메라';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta 연결 오류: $error';
+  }
 }

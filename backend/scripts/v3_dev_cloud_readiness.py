@@ -28,6 +28,11 @@ from v3_dev_cloud_proof import (
     build_target_preflight_report,
     write_prepared_bundle,
 )
+from readiness_gate_common import (
+    add_require_go_arg,
+    evaluate_gates,
+    exit_code_for_status,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--fixture-only', action='store_true')
     parser.add_argument('--proof-matrix-only', action='store_true')
     parser.add_argument('--candidate-manifest-only', action='store_true')
+    add_require_go_arg(parser)
     return parser.parse_args()
 
 
@@ -64,6 +70,9 @@ def main() -> int:
     else:
         result = build_target_preflight_report(env)
     print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    if args.require_go:
+        overall_status, _ = evaluate_gates({'preflight': {'status': result.get('status', 'NOT_RUN')}})
+        return exit_code_for_status(overall_status, require_go=True)
     return 0
 
 

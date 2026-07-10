@@ -16,6 +16,8 @@ private struct CapturedRequest {
 private final class URLCapture: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var _requests: [CapturedRequest] = []
+    private static var _statusCode = 403
+    private static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
 
     static var capturedRequests: [CapturedRequest] {
         lock.lock()
@@ -26,6 +28,15 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
     static func reset() {
         lock.lock()
         _requests.removeAll()
+        _statusCode = 403
+        _responseBody = Data("{\"detail\":\"test\"}".utf8)
+        lock.unlock()
+    }
+
+    static func setResponse(statusCode: Int, body: Data) {
+        lock.lock()
+        _statusCode = statusCode
+        _responseBody = body
         lock.unlock()
     }
 
@@ -78,13 +89,20 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
                 body: Self.bodyData(from: request)
             ))
         }
-        let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
+        let (statusCode, body) = Self.response()
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("{\"detail\":\"test\"}".utf8))
+        client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}
+
+    private static func response() -> (Int, Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (_statusCode, _responseBody)
+    }
 }
 
 // MARK: - Assertion helpers
@@ -126,6 +144,16 @@ final class APIClientRoutingTests: XCTestCase {
             environmentValue: "https://api.omi.me"
         )
         XCTAssertEqual(url, "https://api.omiapi.com/")
+    }
+
+    func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
+        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
+        XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testAuthBackendCanBeExplicitlyOverridden() {
+        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: "http://localhost:8080")
+        XCTAssertEqual(url, "http://localhost:8080/")
     }
 
     func testStableProductionBundleKeepsProductionPythonBackend() {
@@ -256,6 +284,38 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertNotEqual(base, rust)
     }
 
+    func testRealtimeMintStructuredFailurePreservesDiagnostics() async throws {
+        let body = Data(
+            """
+            {
+              "error": "quota exhausted",
+              "reason": "provider_quota_exceeded",
+              "provider": "openai",
+              "backend_route": "/v2/realtime/session",
+              "upstream_status_code": 429,
+              "retryable": true,
+              "code": "insufficient_quota"
+            }
+            """.utf8)
+        URLCapture.setResponse(statusCode: 429, body: body)
+        let client = await makeTestClient()
+
+        do {
+            _ = try await client.mintRealtimeToken(provider: "openai")
+            XCTFail("Expected structured realtime mint failure")
+        } catch let error as RealtimeTokenMintError {
+            XCTAssertEqual(error.statusCode, 429)
+            XCTAssertEqual(error.payload?.reason, "provider_quota_exceeded")
+            XCTAssertEqual(error.payload?.backendRoute, "/v2/realtime/session")
+            XCTAssertEqual(error.payload?.upstreamStatusCode, 429)
+            XCTAssertEqual(error.payload?.retryable, true)
+            XCTAssertEqual(error.healthError.failureClass.logValue, "provider_quota_exceeded")
+            XCTAssertTrue(error.localizedDescription.contains("status: 429"))
+            XCTAssertTrue(error.localizedDescription.contains("reason: provider_quota_exceeded"))
+            XCTAssertTrue(error.localizedDescription.contains("code: insufficient_quota"))
+        }
+    }
+
     // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
 
     private func makeTestClient() async -> APIClient {
@@ -303,7 +363,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testSetConversationStarredRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.setConversationStarred(id: "c1", starred: true)
+        _ = try? await client.setConversationStarred(id: "c1", starred: true)
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c1/starred", method: "PATCH",
                      label: "setConversationStarred")
@@ -311,10 +371,51 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testUpdateConversationTitleRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.updateConversationTitle(id: "c2", title: "New")
+        _ = try? await client.updateConversationTitle(id: "c2", title: "New")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c2", method: "PATCH",
                      label: "updateConversationTitle")
+    }
+
+    func testConversationMutationDecodesCanonicalRevisionAndState() async throws {
+        URLCapture.setResponse(
+            statusCode: 200,
+            body: Data(
+                """
+                {
+                  "status": "Ok",
+                  "conversation": {
+                    "id": "c2",
+                    "created_at": "2026-07-09T12:00:00Z",
+                    "updated_at": "2026-07-09T12:00:01.123456Z",
+                    "started_at": "2026-07-09T12:00:00Z",
+                    "finished_at": "2026-07-09T12:01:00Z",
+                    "structured": {
+                      "title": "Canonical title",
+                      "overview": "Processing finished",
+                      "emoji": "",
+                      "category": "other",
+                      "action_items": [],
+                      "events": []
+                    },
+                    "status": "completed",
+                    "starred": true,
+                    "discarded": false,
+                    "is_locked": false
+                  }
+                }
+                """.utf8
+            )
+        )
+        let client = await makeTestClient()
+
+        let conversation = try await client.updateConversationTitle(id: "c2", title: "Canonical title")
+
+        XCTAssertEqual(conversation.structured.title, "Canonical title")
+        XCTAssertEqual(conversation.structured.overview, "Processing finished")
+        XCTAssertEqual(conversation.status, .completed)
+        XCTAssertTrue(conversation.starred)
+        XCTAssertNotNil(conversation.updatedAt)
     }
 
     // -- Folders (GET → Python) --
@@ -542,7 +643,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testMoveConversationToFolderRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
+        _ = try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c4/folder", method: "PATCH",
                      label: "moveConversationToFolder")

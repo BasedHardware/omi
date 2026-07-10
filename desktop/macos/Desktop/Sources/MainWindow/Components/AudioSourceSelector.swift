@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Audio source selector for the macOS capture path.
 struct AudioSourceSelector: View {

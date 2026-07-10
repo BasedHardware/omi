@@ -8,6 +8,7 @@ GCP access; it does not approve dev/prod evidence execution or any rollout.
 """
 
 from __future__ import annotations
+from typing import Any, Dict
 
 import json
 import sys
@@ -20,7 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 from testing.memory.v3_f6.local_smoke import build_report_from_current_local_contracts
 
 
-def main() -> dict:
+def main() -> Dict[str, Any]:
     report = build_report_from_current_local_contracts()
     print(json.dumps(report, sort_keys=True, indent=2))
     return report

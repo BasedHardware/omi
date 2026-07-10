@@ -7,10 +7,12 @@ collaborators patched.
 
 from unittest.mock import MagicMock, patch
 
+import pydantic
 import pytest
 from fastapi import HTTPException
 
 from routers import apps as apps_mod
+from routers.apps import ReplyToReviewRequest
 
 
 def _call(data):
@@ -25,25 +27,24 @@ def _call(data):
         return apps_mod.reply_to_review('app-1', data, uid='uid1')
 
 
-def test_missing_response_returns_422():
-    with pytest.raises(HTTPException) as e:
-        _call({'reviewer_uid': 'r1'})
-    assert e.value.status_code == 422
+def test_missing_response_rejected_by_pydantic():
+    # FastAPI returns 422 automatically; at model level Pydantic raises ValidationError.
+    with pytest.raises(pydantic.ValidationError):
+        ReplyToReviewRequest(reviewer_uid='r1')
 
 
 def test_empty_or_blank_response_returns_422():
     for bad in ('', '   '):
         with pytest.raises(HTTPException) as e:
-            _call({'reviewer_uid': 'r1', 'response': bad})
+            _call(ReplyToReviewRequest(reviewer_uid='r1', response=bad))
         assert e.value.status_code == 422
 
 
-def test_non_string_response_returns_422():
-    with pytest.raises(HTTPException) as e:
-        _call({'reviewer_uid': 'r1', 'response': 123})
-    assert e.value.status_code == 422
+def test_non_string_response_rejected_by_pydantic():
+    with pytest.raises(pydantic.ValidationError):
+        ReplyToReviewRequest(reviewer_uid='r1', response=123)
 
 
 def test_valid_response_succeeds():
-    result = _call({'reviewer_uid': 'r1', 'response': 'Thanks for the feedback'})
+    result = _call(ReplyToReviewRequest(reviewer_uid='r1', response='Thanks for the feedback'))
     assert result['status'] == 'ok'

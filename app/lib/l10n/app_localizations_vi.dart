@@ -9,6 +9,9 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Phiên đã hết hạn — hãy đăng nhập lại.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9338,7 +9341,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Hiện chỉ hoạt động với thiết bị Omi. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
+      'Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9487,4 +9490,85 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Nạp firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Đang ghi âm trên mặt dây chuyền';
+
+  @override
+  String get pendantRecordingNote =>
+      'Mặt dây chuyền của bạn đang tự ghi âm. Các bản ghi được đồng bộ về điện thoại khi ứng dụng đang mở.';
+
+  @override
+  String get pendantSyncingRecordings => 'Đang đồng bộ các bản ghi từ mặt dây chuyền của bạn…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes phút đã lưu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ.';
+
+  @override
+  String get connectRayBanMeta => 'Kết nối Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Sử dụng kính Ray-Ban Meta của bạn làm thiết bị ghi của Omi cho các cuộc trò chuyện và ngữ cảnh hình ảnh. Omi sẽ mở ứng dụng Meta AI để liên kết kính của bạn.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Kết nối qua Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Hoàn tất kết nối trong ứng dụng Meta AI, sau đó quay lại đây.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Kiểm tra lại';
+
+  @override
+  String get raybanMetaAllowCamera => 'Cho phép camera trên kính';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi sử dụng camera của kính để thêm ảnh vào các cuộc trò chuyện của bạn. Bạn có thể bỏ qua bước này và chỉ sử dụng âm thanh.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Bỏ qua ngay bây giờ';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Chế độ chỉ âm thanh của Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Phiên bản Omi này có thể sử dụng micrô của kính qua Bluetooth. Chụp ảnh cần bản dựng dành cho nhà phát triển Meta của Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Nhạc trên điện thoại của bạn sẽ tạm dừng khi micrô của kính đang được sử dụng.';
+
+  @override
+  String get raybanMetaContinue => 'Tiếp tục';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Chụp ảnh';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Đã yêu cầu ảnh — ảnh sẽ xuất hiện trong cuộc trò chuyện của bạn.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Micrô đã sẵn sàng';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Đã sẵn sàng chụp ảnh';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Không khả dụng ở chế độ chỉ âm thanh';
+
+  @override
+  String get raybanMetaCamera => 'Camera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Lỗi khi kết nối với Ray-Ban Meta: $error';
+  }
 }

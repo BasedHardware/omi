@@ -52,7 +52,7 @@ class V3ProjectionReadinessDecision:
     legacy_fallback_allowed: bool = False
     archive_default_available: bool = False
     stale_short_term_default_visible: bool = False
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True)

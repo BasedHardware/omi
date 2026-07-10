@@ -1,6 +1,6 @@
 # Agent macOS Desktop Prod Promotion Runbook
 
-This runbook is for agents preparing an Omi macOS Desktop beta/dev release for stable/prod promotion. It consolidates the repo-facing process only: release discovery, stable-rollup release-log creation, backend coupling assessment, approval shape, workflow dispatch, and deterministic post-promotion checks.
+This runbook is for agents preparing an Omi macOS Desktop qualified beta for stable-candidate nomination and stable/prod promotion. It consolidates the repo-facing process only: release discovery, qualification evidence, nomination review, stable-rollup release-log creation, backend coupling assessment, approval shape, workflow dispatch, and deterministic post-promotion checks.
 
 Do **not** put external promotion readiness here. Fleet health/readiness checks are performed separately before approval.
 
@@ -9,8 +9,11 @@ Do **not** put external promotion readiness here. Fleet health/readiness checks 
 - Do not promote, deploy, mutate release metadata, clear caches, edit Firestore, or shift traffic until David explicitly approves the exact current plan.
 - Stable promotion is macOS Desktop only. It does not deploy mobile.
 - Stable promotion is roll-forward-oriented. Recovery usually means promoting a newer fixed desktop release or performing a separately approved manual infrastructure rollback.
-- Do not manually edit a GitHub desktop release to stable. The promotion workflow owns stable release metadata and Firestore promotion.
+- Do not manually edit stable-candidate or stable metadata. The nomination and promotion workflows own those mutations.
 - Do not use hotfix/cherry-pick branches for normal desktop rollouts. Use the latest eligible mainline `v*-macos` artifact.
+- When promoting the release that ships the desktop-agent-platonic branch, record the concrete ship+2 burn version numbers for gap-closure G6 (legacy shims, `legacy_default` grant source, sqlite legacy columns) in the release notes or a maintainer tracking issue.
+
+Lifecycle vocabulary is exact: `main → build candidate → qualified beta → stable candidate → stable`. Qualification and nomination leave stable visibility unchanged. Only `desktop_promote_prod.yml` makes the final stable decision.
 
 ## 1. Discover release state
 
@@ -31,7 +34,7 @@ Identify and report:
 - newest published GitHub macOS release;
 - whether a newer auto-release or Codemagic build is currently in flight.
 
-A tag is eligible only after Codemagic has successfully published the GitHub Release, Sparkle ZIP/DMG assets, and beta/dev appcast metadata. If the newest tag is queued/building or not published, hold and report it as not ready.
+A tag is eligible for nomination only after Codemagic has published the immutable ZIP/DMG build candidate, `qualify-desktop-beta.sh` has completed exact-tag T2 qualification, and the beta workflow has promoted its explicit beta pointer. If the newest tag is still a build candidate, queued, building, or unqualified, hold and report it as not ready.
 
 ## 2. Verify release artifact alignment
 
@@ -52,10 +55,41 @@ gh release view "$RELEASE_TAG" \
 Confirm:
 
 - Codemagic `Release OMI Desktop (Swift)` is completed/success;
+- Codemagic ran `Smoke signed desktop artifact` before `Create GitHub release`;
+- Codemagic uploaded `desktop-smoke-result.json`, and its tag/version/build/artifact digests match the release assets;
 - GitHub Release exists and is not draft;
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
+- release metadata includes canonical `qualifiedBeta: true`, `qualifiedBetaTier: 2`, `qualifiedBetaSha` matching the tag commit, `qualifiedBetaAt`, and a published `qualifiedBetaEvidence` asset; legacy `blessed*` metadata remains valid for releases qualified before the migration;
 - live appcast beta/dev item points to the same build.
+
+For high-risk desktop auth/runtime releases, run the live signed-artifact canary
+before promotion:
+
+```bash
+desktop/macos/scripts/smoke-signed-desktop-artifact.sh \
+  --zip /path/to/Omi.zip \
+  --dmg /path/to/omi.dmg \
+  --tag "$RELEASE_TAG" \
+  --expected-channel beta \
+  --launch --network --auth --chat --permissions --storage --quarantine \
+  --result-json /tmp/desktop-live-smoke-result.json
+```
+
+The live canary intentionally requires explicit environment:
+`OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1` and
+`OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND='...'`. The auth proof command
+must verify the launched app's real persistence path (Keychain write/read,
+restart, and authenticated API), not only curl an API with an injected bearer
+token. `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER='Bearer ...'` is only for the
+separate minimal chat endpoint probe.
+
+Beta exposure is gated: Codemagic uploads a non-live candidate, the signed-artifact
+smoke runs against that digest, `qualify-desktop-beta.sh` rebuilds the exact tag and runs
+the T2 harness, and only the beta promotion workflow can advance visibility.
+For stable promotion, add an upgrade-path canary: previous signed release signed
+in → update to candidate → restart → auth, helper runtime, and local storage
+still work.
 
 ## 3. Build the curated stable release log
 
@@ -149,7 +183,25 @@ Rules of thumb:
 - If a desktop flow relies on a new endpoint, query parameter echo, response field, OAuth client, runtime env, or server-side policy, backend is required for full capability.
 - If backend is required, propose it as a separately approved phase. Do not dispatch `gcp_backend.yml` without explicit approval.
 
-## 5. Present approval plan
+## 5. Nominate the stable candidate
+
+Nomination is a non-customer-facing decision record. It validates that the release is a qualified beta, equals the current macOS beta pointer, and matches that pointer's immutable manifest source SHA. It then records operator, rationale, qualification evidence, soak review, telemetry review, and release-note review. It does not move beta or stable, deploy a backend, or change customer visibility.
+
+```bash
+RELEASE_TAG='vX.Y.Z+BUILD-macos'
+
+gh workflow run desktop_nominate_stable_candidate.yml \
+  --repo BasedHardware/omi \
+  -f release_tag="$RELEASE_TAG" \
+  -f rationale='Why this beta is ready for stable consideration' \
+  -f soak_review='Duration, cohort, and outcome reviewed' \
+  -f telemetry_review='Crash, update, and health telemetry reviewed' \
+  -f release_notes_review='Stable rollup reviewed'
+```
+
+After the workflow completes, verify the release has matching `stableCandidateTag`, `stableCandidateSha`, `stableCandidateAt`, `stableCandidateBy`, `stableCandidateRationale`, `stableCandidateQualificationEvidence`, `stableCandidateSoakReview`, `stableCandidateTelemetryReview`, and `stableCandidateReleaseNotesReview`. Verify beta and stable appcasts are unchanged.
+
+## 6. Present promotion approval plan
 
 Before any mutation, present:
 
@@ -166,7 +218,7 @@ Before any mutation, present:
 
 End with an explicit confirmation question naming the exact tag and phase(s).
 
-## 6. Execute only approved workflows
+## 7. Execute only approved workflows
 
 Desktop stable promotion:
 

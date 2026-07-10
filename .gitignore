@@ -63,6 +63,7 @@ dist/
 **/ios/**/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/RayBanMetaCredentials.xcconfig
 **/ios/.generated/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
@@ -239,5 +240,9 @@ builds-snapshot.md
 .dev/
 
 # Agent planning artifacts (ephemeral; do not commit)
-.cursor/plans/
+.cursor/plans/*
+!.cursor/plans/.gitkeep
+
 .hermes/
+backend/.venv
+backend/.harness/

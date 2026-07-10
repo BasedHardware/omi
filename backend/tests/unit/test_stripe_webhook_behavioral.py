@@ -33,7 +33,13 @@ def _get_build_subscription_fn():
     func_source = func_source.replace('Subscription | None', 'object')
 
     # Build a namespace with the dependencies the function needs
+    from typing import Any, Dict, Optional, cast as _cast
+
     namespace = {
+        'Any': Any,
+        'Dict': Dict,
+        'Optional': Optional,
+        'cast': _cast,
         'PlanType': PlanType,
         'SubscriptionStatus': SubscriptionStatus,
         'Subscription': Subscription,

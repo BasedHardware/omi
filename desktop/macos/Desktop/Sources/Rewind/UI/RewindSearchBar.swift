@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Search bar component for Rewind with app filter and date picker
 struct RewindSearchBar: View {

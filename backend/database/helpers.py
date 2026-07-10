@@ -1,25 +1,32 @@
 import inspect
 from functools import wraps
-from typing import List, Dict, Any, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from database import users as users_db, redis_db
 import logging
 
 logger = logging.getLogger(__name__)
 
+F = TypeVar("F", bound=Callable[..., Any])
 
-def _get_user_profile_for_data_protection(uid: str, firestore_client=None) -> dict:
+
+def _typed_doc(raw: object) -> Dict[str, Any]:
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def _get_user_profile_for_data_protection(uid: str, firestore_client: Any = None) -> Dict[str, Any]:
     if firestore_client is not None:
         user_ref = firestore_client.collection('users').document(uid)
         user_doc = user_ref.get()
-        if user_doc.exists:
-            return user_doc.to_dict() or {}
+        if getattr(user_doc, "exists", False):
+            raw: object = user_doc.to_dict()
+            return _typed_doc(raw)
         return {}
 
     return users_db.get_user_profile(uid)
 
 
-def set_data_protection_level(data_arg_name: str):
+def set_data_protection_level(data_arg_name: str) -> Callable[[F], F]:
     """
     Decorator to automatically set 'data_protection_level' on a dictionary or a list of dictionaries.
 
@@ -30,9 +37,9 @@ def set_data_protection_level(data_arg_name: str):
     Assumes 'uid' is an argument to the decorated function.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Bind the provided arguments to the function's signature to easily access them by name
             try:
                 sig = inspect.signature(func)
@@ -44,7 +51,7 @@ def set_data_protection_level(data_arg_name: str):
                 return func(*args, **kwargs)
 
             uid = bound_args.arguments.get('uid')
-            data: Dict[str, Any] | List[Dict[str, Any]] | None = bound_args.arguments.get(data_arg_name)
+            data: Any = bound_args.arguments.get(data_arg_name)
 
             if not uid:
                 raise TypeError(
@@ -58,19 +65,25 @@ def set_data_protection_level(data_arg_name: str):
             # Check if backfilling is needed before fetching the level from DB/cache for performance.
             needs_backfill = False
             if isinstance(data, dict):
-                if data.get('data_protection_level') is None:
+                data_dict: Dict[str, Any] = cast(Dict[str, Any], data)
+                if data_dict.get('data_protection_level') is None:
                     needs_backfill = True
-            elif isinstance(data, list):
-                for item in data:
-                    if isinstance(item, dict) and item.get('data_protection_level') is None:
-                        needs_backfill = True
-                        break
+            else:
+                data_list: List[Any] = cast(List[Any], data)
+                for item in data_list:
+                    if isinstance(item, dict):
+                        item_dict: Dict[str, Any] = cast(Dict[str, Any], item)
+                        if item_dict.get('data_protection_level') is None:
+                            needs_backfill = True
+                            break
 
             if not needs_backfill:
                 return func(*args, **kwargs)
 
             firestore_client = bound_args.arguments.get('firestore_client')
-            level = None if firestore_client is not None else redis_db.get_user_data_protection_level(uid)
+            level: Optional[str] = (
+                None if firestore_client is not None else redis_db.get_user_data_protection_level(uid)
+            )
 
             if not level:
                 try:
@@ -86,22 +99,27 @@ def set_data_protection_level(data_arg_name: str):
                 level = 'enhanced'
 
             if isinstance(data, dict):
-                if data.get('data_protection_level') is None:
-                    data['data_protection_level'] = level
-            elif isinstance(data, list):
-                for item in data:
+                data_dict_after: Dict[str, Any] = cast(Dict[str, Any], data)
+                if data_dict_after.get('data_protection_level') is None:
+                    data_dict_after['data_protection_level'] = level
+            else:
+                items_after: List[Any] = cast(List[Any], data)
+                for item in items_after:
                     if isinstance(item, dict):
-                        if item.get('data_protection_level') is None:
-                            item['data_protection_level'] = level
+                        item_dict_after: Dict[str, Any] = cast(Dict[str, Any], item)
+                        if item_dict_after.get('data_protection_level') is None:
+                            item_dict_after['data_protection_level'] = level
 
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any], str, str], Dict[str, Any]]):
+def prepare_for_write(
+    data_arg_name: str, prepare_func: Callable[[Dict[str, Any], str, str], Dict[str, Any]]
+) -> Callable[[F], F]:
     """
     Decorator to prepare data before writing to the database.
     It uses the provided prepare_func to handle the specifics of data preparation,
@@ -113,15 +131,15 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
     This decorator should be placed AFTER @set_data_protection_level.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
 
             uid = bound_args.arguments.get('uid')
-            original_data = bound_args.arguments.get(data_arg_name)
+            original_data: Any = bound_args.arguments.get(data_arg_name)
 
             if not uid:
                 raise TypeError(
@@ -132,29 +150,42 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
                 func(*args, **kwargs)
                 return original_data
 
-            prepared_data = original_data
+            prepared_data: Any = cast(Any, original_data)
 
             if isinstance(original_data, dict):
-                prepared_data = prepare_func(original_data, uid, original_data.get('data_protection_level', 'standard'))
-            elif isinstance(original_data, list):
-                if original_data and isinstance(original_data[0], dict):
-                    prepared_data = [
-                        prepare_func(item, uid, item.get('data_protection_level', 'standard')) for item in original_data
-                    ]
+                data_dict: Dict[str, Any] = cast(Dict[str, Any], original_data)
+                level_value = data_dict.get('data_protection_level', 'standard')
+                prepared_data = prepare_func(
+                    data_dict, uid, str(level_value) if level_value is not None else 'standard'
+                )
+            else:
+                items: List[Any] = cast(List[Any], original_data)
+                if items and isinstance(items[0], dict):
+                    prepared_list: List[Dict[str, Any]] = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            item_dict = cast(Dict[str, Any], item)
+                            level_value = item_dict.get('data_protection_level', 'standard')
+                            prepared_list.append(
+                                prepare_func(
+                                    item_dict, uid, str(level_value) if level_value is not None else 'standard'
+                                )
+                            )
+                    prepared_data = prepared_list
 
             # Modify the bound arguments with the prepared data and reconstruct the call
             bound_args.arguments[data_arg_name] = prepared_data
             func(*bound_args.args, **bound_args.kwargs)
 
             # Return the original, unmodified data from the initial call
-            return original_data
+            return cast(Any, original_data)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]):
+def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]) -> Callable[[F], F]:
     """
     Decorator to decrypt data after reading from the database.
     It processes the return value of the decorated function. If the return value is a dict or
@@ -163,9 +194,9 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
     Assumes 'uid' is an argument to the decorated function to be used for decryption.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
@@ -178,44 +209,46 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
             if result is None:
                 return None
 
-            def _process(item):
+            def _process(item: Any) -> Any:
                 if isinstance(item, dict):
                     # The decrypt_func is responsible for checking the level and acting accordingly
-                    return decrypt_func(item, uid)
+                    return decrypt_func(cast(Dict[str, Any], item), uid)
                 return item
 
             if isinstance(result, dict):
                 return _process(result)
             elif isinstance(result, list):
-                return [_process(item) for item in result]
+                items: List[Any] = cast(List[Any], result)
+                return [_process(item) for item in items]
             elif isinstance(result, tuple):
                 # Handle functions that return a tuple, e.g., (data, doc_id)
-                processed_elements = []
-                for element in result:
+                elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
+                processed_elements: List[Any] = []
+                for element in elements:
                     if isinstance(element, dict):
                         processed_elements.append(_process(element))
                     elif isinstance(element, list):
-                        processed_elements.append([_process(item) for item in element])
+                        processed_elements.append([_process(item) for item in cast(List[Any], element)])
                     else:
                         processed_elements.append(element)
                 return tuple(processed_elements)
             return result
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def with_photos(photos_getter: Callable):
+def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
     """
     Decorator to automatically populate the 'photos' field for a conversation or a list of conversations.
     It fetches documents from the 'photos' sub-collection and attaches them using the provided getter.
     This should be applied to functions that return conversation dicts and have a 'uid' parameter.
     """
 
-    def decorator(func):
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
@@ -230,37 +263,41 @@ def with_photos(photos_getter: Callable):
             if result is None:
                 return None
 
-            def _fetch_and_attach_photos(conversation_data):
+            def _fetch_and_attach_photos(conversation_data: Any) -> Any:
                 if not isinstance(conversation_data, dict) or 'id' not in conversation_data:
-                    return conversation_data
+                    return cast(Any, conversation_data)
+
+                data_dict: Dict[str, Any] = cast(Dict[str, Any], conversation_data)
 
                 # If photos are already present and not empty, don't overwrite.
                 # This handles cases where photos are added in-memory before DB retrieval.
-                if conversation_data.get('photos'):
-                    return conversation_data
+                if data_dict.get('photos'):
+                    return data_dict
 
-                conversation_id = conversation_data['id']
+                conversation_id = data_dict['id']
                 photos = photos_getter(uid=uid, conversation_id=conversation_id)
-                conversation_data['photos'] = photos
-                return conversation_data
+                data_dict['photos'] = photos
+                return data_dict
 
             if isinstance(result, dict):
                 return _fetch_and_attach_photos(result)
             elif isinstance(result, list):
-                return [_fetch_and_attach_photos(item) for item in result]
+                items: List[Any] = cast(List[Any], result)
+                return [_fetch_and_attach_photos(item) for item in items]
             elif isinstance(result, tuple):
-                processed_elements = []
-                for element in result:
+                elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
+                processed_elements: List[Any] = []
+                for element in elements:
                     if isinstance(element, dict):
                         processed_elements.append(_fetch_and_attach_photos(element))
                     elif isinstance(element, list):
-                        processed_elements.append([_fetch_and_attach_photos(item) for item in element])
+                        processed_elements.append([_fetch_and_attach_photos(item) for item in cast(List[Any], element)])
                     else:
                         processed_elements.append(element)
                 return tuple(processed_elements)
 
             return result
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator

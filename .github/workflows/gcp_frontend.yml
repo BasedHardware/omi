@@ -56,9 +56,9 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
             --build-arg API_URL=${{ secrets.API_URL }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG -f web/frontend/Dockerfile .
+            -t "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" -f web/frontend/Dockerfile .
             
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG
+          docker push "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}"
           echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         id: deploy
@@ -69,6 +69,15 @@ jobs:
           image: ${{ env.IMAGE }}
           secrets: |
             OPENAI_API_KEY=OPENAI_API_KEY:latest
+
+      - name: Verify Cloud Run rollout
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service ${{ env.SERVICE }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

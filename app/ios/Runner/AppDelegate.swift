@@ -92,6 +92,7 @@ final class QuickActionsIconPatcher: NSObject {
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
+    var rayBanMetaHostApi: RayBanMetaHostApiImpl?
   private var audioChunks: [Int: (Data, Double)] = [:] // (audioData, sampleRate)
   private var nextExpectedChunkIndex: Int = 0
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
@@ -127,6 +128,16 @@ final class QuickActionsIconPatcher: NSObject {
           NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
       } else {
           NSLog("[OmiBle] ERROR: Could not get FlutterBinaryMessenger")
+      }
+
+      // Ray-Ban Meta (Meta Wearables DAT camera + Bluetooth HFP mic) — Pigeon APIs.
+      // Registered unconditionally; the impl reports availability mode based on
+      // whether the DAT SDK is linked into this build.
+      if let messenger = (window?.rootViewController as? FlutterViewController)?.binaryMessenger {
+          let rayBanFlutterApi = RayBanMetaFlutterAPI(binaryMessenger: messenger)
+          let rayBanApi = RayBanMetaHostApiImpl(flutterAPI: rayBanFlutterApi)
+          rayBanMetaHostApi = rayBanApi
+          RayBanMetaHostAPISetup.setUp(binaryMessenger: messenger, api: rayBanApi)
       }
 
       // Retrieve the link from parameters
@@ -258,6 +269,19 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Meta AI app calls back into this app to finish Ray-Ban Meta registration
+  // (AppLinkURLScheme in the MWDAT Info.plist dictionary).
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    if rayBanMetaHostApi?.handleUrl(url) == true {
+      return true
+    }
+    return super.application(app, open: url, options: options)
   }
 
   private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

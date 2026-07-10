@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Full-width timeline bar with time-based positioning and gap indicators
 struct InteractiveTimelineBar: View {

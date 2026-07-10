@@ -1,0 +1,5 @@
+data: {"id":"chatcmpl-stub-default","object":"chat.completion.chunk","created":0,"model":"omi-stub","choices":[{"index":0,"delta":{"role":"assistant","content":"Hermetic desktop chat stub response."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-stub-default","object":"chat.completion.chunk","created":0,"model":"omi-stub","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]

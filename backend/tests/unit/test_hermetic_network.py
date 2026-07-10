@@ -20,6 +20,20 @@ def test_external_socket_connect_is_blocked():
         sock.close()
 
 
+def test_local_socket_connect_does_not_require_af_unix(monkeypatch):
+    monkeypatch.delattr(socket, 'AF_UNIX', raising=False)
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+
+        client.connect(server.getsockname())
+    finally:
+        client.close()
+        server.close()
+
+
 def test_external_dns_resolution_is_blocked():
     with pytest.raises(BlockedNetworkError):
         socket.getaddrinfo('example.com', 443)

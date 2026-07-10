@@ -6,7 +6,7 @@
 // Issue #6624: Model allowlist, body size limit, request body validation.
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -17,8 +17,10 @@ use std::time::{Duration, Instant};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::AppState;
 
+use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
 use super::rate_limit::{self, RateDecision};
 
 // Allowed Gemini API actions (suffix after model name)
@@ -48,9 +50,9 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// Keep non-streaming upstream calls comfortably below Cloud Run's 300s request
-/// deadline so the proxy owns timeout mapping and logging.
-const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(120);
+/// Keep non-streaming upstream calls below observed Cloud Run request boundaries
+/// so the proxy owns timeout mapping and desktop clients get a retryable error.
+const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
@@ -63,6 +65,10 @@ enum ProxyError {
     UpstreamTimeout,
 }
 
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    crate::routes::response_or_500("gemini_proxy", builder, body)
+}
+
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
         match self {
@@ -73,19 +79,21 @@ impl IntoResponse for ProxyError {
                 let body = rate_limit::rate_limit_error_json(
                     "Resource exhausted: rate limit exceeded. Please try again later.",
                 );
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60")
-                    .body(axum::body::Body::from(body))
-                    .unwrap()
+                response_or_500(
+                    Response::builder()
+                        .status(StatusCode::TOO_MANY_REQUESTS)
+                        .header("content-type", "application/json")
+                        .header("retry-after", "60"),
+                    Body::from(body),
+                )
             }
-            ProxyError::UpstreamTimeout => Response::builder()
-                .status(StatusCode::GATEWAY_TIMEOUT)
-                .header("content-type", "application/json")
-                .header("retry-after", "30")
-                .body(axum::body::Body::from(upstream_timeout_json()))
-                .unwrap(),
+            ProxyError::UpstreamTimeout => response_or_500(
+                Response::builder()
+                    .status(StatusCode::GATEWAY_TIMEOUT)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "30"),
+                Body::from(upstream_timeout_json()),
+            ),
         }
     }
 }
@@ -129,12 +137,70 @@ fn duration_bucket(elapsed: Duration) -> &'static str {
     }
 }
 
+fn log_upstream_result(
+    provider: &str,
+    model: &str,
+    action: &str,
+    payload_bucket: &str,
+    started: Instant,
+    phase: &str,
+    status: &str,
+) {
+    tracing::info!(
+        "gemini_proxy: upstream_result provider={} model={} action={} payload_bucket={} duration_bucket={} phase={} status={}",
+        provider,
+        model,
+        action,
+        payload_bucket,
+        duration_bucket(started.elapsed()),
+        phase,
+        status
+    );
+}
+
 fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
     let error = error.without_url();
     if error.is_timeout() {
         tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
         ProxyError::UpstreamTimeout
     } else {
+        tracing::error!("gemini_proxy: {} failed: {}", operation, error);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    }
+}
+
+fn map_upstream_error_with_context(
+    error: reqwest::Error,
+    operation: &str,
+    provider: &str,
+    model: &str,
+    action: &str,
+    payload_bucket: &str,
+    started: Instant,
+) -> ProxyError {
+    let error = error.without_url();
+    if error.is_timeout() {
+        log_upstream_result(
+            provider,
+            model,
+            action,
+            payload_bucket,
+            started,
+            operation,
+            "timeout",
+        );
+        tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
+        ProxyError::UpstreamTimeout
+    } else {
+        log_upstream_result(
+            provider,
+            model,
+            action,
+            payload_bucket,
+            started,
+            operation,
+            "transport_error",
+        );
         tracing::error!("gemini_proxy: {} failed: {}", operation, error);
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     }
@@ -158,6 +224,10 @@ async fn gemini_proxy(
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
+
     if !is_gemini_action_allowed(action) {
         tracing::warn!(
             "gemini_proxy: blocked action '{}' in path '{}'",
@@ -203,6 +273,13 @@ async fn gemini_proxy(
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
         if effective_path != path {
+            record_fallback(
+                "gemini_proxy",
+                bucket_gemini_tier(model),
+                bucket_gemini_tier(extract_gemini_model(&effective_path)),
+                "quota",
+                FallbackOutcome::Degraded,
+            );
             tracing::info!(
                 "gemini_proxy: degraded uid={} {} -> {}",
                 user.uid,
@@ -212,15 +289,9 @@ async fn gemini_proxy(
         }
 
         // Non-BYOK path: use server key with Vertex AI / AI Studio routing
-        let response = gemini_proxy_server_key(
-            &state,
-            &user,
-            &effective_path,
-            action,
-            model,
-            &sanitized_body,
-        )
-        .await?;
+        let response =
+            gemini_proxy_server_key(&state, &effective_path, action, model, &sanitized_body)
+                .await?;
         if response.status().is_success() {
             tracing::info!(
                 "gemini_proxy: forwarded uid={} path={}",
@@ -235,7 +306,13 @@ async fn gemini_proxy(
     // Vertex AI requires our service account — can't mix with user's API key.
     // Skip Vertex-specific transforms (embedContent→predict) since AI Studio
     // handles embedContent natively.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`, but return 500 instead of panicking if
+    // the invariant ever breaks (e.g. under refactor) so a request can't drop the
+    // connection with no response.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
     let url = build_gemini_url(&path, byok_key);
@@ -248,22 +325,39 @@ async fn gemini_proxy(
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream request"))?;
+        .map_err(|e| {
+            map_upstream_error_with_context(
+                e,
+                "request",
+                "ai_studio_byok",
+                model,
+                action,
+                request_payload_bucket,
+                started,
+            )
+        })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| map_upstream_error(e, "BYOK upstream body read"))?;
-    tracing::info!(
-        "gemini_proxy: upstream_result uid={} provider=ai_studio_byok model={} action={} payload_bucket={} duration_bucket={} status={}",
-        user.uid,
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            "ai_studio_byok",
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
+    log_upstream_result(
+        "ai_studio_byok",
         model,
         action,
         request_payload_bucket,
-        duration_bucket(started.elapsed()),
-        status.as_u16()
+        started,
+        "complete",
+        &status.as_u16().to_string(),
     );
 
     Ok((status, bytes).into_response())
@@ -273,7 +367,6 @@ async fn gemini_proxy(
 /// rate limiting, model degradation, and body transforms.
 async fn gemini_proxy_server_key(
     state: &AppState,
-    user: &AuthUser,
     effective_path: &str,
     action: &str,
     model: &str,
@@ -390,23 +483,39 @@ async fn gemini_proxy_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| map_upstream_error(e, "upstream request"))?;
+    let upstream = upstream.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "request",
+            upstream_provider,
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream
-        .bytes()
-        .await
-        .map_err(|e| map_upstream_error(e, "upstream body read"))?;
-    tracing::info!(
-        "gemini_proxy: upstream_result uid={} provider={} model={} action={} payload_bucket={} duration_bucket={} status={}",
-        user.uid,
+    let bytes = upstream.bytes().await.map_err(|e| {
+        map_upstream_error_with_context(
+            e,
+            "body_read",
+            upstream_provider,
+            model,
+            action,
+            request_payload_bucket,
+            started,
+        )
+    })?;
+    log_upstream_result(
         upstream_provider,
         model,
         action,
         request_payload_bucket,
-        duration_bucket(started.elapsed()),
-        status.as_u16()
+        started,
+        "complete",
+        &status.as_u16().to_string(),
     );
 
     // Apply response transform if needed (e.g., Vertex predict → AI Studio embed format)
@@ -445,6 +554,9 @@ async fn gemini_stream_proxy(
 
     // Validate the action
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
     if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
         return Err(ProxyError::Status(StatusCode::FORBIDDEN));
@@ -486,6 +598,13 @@ async fn gemini_stream_proxy(
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
         if effective_path != path {
+            record_fallback(
+                "gemini_stream_proxy",
+                bucket_gemini_tier(model),
+                bucket_gemini_tier(extract_gemini_model(&effective_path)),
+                "quota",
+                FallbackOutcome::Degraded,
+            );
             tracing::info!(
                 "gemini_stream_proxy: degraded uid={} {} -> {}",
                 user.uid,
@@ -515,7 +634,12 @@ async fn gemini_stream_proxy(
     }
 
     // BYOK path: always use AI Studio with user's key, skip Vertex AI.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`; return 500 rather than panic if the
+    // invariant ever breaks under refactor.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_stream_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!(
         "gemini_stream_proxy: using BYOK Gemini key for uid={}",
         user.uid
@@ -535,13 +659,14 @@ async fn gemini_stream_proxy(
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
@@ -646,13 +771,14 @@ async fn gemini_stream_server_key(
 
     // Stream the response body through
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")
@@ -665,6 +791,18 @@ fn extract_gemini_model(path: &str) -> &str {
     path.strip_prefix("models/")
         .and_then(|rest| rest.split(':').next())
         .unwrap_or("")
+}
+
+/// Closed Gemini model tier for fallback telemetry (no free model ID strings).
+fn bucket_gemini_tier(model: &str) -> &'static str {
+    let lower = model.to_ascii_lowercase();
+    if lower.contains("pro") {
+        "pro"
+    } else if lower.contains("flash") {
+        "flash"
+    } else {
+        "other"
+    }
 }
 
 /// Check if a Gemini action is in the allowlist
@@ -959,7 +1097,8 @@ mod tests {
     #[test]
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_UPSTREAM_TIMEOUT);
-        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(300));
+        assert!(GEMINI_UPSTREAM_TIMEOUT <= Duration::from_secs(90));
+        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(120));
     }
 
     #[test]
@@ -1078,6 +1217,13 @@ mod tests {
             extract_gemini_model("models/gemini-embedding-001:embedContent"),
             "gemini-embedding-001"
         );
+    }
+
+    #[test]
+    fn bucket_gemini_tier_maps_pro_and_flash() {
+        assert_eq!(bucket_gemini_tier("gemini-2.5-pro"), "pro");
+        assert_eq!(bucket_gemini_tier("gemini-2.5-flash"), "flash");
+        assert_eq!(bucket_gemini_tier("gemini-embedding-001"), "other");
     }
 
     #[test]

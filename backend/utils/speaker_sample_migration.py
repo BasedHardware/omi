@@ -9,6 +9,8 @@ Provides functions for migrating speaker samples across versions:
 Uses in-process locking to prevent concurrent migrations.
 """
 
+from typing import Any, Dict, List
+
 import asyncio
 
 from google.cloud.exceptions import NotFound
@@ -39,7 +41,7 @@ async def _get_migration_lock(uid: str, person_id: str) -> asyncio.Lock:
         return _migration_locks[key]
 
 
-async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
+async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate person's speech samples from v1 to v2.
 
@@ -81,9 +83,9 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             person['speaker_embedding'] = None
             return person
 
-        valid_samples = []
-        valid_transcripts = []
-        samples_to_delete = []
+        valid_samples: List[Any] = []
+        valid_transcripts: List[Any] = []
+        samples_to_delete: List[Any] = []
         has_transient_failures = False
 
         for sample_path in samples:
@@ -159,7 +161,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
         return person
 
 
-async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
+async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate person's speech samples from v2 to v3.
 
@@ -239,7 +241,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
         return person
 
 
-async def migrate_person_samples_v1_to_v3(uid: str, person: dict) -> dict:
+async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate person's speech samples from v1 to v3.
 
@@ -270,7 +272,7 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: dict) -> dict:
     return await migrate_person_samples_v2_to_v3(uid, person)
 
 
-async def maybe_migrate_person_samples(uid: str, person: dict) -> dict:
+async def maybe_migrate_person_samples(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate person's speech samples to v3 if needed.
 

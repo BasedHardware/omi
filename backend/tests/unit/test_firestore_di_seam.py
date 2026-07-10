@@ -17,6 +17,8 @@ import database.helpers as helpers  # noqa: E402
 import database.memories as memories_db  # noqa: E402
 from fakes.firestore import setup_fake_firestore, teardown_fake_firestore  # noqa: E402
 
+pytestmark = pytest.mark.slow
+
 
 def _subprocess_env() -> dict:
     env = os.environ.copy()

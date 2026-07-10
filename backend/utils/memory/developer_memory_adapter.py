@@ -21,10 +21,12 @@ from utils.memory.default_read_surface import (
     rollout_decision_from_legacy_args,
 )
 
+MemoryPayload = dict[str, Any]
+
 
 @dataclass(frozen=True)
 class DeveloperMemorySearchResult:
-    memories: list[dict]
+    memories: list[MemoryPayload]
     read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
@@ -41,14 +43,14 @@ def _developer_result(result: DefaultReadSearchResult) -> DeveloperMemorySearchR
     )
 
 
-def _developer_category(item: dict) -> str:
+def _developer_category(item: MemoryPayload) -> str:
     category = item.get('category')
     if isinstance(category, str) and category.strip():
         return category
     return 'other'
 
 
-def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
+def _format_developer_memory(item: MemoryPayload, policy: MemoryAccessPolicy) -> MemoryPayload:
     updated_at = parse_default_read_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
     raw_category = item.get('category')
     category_source = (
@@ -88,9 +90,12 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
     }
 
 
-def _attach_developer_vector_score(memory: dict, item: dict, scores_by_memory_id: dict[str, float]) -> dict:
-    memory_id = item['memory_id']
-    memory['relevance_score'] = round(float(scores_by_memory_id.get(memory_id, 0)), 4)
+def _attach_developer_vector_score(
+    memory: MemoryPayload, item: MemoryPayload, scores_by_memory_id: dict[str, float]
+) -> MemoryPayload:
+    memory_id = item.get('memory_id')
+    score = scores_by_memory_id.get(memory_id, 0.0) if isinstance(memory_id, str) else 0.0
+    memory['relevance_score'] = round(float(score), 4)
     memory['vector_search'] = True
     return memory
 
@@ -101,7 +106,7 @@ def search_memory_default_developer_memories(
     query: str = '',
     limit: int,
     offset: int,
-    db_client,
+    db_client: Any,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
@@ -125,7 +130,7 @@ def search_memory_default_developer_memories(
         app_has_default_memory_grant=app_has_default_memory_grant,
     )
 
-    def _category_filter(memory: dict) -> bool:
+    def _category_filter(memory: MemoryPayload) -> bool:
         if not categories:
             return True
         allowed_categories = {category for category in categories if category}
@@ -152,7 +157,7 @@ def search_memory_default_developer_memories_vector(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
@@ -189,7 +194,3 @@ def search_memory_default_developer_memories_vector(
             score_attacher=_attach_developer_vector_score,
         )
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-DeveloperMemorySearchResult = DeveloperMemorySearchResult

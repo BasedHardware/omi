@@ -535,7 +535,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final ringStatus = await connection.getRingStatus();
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
-            'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)');
+          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+        );
         onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
         return;
       }
@@ -610,6 +611,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _isOmiGlassDevice {
     if (pairedDevice == null) return false;
     if (pairedDevice!.type == DeviceType.openglass) return true;
+    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
+    // contain 'glasses' but its firmware is managed by the Meta AI app.
+    if (pairedDevice!.type != DeviceType.omi) return false;
     final name = pairedDevice!.name.toLowerCase();
     return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
   }
