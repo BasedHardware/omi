@@ -98,7 +98,7 @@ final class PTTBarPresenter {
     if shouldExpandForVoice != wasExpandedForVoice,
       !barState.isVoiceFollowUp,
       !barState.showingAIConversation,
-      UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+      UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
     {
       FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
     }

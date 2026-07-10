@@ -35,6 +35,7 @@ enum DefaultsKey: String {
     case chatBridgeMode = "chatBridgeMode"
     case multiChatEnabled = "multiChatEnabled"
     case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+    case hasCompletedOnboarding = "hasCompletedOnboarding"
     case onboardingStep = "onboardingStep"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
 }
