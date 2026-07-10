@@ -739,6 +739,80 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     XCTAssertFalse(floatingState.contains("@Published var chatHistory"))
   }
+
+  /// INV-6 single ChatProvider lifecycle — only ViewModelContainer may construct production instances.
+  func testProductionSourcesOnlyConstructChatProviderInViewModelContainer() throws {
+    let violations = try productionChatProviderConstructorViolations()
+    XCTAssertTrue(
+      violations.isEmpty,
+      """
+      Production Sources must not call ChatProvider() outside ViewModelContainer \
+      (SwiftUI #Preview blocks and ViewExporter are excluded).
+      Violations:
+      \(violations.sorted().joined(separator: "\n"))
+      """
+    )
+
+    let schedulerSource = try String(
+      contentsOf: sourcesRoot().appendingPathComponent("Services/RecurringTaskScheduler.swift"),
+      encoding: .utf8
+    )
+    XCTAssertTrue(schedulerSource.contains("configure(taskChatCoordinator:"))
+    XCTAssertFalse(
+      schedulerSource.contains("ChatProvider()"),
+      "RecurringTaskScheduler must reuse the shared TaskChatCoordinator"
+    )
+  }
+
+  private func sourcesRoot() -> URL {
+    URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+  }
+
+  private func productionChatProviderConstructorViolations() throws -> [String] {
+    let allowedFiles: Set<String> = [
+      "ViewModelContainer.swift",
+      "ViewExporter.swift",
+    ]
+    let root = sourcesRoot()
+    let paths = try FileManager.default.subpathsOfDirectory(atPath: root.path)
+      .filter { $0.hasSuffix(".swift") }
+      .sorted()
+
+    var violations: [String] = []
+    for path in paths {
+      let fileName = (path as NSString).lastPathComponent
+      if allowedFiles.contains(fileName) {
+        continue
+      }
+
+      let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+      var inPreviewOnlyBlock = false
+      var previewDepth = 0
+
+      for (index, line) in text.components(separatedBy: .newlines).enumerated() {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("#if canImport(PreviewsMacros)") {
+          previewDepth += 1
+        }
+        if previewDepth > 0 {
+          inPreviewOnlyBlock = true
+        }
+        if trimmed.hasPrefix("#endif") {
+          previewDepth = max(0, previewDepth - 1)
+          if previewDepth == 0 {
+            inPreviewOnlyBlock = false
+          }
+        }
+
+        guard line.contains("ChatProvider()"), !inPreviewOnlyBlock else { continue }
+        violations.append("\(path):\(index + 1): \(trimmed)")
+      }
+    }
+    return violations
+  }
 }
 
 private extension Array where Element == ChatContentBlock {

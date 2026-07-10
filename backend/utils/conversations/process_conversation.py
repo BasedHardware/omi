@@ -475,9 +475,8 @@ def _extract_memories(uid: str, conversation: Conversation) -> None:
 
 
 def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
-    """Canonical-cohort extraction: retract-then-write to memory_items only (Q1/Q7)."""
+    """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
     memory_service = MemoryService(db_client=db_client)
-    memory_service.retract_conversation_memories(uid, conversation.id)
 
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
@@ -525,6 +524,8 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
         return
 
+    memory_service.retract_conversation_memories(uid, conversation.id)
+
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
     for memory_db_obj in parsed_memories:
         memory_service.write(uid, memory_db_obj.model_dump(mode="json"))
@@ -543,11 +544,6 @@ def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
 
 
 def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
-    # Also get the IDs to delete from Pinecone
-    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
-    for memory_id in deletion_result.get('vector_delete_ids', []):
-        delete_memory_vector(uid, memory_id)
-
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
@@ -655,6 +651,11 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
     if len(parsed_memories) == 0:
         logger.info(f"No memories extracted for conversation {conversation.id}")
         return
+
+    # Replace conversation-scoped memories only after extraction succeeds.
+    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
+    for memory_id in deletion_result.get('vector_delete_ids', []):
+        delete_memory_vector(uid, memory_id)
 
     logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])

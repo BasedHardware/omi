@@ -2278,7 +2278,8 @@ final class DesktopAutomationActionRegistry {
       guard let appState = AppState.current else {
         return ["error": "app state unavailable"]
       }
-      try await appState.conversationRepository.setStarred(id: resolvedConversationId, starred: starred)
+      try await appState.conversationRepository.setStarred(
+        id: resolvedConversationId, starred: starred)
       return [
         "conversation_id": resolvedConversationId,
         "starred": starred ? "true" : "false",

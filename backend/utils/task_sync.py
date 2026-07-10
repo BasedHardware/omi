@@ -7,6 +7,7 @@ import database.users as users_db
 import database.action_items as action_items_db
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_apple_reminders_sync_push
+from utils.task_integrations_ops import create_task_internal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,11 +55,9 @@ async def auto_sync_action_item(
 async def _sync_to_cloud_service(
     uid: str, app_key: str, integration: Dict[str, Any], action_item: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Create task in external service using existing task_integrations logic."""
-    from routers.task_integrations import _create_task_internal  # type: ignore[reportPrivateUsage]  # internal helper reused across modules
-
+    """Create task in external service using shared task integration ops."""
     async with httpx.AsyncClient(timeout=10.0) as client:
-        result = await _create_task_internal(
+        result = await create_task_internal(
             uid=uid,
             app_key=app_key,
             integration=integration,

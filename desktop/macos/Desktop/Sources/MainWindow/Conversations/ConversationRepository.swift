@@ -434,6 +434,7 @@ final class ConversationRepository {
     }
 
     try ensureCurrentSession(session)
+    try Task.checkCancellation()
     try await remote.delete(id: id)
     try ensureCurrentSession(session)
     try? await local.delete(id: id, scope: cacheWriteScope, generation: session)
@@ -485,7 +486,6 @@ final class ConversationRepository {
       try Task.checkCancellation()
       try ensureCurrentSession(session)
       let canonical = try await remotely()
-      try Task.checkCancellation()
       try ensureCurrentSession(session)
       updateMutationBaseline(id: id, canonical: canonical)
       _ = clearPendingField(id: id, operation: operation)

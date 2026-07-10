@@ -484,6 +484,55 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.conversations, [firstCanonical])
   }
 
+  func testSuccessfulMutationCommitsCanonicalStateDespiteCallerCancellationAfterRemote() async throws {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let canonical = makeConversation(title: "Applied", revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+
+    let task = Task { try await repository.updateTitle(id: initial.id, title: "Applied") }
+    await suspendedTitles.waitUntilRequested("Applied")
+    await suspendedTitles.resume("Applied", with: .success(canonical))
+    task.cancel()
+
+    _ = try? await task.value
+    XCTAssertEqual(repository.conversations, [canonical])
+  }
+
+  func testDeleteCancelledWhileQueuedDoesNotCallRemote() async throws {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let firstCanonical = makeConversation(title: "First", revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let suspendedDeletes = SuspendedVoidResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    remote.deleteHandler = { id in try await suspendedDeletes.result(for: id) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+
+    let titleTask = Task { try await repository.updateTitle(id: initial.id, title: "First") }
+    await suspendedTitles.waitUntilRequested("First")
+    let deleteTask = Task { try await repository.delete(id: initial.id) }
+    deleteTask.cancel()
+
+    await suspendedTitles.resume("First", with: .success(firstCanonical))
+    try await titleTask.value
+    do {
+      try await deleteTask.value
+      XCTFail("Expected queued delete cancellation")
+    } catch is CancellationError {
+      // Expected.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+
+    XCTAssertTrue(remote.deletedIds.isEmpty)
+    XCTAssertEqual(repository.conversations, [firstCanonical])
+  }
+
   func testOlderCanonicalResponseCannotRegressNewerVisibleRevision() async throws {
     let current = makeConversation(title: "Current", revision: 5)
     let staleMutationResponse = makeConversation(title: "Stale", revision: 4)
