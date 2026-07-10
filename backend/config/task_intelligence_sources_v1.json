@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "issue": 9352,
+  "sources": [
+    {
+      "id": "mobile_manual",
+      "policy_class": "direct_command",
+      "owner_paths": [
+        "app/lib/providers/action_items_provider.dart",
+        "app/lib/backend/http/api/action_items.dart",
+        "app/lib/pages/action_items/action_items_page.dart",
+        "app/lib/pages/action_items/services/action_item_export_service.dart",
+        "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
+        "app/lib/pages/action_items/widgets/action_item_tile_widget.dart",
+        "app/lib/pages/conversation_detail/widgets.dart",
+        "app/lib/pages/conversations/widgets/goals_widget.dart",
+        "backend/routers/action_items.py"
+      ],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.delete_action_item", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.delete_action_items_batch", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.mark_action_item_completed", "discover": true},
+        {"path": "backend/routers/action_items.py", "symbol": "action_items_db.update_action_item", "discover": true}
+      ]
+    },
+    {
+      "id": "desktop_manual",
+      "policy_class": "direct_command",
+      "owner_paths": [
+        "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/APIClient.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
+        "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift",
+        "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
+        "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift"
+      ],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": []
+    },
+    {
+      "id": "chat_voice_tools",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/utils/retrieval/tool_services/action_items.py", "backend/utils/retrieval/tools/action_item_tools.py", "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/utils/retrieval/tool_services/action_items.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/utils/retrieval/tool_services/action_items.py", "symbol": "action_items_db.update_action_item", "discover": true},
+        {"path": "backend/utils/retrieval/tools/action_item_tools.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/utils/retrieval/tools/action_item_tools.py", "symbol": "action_items_db.update_action_item", "discover": true}
+      ]
+    },
+    {
+      "id": "mcp_tools",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/utils/mcp_action_items.py", "backend/routers/mcp.py", "backend/routers/mcp_sse.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/utils/mcp_action_items.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/utils/mcp_action_items.py", "symbol": "action_items_db.delete_action_item", "discover": true},
+        {"path": "backend/utils/mcp_action_items.py", "symbol": "action_items_db.mark_action_item_completed", "discover": true},
+        {"path": "backend/utils/mcp_action_items.py", "symbol": "action_items_db.update_action_item", "discover": true}
+      ]
+    },
+    {
+      "id": "developer_api",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/routers/developer.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/routers/developer.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "action_items_db.delete_action_item", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "action_items_db.update_action_item", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "goals_db.create_goal", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "goals_db.delete_goal", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "goals_db.update_goal", "discover": true},
+        {"path": "backend/routers/developer.py", "symbol": "goals_db.update_goal_progress", "discover": true}
+      ]
+    },
+    {
+      "id": "backend_conversation_extraction",
+      "policy_class": "shared_capture_policy",
+      "owner_paths": ["backend/utils/conversations/process_conversation.py", "backend/utils/conversations/merge_conversations.py", "backend/routers/conversations.py"],
+      "test_adapter": "transcript_capture_v1",
+      "writer_anchors": [
+        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
+        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
+        {"path": "backend/utils/conversations/merge_conversations.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
+        {"path": "backend/routers/conversations.py", "symbol": "action_items_db.delete_action_item", "discover": true},
+        {"path": "backend/routers/conversations.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
+        {"path": "backend/routers/conversations.py", "symbol": "action_items_db.mark_action_item_completed", "discover": true},
+        {"path": "backend/routers/conversations.py", "symbol": "action_items_db.update_action_item", "discover": true}
+      ]
+    },
+    {
+      "id": "desktop_screen_extraction",
+      "policy_class": "shared_capture_policy",
+      "owner_paths": ["desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift"],
+      "test_adapter": "screen_capture_v1",
+      "writer_anchors": []
+    },
+    {
+      "id": "sharing_imports",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/routers/action_items.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": []
+    },
+    {
+      "id": "recurrence",
+      "policy_class": "direct_command",
+      "owner_paths": ["desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": []
+    },
+    {
+      "id": "integrations",
+      "policy_class": "direct_command",
+      "owner_paths": [
+        "backend/routers/task_integrations.py",
+        "backend/utils/task_sync.py",
+        "app/lib/providers/task_integration_provider.dart",
+        "desktop/macos/Desktop/Sources/CalendarReaderService.swift",
+        "desktop/macos/Desktop/Sources/GmailReaderService.swift",
+        "desktop/macos/Desktop/Sources/MemoryExportExecutor.swift"
+      ],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [{"path": "backend/utils/task_sync.py", "symbol": "action_items_db.update_action_item", "discover": true}]
+    },
+    {
+      "id": "goal_manual_api",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/routers/goals.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/routers/goals.py", "symbol": "goals_db.create_goal", "discover": true},
+        {"path": "backend/routers/goals.py", "symbol": "goals_db.delete_goal", "discover": true},
+        {"path": "backend/routers/goals.py", "symbol": "goals_db.update_goal", "discover": true},
+        {"path": "backend/routers/goals.py", "symbol": "goals_db.update_goal_progress", "discover": true}
+      ]
+    },
+    {
+      "id": "goal_ai_progress",
+      "policy_class": "shared_capture_policy",
+      "owner_paths": [
+        "backend/utils/llm/goals.py",
+        "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalsAIService.swift"
+      ],
+      "test_adapter": "transcript_capture_v1",
+      "writer_anchors": [{"path": "backend/utils/llm/goals.py", "symbol": "goals_db.update_goal_progress", "discover": true}]
+    },
+    {
+      "id": "legacy_staged_promotion",
+      "policy_class": "compatibility_migration",
+      "owner_paths": ["backend/database/staged_tasks.py", "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPromotionService.swift"],
+      "test_adapter": "legacy_reconciliation_contract",
+      "writer_anchors": [
+        {"path": "backend/database/staged_tasks.py", "symbol": "action_items_db.create_action_item", "discover": true},
+        {"path": "backend/database/staged_tasks.py", "symbol": "action_items_db.update_action_item", "discover": true}
+      ]
+    }
+  ]
+}
