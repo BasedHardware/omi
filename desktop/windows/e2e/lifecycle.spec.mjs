@@ -39,7 +39,13 @@ async function launch(userDataDir, extraArgs = []) {
 test('single instance, tray, close-hides-to-tray, and app:quit really quits', async (t) => {
   const dir = tempUserDataDir()
   const app = await launch(dir)
-  t.after(() => {
+  t.after(async () => {
+    // If an assertion failed before app:quit ran, don't leak the instance.
+    try {
+      await app.close()
+    } catch {
+      /* already closed */
+    }
     try {
       rmSync(dir, { recursive: true, force: true })
     } catch {
@@ -74,9 +80,12 @@ test('single instance, tray, close-hides-to-tray, and app:quit really quits', as
   // First app is still alive (has windows).
   assert.ok((await app.windows()).length >= 1, 'first instance should still be alive')
 
-  // (c) Closing the main window hides it (does NOT quit, does NOT destroy).
+  // (c) Closing the MAIN window hides it (does NOT quit, does NOT destroy).
+  // Target it by id from the E2E hook — getAllWindows() also returns the insight
+  // toast window, whose close is NOT intercepted (that one really destroys).
   const afterClose = await app.evaluate(async ({ BrowserWindow }) => {
-    const win = BrowserWindow.getAllWindows().find((w) => !w.getParentWindow())
+    const hook = globalThis.__omiE2E
+    const win = BrowserWindow.fromId(hook.mainWindowId)
     win.close()
     // Give the synchronous 'close' handler a tick.
     await new Promise((r) => setTimeout(r, 200))

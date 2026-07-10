@@ -484,6 +484,9 @@ app.whenReady().then(async () => {
   if (process.env.OMI_E2E === '1') {
     ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
       trayCreated: true,
+      // The harness must target the MAIN window — getAllWindows() also returns
+      // the insight toast / overlay, which have different close semantics.
+      mainWindowId: mainWindow.id,
       isQuitting: () => isQuitting()
     }
   }
