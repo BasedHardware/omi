@@ -325,6 +325,15 @@ function stopSession(sessionId: string): void {
   if (s) killSession(sessionId, s, 'stop')
 }
 
+/** Close every session owned by a webContents that no longer exists — a crashed
+ * capture window leaves its sessions' WebSockets lingering until server timeout
+ * otherwise. Called by captureWindow on respawn. */
+export function killSessionsForOwner(ownerId: number): void {
+  for (const [id, s] of sessions) {
+    if (s.ownerId === ownerId) killSession(id, s, `owner ${ownerId} gone`)
+  }
+}
+
 export function registerOmiListenHandlers(): void {
   // Expose the byte counters to the E2E harnesses (VAD-playback / soak) so a
   // Playwright electronApp.evaluate can read them from the main process. Gated on

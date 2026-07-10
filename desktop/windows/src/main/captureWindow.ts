@@ -11,14 +11,14 @@ import { is } from '@electron-toolkit/utils'
 import { rendererBaseUrl } from './rendererServer'
 import { isQuitting } from './lifecycle'
 import { emitCaptureEventFromMain } from './ipc/captureBridge'
+import { killSessionsForOwner } from './ipc/omiListen'
 
 let captureWindow: BrowserWindow | null = null
 // Timestamps of recent (re)spawns, used to bound the crash-loop respawn rate.
 let spawnTimes: number[] = []
-// The capture window's first load is startup, not a recreate/reload — only
-// LATER loads (crash reload, or a recreated window) should tell UI windows to
-// re-issue their standing capture commands.
-let firstEverLoad = true
+// Whether any capture window has been created yet this process (the FIRST
+// window's initial load is startup; everything after signals a restart).
+let firstWindowCreated = false
 
 const RESPAWN_WINDOW_MS = 60_000
 const RESPAWN_MAX = 3
@@ -70,6 +70,9 @@ export function createCaptureWindow(): BrowserWindow {
     const wasCapture = captureWindow === win
     captureWindow = null
     if (!wasCapture || isQuitting()) return
+    // The dead window's listen sessions would otherwise linger as open
+    // WebSockets in the main process until server timeout.
+    killSessionsForOwner(win.webContents.id)
     const now = Date.now()
     const { allow, times } = decideRespawn(spawnTimes, now)
     if (!allow) {
@@ -86,12 +89,18 @@ export function createCaptureWindow(): BrowserWindow {
     }, RESPAWN_DELAY_MS)
   })
 
-  // On every load AFTER the first-ever one (crash reload, or a freshly recreated
-  // window), tell UI windows the capture window restarted so they re-issue their
-  // standing commands (live-view, screen-view). An in-flight PTT is abandoned.
+  // On every load AFTER the first-ever WINDOW's initial load attempt (crash
+  // reload, or a freshly recreated window), tell UI windows the capture window
+  // restarted so they re-issue their standing commands (live-view, screen-view,
+  // audio-start). Keyed to the first WINDOW, not the first successful load —
+  // if the very first load fails and a respawn recovers it, consumers still
+  // deserve the signal.
+  const isFirstWindow = !firstWindowCreated
+  firstWindowCreated = true
+  let announcedFirstLoad = false
   win.webContents.on('did-finish-load', () => {
-    if (firstEverLoad) {
-      firstEverLoad = false
+    if (isFirstWindow && !announcedFirstLoad) {
+      announcedFirstLoad = true
       return
     }
     emitCaptureEventFromMain({ type: 'capture-window-restarted' }, win.webContents.id)

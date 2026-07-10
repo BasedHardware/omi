@@ -145,6 +145,24 @@ describe('startOmiListen', () => {
     expect(cb.onError).not.toHaveBeenCalled()
   })
 
+  it('re-issues audio-start when the capture window restarts (frozen-transcript regression)', async () => {
+    await startOmiListen('mic', callbacks())
+    const sessionId = startedSessionId()
+    const startsBefore = bridge.commands.filter((c) => c.type === 'audio-start').length
+    emitEvent({ type: 'capture-window-restarted' })
+    const starts = bridge.commands.filter((c) => c.type === 'audio-start')
+    expect(starts.length).toBe(startsBefore + 1)
+    expect(starts[starts.length - 1]).toMatchObject({ type: 'audio-start', sessionId, source: 'mic' })
+  })
+
+  it('does NOT re-issue audio-start after stop()', async () => {
+    const session = await startOmiListen('mic', callbacks())
+    session.stop()
+    const startsBefore = bridge.commands.filter((c) => c.type === 'audio-start').length
+    emitEvent({ type: 'capture-window-restarted' })
+    expect(bridge.commands.filter((c) => c.type === 'audio-start').length).toBe(startsBefore)
+  })
+
   it('stop() tears down: audio-stop, listenStop, and no further callbacks', async () => {
     const cb = callbacks()
     const handle = await startOmiListen('mic', cb)

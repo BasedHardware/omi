@@ -81,8 +81,16 @@ export async function startOmiListen(
   // dead/blocked mic, no loopback track) arrives as a routed audio-source-error
   // for our sessionId — surface it as a fatal source failure.
   const unsubCapture = window.omi.onCaptureEvent((ev) => {
-    if (ev.type !== 'audio-source-error' || ev.sessionId !== sessionId) return
     if (stopped) return
+    // The capture window crashed and respawned: its session map is empty, so the
+    // still-open WebSocket would silently starve (frozen transcript, no error).
+    // Re-issue audio-start — AudioSessionHost re-acquires the source and resumes
+    // feeding this session. One seam covers every startOmiListen consumer.
+    if (ev.type === 'capture-window-restarted') {
+      window.omi.captureCommand({ type: 'audio-start', sessionId, source })
+      return
+    }
+    if (ev.type !== 'audio-source-error' || ev.sessionId !== sessionId) return
     cb.onError(new Error(ev.message || 'audio source failed'), true)
   })
 
