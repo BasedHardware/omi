@@ -58,3 +58,11 @@ npm run build:linux
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
 the config is compiled into the binary.
+
+## Conversation sync
+
+Screen-session (mic + system audio) recordings sync to the Omi cloud via
+`POST /v1/conversations/from-segments` with a client-owned outbox (offline
+retry, duplicate-safe). Design, outbox semantics, and the live E2E harness
+(`pnpm test:e2e:conv-sync`) are documented in
+[docs/conversation-sync.md](docs/conversation-sync.md).
