@@ -54,7 +54,11 @@ function readDotEnv(): Record<string, string> {
   return out
 }
 const dotEnv = readDotEnv()
-const DIRECT_TOKEN = process.env.OMI_E2E_TOKEN ?? dotEnv.OMI_E2E_TOKEN ?? ''
+// Explicit opt-in comes from the PROCESS env only (OMI_E2E_TOKEN or OMI_E2E=1 via
+// `pnpm test:e2e:ptt`) — never from .env alone. A stored refresh token must not
+// silently turn the hermetic `pnpm test` run into a live network suite.
+const DIRECT_TOKEN = process.env.OMI_E2E_TOKEN ?? ''
+const OPTED_IN = process.env.OMI_E2E === '1' || Boolean(DIRECT_TOKEN)
 const REFRESH_TOKEN =
   process.env.OMI_E2E_REFRESH_TOKEN ??
   dotEnv.OMI_E2E_REFRESH_TOKEN ??
@@ -209,7 +213,7 @@ function recordMetric(name: string, ms: number, budgetMs: number): void {
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
-describe.skipIf(!DIRECT_TOKEN && !REFRESH_TOKEN)('ptt transcription e2e (live api.omi.me)', () => {
+describe.skipIf(!OPTED_IN || (!DIRECT_TOKEN && !REFRESH_TOKEN))('ptt transcription e2e (live api.omi.me)', () => {
   beforeAll(async () => {
     if (!fs.existsSync(path.join(FIXTURE_DIR, 'manifest.json'))) {
       execFileSync('node', [path.resolve(HERE, '../../../scripts/gen-audio-fixtures.mjs')], {
@@ -263,15 +267,24 @@ describe.skipIf(!DIRECT_TOKEN && !REFRESH_TOKEN)('ptt transcription e2e (live ap
     recordMetric('finalize -> first segment', r.finalizeToSegmentMs, 3_000)
   }, 40_000)
 
-  it('stream: release-before-connect (all audio + finalize queued at open)', async () => {
-    const t0 = Date.now()
+  it('stream: burst feed + immediate finalize — documents why release-before-connect batches', async () => {
+    // The OLD design queued all audio + 'finalize' at socket open when the hold
+    // was released mid-handshake. Observed live: this burst shape sometimes
+    // degrades diction ("Health world") or returns NOTHING at all — which is why
+    // the rebuilt client skips the stream lane entirely for a hold released
+    // before connect and batch-POSTs the retained buffer instead. This probe
+    // documents that backend behavior; the only hard assertions are protocol
+    // ones (the socket accepts the shape without erroring).
     const r = await streamSession(fixture('speech-hello.pcm'))
     expect(r.connected).toBe(true)
-    // Burst-fed audio can degrade STT diction slightly (observed: "Health world"
-    // for "Hello world") — the invariant is that a transcript ARRIVES despite
-    // finalize being queued at open, so assert on "world", not "hello".
-    expect(r.segments.join(' ')).toMatch(/world/i)
-    recordMetric('release-before-connect end-to-end', Date.now() - t0, 12_000)
+    console.log(
+      `[ptt-e2e] burst+finalize transcript: ${JSON.stringify(r.segments.join(' '))} (close=${r.closeCode})`
+    )
+    if (!/world/i.test(r.segments.join(' '))) {
+      console.warn(
+        '[ptt-e2e] ⚠ burst+immediate-finalize returned a degraded/empty transcript — validates the batch-on-release-before-connect design'
+      )
+    }
   }, 40_000)
 
   it('batch: 5 rapid-fire sequential requests all succeed', async () => {

@@ -53,10 +53,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
 
   const ptt = usePushToTalk({
     onTranscript: (text) => setDraft(text),
-    onCommit: (text) => {
-      setDraft('')
-      enqueueSend(text)
-    },
+    // The hook clears the draft itself when the ACTIVE capture commits (a
+    // superseded background capture's commit must not wipe a newer hold's text).
+    onCommit: (text) => enqueueSend(text),
     // Fires on every completed hold-Space capture, even when transcription was
     // unavailable (quota/1008) or silent. Drives the onboarding voice step so a
     // no-quota account can finish onboarding instead of being stuck waiting for a
@@ -124,7 +123,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === 'Escape') {
       e.preventDefault()
-      if (ptt.recording || ptt.finalizing) {
+      if (ptt.recording || ptt.transcribing) {
         ptt.cancel()
       } else {
         reset()
@@ -203,7 +202,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             />
             <button
               onClick={submit}
-              disabled={sending || ptt.recording || ptt.finalizing || !draft.trim()}
+              disabled={sending || ptt.recording || ptt.transcribing || !draft.trim()}
               className="rounded-xl bg-neutral-200 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
             >
               Send
@@ -213,7 +212,10 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
           {ptt.recording && (
             // Live capture strip BELOW the input, while holding Space: the waveform
             // animates and the recognized transcript renders into the textarea above.
-            <div className="flex items-center gap-3 rounded-xl bg-neutral-800/50 px-3 py-1.5">
+            <div
+              data-testid="ptt-listening"
+              className="flex items-center gap-3 rounded-xl bg-neutral-800/50 px-3 py-1.5"
+            >
               <span className="shrink-0 text-xs font-medium text-neutral-300">Listening…</span>
               <Waveform analyserRef={ptt.analyserRef} />
               <span className="shrink-0 text-[10px] text-neutral-500">
@@ -222,20 +224,36 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             </div>
           )}
 
-          {!ptt.recording && ptt.finalizing && (
-            // After release we wait for the backend's transcript (connect + finalize,
-            // ~1s). Without a cue the user sees nothing happening and re-holds — which
-            // cancels this in-flight capture. A spinner tells them it's processing.
-            <div className="flex items-center gap-2 rounded-xl bg-neutral-800/50 px-3 py-1.5">
+          {!ptt.recording && ptt.transcribing && (
+            // After release, while the transcript resolves (stream short-circuit or
+            // batch POST — bounded, typically well under 2s). Without a cue the user
+            // sees nothing happening and re-holds.
+            <div
+              data-testid="ptt-transcribing"
+              className="flex items-center gap-2 rounded-xl bg-neutral-800/50 px-3 py-1.5"
+            >
               <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200" />
               <span className="shrink-0 text-xs font-medium text-neutral-300">Transcribing…</span>
               <span className="shrink-0 text-[10px] text-neutral-500">Esc cancels</span>
             </div>
           )}
+
+          {!ptt.recording && !ptt.transcribing && ptt.hint && (
+            // Guidance after a discarded capture ("Hold longer to record") — the
+            // capture already ended, so a rapid re-hold works immediately.
+            <div
+              data-testid="ptt-hint"
+              className="flex items-center gap-2 rounded-xl bg-neutral-800/50 px-3 py-1.5"
+            >
+              <span className="shrink-0 text-xs font-medium text-neutral-300">{ptt.hint}</span>
+            </div>
+          )}
         </div>
 
         {ptt.error && !ptt.recording && (
-          <div className="px-1 text-[11px] text-red-400">Voice: {ptt.error}</div>
+          <div data-testid="ptt-error" className="px-1 text-[11px] text-red-400">
+            Voice: {ptt.error}
+          </div>
         )}
       </div>
     </div>

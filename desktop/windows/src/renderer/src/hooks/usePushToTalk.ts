@@ -1,410 +1,323 @@
 import { useEffect, useRef, useState } from 'react'
-import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
-import type { TranscriptLine } from '../../../shared/types'
+import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
+import { voicedStats } from '../lib/ptt/gate'
+import { startPttCapture, type PttCapture } from '../lib/ptt/capture'
+import { startPttStream, batchTranscribe, batchErrorMessage, type PttStream } from '../lib/ptt/transport'
 import {
   HOLD_THRESHOLD_MS,
-  assembleTranscript,
-  upsertLine,
-  shouldFinalize,
-  type FinalizeConfig
-} from '../components/overlay/pushToTalk'
+  STREAM_FINALIZE_DEADLINE_MS,
+  HINT_MS,
+  TOO_LONG_HINT_MS,
+  ERROR_STRIP_MS,
+  WATCHDOG_MS
+} from '../lib/ptt/constants'
 
-// Releasing Space SEALS the capture — the key is the source of truth for what the
-// message contains. On release the mic is cut (after a ~300ms tail inside
-// omiListenClient so the last syllable isn't clipped), the backend is told to
-// flush + finalize, and audio past that point is dropped in the main process.
-// The remaining wait (see shouldFinalize) is only for the backend's trailing
-// FINAL segment to land and settle — nothing new can enter the transcript.
-const FINALIZE_CFG: FinalizeConfig = {
-  // Hard cap must cover PTT_CONNECT_TIMEOUT_MS (8s): a hold released mid-handshake
-  // only gets its transcript after connect+flush+finalize, so giving up sooner
-  // than the connect timeout throws away a capture that was about to succeed.
-  maxMs: 8500,
-  noVoiceGraceMs: 700,
-  silenceMs: 350,
-  settleMs: 400,
-  // Hold the commit briefly past release so the post-'finalize' trailing segment
-  // (~0.3s) lands before we send. Lowered from the v4/listen era's 1000ms (when the
-  // tail was ~1.8s-late with no interim) — PTT now flushes + finalizes on release,
-  // so the tail is prompt and a shorter floor makes the commit feel much snappier.
-  trailingGraceMs: 400,
-  // Voiced but nothing ever recognized (e.g. speech too quiet): once released AND
-  // connected this long with zero segments, commit empty instead of hanging to the
-  // hard cap. Covers the flush→finalize→trailing-segment round-trip with margin.
-  emptyGraceMs: 2500
-}
-const POLL_MS = 120
-// Mic energy this far above its adaptive noise floor counts as speech (VAD). The
-// floor learns steady noise (fans), so they don't register as voice.
-const VOICE_MARGIN = 0.08
+// Hold-Space push-to-talk, buffer-first (macOS architecture): one mic capture per
+// hold feeds a local PCM buffer + the waveform + an opportunistic live stream. On
+// release, local gates decide instantly (hint / silent discard / transcribe); a
+// connected stream gets 3s to deliver the finalized transcript, otherwise the
+// buffer is batch-POSTed. The pure state machine lives in lib/ptt/machine.ts —
+// this hook only owns timers, transports, and React state.
 
 type Options = {
   /** Final transcript on hold-release (non-empty only) — caller auto-sends it. */
   onCommit: (text: string) => void
-  /** Live transcript as it's recognized (during the hold and the finalize wait), so
-   *  the caller can render it in the input box before it's sent. Fires '' at the
-   *  start of a capture to clear any leftover. */
+  /** Live transcript while capturing (stream lane finals). Fires '' at the start
+   *  of a capture and after the ACTIVE capture commits, so leftovers never linger.
+   *  A superseded background capture never touches the draft. */
   onTranscript: (text: string) => void
-  /** Fires when a hold-capture finalizes, whether or not it produced any
-   *  transcript. Lets a caller treat the GESTURE as complete even when cloud
-   *  transcription was unavailable (e.g. quota/1008 closed the socket) — used by
-   *  onboarding so a no-quota account isn't dead-ended on "hold Space and speak". */
+  /** Fires when a hold-capture completes (committed, empty, hinted, or failed —
+   *  not cancelled), so onboarding can treat the GESTURE as done even without a
+   *  transcript. */
   onCaptureEnd?: () => void
-  /** Restore the input to its pre-hold contents, removing the space(s) that were
-   *  typed while the key was held. Receives the snapshot captured at key-down. */
+  /** Restore the input to its pre-hold contents (removes the held-Space spaces). */
   restoreDraft: (snapshot: string) => void
-  /** Current draft text, read at key-down for the window-level (textarea-unfocused)
-   *  hold path so the snapshot/restore matches the focused path. */
+  /** Current draft, read at key-down on the window-level (unfocused) hold path. */
   getDraft: () => string
 }
 
 export type PushToTalk = {
+  /** True while Space is held and the mic is capturing. */
   recording: boolean
-  /** True after release while we wait for the backend's final transcript to land. */
-  finalizing: boolean
+  /** True after release while the transcript is being finalized (stream or batch). */
+  transcribing: boolean
+  /** Friendly guidance ("Hold longer to record") — auto-clears. */
+  hint: string | null
+  /** Failure strip message — auto-clears. */
   error: string | null
-  /** Live analyser for the waveform visualizer (null while not capturing). */
+  /** Live analyser for the waveform (null while not capturing). */
   analyserRef: React.MutableRefObject<AnalyserNode | null>
-  /** Wire to the input's onKeyDown. Returns true if it consumed the event (the
-   *  caller must then NOT run its own Enter/typing handling). */
+  /** Wire to the input's onKeyDown. True = consumed (skip Enter/typing handling). */
   onKeyDown: (e: React.KeyboardEvent) => boolean
-  /** Wire to the input's onKeyUp. Returns true if it consumed the event. */
+  /** Wire to the input's onKeyUp. True = consumed. */
   onKeyUp: (e: React.KeyboardEvent) => boolean
-  /** Abort an in-progress recording OR pending finalize WITHOUT sending
-   *  (Esc / focus loss / unmount). */
+  /** Abort the active capture without sending (Esc / focus loss / unmount). */
   cancel: () => void
 }
 
-function isSpace(e: React.KeyboardEvent): boolean {
+const HINT_TEXT = {
+  'too-short': 'Hold longer to record',
+  'too-long': 'Recording too long — keep it under 5 minutes'
+} as const
+
+/** One capture's mutable world: its machine state plus everything the effects
+ *  operate on. A new hold creates a fresh job; a prior job still transcribing
+ *  keeps running in the background and commits (or fails) on its own. */
+type Job = {
+  state: PttState
+  capture: PttCapture | null
+  capturePromise: Promise<PttCapture | null> | null
+  stream: PttStream | null
+  streamStopped: boolean
+  buffer: Int16Array | null
+  abort: AbortController | null
+  deadlineTimer: ReturnType<typeof setTimeout> | null
+  watchdogTimer: ReturnType<typeof setTimeout> | null
+}
+
+function isSpace(e: { key: string; code: string }): boolean {
   return e.key === ' ' || e.code === 'Space'
 }
 
-/**
- * Hold-Space-to-talk for the overlay's Ask box. A quick Space tap types a space as
- * usual; holding past HOLD_THRESHOLD_MS starts mic transcription (PTT mode → Omi's
- * transcription-only /v2/voice-message/transcribe-stream, via startTranscription)
- * and exposes a live analyser for the waveform. Releasing enters a VAD-gated
- * finalize phase (which sends the 'finalize' frame) that waits until you've
- * stopped speaking and the backend's transcript has settled, then auto-sends it.
- * Normal typing stays fully native — the space is only "taken back" (draft restored
- * to the key-down snapshot) once a hold actually crosses the threshold.
- */
 export function usePushToTalk(opts: Options): PushToTalk {
-  const { onCommit, onTranscript, restoreDraft } = opts
   const [recording, setRecording] = useState(false)
-  const [finalizing, setFinalizing] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  // Mirrors `recording` for synchronous reads inside event handlers / async work.
-  const recordingRef = useRef(false)
-  // Mirrors `finalizing` for synchronous reads.
-  const finalizingRef = useRef(false)
-  // Pending hold timer (set on key-down, fires to start recording, cleared on a tap).
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Draft value captured at key-down (before the space is inserted).
-  const snapshotRef = useRef('')
-  // Generation token: every start bumps it so async work (transcription connect,
-  // finalize poll, VAD) from a superseded session no-ops / tears itself down.
-  const sessionRef = useRef(0)
-
-  const handleRef = useRef<TranscriptionHandle | null>(null)
-  // Early capture handle (mic live, socket may still be handshaking) — arrives via
-  // onCaptureReady BEFORE startTranscription resolves, so key-release can seal the
-  // capture immediately instead of waiting for the connection to land.
-  const captureRef = useRef<{ finalize: () => void } | null>(null)
-  // Space was released before even the capture handle existed (a very fast
-  // release) — deliver the finalize the moment it arrives. Without this, a hold
-  // released mid-setup never finalizes and the transcript waits out Deepgram's
-  // slow silence endpointing.
-  const wantFinalizeRef = useRef(false)
-  // When the transcription socket connected (0 = not yet) — feeds shouldFinalize's
-  // "connected but nothing recognized" empty-commit gate.
-  const connectedAtRef = useRef(0)
-  const linesRef = useRef<TranscriptLine[]>([])
-  const interimRef = useRef('')
-  // Timestamp (ms) of the last accepted segment THIS hold, or 0 if none yet.
-  const lastSegmentAtRef = useRef(0)
-  // VAD: last time the mic had speech-level energy, and whether it ever did.
-  const lastVoiceAtRef = useRef(0)
-  const everVoicedRef = useRef(false)
-  // Segment ids already consumed by PRIOR holds, skipped as echoes. This guarded a
-  // v4/listen quirk (its per-uid server-side conversation RE-SENT earlier segments
-  // on each connection, bleeding an old utterance into the next message). PTT now
-  // uses the transcription-only transcribe-stream endpoint, which has no server-side
-  // conversation and emits id-less finals — so this is inert on the current path,
-  // kept as a harmless backstop.
-  const consumedIdsRef = useRef<Set<string>>(new Set())
-
-  // Poll timer for the finalize phase.
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Mic audio graph (a second stream, independent of transcription's), feeding both
-  // the waveform and the VAD.
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const ctxRef = useRef<AudioContext | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
 
-  const clearPoll = (): void => {
-    if (pollTimerRef.current) {
-      clearTimeout(pollTimerRef.current)
-      pollTimerRef.current = null
-    }
+  // The ACTIVE (foreground) job — the one bound to UI state. Superseded jobs run
+  // headless until they finish.
+  const jobRef = useRef<Job | null>(null)
+  // Mirrors the active job's phase for synchronous reads in key handlers.
+  const recordingRef = useRef(false)
+  // Pending hold timer (armed at key-down; firing starts the capture).
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Draft snapshot taken at key-down, restored when the hold crosses the threshold.
+  const snapshotRef = useRef('')
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const optsRef = useRef(opts)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
+  optsRef.current = opts
+
+  const isForeground = (job: Job): boolean => jobRef.current === job
+
+  const showHint = (text: string, ms: number): void => {
+    setHint(text)
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
+    hintTimerRef.current = setTimeout(() => setHint(null), ms)
+  }
+  const showError = (message: string): void => {
+    setError(message)
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = setTimeout(() => setError(null), ERROR_STRIP_MS)
   }
 
-  const stopAudioViz = (): void => {
-    analyserRef.current = null // also stops the VAD loop (it checks this ref)
-    if (ctxRef.current) {
-      void ctxRef.current.close().catch(() => {})
-      ctxRef.current = null
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
+  const syncUi = (job: Job): void => {
+    if (!isForeground(job)) return
+    const { phase } = job.state
+    recordingRef.current = phase === 'holding'
+    setRecording(phase === 'holding')
+    setTranscribing(phase === 'draining' || phase === 'streamFinalize' || phase === 'batching')
   }
 
-  const startAudioViz = async (session: number): Promise<void> => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Superseded OR already released while awaiting permission — drop the stream so
-      // a fast key-drop doesn't leave the mic open.
-      if (sessionRef.current !== session || !recordingRef.current) {
-        stream.getTracks().forEach((t) => t.stop())
-        return
-      }
-      streamRef.current = stream
-      const ctx = new AudioContext()
-      ctxRef.current = ctx
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 64 // 32 frequency bins; the visualizer uses the low end
-      // Higher = smoother, less jumpy bars (averages more across frames). The
-      // visualizer also eases each bar toward its target, so speech ramps in.
-      analyser.smoothingTimeConstant = 0.85
-      ctx.createMediaStreamSource(stream).connect(analyser)
-      analyserRef.current = analyser
-
-      // Voice-activity detection on the same analyser: mark the last time the mic had
-      // energy above its adaptive noise floor (so steady fans don't count as voice).
-      const buf = new Uint8Array(analyser.frequencyBinCount)
-      const n = Math.min(24, buf.length)
-      let floor = 0
-      let seeded = false
-      const vad = (): void => {
-        if (analyserRef.current !== analyser) return // viz stopped → end the loop
-        analyser.getByteFrequencyData(buf)
-        let sum = 0
-        for (let i = 0; i < n; i++) sum += buf[i] / 255
-        const level = sum / n
-        if (!seeded) {
-          floor = level
-          seeded = true
-        } else {
-          floor = level > floor ? floor * 0.97 + level * 0.03 : floor * 0.9 + level * 0.1
-        }
-        if (level - floor > VOICE_MARGIN) {
-          lastVoiceAtRef.current = Date.now()
-          everVoicedRef.current = true
-        }
-        requestAnimationFrame(vad)
-      }
-      requestAnimationFrame(vad)
-    } catch {
-      // Waveform/VAD are non-essential; a blocked mic just shows flat bars and lets
-      // the finalize fall back to the segment-settle / max-cap path. Transcription
-      // has its own mic + error surfacing.
-    }
+  const clearJobTimers = (job: Job): void => {
+    if (job.deadlineTimer) clearTimeout(job.deadlineTimer)
+    if (job.watchdogTimer) clearTimeout(job.watchdogTimer)
+    job.deadlineTimer = null
+    job.watchdogTimer = null
   }
 
-  // Remember this hold's segment ids so the backend re-sending them on a later
-  // connection is recognized as an echo and skipped.
-  const markConsumed = (): void => {
-    for (const ln of linesRef.current) if (ln.id != null) consumedIdsRef.current.add(ln.id)
-  }
+  const dispatch = (job: Job, event: PttEvent): void => {
+    const prevPhase = job.state.phase
+    const { state, effects } = reduce(job.state, event)
+    job.state = state
 
-  // Stop and discard the current capture + buffered transcript, and invalidate the
-  // session so any in-flight async work tears itself down.
-  const teardownTranscription = (): void => {
-    clearPoll()
-    finalizingRef.current = false
-    setFinalizing(false)
-    stopAudioViz()
-    try {
-      handleRef.current?.stop()
-    } catch {
-      /* ignore */
-    }
-    handleRef.current = null
-    captureRef.current = null
-    wantFinalizeRef.current = false
-    markConsumed()
-    linesRef.current = []
-    interimRef.current = ''
-    sessionRef.current++
-  }
-
-  const startRecording = (): void => {
-    // Abandon any prior, not-yet-committed utterance (e.g. a quick re-hold during
-    // the finalize window) before starting fresh.
-    teardownTranscription()
-
-    const session = ++sessionRef.current
-    recordingRef.current = true
-    setRecording(true)
-    setError(null)
-    // Take back the space(s) auto-repeat inserted while holding, then clear the box
-    // so the recognized transcript renders into it cleanly.
-    restoreDraft(snapshotRef.current)
-    linesRef.current = []
-    interimRef.current = ''
-    lastSegmentAtRef.current = 0
-    lastVoiceAtRef.current = 0
-    everVoicedRef.current = false
-    connectedAtRef.current = 0
-    onTranscript('')
-
-    void startAudioViz(session)
-    void (async () => {
-      try {
-        const handle = await startTranscription(
-          'mic',
-          {
-            onLine: (l) => {
-              if (sessionRef.current !== session) return
-              // Skip segments the backend re-sends from a PRIOR hold (server-side
-              // conversation echo), then upsert by id so re-sent/refined segments
-              // within THIS hold don't duplicate either.
-              if (l.id != null && consumedIdsRef.current.has(l.id)) return
-              upsertLine(linesRef.current, l)
-              lastSegmentAtRef.current = Date.now()
-              onTranscript(assembleTranscript(linesRef.current, interimRef.current))
-            },
-            onInterim: (t) => {
-              if (sessionRef.current !== session) return
-              interimRef.current = t
-              onTranscript(assembleTranscript(linesRef.current, interimRef.current))
-            },
-            onBackend: () => {
-              if (sessionRef.current === session) connectedAtRef.current = Date.now()
-            },
-            onError: (e) => {
-              if (sessionRef.current === session) setError(e.message)
-            },
-            onCaptureReady: (capture) => {
-              if (sessionRef.current !== session) return
-              captureRef.current = capture
-              // Space already released while the capture was being set up — seal it now.
-              if (wantFinalizeRef.current) {
-                wantFinalizeRef.current = false
-                capture.finalize()
+    for (const eff of effects) {
+      switch (eff.kind) {
+        case 'startCapture': {
+          job.capturePromise = startPttCapture({
+            onChunk: (pcm) => job.stream?.feed(pcm),
+            onCapped: () => dispatch(job, { type: 'BUFFER_CAPPED' })
+          })
+            .then((capture) => {
+              if (job.state.phase === 'idle') {
+                capture.dispose()
+                return null
               }
-            }
-          },
-          'ptt'
-        )
-        // Released/superseded before the connection resolved — tear it straight down.
-        if (sessionRef.current !== session) {
-          try {
-            handle.stop()
-          } catch {
-            /* ignore */
-          }
-          return
+              job.capture = capture
+              if (isForeground(job)) analyserRef.current = capture.analyser
+              return capture
+            })
+            .catch((err: Error) => {
+              console.warn('[ptt] mic capture failed:', err.message)
+              if (isForeground(job)) showError('Microphone unavailable')
+              dispatch(job, { type: 'CANCEL' })
+              return null
+            })
+          break
         }
-        handleRef.current = handle
-      } catch (e) {
-        if (sessionRef.current === session) setError((e as Error).message)
+        case 'startStream': {
+          startPttStream({
+            onConnected: () => dispatch(job, { type: 'STREAM_CONNECTED' }),
+            onFinal: (text) => dispatch(job, { type: 'STREAM_FINAL', text }),
+            onDead: () => dispatch(job, { type: 'STREAM_DEAD' })
+          })
+            .then((stream) => {
+              if (job.streamStopped || job.state.phase === 'idle') {
+                stream.stop()
+                return
+              }
+              job.stream = stream
+            })
+            .catch(() => dispatch(job, { type: 'STREAM_DEAD' }))
+          break
+        }
+        case 'startDrain': {
+          void (async () => {
+            const capture = await job.capturePromise
+            if (!capture) return // mic failure already cancelled the job
+            const buffer = await capture.drain()
+            job.capture = null
+            if (isForeground(job)) analyserRef.current = null
+            job.buffer = buffer
+            dispatch(job, { type: 'DRAINED', stats: voicedStats(buffer) })
+          })()
+          break
+        }
+        case 'stopCapture': {
+          job.capture?.dispose()
+          job.capture = null
+          if (isForeground(job)) analyserRef.current = null
+          break
+        }
+        case 'stopStream': {
+          job.streamStopped = true
+          job.stream?.stop()
+          job.stream = null
+          break
+        }
+        case 'sendFinalize': {
+          job.stream?.finalize()
+          job.deadlineTimer = setTimeout(
+            () => dispatch(job, { type: 'FINALIZE_DEADLINE' }),
+            STREAM_FINALIZE_DEADLINE_MS
+          )
+          break
+        }
+        case 'startBatch': {
+          const abort = new AbortController()
+          job.abort = abort
+          void (async () => {
+            try {
+              const transcript = await batchTranscribe(job.buffer ?? new Int16Array(0), abort.signal)
+              dispatch(job, { type: 'BATCH_OK', transcript })
+            } catch (err) {
+              if (abort.signal.aborted) return // cancelled — the job is already idle
+              dispatch(job, { type: 'BATCH_FAIL', message: batchErrorMessage(err) })
+            }
+          })()
+          break
+        }
+        case 'abortBatch': {
+          job.abort?.abort()
+          job.abort = null
+          break
+        }
+        case 'commit': {
+          if (isForeground(job)) optsRef.current.onTranscript('')
+          if (eff.text) optsRef.current.onCommit(eff.text)
+          break
+        }
+        case 'setLiveText': {
+          if (isForeground(job)) optsRef.current.onTranscript(eff.text)
+          break
+        }
+        case 'showHint': {
+          if (isForeground(job)) {
+            showHint(HINT_TEXT[eff.hint], eff.hint === 'too-long' ? TOO_LONG_HINT_MS : HINT_MS)
+          }
+          break
+        }
+        case 'showError': {
+          if (isForeground(job)) showError(eff.message)
+          else console.warn('[ptt] background capture failed:', eff.message)
+          break
+        }
       }
-    })()
+    }
+
+    if (job.state.phase === 'idle' && prevPhase !== 'idle') {
+      clearJobTimers(job)
+      // The gesture completed (committed / hinted / silent / failed) — cancel is
+      // the one exit that isn't a completed gesture. Holding→idle only happens on
+      // cancel/watchdog, so a threshold-crossed-but-aborted hold doesn't count.
+      if (event.type !== 'CANCEL' && prevPhase !== 'holding') {
+        optsRef.current.onCaptureEnd?.()
+      }
+    }
+    syncUi(job)
   }
 
-  const finishRecording = (commit: boolean): void => {
-    if (!recordingRef.current) return
-    recordingRef.current = false
-    setRecording(false)
-
-    if (!commit) {
-      teardownTranscription() // also stops the audio viz
-      return
+  const startHold = (): void => {
+    // A prior job still pre-release can't coexist with a new hold (only possible
+    // via focus glitches); one already transcribing keeps running in the
+    // background and commits on its own — the new hold never kills it.
+    const prev = jobRef.current
+    if (prev && (prev.state.phase === 'holding' || prev.state.phase === 'draining')) {
+      dispatch(prev, { type: 'CANCEL' })
     }
-
-    // Release seals the capture: stop the VAD/waveform mic (post-release speech
-    // must not extend the wait) and tell the capture to cut its mic + finalize —
-    // the backend flushes and the trailing segment lands promptly (~0.3s). The
-    // socket stays open only to RECEIVE that segment. If even the capture handle
-    // doesn't exist yet (released mid-setup), flag it so onCaptureReady seals it
-    // the moment it arrives.
-    stopAudioViz()
-    if (captureRef.current) {
-      captureRef.current.finalize()
-    } else {
-      wantFinalizeRef.current = true
+    const job: Job = {
+      state: initialState,
+      capture: null,
+      capturePromise: null,
+      stream: null,
+      streamStopped: false,
+      buffer: null,
+      abort: null,
+      deadlineTimer: null,
+      watchdogTimer: null
     }
-    const session = sessionRef.current
-    finalizingRef.current = true
-    setFinalizing(true)
-    const releasedAt = Date.now()
-
-    const commitNow = (): void => {
-      if (sessionRef.current !== session) return
-      clearPoll()
-      finalizingRef.current = false
-      setFinalizing(false)
-      stopAudioViz()
-      try {
-        handleRef.current?.stop()
-      } catch {
-        /* ignore */
-      }
-      handleRef.current = null
-      captureRef.current = null
-      wantFinalizeRef.current = false
-      const text = assembleTranscript(linesRef.current, interimRef.current)
-      markConsumed()
-      linesRef.current = []
-      interimRef.current = ''
-      sessionRef.current++ // invalidate any still-pending async work from this session
-      // The hold-capture gesture completed (even if STT produced nothing, e.g.
-      // quota/1008 or silence) — notify before the text-gated send.
-      opts.onCaptureEnd?.()
-      if (text) onCommit(text)
-    }
-
-    const check = (): void => {
-      if (sessionRef.current !== session) return
-      const now = Date.now()
-      const done = shouldFinalize(
-        {
-          elapsedMs: now - releasedAt,
-          everVoiced: everVoicedRef.current,
-          silentForMs: now - lastVoiceAtRef.current,
-          sinceLastSegmentMs: lastSegmentAtRef.current > 0 ? now - lastSegmentAtRef.current : null,
-          sinceConnectedMs: connectedAtRef.current > 0 ? now - connectedAtRef.current : null
-        },
-        FINALIZE_CFG
-      )
-      if (done) {
-        commitNow()
-        return
-      }
-      pollTimerRef.current = setTimeout(check, POLL_MS)
-    }
-    check()
+    jobRef.current = job
+    setError(null)
+    setHint(null)
+    // Take back the space(s) auto-repeat typed while holding, then clear the box
+    // so the live transcript renders cleanly.
+    optsRef.current.restoreDraft(snapshotRef.current)
+    job.watchdogTimer = setTimeout(() => dispatch(job, { type: 'WATCHDOG' }), WATCHDOG_MS)
+    dispatch(job, { type: 'HOLD_START' })
   }
+
+  const release = (): void => {
+    const job = jobRef.current
+    if (job && job.state.phase === 'holding') dispatch(job, { type: 'RELEASE' })
+  }
+
+  const cancel = (): void => {
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    const job = jobRef.current
+    if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
+    setHint(null)
+  }
+
+  // --- Space gesture wiring (tap types a space; a ≥350ms hold records) ---------
 
   const onKeyDown = (e: React.KeyboardEvent): boolean => {
     if (!isSpace(e)) return false
     if (recordingRef.current) {
-      // Block the auto-repeat spaces from leaking into the (hidden) input.
-      e.preventDefault()
+      e.preventDefault() // swallow auto-repeat spaces while recording
       return true
     }
-    // Initial press only (ignore OS auto-repeat). Snapshot the pre-space draft and
-    // arm the hold timer; let the space type normally so a tap is a real space.
     if (!e.repeat && holdTimerRef.current === null) {
       snapshotRef.current = (e.currentTarget as HTMLTextAreaElement).value ?? ''
       holdTimerRef.current = setTimeout(() => {
         holdTimerRef.current = null
-        startRecording()
+        startHold()
       }, HOLD_THRESHOLD_MS)
     }
     return false
@@ -420,72 +333,46 @@ export function usePushToTalk(opts: Options): PushToTalk {
     }
     if (recordingRef.current) {
       e.preventDefault()
-      finishRecording(true)
+      release()
       return true
     }
     return false
   }
 
-  const cancel = (): void => {
-    if (holdTimerRef.current !== null) {
-      clearTimeout(holdTimerRef.current)
-      holdTimerRef.current = null
-    }
-    if (recordingRef.current) {
-      finishRecording(false)
-      return
-    }
-    // Esc during the finalize window: abort, don't send.
-    if (finalizingRef.current) teardownTranscription()
-  }
-
-  // Window-level hold-Space so push-to-talk works whenever the overlay window is
-  // FOCUSED — not only when the textarea has focus. The textarea keeps its own
-  // handlers (onKeyDown/onKeyUp); this only acts when focus is NOT in a text
-  // field, so the two never double-handle. Latest start/finish/getDraft are read
-  // through refs so the once-registered listeners never call a stale closure.
-  const startRecordingRef = useRef(startRecording)
-  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  startRecordingRef.current = startRecording
-  const finishRecordingRef = useRef(finishRecording)
-  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  finishRecordingRef.current = finishRecording
-  const getDraftRef = useRef(opts.getDraft)
-  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  getDraftRef.current = opts.getDraft
-
+  // Window-level hold-Space so PTT works whenever the overlay window is FOCUSED —
+  // not only when the textarea has focus. The textarea keeps its own handlers;
+  // this path only acts when focus is NOT in a text field, so they never
+  // double-handle.
   useEffect(() => {
     const inTextField = (): boolean => {
       const ae = document.activeElement
       return !!ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT')
     }
-    const isSpaceKey = (e: KeyboardEvent): boolean => e.key === ' ' || e.code === 'Space'
     const onDown = (e: KeyboardEvent): void => {
-      if (!isSpaceKey(e) || inTextField()) return // the textarea path owns it when focused
+      if (!isSpace(e) || inTextField()) return
       if (recordingRef.current) {
-        e.preventDefault() // swallow auto-repeat spaces while recording
+        e.preventDefault()
         return
       }
       if (!e.repeat && holdTimerRef.current === null) {
         e.preventDefault() // don't let Space scroll or activate a focused control
-        snapshotRef.current = getDraftRef.current()
+        snapshotRef.current = optsRef.current.getDraft()
         holdTimerRef.current = setTimeout(() => {
           holdTimerRef.current = null
-          startRecordingRef.current()
+          startHold()
         }, HOLD_THRESHOLD_MS)
       }
     }
     const onUp = (e: KeyboardEvent): void => {
-      if (!isSpaceKey(e) || inTextField()) return
+      if (!isSpace(e) || inTextField()) return
       if (holdTimerRef.current !== null) {
-        // Released before the threshold → a tap; nothing to record.
         clearTimeout(holdTimerRef.current)
         holdTimerRef.current = null
         return
       }
       if (recordingRef.current) {
         e.preventDefault()
-        finishRecordingRef.current(true)
+        release()
       }
     }
     window.addEventListener('keydown', onDown)
@@ -494,24 +381,20 @@ export function usePushToTalk(opts: Options): PushToTalk {
       window.removeEventListener('keydown', onDown)
       window.removeEventListener('keyup', onUp)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startHold/release are stable via refs
   }, [])
 
-  // Tear everything down if the panel unmounts mid-recording/finalize (e.g. Esc reset).
+  // Tear down on unmount: cancel the active capture and clear UI timers.
   useEffect(() => {
     return () => {
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current)
-      clearPoll()
-      stopAudioViz()
-      try {
-        handleRef.current?.stop()
-      } catch {
-        /* ignore */
-      }
-      handleRef.current = null
-      sessionRef.current++
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+      const job = jobRef.current
+      if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { recording, finalizing, error, analyserRef, onKeyDown, onKeyUp, cancel }
+  return { recording, transcribing, hint, error, analyserRef, onKeyDown, onKeyUp, cancel }
 }
