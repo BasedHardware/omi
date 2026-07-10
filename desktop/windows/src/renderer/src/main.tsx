@@ -18,11 +18,20 @@ if (SENTRY_DSN) {
   })
 }
 
+// Startup-phase marks are the MAIN window's cost. Secondary windows (overlay,
+// insight-toast, hidden capture) share this bundle and would otherwise fire the
+// same marks and race the bench — the capture window in particular first-paints
+// almost immediately. Gate every perf mark on being the primary window.
+const IS_PRIMARY_WINDOW =
+  !window.location.hash.startsWith('#/overlay') &&
+  !window.location.hash.startsWith('#/insight-toast') &&
+  !window.location.hash.startsWith('#/capture')
+
 // Startup-phase mark: all module imports above are now evaluated (including the
 // App graph, which dynamically — not statically — pulls in @huggingface/
 // transformers). Splits the startup headline into "bundle download + eval" vs
 // "render + first paint".
-window.omi?.perfMark('renderer:eval')
+if (IS_PRIMARY_WINDOW) window.omi?.perfMark('renderer:eval')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -34,6 +43,8 @@ createRoot(document.getElementById('root')!).render(
 // Report the first painted frame to the main process for the startup benchmark.
 // Two rAFs: the first fires before paint, the second after the first frame is on
 // screen.
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => window.omi?.perfFirstPaint())
-})
+if (IS_PRIMARY_WINDOW) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => window.omi?.perfFirstPaint())
+  })
+}

@@ -95,6 +95,20 @@ export function onPreferencesChange(cb: (p: Preferences) => void): () => void {
   return () => listeners.delete(cb)
 }
 
+// Cross-window sync: localStorage is shared across same-origin windows (main,
+// overlay, hidden capture), but setPreferences only notifies its OWN window's
+// subscribers. The `storage` event fires in the OTHER windows when localStorage
+// changes — refresh the cache and notify there too. This is how the capture
+// window sees a continuousRecording flip made from the main window (e.g. the tray
+// Pause toggle or the Settings switch) without a reload.
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key !== KEY) return
+    current = load()
+    listeners.forEach((cb) => cb(current))
+  })
+}
+
 export function isOnboardingComplete(): boolean {
   return typeof getPreferences().onboardingCompletedAt === 'number'
 }

@@ -19,8 +19,9 @@ import { useOnboardingComplete } from './hooks/useOnboardingComplete'
 import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
 import { OverlayApp } from './components/overlay/OverlayApp'
-import { RewindCaptureHost } from './components/rewind/RewindCaptureHost'
-import { ContinuousRecordingHost } from './components/recording/ContinuousRecordingHost'
+import { CaptureApp } from './capture/CaptureApp'
+import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
+import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
@@ -28,11 +29,14 @@ import { TrayStateHost } from './components/tray/TrayStateHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 
-// The overlay and insight-toast windows load this same bundle at their own hash
-// routes. Window-singleton hosts (tray state) must run only in the main window,
-// so gate on the initial hash — set by main at load time, before routing.
+// The overlay, insight-toast, and hidden capture windows load this same bundle at
+// their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
+// must run only in the main window, so gate on the initial hash — set by main at
+// load time, before routing.
 const IS_SECONDARY_WINDOW =
-  window.location.hash.startsWith('#/overlay') || window.location.hash.startsWith('#/insight-toast')
+  window.location.hash.startsWith('#/overlay') ||
+  window.location.hash.startsWith('#/insight-toast') ||
+  window.location.hash.startsWith('#/capture')
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -76,24 +80,15 @@ function AppShellInner(): React.JSX.Element {
       <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
         <MainViews />
       </main>
-      {/* Hidden video sink for screen-capture recording mode. Invisible, but
-          mounted app-wide so the screen stream has a render target regardless of
-          which tab is active. */}
-      <video
-        ref={recorder.videoRef}
-        muted
-        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
-      />
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
         onPick={recorder.pickScreen}
       />
-      {/* Background screen capture for Rewind (runs while the app is open). */}
-      <RewindCaptureHost />
-      {/* Always-on mic capture for continuous recording mode. */}
-      <ContinuousRecordingHost />
+      {/* Mirror the capture window's always-on live transcript into this window and
+          run the on-save UI side effects. Capture itself (Rewind, mic, PTT, screen)
+          runs in the hidden capture window now. */}
+      <LiveMirrorHost />
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
@@ -141,6 +136,23 @@ function App(): React.JSX.Element {
     if (accel) void window.omiOverlay?.setAccelerator(accel)
   }, [])
 
+  // Main window fans out auth transitions to the hidden capture window so it can
+  // refresh its own Firebase session (and thus its listen-WS auth). Re-sent when
+  // the capture window restarts, so a fresh one syncs immediately.
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    const send = (): void =>
+      window.omi?.captureCommand?.({ type: 'auth-changed', signedIn: !!auth.currentUser })
+    const unsubAuth = onAuthStateChanged(auth, send)
+    const unsubRestart = window.omi?.onCaptureEvent?.((ev) => {
+      if (ev.type === 'capture-window-restarted') send()
+    })
+    return () => {
+      unsubAuth()
+      unsubRestart?.()
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="app-canvas flex h-full items-center justify-center">
@@ -160,6 +172,9 @@ function App(): React.JSX.Element {
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
         <Route path="/overlay" element={<OverlayApp />} />
+        {/* The hidden capture window. Ungated (like /overlay) — it owns capture
+            regardless of the UI auth gate; its hosts self-gate on auth. */}
+        <Route path="/capture" element={<CaptureApp />} />
         <Route path="/login" element={user ? <Navigate to="/home" replace /> : <Login />} />
         <Route
           path="/onboarding"
@@ -169,17 +184,12 @@ function App(): React.JSX.Element {
             ) : onboarded ? (
               <Navigate to="/home" replace />
             ) : (
-              <>
-                {/* Run screen capture during onboarding too, so the hot
-                    currentScreen cache is seeded and chat can read the screen
-                    while the user is still in the wizard. Post-onboarding this
-                    host is mounted by AppShell; routes are mutually exclusive so
-                    only one host is ever live (no double getUserMedia stream). */}
-                <RewindCaptureHost />
-                {/* Onboarding is imported DIRECTLY (no lazy/Suspense) so the
-                    BrainGraph map renders reliably — see the import comment. */}
-                <Onboarding />
-              </>
+              // Onboarding is imported DIRECTLY (no lazy/Suspense) so the
+              // BrainGraph map renders reliably — see the import comment. Screen
+              // capture during onboarding is owned by the always-alive capture
+              // window now (it seeds the hot currentScreen cache), so no capture
+              // host is mounted here.
+              <Onboarding />
             )
           }
         />
