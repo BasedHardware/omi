@@ -192,14 +192,15 @@ async def perform_request_with_token_retry(
     app_key: str,
     integration: dict,
     request_fn: Callable,
+    client: Optional[httpx.AsyncClient] = None,
 ) -> Tuple[Any, dict, Optional[Exception]]:
-    client = get_http_client()
+    client = client or get_http_client()
     access_token = integration.get('access_token') or ''
     response = await request_fn(client, access_token)
     if response.status_code == 401:
         if app_key in ['google_tasks', 'asana']:
             try:
-                integration = await refresh_oauth_token(uid, app_key, integration)
+                integration = await refresh_oauth_token(uid, app_key, integration, client=client)
                 new_access_token = integration.get('access_token') or ''
                 response = await request_fn(client, new_access_token)
             except Exception as e:
@@ -262,8 +263,13 @@ async def create_task_internal(
                 return {"success": True, "external_task_id": str(task_data.get('id'))}
             else:
                 if response.status_code == 401:
-                    integration['connected'] = False
-                    await run_blocking(db_executor, users_db.set_task_integration, uid, 'todoist', integration)
+                    await run_blocking(
+                        db_executor,
+                        users_db.set_task_integration,
+                        uid,
+                        'todoist',
+                        {'connected': False},
+                    )
                 return {
                     "success": False,
                     "error": f"Todoist API error: {response.status_code}",
@@ -296,7 +302,7 @@ async def create_task_internal(
                 )
 
             response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _asana_post
+                uid, app_key, integration, _asana_post, client=client
             )
             if retry_err:
                 return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
@@ -330,7 +336,7 @@ async def create_task_internal(
                 )
 
             response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _google_tasks_post
+                uid, app_key, integration, _google_tasks_post, client=client
             )
             if retry_err:
                 return {

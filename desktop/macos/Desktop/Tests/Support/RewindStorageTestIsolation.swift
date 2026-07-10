@@ -2,6 +2,31 @@ import Foundation
 
 @testable import Omi_Computer
 
+private actor RewindStorageTestGate {
+  static let shared = RewindStorageTestGate()
+
+  private var isHeld = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func acquire() async {
+    if !isHeld {
+      isHeld = true
+      return
+    }
+    await withCheckedContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func release() {
+    guard !waiters.isEmpty else {
+      isHeld = false
+      return
+    }
+    waiters.removeFirst().resume()
+  }
+}
+
 /// Shared setup/teardown for XCTest suites that touch Rewind storage singletons.
 ///
 /// Mirrors the lifecycle used by `StagedTaskSyncIntegrityTests`: close the database,
@@ -19,22 +44,33 @@ enum RewindStorageTestIsolation {
   }
 
   static func setUp(userIdPrefix: String) async throws -> Fixture {
+    await RewindStorageTestGate.shared.acquire()
     let testUserId = "\(userIdPrefix)-\(UUID().uuidString)"
-    await RewindDatabase.shared.close()
-    await invalidateAllStorageCaches()
-    RewindDatabase.currentUserId = testUserId
-    await RewindDatabase.shared.configure(userId: testUserId)
-    try await RewindDatabase.shared.initialize()
-    return Fixture(testUserId: testUserId, userDir: userDirectory(for: testUserId))
+    let userDir = userDirectory(for: testUserId)
+    do {
+      await RewindDatabase.shared.close()
+      await invalidateAllStorageCaches()
+      RewindDatabase.currentUserId = testUserId
+      await RewindDatabase.shared.configure(userId: testUserId)
+      try await RewindDatabase.shared.initialize()
+      return Fixture(testUserId: testUserId, userDir: userDir)
+    } catch {
+      await RewindDatabase.shared.close()
+      await invalidateAllStorageCaches()
+      RewindDatabase.currentUserId = nil
+      try? FileManager.default.removeItem(at: userDir)
+      await RewindStorageTestGate.shared.release()
+      throw error
+    }
   }
 
   static func tearDown(userDir: URL?) async {
+    guard let userDir else { return }
     await RewindDatabase.shared.close()
     await invalidateAllStorageCaches()
     RewindDatabase.currentUserId = nil
-    if let userDir {
-      try? FileManager.default.removeItem(at: userDir)
-    }
+    try? FileManager.default.removeItem(at: userDir)
+    await RewindStorageTestGate.shared.release()
   }
 
   @MainActor

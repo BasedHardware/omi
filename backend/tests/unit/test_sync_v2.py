@@ -156,7 +156,7 @@ class TestSyncV2Structure:
         func_body = source[start:next_boundary]
 
         dg_pos = func_body.index('record_dg_usage_ms')
-        processing_pos = func_body.index('asyncio.wait_for(run_blocking(sync_executor, _process_one_segment')
+        processing_pos = func_body.index('run_blocking(sync_executor, _process_one_segment')
         assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
 
     def test_v2_background_does_decode_and_vad(self):
@@ -541,11 +541,13 @@ class TestFullPipelineBackground:
         assert 'await run_blocking(' in body, "Async coordinator must offload blocking work to pools"
         assert '_get_sync_pipeline_semaphore' in body, "Async coordinator must use loop-scoped semaphore"
 
-    def test_background_uses_asyncio_wait_for_timeout(self):
-        """Segment and VAD tasks must use asyncio.wait_for with timeout=300."""
+    def test_background_does_not_abandon_mutating_executor_workers(self):
+        """Cancelling an executor Future must not let its thread outlive job finalization."""
         body = self._get_bg_func_body()
-        assert 'asyncio.wait_for(' in body, "Must use asyncio.wait_for for timeout enforcement"
-        assert 'timeout=300' in body, "Must use 300s timeout"
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg' not in body
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in body
+        assert 'run_blocking(sync_executor, _run_vad_bg' in body
+        assert 'run_blocking(sync_executor, _process_one_segment' in body
 
 
 # ---------------------------------------------------------------------------
@@ -1073,16 +1075,15 @@ class TestAsyncCoordinatorScenarios:
         return_after_empty = body[empty_check_idx:vad_phase_idx]
         assert 'return' in return_after_empty
 
-    # --- VAD error/timeout ---
+    # --- VAD errors ---
 
-    def test_vad_timeout_captured_as_error(self):
-        """VAD TimeoutError must be captured and appended to vad_errors."""
+    def test_vad_workers_complete_before_cleanup(self):
+        """Mutating VAD workers must finish before segmented paths are cleaned."""
         body = self._get_bg_func_body()
-        assert 'asyncio.TimeoutError' in body
-        timeout_idx = body.index('isinstance(r, asyncio.TimeoutError)')
-        after = body[timeout_idx : timeout_idx + 200]
-        assert 'vad_errors.append' in after
-        assert 'VAD timed out' in after
+        gather_idx = body.index('vad_results = await asyncio.gather')
+        cleanup_idx = body.index("stage_timings['vad_ms']")
+        assert gather_idx < cleanup_idx
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg' not in body
 
     def test_vad_executor_error_captured(self):
         """Generic executor error during VAD must be captured."""
@@ -1165,20 +1166,20 @@ class TestAsyncCoordinatorScenarios:
 
     # --- Partial / all segment failure ---
 
-    def test_segment_timeout_captured(self):
-        """Segment TimeoutError must be captured in segment_errors."""
+    def test_segment_workers_complete_before_reprocessing(self):
+        """Mutating segment workers must finish before merged conversations are reprocessed."""
         body = self._get_bg_func_body()
-        seg_section = body[body.index('seg_results = await asyncio.gather') :]
-        seg_early = seg_section[:500]
-        assert 'isinstance(r, asyncio.TimeoutError)' in seg_early
-        assert 'Segment timed out' in seg_early
+        gather_idx = body.index('seg_results = await asyncio.gather')
+        reprocess_idx = body.index('_reprocess_merged_conversations')
+        assert gather_idx < reprocess_idx
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in body
 
     def test_generic_segment_task_exception_captured(self):
         """Generic segment task exceptions must be counted in segment_errors."""
         body = self._get_bg_func_body()
         seg_section = body[body.index('seg_results = await asyncio.gather') :]
         seg_early = seg_section[:800]
-        assert 'elif isinstance(r, Exception):' in seg_early
+        assert 'if isinstance(r, Exception):' in seg_early
         assert 'segment_errors.append' in seg_early
         assert 'Segment failed:' in seg_early
 
@@ -2596,8 +2597,8 @@ class TestTimeoutConfiguration:
         func_body = source[start:end]
         assert 'attempts < 1' in func_body, "DG bytes transcription must use attempts < 1 (max 2 attempts)"
 
-    def test_segment_timeout_budget(self):
-        """Segment tasks in v2 async coordinator must use asyncio.wait_for with timeout=300."""
+    def test_segment_workers_are_not_detached_by_async_timeout(self):
+        """Executor threads must not outlive the coordinator after an asyncio timeout."""
         source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
         end = source.find('\nasync def ', start + 1)
@@ -2606,5 +2607,5 @@ class TestTimeoutConfiguration:
         if end == -1:
             end = len(source)
         func_body = source[start:end]
-        assert 'asyncio.wait_for(' in func_body, "Must use asyncio.wait_for for timeout enforcement"
-        assert 'timeout=300' in func_body, "Segment tasks must have 300s timeout"
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in func_body
+        assert 'run_blocking(sync_executor, _process_one_segment' in func_body

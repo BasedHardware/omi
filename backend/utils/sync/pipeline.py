@@ -796,14 +796,15 @@ async def _run_full_pipeline_background_async(
                 except Exception as e:
                     vad_errors.append(f'{path}: {e}')
 
-            vad_tasks = [
-                asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg, path), timeout=300) for path in wav_paths
-            ]
+            # Executor futures cannot stop their underlying threads when cancelled.
+            # Abandoning a timed-out VAD worker would let it keep appending paths while
+            # this coordinator cleans up and finalizes the job, so await every mutating
+            # worker to completion. Provider/network calls inside the worker own their
+            # actual request timeouts.
+            vad_tasks = [run_blocking(sync_executor, _run_vad_bg, path) for path in wav_paths]
             vad_results = await asyncio.gather(*vad_tasks, return_exceptions=True)
             for r in vad_results:
-                if isinstance(r, asyncio.TimeoutError):
-                    vad_errors.append('VAD timed out after 300s')
-                elif isinstance(r, Exception):
+                if isinstance(r, Exception):
                     vad_errors.append(f'VAD executor error: {r}')
 
             stage_timings['vad_ms'] = int((time.monotonic() - t0) * 1000)
@@ -947,18 +948,14 @@ async def _run_full_pipeline_background_async(
             chunk_size = 5
             for i in range(0, len(segment_list), chunk_size):
                 chunk = segment_list[i : i + chunk_size]
-                # Later segments in a chunk also wait their assignment turn, so widen
-                # their timeout by position to avoid spurious timeouts.
-                seg_tasks = [
-                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300 + 60 * j)
-                    for j, path in enumerate(chunk)
-                ]
+                # Do not wrap executor work in asyncio.wait_for: cancellation only
+                # detaches the Future while the thread keeps mutating response, job,
+                # conversation, and audio state. Await the whole chunk before any
+                # reprocessing/finalization step can observe it.
+                seg_tasks = [run_blocking(sync_executor, _process_one_segment, path) for path in chunk]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for r in seg_results:
-                    if isinstance(r, asyncio.TimeoutError):
-                        segment_errors.append('Segment timed out after 300s')
-                        logger.error(f'sync_v2 bg: segment timed out job={job_id}')
-                    elif isinstance(r, Exception):
+                    if isinstance(r, Exception):
                         segment_errors.append(f'Segment failed: {sanitize(str(r))}')
                         logger.error(f'sync_v2 bg: segment error: {r}')
                 try:

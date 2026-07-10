@@ -72,7 +72,7 @@ struct OmiHTTPTransport {
   func buildHeaders(
     requireAuth: Bool = true,
     forceRefreshAuth: Bool = false,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = false
   ) async throws -> [String: String] {
     var headers: [String: String] = [
       "Content-Type": "application/json",
@@ -122,7 +122,7 @@ struct OmiHTTPTransport {
     _ endpoint: String,
     baseURL: String,
     requireAuth: Bool = true,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = false
   ) async throws -> T {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
@@ -139,7 +139,7 @@ struct OmiHTTPTransport {
     baseURL: String,
     body: B,
     requireAuth: Bool = true,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = false
   ) async throws -> T {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
@@ -157,7 +157,7 @@ struct OmiHTTPTransport {
     _ endpoint: String,
     baseURL: String,
     requireAuth: Bool = true,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = false
   ) async throws -> T {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
@@ -173,7 +173,7 @@ struct OmiHTTPTransport {
     _ endpoint: String,
     baseURL: String,
     requireAuth: Bool = true,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = false
   ) async throws {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse

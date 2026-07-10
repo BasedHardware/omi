@@ -89,3 +89,43 @@ async def test_create_task_missing_access_token():
         "error": "No access token for todoist",
         "error_code": "no_access_token",
     }
+
+
+@pytest.mark.asyncio
+async def test_asana_retry_reuses_injected_client_for_refresh_and_retry():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = [
+        _mock_response(401, text="expired"),
+        _mock_response(200, {"access_token": "fresh-token", "expires_in": 3600}),
+        _mock_response(201, {"data": {"gid": "asana-task-42"}}),
+    ]
+    integration = {
+        "connected": True,
+        "access_token": "expired-token",
+        "refresh_token": "refresh-token",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "workspace_gid": "workspace-1",
+    }
+
+    with (
+        patch.dict(os.environ, {"ASANA_CLIENT_ID": "client-id", "ASANA_CLIENT_SECRET": "client-secret"}),
+        patch.object(ops, "run_blocking", new=AsyncMock()) as mock_run_blocking,
+        patch.object(ops, "get_http_client", side_effect=AssertionError("must reuse injected client")),
+    ):
+        result = await ops.create_task_internal(
+            uid="uid-asana",
+            app_key="asana",
+            integration=integration,
+            title="Retried task",
+            client=client,
+        )
+
+    assert result == {"success": True, "external_task_id": "asana-task-42"}
+    assert client.post.await_count == 3
+    calls = client.post.await_args_list
+    assert calls[0].args[0] == "https://app.asana.com/api/1.0/tasks"
+    assert calls[0].kwargs["headers"]["Authorization"] == "Bearer expired-token"
+    assert calls[1].args[0] == "https://app.asana.com/-/oauth_token"
+    assert calls[2].args[0] == "https://app.asana.com/api/1.0/tasks"
+    assert calls[2].kwargs["headers"]["Authorization"] == "Bearer fresh-token"
+    mock_run_blocking.assert_awaited_once()
