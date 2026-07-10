@@ -4,7 +4,6 @@ import { useChat } from '../../hooks/useChat'
 import { useAuth } from '../../hooks/useAuth'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { auth } from '../../lib/firebase'
-import { releasePttMic } from '../../lib/ptt/capture'
 import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
@@ -68,21 +67,6 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
 
   useEffect(() => {
     inputRef.current?.focus()
-  }, [])
-
-  // The PTT mic is acquired at Space key-down (usePushToTalk) and lingers
-  // briefly between presses. This effect is the privacy backstop: the moment the
-  // overlay hides or loses focus, any lingering warm mic is released.
-  useEffect(() => {
-    const unActive = window.omiOverlay.onActiveChange((active) => {
-      if (!active) releasePttMic()
-    })
-    const unHide = window.omiOverlay.onWillHide(() => releasePttMic())
-    return () => {
-      unActive()
-      unHide()
-      releasePttMic()
-    }
   }, [])
 
   // Auto-grow the input to fit its contents — especially the live voice transcript,

@@ -22,6 +22,7 @@
 // A capture feeds three consumers: the bounded local PCM buffer (the foundation
 // every transcription lane reads from), the waveform AnalyserNode, and an onChunk
 // tee for the opportunistic streaming lane.
+import { acquireMicStream, floatTo16BitPCM, teardownAudioGraph } from '../audio'
 import { DRAIN_MS, MAX_BUFFER_BYTES } from './constants'
 
 /** How much already-heard audio the warm graph retains for backfill. Must cover
@@ -42,7 +43,8 @@ export type PttCapture = {
 }
 
 export type PttCaptureOptions = {
-  /** Tee for each converted PCM chunk (the streaming lane). Not called after
+  /** Tee for each PCM chunk, INCLUDING the backfill seed (the streaming lane must
+   *  hear the same audio the batch buffer holds). Not called after
    *  drain()/dispose(). */
   onChunk?: (pcm: Int16Array) => void
   /** Fired once if the buffer hits MAX_BUFFER_BYTES; capture keeps running but
@@ -67,43 +69,9 @@ type MicGraph = {
   ringSamples: number
 }
 
-// Virtual/loopback input devices (VB-Audio Cable, VoiceMeeter, …) output pure
-// silence unless something routes audio into them. If Windows' DEFAULT capture
-// device is one of these, every hold hears zeros — observed in the wild when a
-// VB-Cable install grabbed the system default. Prefer a real microphone instead
-// (macOS parity: its PTT likewise avoids inputs that can't hear the user), and
-// among real mics prefer non-Bluetooth — opening a BT mic drops the headset to
-// HFP and degrades its output.
-const VIRTUAL_INPUT_RE = /virtual|vb-audio|voicemeeter|loopback|\bcable\b|blackhole/i
-const BLUETOOTH_RE = /bluetooth|hands-free/i
-
-async function acquireMicStream(): Promise<MediaStream> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-  const label = stream.getAudioTracks()[0]?.label ?? ''
-  if (!VIRTUAL_INPUT_RE.test(label)) return stream
-  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
-    (d) =>
-      d.kind === 'audioinput' &&
-      d.deviceId !== 'default' &&
-      d.deviceId !== 'communications' &&
-      d.label &&
-      !VIRTUAL_INPUT_RE.test(d.label)
-  )
-  const pick = inputs.find((d) => !BLUETOOTH_RE.test(d.label)) ?? inputs[0]
-  if (!pick) return stream // nothing better exists — keep the default
-  try {
-    const better = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: pick.deviceId } }
-    })
-    console.warn(`[ptt] default input "${label}" is a virtual device — capturing "${pick.label}" instead`)
-    stream.getTracks().forEach((t) => t.stop())
-    return better
-  } catch {
-    return stream
-  }
-}
-
-async function createGraph(): Promise<MicGraph> {
+/** `trackRing: false` for ephemeral (cold) graphs — nothing ever reads their
+ *  pre-roll, so skip the per-chunk ring bookkeeping. */
+async function createGraph(trackRing: boolean): Promise<MicGraph> {
   const stream = await acquireMicStream()
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
   const source = ctx.createMediaStreamSource(stream)
@@ -129,16 +97,13 @@ async function createGraph(): Promise<MicGraph> {
 
   const ringCap = (PRE_ROLL_MS / 1000) * SAMPLE_RATE
   processor.onaudioprocess = (e): void => {
-    const f32 = e.inputBuffer.getChannelData(0)
-    const i16 = new Int16Array(f32.length)
-    for (let i = 0; i < f32.length; i++) {
-      const s = Math.max(-1, Math.min(1, f32[i]))
-      i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-    }
-    graph.ring.push(i16)
-    graph.ringSamples += i16.length
-    while (graph.ringSamples - graph.ring[0].length >= ringCap) {
-      graph.ringSamples -= graph.ring.shift()!.length
+    const i16 = floatTo16BitPCM(e.inputBuffer.getChannelData(0))
+    if (trackRing) {
+      graph.ring.push(i16)
+      graph.ringSamples += i16.length
+      while (graph.ringSamples - graph.ring[0].length >= ringCap) {
+        graph.ringSamples -= graph.ring.shift()!.length
+      }
     }
     for (const sub of graph.subscribers) sub(i16)
   }
@@ -147,26 +112,7 @@ async function createGraph(): Promise<MicGraph> {
 }
 
 function destroyGraph(graph: MicGraph): void {
-  try {
-    graph.processor.disconnect()
-  } catch {
-    /* ignore */
-  }
-  try {
-    graph.source.disconnect()
-  } catch {
-    /* ignore */
-  }
-  try {
-    graph.stream.getTracks().forEach((t) => t.stop())
-  } catch {
-    /* ignore */
-  }
-  try {
-    void graph.ctx.close()
-  } catch {
-    /* ignore */
-  }
+  teardownAudioGraph({ nodes: [graph.processor, graph.source], stream: graph.stream, ctx: graph.ctx })
 }
 
 /** The most recent `ms` of audio from the ring, trimmed to the sample so nothing
@@ -185,45 +131,37 @@ function backfillFromRing(graph: MicGraph, ms: number): Int16Array[] {
   return out
 }
 
-// --- Warm-graph lifecycle (driven by the overlay's focus) ---------------------
+// --- Warm-graph lifecycle (driven by the hook: key-down warm, idle release) ----
 
 let warmGraph: MicGraph | null = null
 let warmPromise: Promise<MicGraph> | null = null
 let attachedCaptures = 0
 let releaseWanted = false
 
-/** Open (or keep) the warm mic graph. Idempotent; resolves false if the mic is
- *  unavailable (permission denied / no device) — holds then cold-start and fail
- *  visibly through the normal capture path. */
-export async function warmPttMic(): Promise<boolean> {
+/** Open (or keep) the warm mic graph. Idempotent; failures are swallowed here —
+ *  a hold then cold-starts and surfaces mic errors through the capture path. */
+export async function warmPttMic(): Promise<void> {
   releaseWanted = false
-  if (warmGraph) return true
-  warmPromise ??= createGraph()
+  if (warmGraph) return
+  warmPromise ??= createGraph(true)
   try {
     const graph = await warmPromise
     // A release may have arrived while the graph was being created.
-    if (releaseWanted) {
-      destroyGraph(graph)
-      return false
-    }
-    warmGraph = graph
-    return true
+    if (releaseWanted) destroyGraph(graph)
+    else warmGraph = graph
   } catch {
-    return false
+    /* hold-time capture will retry cold and surface the error */
   } finally {
     warmPromise = null
   }
 }
 
-/** Release the warm graph (overlay hidden/blurred). If a hold is mid-capture the
- *  teardown is deferred until it detaches, so an in-flight capture never loses
- *  its mic. */
+/** Release the warm graph (idle linger elapsed, or overlay hidden/blurred). If a
+ *  hold is mid-capture the teardown is deferred until it detaches, so an
+ *  in-flight capture never loses its mic. */
 export function releasePttMic(): void {
   releaseWanted = true
-  if (warmGraph && attachedCaptures === 0) {
-    destroyGraph(warmGraph)
-    warmGraph = null
-  }
+  maybeReleaseWarm()
 }
 
 function maybeReleaseWarm(): void {
@@ -247,7 +185,7 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
     }
     warm = warmGraph
   }
-  const graph = warm ?? (await createGraph())
+  const graph = warm ?? (await createGraph(false))
   const ephemeral = !warm
   if (!ephemeral) attachedCaptures++
 

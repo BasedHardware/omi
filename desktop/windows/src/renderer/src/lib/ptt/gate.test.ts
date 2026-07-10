@@ -106,9 +106,14 @@ describe('gateDecision', () => {
     expect(gateDecision({ totalSec: 1.0, voicedSec: MIN_VOICED_SEC, peak: 8000 })).toBe('ok')
   })
 
-  it('measures peak so the machine can tell a dead input from a quiet room', () => {
+  it('measures peak so a dead input can be told from a quiet room', () => {
     expect(voicedStats(zeros(1000)).peak).toBe(0)
     expect(voicedStats(sine(1000, 8000)).peak).toBeGreaterThan(7500)
+  })
+
+  it('distinguishes dead-mic (flat-line) from silent (quiet room)', () => {
+    expect(gateDecision({ totalSec: 2.0, voicedSec: 0, peak: 0 })).toBe('dead-mic')
+    expect(gateDecision({ totalSec: 2.0, voicedSec: 0, peak: 200 })).toBe('silent')
   })
 
   it('end-to-end: quiet speech below the RMS threshold is discarded, loud is kept', () => {

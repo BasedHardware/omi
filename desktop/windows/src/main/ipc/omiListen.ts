@@ -1,11 +1,12 @@
 import { ipcMain, WebContents, webContents } from 'electron'
 import WebSocket from 'ws'
-import type {
-  BackendSegment,
-  ListenEvent,
-  ListenMessage,
-  ListenMode,
-  ListenStartArgs
+import {
+  PCM_PENDING_MAX_BYTES,
+  type BackendSegment,
+  type ListenEvent,
+  type ListenMessage,
+  type ListenMode,
+  type ListenStartArgs
 } from '../../shared/types'
 
 /**
@@ -61,10 +62,6 @@ type Session = {
   pendingBytes: number
 }
 
-// Cap the pre-connect buffer (~5s of 16 kHz mono PCM16 = 160 KB). If the socket
-// somehow never opens, we never grow this without bound; oldest chunks drop first.
-const MAX_PENDING_BYTES = 16000 * 2 * 5
-
 const sessions = new Map<string, Session>()
 
 function emit(ownerId: number, msg: ListenMessage): void {
@@ -74,39 +71,40 @@ function emit(ownerId: number, msg: ListenMessage): void {
   }
 }
 
+/** The one way a session dies early: mark closed, drop buffers, remove from the
+ *  map, close the socket. Shared by replace/supersede/stop so Session cleanup
+ *  can't drift between call sites. */
+function killSession(id: string, s: Session, why: string): void {
+  console.log(`[omi-listen] ${why} ${id} mode=${s.mode} (readyState=${s.ws.readyState})`)
+  s.closed = true
+  s.pending = []
+  s.pendingBytes = 0
+  sessions.delete(id)
+  try {
+    s.ws.close()
+  } catch {
+    /* ignore */
+  }
+}
+
 function startSession(args: ListenStartArgs, owner: WebContents): void {
   const existing = sessions.get(args.sessionId)
   if (existing) {
-    // Already running — caller bug. Tear the old one down to avoid leaks.
-    try {
-      existing.ws.close()
-    } catch {
-      /* ignore */
-    }
-    sessions.delete(args.sessionId)
+    // Already running under the same id — caller bug; tear down to avoid leaks.
+    killSession(args.sessionId, existing, 'replace')
   }
   const mode: ListenMode = args.mode ?? 'conversation'
 
   // Push-to-talk is a single-at-a-time gesture. When a new PTT hold opens its
   // connection, close any prior PTT session for the same window — a rapid series of
   // holds otherwise leaves several connections handshaking to the same endpoint at
-  // once, and they contend (connect times balloon from ~100ms to 4-11s). Killing the
-  // superseded one keeps exactly one live PTT connection, so the newest stays fast.
-  // The client already abandons the prior hold's commit on a new hold, so nothing is
-  // lost that wasn't already being discarded.
+  // once, and they contend (connect times balloon from ~100ms to 4-11s). The
+  // superseded hold is NOT lost: its renderer job keeps its locally-retained
+  // buffer, sees the stream death, and falls back to batch transcription.
   if (mode === 'ptt') {
     for (const [id, s] of sessions) {
       if (id !== args.sessionId && s.mode === 'ptt' && s.ownerId === owner.id) {
-        console.log(`[omi-listen] supersede ${id} (new PTT hold ${args.sessionId})`)
-        s.closed = true
-        s.pending = []
-        s.pendingBytes = 0
-        sessions.delete(id)
-        try {
-          s.ws.close()
-        } catch {
-          /* ignore */
-        }
+        killSession(id, s, `supersede (new PTT hold ${args.sessionId})`)
       }
     }
   }
@@ -240,7 +238,7 @@ function feedSession(sessionId: string, pcm: ArrayBuffer): void {
     const chunk = Buffer.from(pcm)
     s.pending.push(chunk)
     s.pendingBytes += chunk.byteLength
-    while (s.pendingBytes > MAX_PENDING_BYTES && s.pending.length > 1) {
+    while (s.pendingBytes > PCM_PENDING_MAX_BYTES && s.pending.length > 1) {
       const dropped = s.pending.shift()!
       s.pendingBytes -= dropped.byteLength
     }
@@ -268,17 +266,7 @@ function finalizeSession(sessionId: string): void {
 
 function stopSession(sessionId: string): void {
   const s = sessions.get(sessionId)
-  if (!s) return
-  console.log(`[omi-listen] stop ${sessionId} mode=${s.mode} (readyState=${s.ws.readyState})`)
-  s.closed = true
-  s.pending = []
-  s.pendingBytes = 0
-  sessions.delete(sessionId)
-  try {
-    s.ws.close()
-  } catch {
-    /* ignore */
-  }
+  if (s) killSession(sessionId, s, 'stop')
 }
 
 export function registerOmiListenHandlers(): void {

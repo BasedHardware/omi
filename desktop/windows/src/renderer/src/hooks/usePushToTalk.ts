@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
 import { voicedStats } from '../lib/ptt/gate'
 import { startPttCapture, warmPttMic, releasePttMic, type PttCapture } from '../lib/ptt/capture'
-import { startPttStream, batchTranscribe, batchErrorMessage, type PttStream } from '../lib/ptt/transport'
+import {
+  startPttStream,
+  batchTranscribe,
+  batchErrorMessage,
+  prefetchAuthToken,
+  type PttStream
+} from '../lib/ptt/transport'
 import {
   HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
@@ -10,8 +16,11 @@ import {
   TOO_LONG_HINT_MS,
   ERROR_STRIP_MS,
   WATCHDOG_MS,
-  MIC_IDLE_RELEASE_MS
+  MIC_IDLE_RELEASE_MS,
+  MIC_TAP_RELEASE_MS,
+  RECORDING_TOO_LONG_MESSAGE
 } from '../lib/ptt/constants'
+import { PCM_PENDING_MAX_BYTES } from '../../../shared/types'
 
 // Hold-Space push-to-talk, buffer-first (macOS architecture): one mic capture per
 // hold feeds a local PCM buffer + the waveform + an opportunistic live stream. On
@@ -56,10 +65,13 @@ export type PushToTalk = {
   cancel: () => void
 }
 
-const HINT_TEXT = {
-  'too-short': 'Hold longer to record',
-  'too-long': 'Recording too long — keep it under 5 minutes',
-  'dead-mic': 'Mic heard nothing — check your input device in Windows sound settings'
+const HINTS = {
+  'too-short': { text: 'Hold longer to record', ms: HINT_MS },
+  'too-long': { text: RECORDING_TOO_LONG_MESSAGE, ms: TOO_LONG_HINT_MS },
+  'dead-mic': {
+    text: 'Mic heard nothing — check your input device in Windows sound settings',
+    ms: TOO_LONG_HINT_MS
+  }
 } as const
 
 /** One capture's mutable world: its machine state plus everything the effects
@@ -85,12 +97,6 @@ type Job = {
   backfillMs: number
 }
 
-/** Cap on renderer-side chunks queued while the stream session is still being
- *  created (~5s of 16kHz PCM16, mirroring the main process's pre-OPEN buffer).
- *  If the stream takes longer than this it's effectively dead — the batch lane
- *  owns the capture anyway, so dropping oldest is harmless. */
-const PENDING_STREAM_MAX_BYTES = 16000 * 2 * 5
-
 function isSpace(e: { key: string; code: string }): boolean {
   return e.key === ' ' || e.code === 'Space'
 }
@@ -108,8 +114,6 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // Every job still in flight (foreground + background) — so unmount can cancel
   // background captures too, not just the active one.
   const liveJobsRef = useRef(new Set<Job>())
-  // Mirrors the active job's phase for synchronous reads in key handlers.
-  const recordingRef = useRef(false)
   // Pending hold timer (armed at key-down; firing starts the capture).
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // When the physical key went down — the warm mic backfills from this moment.
@@ -118,8 +122,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const snapshotRef = useRef('')
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Warm-mic idle linger: the graph opens at Space key-down and closes after
-  // MIC_IDLE_RELEASE_MS without Space activity (or on overlay blur/hide).
+  // Warm-mic idle linger: the graph opens at Space key-down and closes after a
+  // Space-inactivity window (short after a mere tap, long after PTT use) — or on
+  // overlay blur/hide.
   const micIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const optsRef = useRef(opts)
@@ -127,20 +132,28 @@ export function usePushToTalk(opts: Options): PushToTalk {
   optsRef.current = opts
 
   const isForeground = (job: Job): boolean => jobRef.current === job
+  /** Synchronous "is a hold capturing right now" for the key handlers — derived
+   *  from the machine state, never a second source of truth. */
+  const isHolding = (): boolean => jobRef.current?.state.phase === 'holding'
 
   // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
-  // hold threshold) and re-arm the idle release. If the timer fires mid-capture,
-  // releasePttMic defers internally until the capture detaches.
+  // hold threshold), prefetch the auth token alongside the mic spin-up, and
+  // (re-)arm the idle release. If the timer fires mid-capture, releasePttMic
+  // defers internally until the capture detaches.
+  const armMicIdleRelease = (ms: number): void => {
+    if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
+    micIdleTimerRef.current = setTimeout(() => releasePttMic(), ms)
+  }
   const touchMic = (): void => {
     void warmPttMic()
-    if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
-    micIdleTimerRef.current = setTimeout(() => releasePttMic(), MIC_IDLE_RELEASE_MS)
+    prefetchAuthToken()
+    armMicIdleRelease(MIC_IDLE_RELEASE_MS)
   }
 
-  const showHint = (text: string, ms: number): void => {
-    setHint(text)
+  const showHint = (which: keyof typeof HINTS): void => {
+    setHint(HINTS[which].text)
     if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-    hintTimerRef.current = setTimeout(() => setHint(null), ms)
+    hintTimerRef.current = setTimeout(() => setHint(null), HINTS[which].ms)
   }
   const showError = (message: string): void => {
     setError(message)
@@ -151,7 +164,6 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const syncUi = (job: Job): void => {
     if (!isForeground(job)) return
     const { phase } = job.state
-    recordingRef.current = phase === 'holding'
     setRecording(phase === 'holding')
     setTranscribing(phase === 'draining' || phase === 'streamFinalize' || phase === 'batching')
   }
@@ -181,7 +193,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
               } else if (!job.streamStopped) {
                 job.pendingStream.push(pcm)
                 job.pendingStreamBytes += pcm.byteLength
-                while (job.pendingStreamBytes > PENDING_STREAM_MAX_BYTES && job.pendingStream.length > 1) {
+                while (job.pendingStreamBytes > PCM_PENDING_MAX_BYTES && job.pendingStream.length > 1) {
                   job.pendingStreamBytes -= job.pendingStream.shift()!.byteLength
                 }
               }
@@ -253,6 +265,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
           job.pendingStreamBytes = 0
           break
         }
+        case 'armWatchdog': {
+          job.watchdogTimer = setTimeout(() => dispatch(job, { type: 'WATCHDOG' }), WATCHDOG_MS)
+          break
+        }
         case 'sendFinalize': {
           job.stream?.finalize()
           job.deadlineTimer = setTimeout(
@@ -290,14 +306,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
           break
         }
         case 'showHint': {
-          if (isForeground(job)) {
-            showHint(HINT_TEXT[eff.hint], eff.hint === 'too-short' ? HINT_MS : TOO_LONG_HINT_MS)
-          }
+          if (isForeground(job)) showHint(eff.hint)
           break
         }
         case 'showError': {
           if (isForeground(job)) showError(eff.message)
           else console.warn('[ptt] background capture failed:', eff.message)
+          break
+        }
+        case 'captureEnded': {
+          optsRef.current.onCaptureEnd?.()
           break
         }
       }
@@ -306,12 +324,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
     if (job.state.phase === 'idle' && prevPhase !== 'idle') {
       clearJobTimers(job)
       liveJobsRef.current.delete(job)
-      // The gesture completed (committed / hinted / silent / failed) — cancel is
-      // the one exit that isn't a completed gesture. Holding→idle only happens on
-      // cancel/watchdog, so a threshold-crossed-but-aborted hold doesn't count.
-      if (event.type !== 'CANCEL' && prevPhase !== 'holding') {
-        optsRef.current.onCaptureEnd?.()
-      }
+      // Release the big audio references immediately — the finished job object
+      // lives on in jobRef until the next hold, and the buffer (plus the capture
+      // closure's chunk array via capturePromise) is up to ~17MB.
+      job.buffer = null
+      job.capturePromise = null
+      job.pendingStream = []
+      job.pendingStreamBytes = 0
     }
     syncUi(job)
   }
@@ -348,16 +367,6 @@ export function usePushToTalk(opts: Options): PushToTalk {
     dispatch(job, { type: 'HOLD_START' })
   }
 
-  const release = (): void => {
-    const job = jobRef.current
-    if (job && job.state.phase === 'holding') {
-      // The watchdog guards the post-RELEASE pipeline only — the hold itself is
-      // user-bounded (the key is down) and may legitimately run for minutes.
-      job.watchdogTimer = setTimeout(() => dispatch(job, { type: 'WATCHDOG' }), WATCHDOG_MS)
-      dispatch(job, { type: 'RELEASE' })
-    }
-  }
-
   const cancel = (): void => {
     if (holdTimerRef.current !== null) {
       clearTimeout(holdTimerRef.current)
@@ -368,37 +377,56 @@ export function usePushToTalk(opts: Options): PushToTalk {
     setHint(null)
   }
 
-  // --- Space gesture wiring (tap types a space; a ≥350ms hold records) ---------
+  // --- Space gesture (tap types a space; a ≥350ms hold records) ----------------
+  // One implementation shared by the textarea handlers and the window-level
+  // listeners; the wrappers differ only in snapshot source and preventDefault.
+
+  /** Key-down: warm the mic, snapshot the draft, arm the threshold timer. */
+  const gestureDown = (snapshot: string): void => {
+    keyDownAtRef.current = Date.now()
+    touchMic()
+    snapshotRef.current = snapshot
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null
+      startHold()
+    }, HOLD_THRESHOLD_MS)
+  }
+
+  /** Key-up: resolve the gesture. 'tap' = threshold not reached (the space
+   *  types); 'released' = a hold ended (consumed); 'none' = not ours. */
+  const gestureUp = (): 'tap' | 'released' | 'none' => {
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+      // A mere typed space: don't keep the mic open the whole time the user is
+      // typing a sentence — shorten the linger to a quick-re-press window.
+      armMicIdleRelease(MIC_TAP_RELEASE_MS)
+      return 'tap'
+    }
+    const job = jobRef.current
+    if (job && job.state.phase === 'holding') {
+      dispatch(job, { type: 'RELEASE' })
+      return 'released'
+    }
+    return 'none'
+  }
 
   const onKeyDown = (e: React.KeyboardEvent): boolean => {
     if (!isSpace(e)) return false
-    if (recordingRef.current) {
+    if (isHolding()) {
       e.preventDefault() // swallow auto-repeat spaces while recording
       return true
     }
     if (!e.repeat && holdTimerRef.current === null) {
-      keyDownAtRef.current = Date.now()
-      touchMic()
-      snapshotRef.current = (e.currentTarget as HTMLTextAreaElement).value ?? ''
-      holdTimerRef.current = setTimeout(() => {
-        holdTimerRef.current = null
-        startHold()
-      }, HOLD_THRESHOLD_MS)
+      gestureDown((e.currentTarget as HTMLTextAreaElement).value ?? '')
     }
     return false
   }
 
   const onKeyUp = (e: React.KeyboardEvent): boolean => {
     if (!isSpace(e)) return false
-    if (holdTimerRef.current !== null) {
-      // Released before the threshold → it was a tap; the space already typed.
-      clearTimeout(holdTimerRef.current)
-      holdTimerRef.current = null
-      return false
-    }
-    if (recordingRef.current) {
+    if (gestureUp() === 'released') {
       e.preventDefault()
-      release()
       return true
     }
     return false
@@ -415,32 +443,18 @@ export function usePushToTalk(opts: Options): PushToTalk {
     }
     const onDown = (e: KeyboardEvent): void => {
       if (!isSpace(e) || inTextField()) return
-      if (recordingRef.current) {
+      if (isHolding()) {
         e.preventDefault()
         return
       }
       if (!e.repeat && holdTimerRef.current === null) {
         e.preventDefault() // don't let Space scroll or activate a focused control
-        keyDownAtRef.current = Date.now()
-        touchMic()
-        snapshotRef.current = optsRef.current.getDraft()
-        holdTimerRef.current = setTimeout(() => {
-          holdTimerRef.current = null
-          startHold()
-        }, HOLD_THRESHOLD_MS)
+        gestureDown(optsRef.current.getDraft())
       }
     }
     const onUp = (e: KeyboardEvent): void => {
       if (!isSpace(e) || inTextField()) return
-      if (holdTimerRef.current !== null) {
-        clearTimeout(holdTimerRef.current)
-        holdTimerRef.current = null
-        return
-      }
-      if (recordingRef.current) {
-        e.preventDefault()
-        release()
-      }
+      if (gestureUp() === 'released') e.preventDefault()
     }
     window.addEventListener('keydown', onDown)
     window.addEventListener('keyup', onUp)
@@ -448,18 +462,34 @@ export function usePushToTalk(opts: Options): PushToTalk {
       window.removeEventListener('keydown', onDown)
       window.removeEventListener('keyup', onUp)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- startHold/release are stable via refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gestureDown/Up are stable via refs
   }, [])
 
-  // Tear down on unmount: cancel the active capture, clear timers, drop the mic.
+  // Privacy backstop: the moment the overlay hides or loses focus, any lingering
+  // warm mic is released (the hook is the single owner of mic lifecycle policy).
+  // Guarded — the bridge doesn't exist under jsdom tests.
+  useEffect(() => {
+    const bridge = (window as { omiOverlay?: typeof window.omiOverlay }).omiOverlay
+    if (!bridge) return
+    const unActive = bridge.onActiveChange((active) => {
+      if (!active) releasePttMic()
+    })
+    const unHide = bridge.onWillHide(() => releasePttMic())
+    return () => {
+      unActive()
+      unHide()
+    }
+  }, [])
+
+  // Tear down on unmount: cancel every in-flight job (foreground and superseded
+  // background ones — so no timer or transport callback fires into an unmounted
+  // tree), clear timers, drop the mic.
   useEffect(() => {
     return () => {
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current)
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
       if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
-      // Cancel EVERY in-flight job (foreground and superseded background ones) so
-      // no timer or transport callback fires into an unmounted tree.
       for (const job of [...liveJobsRef.current]) {
         if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
       }

@@ -2,6 +2,7 @@
 // before ANY network work — whether a hold is worth transcribing. Port of the
 // macOS voicedAudioSeconds / finalize silence-gate design.
 import {
+  DEAD_MIC_PEAK,
   MIN_TOTAL_AUDIO_SEC,
   MIN_VOICED_SEC,
   VOICED_FRAME_SAMPLES,
@@ -21,7 +22,7 @@ export type AudioStats = {
 /** Measure a raw 16kHz mono PCM16 buffer: total duration + voiced duration
  *  (RMS over 20ms frames, macOS parity) + peak. A trailing partial frame is
  *  ignored for voicing but counted in totalSec/peak. */
-export function voicedStats(pcm: Int16Array, rmsThreshold = VOICED_RMS_THRESHOLD): AudioStats {
+export function voicedStats(pcm: Int16Array): AudioStats {
   const totalSec = pcm.length / 16000
   let voicedFrames = 0
   let peak = 0
@@ -35,7 +36,7 @@ export function voicedStats(pcm: Int16Array, rmsThreshold = VOICED_RMS_THRESHOLD
       const a = s < 0 ? -s : s
       if (a > peak) peak = a
     }
-    if (Math.sqrt(sumSq / VOICED_FRAME_SAMPLES) >= rmsThreshold) voicedFrames++
+    if (Math.sqrt(sumSq / VOICED_FRAME_SAMPLES) >= VOICED_RMS_THRESHOLD) voicedFrames++
   }
   for (let i = frames * VOICED_FRAME_SAMPLES; i < pcm.length; i++) {
     const a = pcm[i] < 0 ? -pcm[i] : pcm[i]
@@ -47,14 +48,17 @@ export function voicedStats(pcm: Int16Array, rmsThreshold = VOICED_RMS_THRESHOLD
 export type GateDecision =
   /** Release beat the capture (fast tap): show "Hold longer to record". */
   | 'too-short'
-  /** A real hold with no speech: discard silently — never send silence to STT
-   *  (it hallucinates phrases). */
+  /** A real hold whose input is flat-lined (virtual cable, muted/broken mic):
+   *  show an actionable hint — the user thinks they spoke. */
+  | 'dead-mic'
+  /** A real hold with no speech in a live room: discard silently — never send
+   *  silence to STT (it hallucinates phrases). */
   | 'silent'
   /** Worth transcribing. */
   | 'ok'
 
 export function gateDecision(stats: AudioStats): GateDecision {
   if (stats.totalSec < MIN_TOTAL_AUDIO_SEC) return 'too-short'
-  if (stats.voicedSec < MIN_VOICED_SEC) return 'silent'
+  if (stats.voicedSec < MIN_VOICED_SEC) return stats.peak < DEAD_MIC_PEAK ? 'dead-mic' : 'silent'
   return 'ok'
 }

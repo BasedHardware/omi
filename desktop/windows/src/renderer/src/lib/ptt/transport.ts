@@ -14,8 +14,20 @@ import axios from 'axios'
 import { omiApi } from '../apiClient'
 import { auth } from '../firebase'
 import { getPreferences } from '../preferences'
-import { BATCH_TIMEOUT_MS } from './constants'
+import {
+  BATCH_TIMEOUT_MS,
+  BATCH_TRANSCRIBE_PATH,
+  batchTranscribeParams,
+  RECORDING_TOO_LONG_MESSAGE
+} from './constants'
 import type { BackendSegment } from '../../../../shared/types'
+
+/** Fire-and-forget token warm-up for key-down: Firebase caches the result, so
+ *  the awaited fetch inside startPttStream/batchTranscribe resolves from cache
+ *  instead of putting a refresh round-trip on the gesture path. */
+export function prefetchAuthToken(): void {
+  void auth.currentUser?.getIdToken()
+}
 
 export type PttStreamCallbacks = {
   /** The socket reached OPEN. */
@@ -86,7 +98,14 @@ export async function startPttStream(cb: PttStreamCallbacks): Promise<PttStream>
   return {
     feed: (pcm: Int16Array): void => {
       if (stopped) return
-      window.omi.listenFeed(sessionId, pcm.buffer as ArrayBuffer)
+      // A backfill chunk can be a subarray view — send exactly its window, not
+      // the full underlying 8KB buffer (which would include pre-key-down samples
+      // the trim exists to exclude). Steady-state chunks stay zero-copy.
+      const exact =
+        pcm.byteOffset === 0 && pcm.byteLength === pcm.buffer.byteLength
+          ? (pcm.buffer as ArrayBuffer)
+          : (pcm.buffer as ArrayBuffer).slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength)
+      window.omi.listenFeed(sessionId, exact)
     },
     finalize: (): void => {
       if (stopped) return
@@ -107,8 +126,8 @@ export async function startPttStream(cb: PttStreamCallbacks): Promise<PttStream>
  *  with a force-refreshed token (covers a just-expired cached token). */
 export async function batchTranscribe(pcm: Int16Array, signal: AbortSignal): Promise<string> {
   const post = (): Promise<{ data?: { transcript?: string } }> =>
-    omiApi.post('/v2/voice-message/transcribe', pcm.buffer, {
-      params: { language: getPreferences().language || 'en', sample_rate: 16000, encoding: 'linear16', channels: 1 },
+    omiApi.post(BATCH_TRANSCRIBE_PATH, pcm.buffer, {
+      params: batchTranscribeParams(getPreferences().language),
       headers: { 'Content-Type': 'application/octet-stream' },
       timeout: BATCH_TIMEOUT_MS,
       signal,
@@ -135,7 +154,7 @@ export function batchErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status
     if (status === 402) return 'Voice transcription needs an active Omi plan'
-    if (status === 413) return 'Recording too long — keep it under 5 minutes'
+    if (status === 413) return RECORDING_TOO_LONG_MESSAGE
     if (status === 429) return 'Voice limit reached — try again in a minute'
     if (status === 401 || status === 403) return 'Sign-in expired — sign in again to use voice'
   }

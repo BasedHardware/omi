@@ -38,6 +38,10 @@ describe('happy paths', () => {
     expect(commitOf(effects)).toBe('hello world')
     expect(kinds(effects)).toContain('sendFinalize')
     expect(kinds(effects)).not.toContain('startBatch')
+    // The watchdog is machine doctrine: armed at RELEASE, and the completed
+    // gesture is announced as an effect (not inferred by the interpreter).
+    expect(kinds(effects)).toContain('armWatchdog')
+    expect(kinds(effects)).toContain('captureEnded')
   })
 
   it('release-before-connect goes straight to batch — sendFinalize is never emitted', () => {
@@ -193,12 +197,13 @@ describe('cancel and watchdog — no path can hang or leak', () => {
   ]
 
   for (const { name, events } of phases) {
-    it(`CANCEL from ${name} → idle with full teardown and never a commit`, () => {
+    it(`CANCEL from ${name} → idle with full teardown, never a commit or captureEnded`, () => {
       const setup = run(events)
       const { state, effects } = run([{ type: 'CANCEL' }], setup.state)
       expect(state.phase).toBe('idle')
       expect(kinds(effects)).toEqual(expect.arrayContaining(['stopCapture', 'stopStream', 'abortBatch']))
       expect(commitOf(effects)).toBeNull()
+      expect(kinds(effects)).not.toContain('captureEnded')
     })
 
     if (name !== 'holding') {

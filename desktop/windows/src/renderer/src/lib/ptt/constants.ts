@@ -69,6 +69,21 @@ export const WATCHDOG_MS = 25000
  *  Also released immediately when the overlay hides or loses focus. */
 export const MIC_IDLE_RELEASE_MS = 15000
 
+/** Shorter linger after a TAP (a typed space, not a hold): typing a sentence
+ *  fires key-down per word boundary, and the long linger would keep the mic
+ *  open the whole time the user is merely typing. */
+export const MIC_TAP_RELEASE_MS = 2000
+
+/** Batch transcription contract — shared by the transport and the live E2E
+ *  suite so the harness can never green-test a stale request shape. */
+export const BATCH_TRANSCRIBE_PATH = '/v2/voice-message/transcribe'
+export function batchTranscribeParams(language: string): Record<string, string | number> {
+  return { language: language || 'en', sample_rate: 16000, encoding: 'linear16', channels: 1 }
+}
+
+/** One copy of the user-facing over-length message (hint + 413 error share it). */
+export const RECORDING_TOO_LONG_MESSAGE = 'Recording too long — keep it under 5 minutes'
+
 /** A whole hold whose loudest sample is below this (int16) means the input
  *  device is effectively DEAD — a virtual cable with nothing routed in, or a
  *  muted/broken mic — not a quiet room (macOS deadMicPeakThreshold parity).

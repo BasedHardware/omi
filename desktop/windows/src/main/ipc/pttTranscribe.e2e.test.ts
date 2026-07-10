@@ -34,26 +34,20 @@ import axios from 'axios'
 import WebSocket from 'ws'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { buildListenEndpoint } from './omiListen'
+// The production batch contract — imported so this harness can never green-test
+// a stale request shape.
+import { BATCH_TRANSCRIBE_PATH, batchTranscribeParams } from '../../renderer/src/lib/ptt/constants'
+// Shared auth bootstrap (also used by scripts/diag-listen-probe.mjs).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore -- plain .mjs helper without type declarations
+import { readDotEnv, decodeJwt, exchangeRefreshToken } from '../../../scripts/lib/omi-auth.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 // ---------------------------------------------------------------------------
 // Env / gating
 // ---------------------------------------------------------------------------
-function readDotEnv(): Record<string, string> {
-  const envPath = path.resolve(HERE, '../../../.env')
-  const out: Record<string, string> = {}
-  try {
-    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-      const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
-      if (m) out[m[1]] = m[2].trim()
-    }
-  } catch {
-    /* no .env — env vars only */
-  }
-  return out
-}
-const dotEnv = readDotEnv()
+const dotEnv: Record<string, string> = readDotEnv(path.resolve(HERE, '../../../.env'))
 // Explicit opt-in comes from the PROCESS env only (OMI_E2E_TOKEN or OMI_E2E=1 via
 // `pnpm test:e2e:ptt`) — never from .env alone. A stored refresh token must not
 // silently turn the hermetic `pnpm test` run into a live network suite.
@@ -78,13 +72,7 @@ let idToken = ''
 
 async function resolveIdToken(): Promise<string> {
   if (DIRECT_TOKEN) return DIRECT_TOKEN
-  if (!FIREBASE_API_KEY) throw new Error('VITE_FIREBASE_API_KEY missing (needed for refresh-token exchange)')
-  const res = await axios.post(
-    `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-    new URLSearchParams({ grant_type: 'refresh_token', refresh_token: REFRESH_TOKEN }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15_000 }
-  )
-  return res.data.id_token as string
+  return (await exchangeRefreshToken(REFRESH_TOKEN, FIREBASE_API_KEY)) as string
 }
 
 function fixture(name: string): Buffer {
@@ -92,7 +80,10 @@ function fixture(name: string): Buffer {
 }
 
 function batchUrl(): string {
-  return `${OMI_BASE}/v2/voice-message/transcribe?language=en&sample_rate=16000&encoding=linear16&channels=1`
+  const params = new URLSearchParams(
+    Object.entries(batchTranscribeParams('en')).map(([k, v]) => [k, String(v)])
+  )
+  return `${OMI_BASE}${BATCH_TRANSCRIBE_PATH}?${params}`
 }
 
 function streamUrl(): string {
@@ -222,7 +213,7 @@ describe.skipIf(!OPTED_IN || (!DIRECT_TOKEN && !REFRESH_TOKEN))('ptt transcripti
       })
     }
     idToken = await resolveIdToken()
-    const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString('utf8'))
+    const payload = decodeJwt(idToken) as { user_id?: string; sub?: string; exp: number }
     console.log(
       `[ptt-e2e] uid=${payload.user_id ?? payload.sub} exp=${new Date(payload.exp * 1000).toISOString()} base=${OMI_BASE}`
     )

@@ -70,13 +70,14 @@ const h = vi.hoisted(() => {
 
 vi.mock('../lib/ptt/capture', () => ({
   startPttCapture: h.startPttCapture,
-  warmPttMic: vi.fn(async () => true),
+  warmPttMic: vi.fn(async () => {}),
   releasePttMic: vi.fn()
 }))
 vi.mock('../lib/ptt/transport', () => ({
   startPttStream: h.startPttStream,
   batchTranscribe: h.batchTranscribe,
-  batchErrorMessage: () => 'friendly error'
+  batchErrorMessage: () => 'friendly error',
+  prefetchAuthToken: vi.fn()
 }))
 
 import { usePushToTalk } from './usePushToTalk'

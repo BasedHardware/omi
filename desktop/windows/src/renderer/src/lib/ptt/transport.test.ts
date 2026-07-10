@@ -85,6 +85,18 @@ describe('startPttStream', () => {
     expect(h.listen.stop).toHaveBeenCalledOnce()
   })
 
+  it('feed sends exactly a subarray view window, never the full underlying buffer', async () => {
+    // A trimmed backfill chunk is a subarray; sending its whole backing buffer
+    // would ship pre-key-down samples the trim exists to exclude.
+    const stream = await startPttStream({ onConnected: vi.fn(), onFinal: vi.fn(), onDead: vi.fn() })
+    const backing = new Int16Array(4096)
+    const view = backing.subarray(4000) // 96 samples = 192 bytes
+    stream.feed(view)
+    const sent = h.listen.feed.mock.calls[0][1] as ArrayBuffer
+    expect(sent.byteLength).toBe(192)
+    stream.stop()
+  })
+
   it('reports death once — on fatal error or close, whichever first', async () => {
     const cb = { onConnected: vi.fn(), onFinal: vi.fn(), onDead: vi.fn() }
     const stream = await startPttStream(cb)

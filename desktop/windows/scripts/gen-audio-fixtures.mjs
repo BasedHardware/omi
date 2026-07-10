@@ -99,6 +99,14 @@ function wavToPcm(wavPath) {
   return data
 }
 
+/** RMS of one 20ms frame — the single copy of the gate's frame rule here. */
+function frameRms(pcm, frame) {
+  const base = frame * VOICED_FRAME_SAMPLES
+  let sumSq = 0
+  for (let i = 0; i < VOICED_FRAME_SAMPLES; i++) sumSq += pcm[base + i] * pcm[base + i]
+  return Math.sqrt(sumSq / VOICED_FRAME_SAMPLES)
+}
+
 /** Per-fixture stats using the app's gate rule (20ms frames, RMS >= threshold). */
 function stats(pcmBuf) {
   const pcm = new Int16Array(pcmBuf.buffer, pcmBuf.byteOffset, pcmBuf.byteLength / 2)
@@ -109,10 +117,7 @@ function stats(pcmBuf) {
   let voicedFrames = 0
   const frames = Math.floor(pcm.length / VOICED_FRAME_SAMPLES)
   for (let f = 0; f < frames; f++) {
-    let s = 0
-    const base = f * VOICED_FRAME_SAMPLES
-    for (let i = 0; i < VOICED_FRAME_SAMPLES; i++) s += pcm[base + i] * pcm[base + i]
-    if (Math.sqrt(s / VOICED_FRAME_SAMPLES) >= VOICED_RMS_THRESHOLD) voicedFrames++
+    if (frameRms(pcm, f) >= VOICED_RMS_THRESHOLD) voicedFrames++
   }
   return {
     bytes: pcmBuf.byteLength,
@@ -126,10 +131,7 @@ function stats(pcmBuf) {
 function firstVoicedFrame(pcm) {
   const frames = Math.floor(pcm.length / VOICED_FRAME_SAMPLES)
   for (let f = 0; f < frames; f++) {
-    let s = 0
-    const base = f * VOICED_FRAME_SAMPLES
-    for (let i = 0; i < VOICED_FRAME_SAMPLES; i++) s += pcm[base + i] * pcm[base + i]
-    if (Math.sqrt(s / VOICED_FRAME_SAMPLES) >= VOICED_RMS_THRESHOLD) return f
+    if (frameRms(pcm, f) >= VOICED_RMS_THRESHOLD) return f
   }
   return -1
 }

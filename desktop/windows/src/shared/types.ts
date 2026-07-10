@@ -1,3 +1,9 @@
+/** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
+ *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
+ *  pre-session queue (usePushToTalk) and the main process's pre-OPEN WebSocket
+ *  buffer (omiListen) — so the two windows can't silently diverge. */
+export const PCM_PENDING_MAX_BYTES = 16000 * 2 * 5
+
 export type CaptureSource = {
   id: string
   name: string

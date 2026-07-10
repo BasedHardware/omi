@@ -14,7 +14,6 @@
 //   batching → BATCH_OK → commit | BATCH_FAIL → error strip
 //   any non-idle → CANCEL/WATCHDOG → idle (discard, abort in-flight work)
 import { type AudioStats, gateDecision } from './gate'
-import { DEAD_MIC_PEAK } from './constants'
 
 export type PttPhase = 'idle' | 'holding' | 'draining' | 'streamFinalize' | 'batching'
 
@@ -49,6 +48,9 @@ export type PttEffect =
   | { kind: 'startDrain' }
   | { kind: 'stopCapture' }
   | { kind: 'stopStream' }
+  /** Arm the post-release pipeline watchdog (WATCHDOG_MS). Emitted at RELEASE —
+   *  never during the hold, which is user-bounded and may run for minutes. */
+  | { kind: 'armWatchdog' }
   /** Send 'finalize' on the connected stream; arm STREAM_FINALIZE_DEADLINE_MS. */
   | { kind: 'sendFinalize' }
   /** POST the drained buffer to the batch endpoint; arm BATCH_TIMEOUT_MS. */
@@ -61,6 +63,9 @@ export type PttEffect =
   | { kind: 'showError'; message: string }
   /** Live transcript for the input box while the capture is in flight. */
   | { kind: 'setLiveText'; text: string }
+  /** The hold GESTURE completed — committed, hinted, discarded, or failed (never
+   *  emitted on CANCEL). Drives onboarding's voice step. */
+  | { kind: 'captureEnded' }
 
 export const initialState: PttState = {
   phase: 'idle',
@@ -98,7 +103,10 @@ export function reduce(s: PttState, e: PttEvent): Step {
 
     case 'RELEASE': {
       if (s.phase !== 'holding') return stay(s)
-      return { state: { ...s, phase: 'draining' }, effects: [{ kind: 'startDrain' }] }
+      return {
+        state: { ...s, phase: 'draining' },
+        effects: [{ kind: 'armWatchdog' }, { kind: 'startDrain' }]
+      }
     }
 
     case 'CANCEL': {
@@ -109,21 +117,18 @@ export function reduce(s: PttState, e: PttEvent): Step {
     case 'DRAINED': {
       if (s.phase !== 'draining') return stay(s)
       const decision = gateDecision(e.stats)
-      if (decision === 'too-short') {
+      if (decision === 'too-short' || decision === 'dead-mic') {
         return {
           state: { ...s, phase: 'idle' },
-          effects: [{ kind: 'stopStream' }, { kind: 'showHint', hint: 'too-short' }]
+          effects: [{ kind: 'stopStream' }, { kind: 'showHint', hint: decision }, { kind: 'captureEnded' }]
         }
       }
       if (decision === 'silent') {
-        // A flat-line hold (peak ≈ 0) means the INPUT is dead — a virtual cable
-        // or muted/broken mic — which deserves an actionable hint. A merely
-        // quiet room still discards silently.
-        const effects: PttEffect[] =
-          e.stats.peak < DEAD_MIC_PEAK
-            ? [{ kind: 'stopStream' }, { kind: 'showHint', hint: 'dead-mic' }]
-            : [{ kind: 'stopStream' }]
-        return { state: { ...s, phase: 'idle' }, effects }
+        // A live room that simply had no speech — discard without ceremony.
+        return {
+          state: { ...s, phase: 'idle' },
+          effects: [{ kind: 'stopStream' }, { kind: 'captureEnded' }]
+        }
       }
       if (s.streamConnected) {
         return { state: { ...s, phase: 'streamFinalize' }, effects: [{ kind: 'sendFinalize' }] }
@@ -151,7 +156,12 @@ export function reduce(s: PttState, e: PttEvent): Step {
         // Short-circuit: the post-finalize trailing segment landed — commit now.
         return {
           state: { ...s, finals, phase: 'idle' },
-          effects: [{ kind: 'stopStream' }, { kind: 'setLiveText', text: live }, { kind: 'commit', text: live }]
+          effects: [
+            { kind: 'stopStream' },
+            { kind: 'setLiveText', text: live },
+            { kind: 'commit', text: live },
+            { kind: 'captureEnded' }
+          ]
         }
       }
       return { state: { ...s, finals }, effects: [{ kind: 'setLiveText', text: live }] }
@@ -180,12 +190,18 @@ export function reduce(s: PttState, e: PttEvent): Step {
 
     case 'BATCH_OK': {
       if (s.phase !== 'batching') return stay(s)
-      return { state: { ...s, phase: 'idle' }, effects: [{ kind: 'commit', text: e.transcript.trim() }] }
+      return {
+        state: { ...s, phase: 'idle' },
+        effects: [{ kind: 'commit', text: e.transcript.trim() }, { kind: 'captureEnded' }]
+      }
     }
 
     case 'BATCH_FAIL': {
       if (s.phase !== 'batching') return stay(s)
-      return { state: { ...s, phase: 'idle' }, effects: [{ kind: 'showError', message: e.message }] }
+      return {
+        state: { ...s, phase: 'idle' },
+        effects: [{ kind: 'showError', message: e.message }, { kind: 'captureEnded' }]
+      }
     }
 
     case 'BUFFER_CAPPED': {
@@ -204,7 +220,7 @@ export function reduce(s: PttState, e: PttEvent): Step {
       if (s.phase === 'idle' || s.phase === 'holding') return stay(s)
       return {
         state: { ...s, phase: 'idle' },
-        effects: [...TEARDOWN, { kind: 'showError', message: 'Voice input timed out' }]
+        effects: [...TEARDOWN, { kind: 'showError', message: 'Voice input timed out' }, { kind: 'captureEnded' }]
       }
     }
   }
