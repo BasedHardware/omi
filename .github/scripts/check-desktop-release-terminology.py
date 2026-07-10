@@ -16,6 +16,8 @@ OPERATOR_SURFACES = (
     ".github/workflows/desktop_promote_beta.yml",
     ".github/workflows/desktop_promote_prod.yml",
     ".github/workflows/desktop_nominate_stable_candidate.yml",
+    "web/admin/app/api/omi/releases/route.ts",
+    "web/admin/app/(protected)/dashboard/releases/page.tsx",
 )
 
 
@@ -42,6 +44,8 @@ def main() -> int:
     for required in (
         "workflow_dispatch:",
         "desktop_update_channels/macos-beta",
+        "desktop_release_manifests/${RELEASE_TAG}",
+        "--beta-source-sha",
         "nominate-desktop-stable-candidate.py",
         "Stable visibility was not changed",
     ):

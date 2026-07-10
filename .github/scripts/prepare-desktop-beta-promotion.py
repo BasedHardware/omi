@@ -59,6 +59,19 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
+    qualification_manifest = {
+        "passed": True,
+        "tier": "T2",
+        "evidence_asset": qualification.evidence,
+    }
+    if qualification.source == "legacy":
+        # Preserve the immutable manifest shape used by releases registered
+        # before canonical qualification metadata existed. This keeps exact
+        # beta-promotion retries idempotent.
+        qualification_manifest["blessed_at"] = qualification.qualified_at
+    else:
+        qualification_manifest["qualified_at"] = qualification.qualified_at
+
     return {
         "release_id": release_tag,
         "platform": "macos",
@@ -73,13 +86,7 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
         "source_sha": target_sha,
         "zip_sha256": zip_sha256,
         "dmg_sha256": dmg_sha256,
-        "qualification": {
-            "passed": True,
-            "tier": "T2",
-            "qualified_at": qualification.qualified_at,
-            "evidence_asset": qualification.evidence,
-            "metadata_source": qualification.source,
-        },
+        "qualification": qualification_manifest,
     }
 
 
