@@ -9,6 +9,9 @@ class AppLocalizationsIt extends AppLocalizations {
   AppLocalizationsIt([String locale = 'it']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'La sessione è scaduta — accedi di nuovo.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7812,6 +7815,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get viewAll => 'Vedi tutto';
 
   @override
+  String get expand => 'Espandi';
+
+  @override
   String get addTask => 'Aggiungi attività';
 
   @override
@@ -9392,7 +9398,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Per ora funziona con i dispositivi Omi. L\'audio resta sul telefono finché non scegli di caricarlo.';
+      'Per ora funziona con i dispositivi Omi e Limitless. L\'audio resta sul telefono finché non scegli di caricarlo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9418,4 +9424,210 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'In pausa — l\'audio non viene registrato';
+
+  @override
+  String get memoryThisDevice => 'Questo dispositivo';
+
+  @override
+  String get memoryThisIphone => 'Questo iPhone';
+
+  @override
+  String get memoryThisPhone => 'Questo telefono';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Come usare Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parla al tuo Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Pronuncia qualche parola e guardale comparire in tempo reale';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Ottimo lavoro!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Inizia a parlare...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Fai una domanda a Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Premi il pulsante una volta, fai la tua domanda, poi premi di nuovo quando hai finito';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Elaborazione della tua domanda...';
+
+  @override
+  String get deviceOnboardingListening => 'In ascolto...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Spegni';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Accendi';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tieni premuto il pulsante per 3 secondi';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Premi il pulsante per riaccenderlo';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tieni premuto saldamente il pulsante finché la luce non si spegne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connesso';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connesso!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Disconnesso';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Spegnimento in corso...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizza il doppio tocco';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Termina conversazione';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salva e termina la conversazione corrente';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Disattiva / Attiva';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Attiva o disattiva il microfono';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Metti tra i preferiti la conversazione in corso';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Segna la conversazione come importante';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Era un tocco singolo: prova a toccare due volte rapidamente!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Provalo ora! Tocca due volte il tuo Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continua';
+
+  @override
+  String get deviceOnboardingFinish => 'Fine';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Scopri il tuo Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tour rapido e pratico di tutto ciò che il tuo Omi può fare.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Circa 1 minuto';
+
+  @override
+  String get jumpToLatestMessage => 'Vai all\'ultimo messaggio';
+
+  @override
+  String get latest => 'Più recente';
+
+  @override
+  String get flashFirmware => 'Installa il firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Registrazione sul ciondolo';
+
+  @override
+  String get pendantRecordingNote =>
+      'Il tuo ciondolo registra autonomamente. Le registrazioni si sincronizzano con il telefono mentre l\'app è aperta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizzazione delle registrazioni dal ciondolo…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min memorizzati';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'La memoria del ciondolo è quasi piena — tieni l\'app aperta per sincronizzare.';
+
+  @override
+  String get connectRayBanMeta => 'Connetti Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Usa i tuoi occhiali Ray-Ban Meta come dispositivo di acquisizione Omi per conversazioni e contesto visivo. Omi aprirà l\'app Meta AI per collegare i tuoi occhiali.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Connetti tramite Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Completa la connessione nell\'app Meta AI, poi torna qui.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Controlla di nuovo';
+
+  @override
+  String get raybanMetaAllowCamera => 'Consenti la fotocamera sugli occhiali';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi usa la fotocamera dei tuoi occhiali per aggiungere foto alle tue conversazioni. Puoi saltare questo passaggio e usare solo l\'audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Salta per ora';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Modalità solo audio di Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Questa versione di Omi può usare il microfono dei tuoi occhiali tramite Bluetooth. L\'acquisizione di foto richiede la versione sviluppatore Meta di Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'La musica sul telefono si mette in pausa mentre è in uso il microfono degli occhiali.';
+
+  @override
+  String get raybanMetaContinue => 'Continua';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Scatta foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto richiesta — apparirà nella tua conversazione.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microfono pronto';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Acquisizione immagini pronta';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Non disponibile in modalità solo audio';
+
+  @override
+  String get raybanMetaCamera => 'Fotocamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Errore di connessione a Ray-Ban Meta: $error';
+  }
 }

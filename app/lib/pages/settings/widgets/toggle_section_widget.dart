@@ -52,7 +52,7 @@ class _ToggleSectionWidgetState extends State<ToggleSectionWidget> {
               Switch(
                 value: widget.isSectionEnabled,
                 onChanged: widget.onSectionEnabledChanged,
-                activeColor: const Color(0xFF8B5CF6),
+                activeThumbColor: const Color(0xFF8B5CF6),
               ),
             ],
           ),

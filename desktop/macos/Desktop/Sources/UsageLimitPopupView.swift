@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Modal overlay shown when the user hits a free-tier usage cap
 /// (transcription minutes, monthly chat/floating-bar messages, etc).
@@ -124,6 +125,7 @@ struct UsageLimitPopupView: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   UsageLimitPopupView(
     reason: "transcription",
@@ -133,3 +135,4 @@ struct UsageLimitPopupView: View {
   )
   .frame(width: 900, height: 600)
 }
+#endif

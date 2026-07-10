@@ -1,0 +1,7 @@
+{
+  "version": "0.11.561",
+  "date": "2026-06-29",
+  "changes": [
+    "Fixed Gmail import detail panel showing \"Connect Gmail\" button when Gmail is already connected"
+  ]
+}

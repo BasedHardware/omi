@@ -1,17 +1,16 @@
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/devices/apple_watch_connection.dart';
-import 'package:omi/services/devices/bee_connection.dart';
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/bee_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/frame_connection.dart';
-import 'package:omi/services/devices/friend_pendant_connection.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/omi_connection.dart';
-import 'package:omi/services/devices/omiglass_connection.dart';
-import 'package:omi/services/devices/plaud_connection.dart';
+import 'package:omi/services/devices/connectors/fieldy_connection.dart';
+import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omiglass_connection.dart';
+import 'package:omi/services/devices/connectors/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
@@ -185,7 +184,31 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
+
+// Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
+const List<String> _legacyDeviceTypeNames = [
+  'omi',
+  'openglass',
+  'frame',
+  'appleWatch',
+  'plaud',
+  'bee',
+  'fieldy',
+  'friendPendant',
+  'limitless',
+  'raybanMeta',
+];
+
+DeviceType _deviceTypeFromJson(dynamic raw) {
+  String? name;
+  if (raw is int) {
+    if (raw >= 0 && raw < _legacyDeviceTypeNames.length) name = _legacyDeviceTypeNames[raw];
+  } else if (raw is String) {
+    name = raw;
+  }
+  return DeviceType.values.firstWhere((e) => e.name == name, orElse: () => DeviceType.omi);
+}
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
@@ -223,16 +246,16 @@ class BtDevice {
 
   // create an empty device
   BtDevice.empty()
-    : name = '',
-      id = '',
-      type = DeviceType.omi,
-      rssi = 0,
-      locator = null,
-      _modelNumber = '',
-      _firmwareRevision = '',
-      _hardwareRevision = '',
-      _manufacturerName = '',
-      _serialNumber = '';
+      : name = '',
+        id = '',
+        type = DeviceType.omi,
+        rssi = 0,
+        locator = null,
+        _modelNumber = '',
+        _firmwareRevision = '',
+        _hardwareRevision = '',
+        _manufacturerName = '',
+        _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
@@ -327,13 +350,25 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
       return await _getDeviceInfoFromOmi(conn);
-    } else if (type == DeviceType.frame) {
-      return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.raybanMeta) {
+      return _getDeviceInfoFromRayBanMeta();
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
+  }
+
+  // The Meta Wearables toolkit doesn't expose firmware/hardware revisions, so
+  // static identity fields are all we can report.
+  BtDevice _getDeviceInfoFromRayBanMeta() {
+    return copyWith(
+      modelNumber: 'Ray-Ban Meta',
+      firmwareRevision: 'Unknown',
+      hardwareRevision: 'Unknown',
+      manufacturerName: 'Meta',
+      type: DeviceType.raybanMeta,
+    );
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
@@ -381,32 +416,6 @@ class BtDevice {
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
       type: t,
-    );
-  }
-
-  Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
-    var modelNumber = 'Frame';
-    var firmwareRevision = 'Unknown';
-    var hardwareRevision = 'Brilliant Labs Frame';
-    var manufacturerName = 'Brilliant Labs';
-
-    try {
-      final deviceInfo = await conn.getDeviceInfo();
-
-      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
-      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
-      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
-      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-    } catch (e) {
-      Logger.error('Error getting Frame device info: $e');
-    }
-
-    return copyWith(
-      modelNumber: modelNumber,
-      firmwareRevision: firmwareRevision,
-      hardwareRevision: hardwareRevision,
-      manufacturerName: manufacturerName,
-      type: DeviceType.frame,
     );
   }
 
@@ -600,8 +609,8 @@ class BtDevice {
         return isBeeFirmwareUnsupported ? 'Firmware Not Supported' : 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
@@ -638,25 +647,29 @@ class BtDevice {
 
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
 
   // from json
   static fromJson(Map<String, dynamic> json) {
+    // Persisted values may be missing or mistyped (e.g. rssi stored as a
+    // String by an older app version) — never throw during deserialization.
+    final rawRssi = json['rssi'];
+    final rssi = rawRssi is int ? rawRssi : (rawRssi is num ? rawRssi.toInt() : int.tryParse('$rawRssi') ?? 0);
     return BtDevice(
-      name: json['name'],
-      id: json['id'],
-      type: DeviceType.values[json['type']],
-      rssi: json['rssi'],
-      locator: json['locator'] != null ? DeviceLocator.fromJson(json['locator']) : null,
-      modelNumber: json['modelNumber'],
-      firmwareRevision: json['firmwareRevision'],
-      hardwareRevision: json['hardwareRevision'],
-      manufacturerName: json['manufacturerName'],
-      serialNumber: json['serialNumber'],
+      name: json['name'] is String ? json['name'] : '',
+      id: json['id'] is String ? json['id'] : '',
+      type: _deviceTypeFromJson(json['type']),
+      rssi: rssi,
+      locator: json['locator'] is Map<String, dynamic> ? DeviceLocator.fromJson(json['locator']) : null,
+      modelNumber: json['modelNumber'] is String ? json['modelNumber'] : null,
+      firmwareRevision: json['firmwareRevision'] is String ? json['firmwareRevision'] : null,
+      hardwareRevision: json['hardwareRevision'] is String ? json['hardwareRevision'] : null,
+      manufacturerName: json['manufacturerName'] is String ? json['manufacturerName'] : null,
+      serialNumber: json['serialNumber'] is String ? json['serialNumber'] : null,
     );
   }
 
@@ -665,7 +678,10 @@ class BtDevice {
     return {
       'name': name,
       'id': id,
-      'type': type.index,
+      // Persist by stable name (not index): _deviceTypeFromJson reads both the
+      // new name strings and legacy integer indexes, so removing an enum value
+      // can never mis-map existing or newly-saved devices.
+      'type': type.name,
       'rssi': rssi,
       'locator': locator?.toJson(),
       'modelNumber': modelNumber,

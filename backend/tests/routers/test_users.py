@@ -1,131 +1,21 @@
 import asyncio
-import importlib.abc
-import importlib.machinery
-import sys
-import types
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
-
-class _AutoMockModule(types.ModuleType):
-    __path__ = []
-
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+from routers import users as users_router
 
 
-_STUB_PREFIXES = (
-    'database',
-    'firebase_admin',
-    'google.cloud',
-    'google.api_core',
-    'pinecone',
-    'typesense',
-    'opuslib',
-    'pydub',
-    'pusher',
-    'modal',
-    'ulid',
-    'pytz',
-    'twilio',
-    'utils',
-)
+class _FakeRequest:
+    def __init__(self, payload):
+        self._payload = payload
 
-
-def _should_stub(name: str) -> bool:
-    if name in {'utils.other.endpoints', 'services.users'}:
-        return False
-    return any(name == prefix or name.startswith(prefix + '.') for prefix in _STUB_PREFIXES)
-
-
-class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def find_spec(self, name, path=None, target=None):
-        if _should_stub(name):
-            return importlib.machinery.ModuleSpec(name, self, is_package=True)
-        return None
-
-    def create_module(self, spec):
-        return _AutoMockModule(spec.name)
-
-    def exec_module(self, module):
-        pass
-
-
-_finder = _StubFinder()
-sys.meta_path.insert(0, _finder)
-
-_endpoints = types.ModuleType('utils.other.endpoints')
-_endpoints.get_current_user_uid = lambda: 'uid1'
-_endpoints.with_rate_limit = lambda dependency, _policy: dependency
-_endpoints.delete_account = MagicMock()
-_endpoints.get_user = MagicMock()
-
-# Save prior sys.modules entries BEFORE any stubbed import runs so the
-# module-scoped teardown restores the real modules (not the stub-loaded
-# versions) — otherwise the mock-backed shim leaks into later test modules.
-_prior_endpoints = sys.modules.get('utils.other.endpoints')
-sys.modules['utils.other.endpoints'] = _endpoints
-
-_prior_routers_users = sys.modules.get('routers.users')
-_prior_service_modules = {
-    name: sys.modules.get(name)
-    for name in (
-        'services.users',
-        'services.users.account_deletion',
-        'services.users.data_export',
-    )
-}
-
-import firebase_admin.auth as _fa_auth  # noqa: E402
-
-_fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-
-from routers import users as users_router  # noqa: E402
-
-sys.meta_path.remove(_finder)
-for _module_name, _module in list(sys.modules.items()):
-    if isinstance(_module, _AutoMockModule):
-        del sys.modules[_module_name]
-
-# Pop ``routers.users`` and the service modules it transitively imported under
-# the stub finder so later test modules in a full ``pytest tests`` run re-import
-# the real modules instead of reusing mock-backed symbols.
-sys.modules.pop('routers.users', None)
-for _svc_name in _prior_service_modules:
-    sys.modules.pop(_svc_name, None)
-# Clear parent package attributes so ``from routers import users`` and
-# ``from services.users import ...`` don't resolve to stub-loaded modules via
-# attribute lookup on the already-imported package objects.
-for _pkg_name, _attr in (
-    ('routers', 'users'),
-    ('services', 'users'),
-    ('services.users', 'account_deletion'),
-    ('services.users', 'data_export'),
-):
-    _pkg = sys.modules.get(_pkg_name)
-    if _pkg is not None and hasattr(_pkg, _attr):
-        delattr(_pkg, _attr)
-
-# Restore utils.other.endpoints immediately too — pytest collects later test
-# modules before any module-scoped fixture teardown runs, so the shim would
-# persist in sys.modules during that window.  users_router already holds the
-# reference it needs; the shim is no longer required after import.
-if _prior_endpoints is None:
-    sys.modules.pop('utils.other.endpoints', None)
-else:
-    sys.modules['utils.other.endpoints'] = _prior_endpoints
-
-
-def _account_deletion_module(start_account_deletion):
-    module = types.ModuleType('services.users.account_deletion')
-    module.start_account_deletion = start_account_deletion
-    return module
+    async def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
 
 
 def test_delete_account_delegates_to_service():
@@ -147,6 +37,140 @@ def test_delete_account_maps_unexpected_service_error_to_500():
 
     assert exc.value.status_code == 500
     assert exc.value.detail == 'Could not delete account. Please try again.'
+
+
+def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
+    calls = []
+
+    async def run_blocking(_executor, fn, *args):
+        calls.append((fn, args))
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            return False
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 3)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {'status': 'retry'}
+    assert calls == [
+        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
+        (users_router.claim_deletion_wipe_for_task, ('uid1',)),
+        (users_router.background_wipe_user_data, ('uid1',)),
+        (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
+    ]
+
+
+def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            return False
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 2)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=1))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'failed_final'}
+
+
+def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
+    release = MagicMock()
+
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return None
+        if fn is users_router.release_job_run_lock:
+            release(*args)
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'locked'}
+    release.assert_not_called()
+
+
+def test_run_account_deletion_wipe_acks_completed_job(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'completed'
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'acked', 'job_status': 'completed'}
+
+
+def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'not_actionable'
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'not_actionable'}
+
+
+def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
+    released = []
+
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            raise asyncio.CancelledError()
+        if fn is users_router.release_job_run_lock:
+            released.append(args)
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    try:
+        asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError('expected cancellation to propagate')
+
+    assert released == []
 
 
 def test_export_all_user_data_keeps_streaming_headers():

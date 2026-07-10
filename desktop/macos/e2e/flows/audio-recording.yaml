@@ -1,10 +1,12 @@
 version: 2
 name: audio-recording
+tier: manual
 description: Audio recording flow — verify microphone permission, Start Recording button, transcription state, and stop recording
 app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
   - desktop/Desktop/Sources/AppState.swift
 preconditions:
   - auth_ready

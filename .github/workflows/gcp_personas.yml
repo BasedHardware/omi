@@ -7,10 +7,14 @@ on:
       - 'web/personas-open-source/**'
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options:
+          - development
+          - prod
 
 
 env:
@@ -19,7 +23,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -27,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Google Auth
         id: auth
@@ -37,6 +41,9 @@ jobs:
       - run: gcloud auth configure-docker
       - name: Build and Push Docker image
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
+          IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
           docker build \
             --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }} \
             --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }} \
@@ -44,26 +51,27 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
-            --build-arg NEXT_PUBLIC_RAPIDAPI_KEY=${{ secrets.NEXT_PUBLIC_RAPIDAPI_KEY }} \
-            --build-arg NEXT_PUBLIC_RAPIDAPI_HOST=${{ secrets.NEXT_PUBLIC_RAPIDAPI_HOST }} \
-            --build-arg NEXT_PUBLIC_LINKEDIN_API_KEY=${{ secrets.NEXT_PUBLIC_LINKEDIN_API_KEY }} \
-            --build-arg NEXT_PUBLIC_LINKEDIN_API_HOST=${{ secrets.NEXT_PUBLIC_LINKEDIN_API_HOST }} \
-            --build-arg CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }} \
             --build-arg NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }} \
-            --build-arg OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} \
             --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN=${{ secrets.NEXT_PUBLIC_MIXPANEL_TOKEN }} \
             --build-arg NEXT_PUBLIC_EXTRA_PROMPT_RULES=${{ secrets.NEXT_PUBLIC_EXTRA_PROMPT_RULES }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG \
             -f web/personas-open-source/Dockerfile .
 
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v0
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
+          secrets: |
+            RAPIDAPI_KEY=NEXT_PUBLIC_RAPIDAPI_KEY:latest
+            RAPIDAPI_HOST=NEXT_PUBLIC_RAPIDAPI_HOST:latest
+            LINKEDIN_API_KEY=NEXT_PUBLIC_LINKEDIN_API_KEY:latest
+            LINKEDIN_API_HOST=NEXT_PUBLIC_LINKEDIN_API_HOST:latest
+            OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

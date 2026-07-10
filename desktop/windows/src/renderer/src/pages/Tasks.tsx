@@ -6,28 +6,13 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
-
-// First-class action item, as returned by GET /v1/action-items. This is the
-// same source the Omi webapp reads from — so manually-created tasks and due
-// dates show up here too, unlike the old approach of scraping every
-// conversation's structured.action_items.
-type ActionItem = {
-  id: string
-  description: string
-  completed: boolean
-  due_at?: string | null
-  completed_at?: string | null
-  created_at?: string | null
-  conversation_id?: string | null
-}
+import type {
+  ActionItemResponse as ActionItem,
+  ActionItemsResponse,
+  Conversation as CloudConversation
+} from '../lib/omiApi.generated'
 
 type ConvMeta = { title: string; emoji?: string }
-
-type CloudConversation = {
-  id: string
-  title?: string | null
-  structured?: { title?: string | null; emoji?: string | null } | null
-}
 
 // Module-level cache so navigating away and back is instant; refresh re-fetches.
 const cache = {
@@ -59,14 +44,14 @@ async function fetchAll(): Promise<{ items: ActionItem[]; convs: Record<string, 
     })
   ])
   if (aiRes.status === 'rejected') throw aiRes.reason
-  const data = aiRes.value.data as ActionItem[] | { action_items?: ActionItem[] }
+  const data = aiRes.value.data as ActionItem[] | ActionItemsResponse
   const list = Array.isArray(data) ? data : (data.action_items ?? [])
 
   const map: Record<string, ConvMeta> = {}
   if (convRes.status === 'fulfilled' && Array.isArray(convRes.value.data)) {
     for (const c of convRes.value.data) {
       map[c.id] = {
-        title: c.structured?.title || c.title || 'Untitled',
+        title: c.structured?.title || 'Untitled',
         emoji: c.structured?.emoji ?? undefined
       }
     }

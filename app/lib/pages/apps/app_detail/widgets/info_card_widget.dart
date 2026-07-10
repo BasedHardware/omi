@@ -35,7 +35,7 @@ class InfoCardWidget extends StatelessWidget {
           bottom: 6,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25).withOpacity(0.8),
+          color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(16.0),
         ),
         child: Column(
@@ -58,8 +58,8 @@ class InfoCardWidget extends StatelessWidget {
               maxLines != null
                   ? description.decodeString
                   : (description.decodeString.characters.length > 200
-                        ? '${description.decodeString.characters.take(200).toString().trim()}...'
-                        : description.decodeString),
+                      ? '${description.decodeString.characters.take(200).toString().trim()}...'
+                      : description.decodeString),
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
               maxLines: maxLines,
               overflow: maxLines != null ? TextOverflow.ellipsis : null,

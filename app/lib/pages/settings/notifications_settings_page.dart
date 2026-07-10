@@ -276,7 +276,9 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: _notificationFrequency == 0 ? Colors.grey.shade800 : const Color(0xFF6366F1).withOpacity(0.2),
+                  color: _notificationFrequency == 0
+                      ? Colors.grey.shade800
+                      : const Color(0xFF6366F1).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
@@ -301,7 +303,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               activeTrackColor: const Color(0xFF6366F1),
               inactiveTrackColor: Colors.grey.shade800,
               thumbColor: Colors.white,
-              overlayColor: const Color(0xFF6366F1).withOpacity(0.2),
+              overlayColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
               trackHeight: 6,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
             ),
@@ -343,7 +345,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             trailing: Switch(
               value: _dailySummaryEnabled,
               onChanged: _updateDailySummaryEnabled,
-              activeColor: const Color(0xFF6366F1),
+              activeThumbColor: const Color(0xFF6366F1),
             ),
           ),
 
@@ -381,7 +383,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
+  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(

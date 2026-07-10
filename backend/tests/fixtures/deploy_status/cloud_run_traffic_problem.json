@@ -1,0 +1,57 @@
+{
+  "services": [
+    {
+      "metadata": {
+        "name": "backend"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "gcr.io/example/backend:abc1234"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "latestCreatedRevisionName": "backend-abc1234-1",
+        "latestReadyRevisionName": "backend-abc1234-1",
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "traffic": [
+          {
+            "revisionName": "backend-old9999-1",
+            "percent": 100
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "backend-sync"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "gcr.io/example/backend:abc1234"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "latestCreatedRevisionName": "backend-sync-abc1234-1",
+        "latestReadyRevisionName": "backend-sync-old9999-1",
+        "traffic": [
+          {
+            "revisionName": "backend-sync-old9999-1",
+            "percent": 100
+          }
+        ]
+      }
+    }
+  ]
+}

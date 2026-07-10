@@ -1,44 +1,43 @@
-import importlib
-import sys
-import types
+"""Subscription plan tests — migrated off module-scope ``sys.modules`` mutation.
+
+``utils.subscription`` pulls in ``database.users`` at import time, which itself
+imports back from ``utils.subscription`` (circular). The original test broke the
+cycle by pre-corrupting ``sys.modules`` at module scope with empty stubs. This
+file uses the sanctioned Tier-2 reserve seam: a module-scoped fixture that
+installs the stubs via ``stub_modules`` and exec's ``utils.subscription`` fresh
+with ``load_module_fresh``, then restores on teardown. See
+backend/docs/test_isolation.md and testing/import_isolation.py.
+"""
+
+import os
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-_announcements_mod = types.ModuleType("database.announcements")
-_announcements_mod.compare_versions = lambda a, b: 0
-sys.modules.setdefault("database.announcements", _announcements_mod)
-sys.modules.setdefault("database.users", types.SimpleNamespace())
-sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
-
 from models.users import PlanType
+from testing.import_isolation import load_module_fresh, stub_modules
 
-_MISSING = object()
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def subscription_module():
-    previous_module = sys.modules.pop("utils.subscription", _MISSING)
-    utils_package = sys.modules.get("utils")
-    previous_attr = getattr(utils_package, "subscription", _MISSING) if utils_package is not None else _MISSING
+    """Load a fresh ``utils.subscription`` against stubbed circular-import deps."""
+    announcements_stub = ModuleType("database.announcements")
+    announcements_stub.compare_versions = lambda a, b: 0
 
-    if utils_package is not None and hasattr(utils_package, "subscription"):
-        delattr(utils_package, "subscription")
-
-    try:
-        module = importlib.import_module("utils.subscription")
+    fakes = {
+        "database.announcements": announcements_stub,
+        "database.users": ModuleType("database.users"),
+        "database.user_usage": ModuleType("database.user_usage"),
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "utils.subscription",
+            os.path.join(str(_BACKEND), "utils", "subscription.py"),
+        )
         yield module
-    finally:
-        sys.modules.pop("utils.subscription", None)
-        if previous_module is not _MISSING:
-            sys.modules["utils.subscription"] = previous_module
-
-        current_utils_package = sys.modules.get("utils")
-        if current_utils_package is not None:
-            if previous_attr is _MISSING:
-                if hasattr(current_utils_package, "subscription"):
-                    delattr(current_utils_package, "subscription")
-            else:
-                current_utils_package.subscription = previous_attr
 
 
 def test_architect_price_ids_map_to_architect_plan(monkeypatch, subscription_module):

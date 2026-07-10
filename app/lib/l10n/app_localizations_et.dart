@@ -9,6 +9,9 @@ class AppLocalizationsEt extends AppLocalizations {
   AppLocalizationsEt([String locale = 'et']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Seanss aegus — logige uuesti sisse.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7764,6 +7767,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get viewAll => 'Vaata kõiki';
 
   @override
+  String get expand => 'Laienda';
+
+  @override
   String get addTask => 'Lisa ülesanne';
 
   @override
@@ -9334,7 +9340,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+      'Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9360,4 +9366,208 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
+
+  @override
+  String get memoryThisDevice => 'See seade';
+
+  @override
+  String get memoryThisIphone => 'See iPhone';
+
+  @override
+  String get memoryThisPhone => 'See telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Kuidas Omi\'t kasutada';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Ütle paar sõna ja vaata, kuidas need reaalajas ilmuvad';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Tubli!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Hakka rääkima...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Esita Omile küsimus';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Vajuta nuppu üks kord, esita küsimus ja vajuta lõpetamiseks uuesti';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Töötlen sinu küsimust...';
+
+  @override
+  String get deviceOnboardingListening => 'Kuulan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Lülita välja';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Lülita sisse';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hoia nuppu 3 sekundit all';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Vajuta nuppu, et see uuesti sisse lülitada';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hoia nuppu kindlalt all, kuni tuli kustub';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ühendatud';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ühendatud!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Ühendus katkenud';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Lülitan välja...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Kohanda topeltkoputust';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Lõpeta vestlus';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvesta ja lõpeta praegune vestlus';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Vaigista / Taasta heli';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Lülita mikrofon sisse või välja';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Märgi käimasolev vestlus tähega';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Märgi vestlus oluliseks';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'See oli üks koputus — proovi koputada kaks korda kiiresti!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Proovi kohe! Koputa oma Omile kaks korda';
+
+  @override
+  String get deviceOnboardingContinue => 'Jätka';
+
+  @override
+  String get deviceOnboardingFinish => 'Lõpeta';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
+
+  @override
+  String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
+
+  @override
+  String get latest => 'Uusim';
+
+  @override
+  String get flashFirmware => 'Installi püsivara';
+
+  @override
+  String get pendantRecordingTitle => 'Salvestamine ripatsil';
+
+  @override
+  String get pendantRecordingNote =>
+      'Sinu ripats salvestab iseseisvalt. Salvestised sünkroonitakse telefoniga, kui rakendus on avatud.';
+
+  @override
+  String get pendantSyncingRecordings => 'Ripatsi salvestiste sünkroonimine…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min salvestatud';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Ripatsi mälu on peaaegu täis — hoia rakendus avatud, et sünkroonida.';
+
+  @override
+  String get connectRayBanMeta => 'Ühenda Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Kasuta oma Ray-Ban Meta prille Omi jäädvustusseadmena vestluste ja visuaalse konteksti jaoks. Omi avab Meta AI rakenduse, et sinu prillid siduda.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Ühenda Meta AI kaudu';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Lõpeta ühendamine Meta AI rakenduses ja tule siis siia tagasi.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Kontrolli uuesti';
+
+  @override
+  String get raybanMetaAllowCamera => 'Luba prillide kaamera';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi kasutab sinu prillide kaamerat, et lisada vestlustele fotosid. Võid selle vahele jätta ja kasutada ainult heli.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Jäta praegu vahele';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ainult heli režiim';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'See Omi versioon saab kasutada sinu prillide mikrofoni Bluetoothi kaudu. Fotode jäädvustamiseks on vaja Omi Meta arendajaversiooni.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Sinu telefoni muusika peatub, kui prillide mikrofon on kasutusel.';
+
+  @override
+  String get raybanMetaContinue => 'Jätka';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Jäädvusta foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto taotletud — see ilmub sinu vestlusesse.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon on valmis';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Pildistamine on valmis';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Pole saadaval ainult heli režiimis';
+
+  @override
+  String get raybanMetaCamera => 'Kaamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Viga Ray-Ban Metaga ühendamisel: $error';
+  }
 }

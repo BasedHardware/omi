@@ -161,9 +161,7 @@ pub fn validate_byok_request(
     let is_active = state.active && {
         match state.last_seen_at {
             Some(last_seen) => {
-                let age = Utc::now()
-                    .signed_duration_since(last_seen)
-                    .num_seconds();
+                let age = Utc::now().signed_duration_since(last_seen).num_seconds();
                 age <= BYOK_HEARTBEAT_TTL_SECS
             }
             None => false,
@@ -238,11 +236,7 @@ impl ByokStateCache {
 
     /// Get BYOK state for a user, using cache if fresh (< 30s).
     /// On Firestore error, returns default inactive state (fail-open).
-    pub async fn get_or_fetch(
-        &self,
-        uid: &str,
-        firestore: &FirestoreService,
-    ) -> ByokState {
+    pub async fn get_or_fetch(&self, uid: &str, firestore: &FirestoreService) -> ByokState {
         // Cache hit
         {
             let cache = self.cache.lock().await;
@@ -304,6 +298,7 @@ pub struct ByokCacheExt(pub Arc<ByokStateCache>);
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -329,22 +324,13 @@ mod tests {
 
     fn fingerprints_for_keys() -> HashMap<String, String> {
         let mut fp = HashMap::new();
-        fp.insert(
-            "openai".to_string(),
-            hex::encode(Sha256::digest(b"sk-o")),
-        );
+        fp.insert("openai".to_string(), hex::encode(Sha256::digest(b"sk-o")));
         fp.insert(
             "anthropic".to_string(),
             hex::encode(Sha256::digest(b"sk-a")),
         );
-        fp.insert(
-            "gemini".to_string(),
-            hex::encode(Sha256::digest(b"sk-g")),
-        );
-        fp.insert(
-            "deepgram".to_string(),
-            hex::encode(Sha256::digest(b"sk-d")),
-        );
+        fp.insert("gemini".to_string(), hex::encode(Sha256::digest(b"sk-g")));
+        fp.insert("deepgram".to_string(), hex::encode(Sha256::digest(b"sk-d")));
         fp
     }
 
@@ -634,9 +620,7 @@ mod tests {
         let state = ByokState {
             active: true,
             fingerprints: fingerprints_for_keys(),
-            last_seen_at: Some(
-                Utc::now() - chrono::Duration::seconds(BYOK_HEARTBEAT_TTL_SECS + 1),
-            ),
+            last_seen_at: Some(Utc::now() - chrono::Duration::seconds(BYOK_HEARTBEAT_TTL_SECS + 1)),
         };
         let headers = all_byok_headers_with_keys();
         let result = validate_byok_request("uid", &headers, &state);

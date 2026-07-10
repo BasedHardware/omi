@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Chat bubble view for a transcript segment
 struct SpeakerBubbleView: View {
@@ -134,6 +135,7 @@ struct SpeakerBubbleView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     VStack(spacing: 16) {
         Text("SpeakerBubbleView Preview")
@@ -142,3 +144,4 @@ struct SpeakerBubbleView: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
+#endif

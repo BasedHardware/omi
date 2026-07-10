@@ -13,8 +13,11 @@ import type {
 } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { AgentRuntimeKernel, StaleAdapterBindingError } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 export interface KernelHarness {
   store: SqliteAgentStore;
@@ -49,6 +52,9 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
   nextArtifacts: AdapterArtifactReference[] | undefined;
+  writeFileOnExecute: { name: string; contents: string } | undefined;
+  /** When set, FakeRuntimeAdapter reports this as the adapter-effective MCP set. */
+  effectiveMcpServersOverride: Record<string, unknown>[] | null = null;
   pendingResult:
     | {
         promise: Promise<AdapterAttemptResult>;
@@ -131,6 +137,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.pendingResult && (!this.deferOnlyPromptIncludes || promptText.includes(this.deferOnlyPromptIncludes))) {
       return this.pendingResult.promise;
     }
+    if (this.writeFileOnExecute) {
+      writeFileSync(join(context.binding.cwd, this.writeFileOnExecute.name), this.writeFileOnExecute.contents);
+      this.writeFileOnExecute = undefined;
+    }
     const artifacts = this.nextArtifacts;
     this.nextArtifacts = undefined;
     return {
@@ -150,6 +160,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       dispatchAttempted: true,
       adapterAcknowledged: false,
     };
+  }
+
+  effectiveMcpServers(_mcpServers: Record<string, unknown>[]): Record<string, unknown>[] {
+    return this.effectiveMcpServersOverride ?? _mcpServers;
   }
 
   deferResult(): void {
@@ -181,12 +195,17 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   }
 }
 
-export function createKernelHarness(databasePath: string, adapterId = "fake", maxWorkers = 4): KernelHarness {
+export function createKernelHarness(
+  databasePath: string,
+  adapterId = "fake",
+  maxWorkers = 4,
+  artifactStorage?: OmiArtifactStorage
+): KernelHarness {
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
   const adapter = new FakeRuntimeAdapter(adapterId);
   const registry = new AdapterRegistry();
   registry.register(adapterId, () => adapter, maxWorkers);
-  const kernel = new AgentRuntimeKernel({ store, registry });
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
   return { store, adapter, kernel };
 }
 

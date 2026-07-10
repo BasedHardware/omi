@@ -21,8 +21,10 @@ class AutomationBridge {
   // Earliest time (ms epoch) the next spawn is allowed, set after a crash so a
   // helper that dies on startup is not re-spawned on every request.
   private cooldownUntil = 0
-  // Set once the helper binary is confirmed missing (spawn ENOENT) so we stop
-  // re-spawning a nonexistent exe — and flooding the log — on every request.
+  // Set once the helper binary is confirmed missing (spawn ENOENT). Without it,
+  // every snapshot/step request re-spawns the missing exe — failing forever,
+  // flooding the log and stalling the planner. Once unavailable, fail fast.
+  // (Mirrors the OCR HelperProcess.) A rebuild + app restart clears it.
   private unavailable = false
 
   private ensureStarted(): void {
@@ -126,6 +128,7 @@ class AutomationBridge {
   }
 
   private request(opcode: number, payloadJson: string): Promise<string> {
+    if (this.unavailable) return Promise.reject(new Error('helper unavailable (binary missing)'))
     this.ensureStarted()
     const child = this.child
     if (!child) return Promise.reject(new Error('helper not available'))

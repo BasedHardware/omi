@@ -11,6 +11,20 @@ extension Notification.Name {
     static let bleDeviceFailedToConnect = Notification.Name("bleDeviceFailedToConnect")
 }
 
+@MainActor
+protocol DeviceBluetoothManaging: AnyObject {
+    var currentBluetoothState: CBManagerState { get }
+    var currentIsScanning: Bool { get }
+    var currentDiscoveredDevices: [BtDevice] { get }
+    var bluetoothStatePublisher: AnyPublisher<CBManagerState, Never> { get }
+    var isScanningPublisher: AnyPublisher<Bool, Never> { get }
+    var discoveredDevicesPublisher: AnyPublisher<[BtDevice], Never> { get }
+
+    func prepareForStateUpdates()
+    func startScanning(timeout: TimeInterval)
+    func stopScanning()
+}
+
 /// Manages Bluetooth scanning and device discovery
 /// Ported from: omi/app/lib/services/devices.dart and bluetooth_discoverer.dart
 @MainActor
@@ -183,6 +197,25 @@ final class BluetoothManager: NSObject, ObservableObject {
         case .poweredOn: return "Powered On"
         @unknown default: return "Unknown"
         }
+    }
+}
+
+extension BluetoothManager: DeviceBluetoothManaging {
+    var currentBluetoothState: CBManagerState { bluetoothState }
+    var currentIsScanning: Bool { isScanning }
+    var currentDiscoveredDevices: [BtDevice] { discoveredDevices }
+    var bluetoothStatePublisher: AnyPublisher<CBManagerState, Never> {
+        $bluetoothState.eraseToAnyPublisher()
+    }
+    var isScanningPublisher: AnyPublisher<Bool, Never> {
+        $isScanning.eraseToAnyPublisher()
+    }
+    var discoveredDevicesPublisher: AnyPublisher<[BtDevice], Never> {
+        $discoveredDevices.eraseToAnyPublisher()
+    }
+
+    func prepareForStateUpdates() {
+        _ = centralManager
     }
 }
 

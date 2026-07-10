@@ -12,24 +12,12 @@ Test surface:
 - Subscription.current_period_start populated by webhook builder
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Pre-stub heavy deps before importing the module under test.
-sys.modules.setdefault('firebase_admin', MagicMock())
-sys.modules.setdefault('firebase_admin.auth', MagicMock())
-sys.modules.setdefault('firebase_admin.firestore', MagicMock())
-sys.modules.setdefault('firebase_admin.messaging', MagicMock())
-sys.modules.setdefault('google.cloud', MagicMock())
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-sys.modules.setdefault('google.auth', MagicMock())
-sys.modules.setdefault('google.auth.transport.requests', MagicMock())
-
 # Import database before utils.subscription to satisfy the circular import.
-import database.users  # noqa: F401,E402
+import database.users  # noqa: F401
 
 from models.users import PlanType, Subscription  # noqa: E402
 from utils.subscription import (  # noqa: E402

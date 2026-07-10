@@ -1,0 +1,51 @@
+name: Auto Deploy Mobile Internals
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'app/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-codemagic:
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        workflow_id:
+          - ios-internal-auto
+          - android-internal-auto
+    env:
+      CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+      CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+    steps:
+      - name: Validate Codemagic API token
+        run: |
+          if [ -z "${CODEMAGIC_API_TOKEN:-}" ]; then
+            echo "CODEMAGIC_API_TOKEN is required to trigger Codemagic builds." >&2
+            exit 1
+          fi
+
+      - name: Debounce mobile internal deploys
+        if: github.event_name == 'push'
+        run: sleep 180
+
+      - name: Trigger Codemagic workflow
+        run: |
+          curl --fail --show-error --silent \
+            -H "Content-Type: application/json" \
+            -H "x-auth-token: ${CODEMAGIC_API_TOKEN}" \
+            --data "{
+              \"appId\": \"${CODEMAGIC_APP_ID}\",
+              \"workflowId\": \"${{ matrix.workflow_id }}\",
+              \"branch\": \"main\"
+            }" \
+            https://api.codemagic.io/builds

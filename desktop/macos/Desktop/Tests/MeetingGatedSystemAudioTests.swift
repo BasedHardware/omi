@@ -74,10 +74,32 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(onChange: { changes.append($0) })
 
+        XCTAssertFalse(detector.hasObservedState)
         detector.applyDetected(true)
 
+        XCTAssertTrue(detector.hasObservedState)
         XCTAssertTrue(detector.isMeetingActive)
         XCTAssertEqual(changes, [true])
+    }
+
+    func testInitialInactiveProbeMarksStateObservedWithoutMeetingChange() {
+        var initialObservedCount = 0
+        var changes = [Bool]()
+        let detector = MeetingDetector(
+            pollInterval: 4.0,
+            offGracePeriod: 8.0,
+            now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
+            onInitialStateObserved: { initialObservedCount += 1 },
+            onChange: { changes.append($0) }
+        )
+
+        detector.applyDetected(false)
+        detector.applyDetected(false)
+
+        XCTAssertTrue(detector.hasObservedState)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(initialObservedCount, 1)
+        XCTAssertEqual(changes, [], "initial inactive readiness is not a meeting state change")
     }
 
     func testTurningOffRequiresSustainedGracePeriod() {
@@ -147,8 +169,8 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testDefaultsToAlways() {
-        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .always)
+    func testDefaultsToOnlyDuringMeetings() {
+        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
     }
 
     func testPersistsAndReadsBack() {
@@ -162,6 +184,92 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
 
     func testUnknownRawValueFallsBackToDefault() {
         UserDefaults.standard.set("garbage", forKey: key)
-        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .always)
+        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
+    }
+}
+
+// MARK: - Meeting conversation boundary
+
+final class MeetingConversationBoundaryPolicyTests: XCTestCase {
+
+    func testMeetingGateClosingWithSegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testMeetingGateClosingWithOnlyInMemorySegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testWaitingForFirstMeetingDoesNotFinishEmptySession() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testNonMeetingModesDoNotUseMeetingEndBoundary() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .always,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .never,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testActiveMeetingDoesNotFinishConversation() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: true,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testUnreadyMeetingStateDoesNotFinishExistingConversation() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: false,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
     }
 }

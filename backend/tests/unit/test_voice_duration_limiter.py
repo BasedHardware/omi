@@ -11,9 +11,8 @@ Covers:
 import os
 import struct
 import tempfile
-import time
 from fractions import Fraction
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -116,70 +115,57 @@ class TestWAVDurationReader:
     def test_valid_wav_120s(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        path = _make_wav(120.0)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None
-            assert abs(duration - 120000) <= 1
-        finally:
-            os.unlink(path)
+        mock_container = MagicMock()
+        mock_container.duration = 120 * 1_000_000
+        mock_container.streams.audio = [MagicMock()]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            duration = read_wav_duration_ms('/tmp/fake.wav')
+
+        assert duration is not None
+        assert abs(duration - 120000) <= 1
 
     def test_stereo_48khz(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        path = _make_wav(5.0, sample_rate=48000, channels=2)
-        try:
-            duration = read_wav_duration_ms(path)
-            assert duration is not None
-            assert abs(duration - 5000) <= 1
-        finally:
-            os.unlink(path)
+        mock_container = MagicMock()
+        mock_container.duration = 5 * 1_000_000
+        mock_container.streams.audio = [MagicMock()]
+        mock_container.__enter__ = MagicMock(return_value=mock_container)
+        mock_container.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.voice_duration_limiter.av.open', return_value=mock_container):
+            duration = read_wav_duration_ms('/tmp/fake.wav')
+
+        assert duration is not None
+        assert abs(duration - 5000) <= 1
 
     def test_invalid_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        fd, path = tempfile.mkstemp()
-        with os.fdopen(fd, 'wb') as f:
-            f.write(b'not a wav file')
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('invalid audio')):
+            assert read_wav_duration_ms('/tmp/invalid.wav') is None
 
     def test_nonexistent_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        assert read_wav_duration_ms('/tmp/nonexistent_wav_12345.wav') is None
+        with patch('utils.voice_duration_limiter.av.open', side_effect=FileNotFoundError('missing audio')):
+            assert read_wav_duration_ms('/tmp/nonexistent_wav_12345.wav') is None
 
     def test_empty_file_returns_none(self):
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        fd, path = tempfile.mkstemp()
-        os.close(fd)
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('empty audio')):
+            assert read_wav_duration_ms('/tmp/empty.wav') is None
 
     def test_corrupted_wav_returns_none(self):
         """Truncated/corrupted WAV should return None (av raises, we catch)."""
         from utils.voice_duration_limiter import read_wav_duration_ms
 
-        buf = bytearray()
-        buf.extend(b'RIFF')
-        buf.extend(struct.pack('<I', 26))
-        buf.extend(b'WAVE')
-        buf.extend(b'fmt ')
-        buf.extend(struct.pack('<I', 10))  # truncated fmt
-        buf.extend(b'\x00' * 10)
-
-        fd, path = tempfile.mkstemp(suffix='.wav')
-        with os.fdopen(fd, 'wb') as f:
-            f.write(buf)
-        try:
-            assert read_wav_duration_ms(path) is None
-        finally:
-            os.unlink(path)
+        with patch('utils.voice_duration_limiter.av.open', side_effect=ValueError('corrupted audio')):
+            assert read_wav_duration_ms('/tmp/corrupted.wav') is None
 
     def test_container_duration_none_falls_back_to_stream(self):
         """When container.duration is None, fall back to stream.duration * stream.time_base."""
@@ -257,7 +243,7 @@ class TestBudgetConsumeLogic:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 60000, 7140000]  # allowed, used=60s, remaining=7140s
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 60000)
@@ -270,7 +256,7 @@ class TestBudgetConsumeLogic:
         _, mock_script = mock_redis
         mock_script.return_value = [0, 7200000, 0]  # rejected, budget exhausted
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 60000)
@@ -284,7 +270,7 @@ class TestBudgetConsumeLogic:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 0, 7200000]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 0)
@@ -296,7 +282,7 @@ class TestBudgetConsumeLogic:
         _, mock_script = mock_redis
         mock_script.side_effect = Exception('Redis connection refused')
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget, DAILY_BUDGET_MS
 
             allowed, used, remaining = try_consume_budget('uid123', 60000)
@@ -305,7 +291,7 @@ class TestBudgetConsumeLogic:
         assert remaining == DAILY_BUDGET_MS
 
     def test_consume_lua_none_fails_open(self):
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', None):
+        with patch('utils.voice_duration_limiter._consume_lua', None):
             from utils.voice_duration_limiter import try_consume_budget, DAILY_BUDGET_MS
 
             allowed, used, remaining = try_consume_budget('uid123', 60000)
@@ -321,7 +307,7 @@ class TestCheckBudget:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 3600000, 3600000]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import check_budget
 
             has_budget, used, remaining = check_budget('uid123')
@@ -333,7 +319,7 @@ class TestCheckBudget:
         # When consuming 0, the Lua script still checks used > budget
         mock_script.return_value = [0, 7200000, 0]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import check_budget
 
             has_budget, used, remaining = check_budget('uid123')
@@ -348,7 +334,7 @@ class TestRecordActualDuration:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 60000, 7140000]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import record_actual_duration
 
             result = record_actual_duration('uid123', 60000)
@@ -362,7 +348,7 @@ class TestRecordActualDuration:
     def test_record_zero_skips_redis(self, mock_redis):
         _, mock_script = mock_redis
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import record_actual_duration
 
             result = record_actual_duration('uid123', 0)
@@ -378,7 +364,7 @@ class TestGetBudgetStatus:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 3600000, 3600000]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import get_budget_status, DAILY_BUDGET_MS
 
             status = get_budget_status('uid123')
@@ -402,7 +388,7 @@ class TestBudgetBoundary:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 7200000, 0]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 1000)
@@ -414,7 +400,7 @@ class TestBudgetBoundary:
         _, mock_script = mock_redis
         mock_script.return_value = [0, 7200001, 0]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 1000)
@@ -427,7 +413,7 @@ class TestBudgetBoundary:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 7200000, 0]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import check_budget
 
             has_budget, used, remaining = check_budget('uid123')
@@ -439,7 +425,7 @@ class TestBudgetBoundary:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 7199999, 1]
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import try_consume_budget
 
             allowed, used, remaining = try_consume_budget('uid123', 999)
@@ -452,7 +438,7 @@ class TestBudgetBoundary:
         _, mock_script = mock_redis
         mock_script.return_value = [1, 7260000, 0]  # force-recorded over budget
 
-        with patch('utils.voice_duration_limiter._CONSUME_LUA', mock_script):
+        with patch('utils.voice_duration_limiter._consume_lua', mock_script):
             from utils.voice_duration_limiter import record_actual_duration
 
             result = record_actual_duration('uid123', 60000)

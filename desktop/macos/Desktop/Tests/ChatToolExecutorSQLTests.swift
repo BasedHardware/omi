@@ -41,4 +41,28 @@ final class ChatToolExecutorSQLTests: XCTestCase {
             )
         )
     }
+
+    func testReadOnlySQLPolicyAllowsLocalReads() {
+        let decision = ChatToolExecutor.localPolicyDecision(
+            toolName: "execute_sql",
+            arguments: ["query": "SELECT appName FROM screenshots LIMIT 1"]
+        )
+
+        XCTAssertEqual(decision, .allow)
+    }
+
+    func testWriteSQLPolicyDeniesLocalMutationByDefault() {
+        let decision = ChatToolExecutor.localPolicyDecision(
+            toolName: "execute_sql",
+            arguments: ["query": "UPDATE action_items SET completed = 1 WHERE id = 42"]
+        )
+
+        guard case .deny(let message) = decision else {
+            return XCTFail("Expected write SQL to be denied")
+        }
+        XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"))
+        XCTAssertTrue(message.contains("\"capability\":\"desktop.context.local_write\""))
+        XCTAssertTrue(message.contains("SQL writes require explicit approval"))
+        XCTAssertFalse(message.contains("UPDATE action_items"))
+    }
 }

@@ -6,8 +6,9 @@ Collection: users/{uid}/advice
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -18,15 +19,15 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 
 
-def _user_col(uid: str, collection: str):
+def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
     return db.collection('users').document(uid).collection(collection)
 
 
-def create_advice(uid: str, content: str, category: str = 'other', **kwargs) -> dict:
+def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any) -> Dict[str, Any]:
     advice_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    doc = {
+    doc: Dict[str, Any] = {
         'id': advice_id,
         'content': content,
         'category': category,
@@ -45,8 +46,8 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs) -> 
 
 
 def get_advice(
-    uid: str, category: str = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
-) -> List[dict]:
+    uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
+) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
     if category:
@@ -57,33 +58,44 @@ def get_advice(
         query = query.offset(offset)
     query = query.limit(limit)
 
-    items = []
+    items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
         items.append(data)
     return items
 
 
-def update_advice(uid: str, advice_id: str, is_read: bool = None, is_dismissed: bool = None) -> Optional[dict]:
+def update_advice(
+    uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
+) -> Optional[Dict[str, Any]]:
     ref = _user_col(uid, 'advice').document(advice_id)
     snap = ref.get()
-    if not snap.exists:
+    if not getattr(snap, "exists", False):
         return None
-    updates = {'updated_at': datetime.now(timezone.utc)}
+    updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
     if is_read is not None:
         updates['is_read'] = is_read
     if is_dismissed is not None:
         updates['is_dismissed'] = is_dismissed
-    ref.update(updates)
-    result = ref.get().to_dict()
+    try:
+        ref.update(updates)
+    except NotFound:
+        # The advice was deleted between the existence check and the update.
+        return None
+    raw: object = ref.get().to_dict()
+    if raw is None:
+        # The advice was deleted between the update and the re-read.
+        return None
+    result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     result['id'] = advice_id
     return result
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
     ref = _user_col(uid, 'advice').document(advice_id)
-    if not ref.get().exists:
+    if not getattr(ref.get(), "exists", False):
         return False
     ref.delete()
     return True

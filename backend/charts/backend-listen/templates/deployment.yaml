@@ -49,12 +49,20 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.env }}
           env:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              {{- if and (eq .name "GOOGLE_CLOUD_PROJECT") $.Values.runtimeGcpProjectId }}
+              value: {{ required "runtimeGcpProjectId is required" $.Values.runtimeGcpProjectId | quote }}
+              {{- else if hasKey . "value" }}
+              value: {{ .value | quote }}
+              {{- else if hasKey . "valueFrom" }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

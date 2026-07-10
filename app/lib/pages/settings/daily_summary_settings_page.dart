@@ -162,7 +162,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               surface: Color(0xFF1C1C1E),
               onSurface: Colors.white,
             ),
-            dialogBackgroundColor: const Color(0xFF1C1C1E),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF1C1C1E)),
           ),
           child: child!,
         );
@@ -275,7 +275,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
           _buildSettingRow(
             icon: FontAwesomeIcons.bell,
             title: context.l10n.dailySummary,
-            trailing: Switch(value: _enabled, onChanged: _updateEnabled, activeColor: const Color(0xFF6366F1)),
+            trailing: Switch(value: _enabled, onChanged: _updateEnabled, activeThumbColor: const Color(0xFF6366F1)),
           ),
 
           Padding(
@@ -312,7 +312,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
+  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(

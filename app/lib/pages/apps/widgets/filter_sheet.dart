@@ -261,7 +261,7 @@ class FilterBottomSheet extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25).withOpacity(0.5),
+                color: const Color(0xFF1F1F25).withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
                 border: isSelected ? Border.all(color: Color(0xFF8B5CF6), width: 2) : null,
               ),

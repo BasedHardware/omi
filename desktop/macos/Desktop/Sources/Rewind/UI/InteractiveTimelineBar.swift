@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Full-width timeline bar with time-based positioning and gap indicators
 struct InteractiveTimelineBar: View {
@@ -144,6 +145,8 @@ class TimeBasedTimelineNSView: NSView {
 
     private var trackingArea: NSTrackingArea?
     private var tooltipWindow: NSWindow?
+    private var isScrubbing = false
+    private var lastScrubbedIndex: Int?
 
     override var isFlipped: Bool { true }
 
@@ -259,13 +262,38 @@ class TimeBasedTimelineNSView: NSView {
 
         if let index = indexAtPoint(location) {
             log("TimelineBar: Click at \(location) resolved to index \(index) of \(screenshots.count)")
-            onSelect?(index)
+            beginScrubbing(at: index)
         } else {
             log("TimelineBar: Click at \(location) not in timeline rect \(rect), bounds=\(bounds), screenshots=\(screenshots.count)")
         }
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        guard isScrubbing else { return }
+        let location = convert(event.locationInWindow, from: nil)
+        guard let index = scrubIndex(at: location) else { return }
+        selectScrubIndex(index)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isScrubbing else { return }
+        let location = convert(event.locationInWindow, from: nil)
+        if let index = scrubIndex(at: location) {
+            selectScrubIndex(index)
+        }
+        isScrubbing = false
+        lastScrubbedIndex = nil
+        if !timelineRect().contains(location) {
+            hoveredIndex = nil
+            hoveredGapIndex = nil
+            onHover?(nil)
+            onGapHover?(nil)
+            needsDisplay = true
+        }
+    }
+
     override func mouseMoved(with event: NSEvent) {
+        guard !isScrubbing else { return }
         let location = convert(event.locationInWindow, from: nil)
 
         // Check if hovering over a gap
@@ -292,6 +320,7 @@ class TimeBasedTimelineNSView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        guard !isScrubbing else { return }
         hoveredIndex = nil
         hoveredGapIndex = nil
         onHover?(nil)
@@ -300,10 +329,46 @@ class TimeBasedTimelineNSView: NSView {
         needsDisplay = true
     }
 
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(timelineRect(), cursor: .pointingHand)
+    }
+
+    private func beginScrubbing(at index: Int) {
+        isScrubbing = true
+        hideTooltip()
+        selectScrubIndex(index)
+    }
+
+    private func selectScrubIndex(_ index: Int) {
+        guard index >= 0, index < screenshots.count, index != lastScrubbedIndex else { return }
+        lastScrubbedIndex = index
+        hoveredIndex = index
+        hoveredGapIndex = nil
+        onHover?(index)
+        onGapHover?(nil)
+        onSelect?(index)
+        needsDisplay = true
+    }
+
     private func indexAtPoint(_ point: CGPoint) -> Int? {
         let rect = timelineRect()
-        guard rect.contains(point), !screenshots.isEmpty else { return nil }
+        guard rect.width > 0, rect.contains(point), !screenshots.isEmpty else { return nil }
+        return nearestIndex(forX: point.x, in: rect)
+    }
 
+    private func scrubIndex(at point: CGPoint) -> Int? {
+        let rect = timelineRect()
+        guard rect.width > 0, !screenshots.isEmpty else { return nil }
+
+        let verticallyNearTimeline = point.y >= rect.minY - 28 && point.y <= rect.maxY + 28
+        guard verticallyNearTimeline else { return nil }
+
+        let clampedX = max(rect.minX, min(rect.maxX, point.x))
+        return nearestIndex(forX: clampedX, in: rect)
+    }
+
+    private func nearestIndex(forX x: CGFloat, in rect: NSRect) -> Int? {
         // Recalculate layout if bounds changed (lightweight, no segment rebuild)
         if !segments.isEmpty && needsLayoutRecalculation() {
             calculateLayout()
@@ -312,9 +377,9 @@ class TimeBasedTimelineNSView: NSView {
         // If layout hasn't been computed yet, use linear fallback
         if frameXPositions.isEmpty || (frameXPositions.count > 1 && frameXPositions.allSatisfy { $0 == 0 }) {
             // Linear fallback (like the old implementation)
-            let relativeX = point.x - rect.minX
+            let relativeX = x - rect.minX
             let ratio = relativeX / rect.width
-            let index = Int(ratio * CGFloat(screenshots.count))
+            let index = Int(round(ratio * CGFloat(max(0, screenshots.count - 1))))
             return max(0, min(screenshots.count - 1, index))
         }
 
@@ -322,8 +387,8 @@ class TimeBasedTimelineNSView: NSView {
         var closestIndex = 0
         var closestDistance = CGFloat.infinity
 
-        for (index, x) in frameXPositions.enumerated() {
-            let distance = abs(point.x - x)
+        for (index, frameX) in frameXPositions.enumerated() {
+            let distance = abs(x - frameX)
             if distance < closestDistance {
                 closestDistance = distance
                 closestIndex = index
@@ -707,6 +772,7 @@ struct GapTooltipView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     InteractiveTimelineBar(
         screenshots: [],
@@ -717,3 +783,4 @@ struct GapTooltipView: View {
     .frame(width: 800, height: 100)
     .background(Color.black)
 }
+#endif

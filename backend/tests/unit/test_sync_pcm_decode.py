@@ -200,7 +200,7 @@ if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from routers.sync import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav
+    from utils.sync.files import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)

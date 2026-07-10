@@ -3,6 +3,7 @@
 import sys
 import types
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -105,7 +106,7 @@ def test_checkout_catches_stripe_invalid_request_error():
 # ---------------------------------------------------------------------------
 
 
-def _setup_payment_module():
+def _setup_payment_module(include_client: bool = True) -> Any:
     """Import payment router with all heavy deps mocked."""
     # Mock heavy modules before importing
     for mod_name in [
@@ -201,20 +202,24 @@ def _setup_payment_module():
 
     users_db_mod = sys.modules["database.users"]
     users_db_mod.get_stripe_connect_account_id = MagicMock()
+    users_db_mod.get_user_profile = MagicMock(return_value={})
     users_db_mod.set_stripe_connect_account_id = MagicMock()
     users_db_mod.set_paypal_payment_details = MagicMock()
     users_db_mod.get_default_payment_method = MagicMock()
     users_db_mod.set_default_payment_method = MagicMock()
     users_db_mod.get_paypal_payment_details = MagicMock()
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     # Force re-import of payment router
     if "routers.payment" in sys.modules:
         del sys.modules["routers.payment"]
 
     from routers import payment as payment_router
+
+    if not include_client:
+        return payment_router
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     app = FastAPI()
     app.include_router(payment_router.router)
@@ -262,6 +267,7 @@ def test_checkout_valid_promo_passes_id_to_session():
             )
 
     assert response.status_code == 200
+    assert response.json() == {"url": "https://checkout.stripe.com/test", "session_id": "cs_test_123"}
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") == "promo_abc123" or (
         len(call_kwargs[0]) > 4 and call_kwargs[0][4] == "promo_abc123"
@@ -283,8 +289,26 @@ def test_checkout_no_promo_omits_promo_id():
         response = client.post("/v1/payments/checkout-session", json={"price_id": "price_123"})
 
     assert response.status_code == 200
+    assert response.json() == {"url": "https://checkout.stripe.com/test", "session_id": "cs_test_456"}
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") is None
+
+
+def test_checkout_response_model_rejects_malformed_success_payloads():
+    """Checkout success must be either a full session or a full reactivation response."""
+    client, router = _setup_payment_module()
+
+    router.PaymentCheckoutSessionResponse.model_validate(
+        {"url": "https://checkout.stripe.com/test", "session_id": "cs"}
+    )
+    router.PaymentCheckoutSessionResponse.model_validate(
+        {"status": "reactivated", "message": "Reactivated", "next_billing_date": 123}
+    )
+
+    with pytest.raises(ValueError):
+        router.PaymentCheckoutSessionResponse.model_validate({"url": "https://checkout.stripe.com/test"})
+    with pytest.raises(ValueError):
+        router.PaymentCheckoutSessionResponse.model_validate({"status": "reactivated", "message": "missing date"})
 
 
 # --- _release_attached_schedules helper ---
@@ -293,7 +317,7 @@ def test_checkout_no_promo_omits_promo_id():
 def test_release_attached_schedules_releases_only_matching_active():
     """Releases active/not_started schedules attached to THIS subscription;
     skips completed schedules and schedules for other subscriptions."""
-    client, router = _setup_payment_module()
+    router = _setup_payment_module(include_client=False)
 
     sched_match = MagicMock(id="ss_active", status="active", subscription="sub_1")
     sched_not_started = MagicMock(id="ss_pending", status="not_started", subscription="sub_1")
@@ -311,7 +335,7 @@ def test_release_attached_schedules_releases_only_matching_active():
 
 def test_release_attached_schedules_noop_without_customer():
     """No customer/sub id -> no Stripe calls (defensive)."""
-    client, router = _setup_payment_module()
+    router = _setup_payment_module(include_client=False)
     with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
         router._release_attached_schedules({"id": "sub_1"})  # missing customer
         router._release_attached_schedules({"customer": "cus_1"})  # missing id
@@ -320,7 +344,7 @@ def test_release_attached_schedules_noop_without_customer():
 
 def test_release_attached_schedules_swallows_list_errors():
     """A Stripe failure while listing schedules must not break the upgrade."""
-    client, router = _setup_payment_module()
+    router = _setup_payment_module(include_client=False)
     with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
         mock_ss.list.side_effect = Exception("stripe down")
         # Should not raise

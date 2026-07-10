@@ -14,16 +14,24 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
+from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
+    compute_audio_files_fingerprint,
     delete_conversation_audio_files,
+    enqueue_conversation_artifact_build,
     list_audio_chunks,
-    storage_client,
+    _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
@@ -217,6 +225,10 @@ def perform_merge_async(
         # Geolocation: use first conversation's
         geolocation = sorted_convs[0].get('geolocation')
 
+        # Capture provenance is safe to retain only when every source came
+        # from the same known device.
+        client_device_id, client_platform = _shared_client_device_provenance(sorted_convs)
+
         # 5. Create merge metadata
         merge_metadata = {
             'merged_at': datetime.now(timezone.utc).isoformat(),
@@ -249,11 +261,22 @@ def perform_merge_async(
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             discarded=discarded,
             status=ConversationStatus.processing,
+            client_device_id=client_device_id,
+            client_platform=client_platform,
             external_data={'merge_metadata': merge_metadata},
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
+
+        # Build the conversation-level playback artifact for the merged conversation.
+        # Fingerprint-named task: dedups with the enqueue process_conversation may
+        # also fire on the reprocess path.
+        if merged_audio_files and is_audio_merge_dispatch_enabled():
+            files_payload = [af.model_dump() for af in merged_audio_files]
+            enqueue_conversation_artifact_build(
+                uid, new_conversation_id, compute_audio_files_fingerprint(files_payload), caller='merge_conversations'
+            )
 
         # Store photos in subcollection if any
         if merged_photos:
@@ -417,7 +440,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
 
     for conv in conversations:
@@ -469,6 +492,24 @@ def _determine_visibility(conversations: List[Dict]) -> str:
     return min_visibility
 
 
+def _shared_client_device_provenance(conversations: List[Dict]) -> Tuple[Optional[str], Optional[str]]:
+    """Return capture provenance only when every merged conversation agrees.
+
+    A merged conversation can represent multiple devices. Assigning one source
+    device to that output would make a cross-device capture appear in the wrong
+    device-scoped memory view, so mixed or missing provenance stays unknown.
+    """
+    provenance = {
+        (conversation.get('client_device_id'), conversation.get('client_platform')) for conversation in conversations
+    }
+    if len(provenance) != 1:
+        return None, None
+    client_device_id, client_platform = provenance.pop()
+    if not client_device_id or not client_platform:
+        return None, None
+    return client_device_id, client_platform
+
+
 def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -486,8 +527,11 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
     import database.action_items as action_items_db
 
     try:
-        # Delete memories
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
+        memory_system = pin_memory_system(uid, db_client=firestore_db)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=firestore_db):
+            MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
+        else:
+            memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
 

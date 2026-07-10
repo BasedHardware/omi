@@ -1,0 +1,135 @@
+version: 2
+name: claude-guidance-overlay
+tier: 2
+description: Cursor-free dogfood flow for Claude spatial guidance overlays.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/CloudConnectorGuidanceOverlay.swift
+  - desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift
+  - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayCore.swift
+  - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayDogfood.swift
+preconditions:
+  - automation_bridge_ready
+steps:
+  - id: S1
+    name: Present Claude Add Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-explicit
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateSource: accessibility
+      result.detail.attachmentEdge: above
+
+  - id: S2
+    name: Capture Claude Add Overlay
+    visual.export:
+      name: claude-add-overlay
+      target: overlay
+
+  - id: S3
+    name: Read Overlay State
+    bridge.action:
+      name: spatial_overlay_state
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+
+  - id: S4
+    name: Dismiss Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S5
+    name: Present Claude Add Inferred Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-inferred-from-cancel
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateId: claude-add-inferred-from-cancel
+      result.detail.candidateSource: layoutHeuristic
+
+  - id: S6
+    name: Capture Claude Add Inferred Overlay
+    visual.export:
+      name: claude-add-inferred-overlay
+      target: overlay
+
+  - id: S7
+    name: Dismiss Inferred Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S8
+    name: Present Claude Add Heuristic Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-heuristic
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateSource: layoutHeuristic
+
+  - id: S9
+    name: Capture Claude Add Heuristic Overlay
+    visual.export:
+      name: claude-add-heuristic-overlay
+      target: overlay
+
+  - id: S10
+    name: Dismiss Heuristic Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S11
+    name: Present Claude Add Instruction Card
+    bridge.action:
+      name: spatial_overlay_present_instruction
+      params:
+        title: Finish in Claude
+        subtitle: Click Add in the connector window to finish creating the Omi connector.
+        anchor: "200,80,1100,820"
+    expect:
+      result.detail.visible: "true"
+      result.detail.kind: instruction
+      result.detail.title: Finish in Claude
+
+  - id: S12
+    name: Capture Claude Add Instruction Card
+    visual.export:
+      name: claude-add-instruction-card
+      target: overlay
+
+  - id: S13
+    name: Dismiss Instruction Card
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S14
+    name: Logs Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"
+        - "No viable overlay placement"

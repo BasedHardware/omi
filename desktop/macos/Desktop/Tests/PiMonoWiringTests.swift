@@ -5,39 +5,105 @@ import XCTest
 final class PiMonoWiringTests: XCTestCase {
 
   // MARK: - TaskChatState mode-mapping logic
-  // Mirrors the branching in TaskChatState.ensureBridge():
-  //   let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-  //   let harness = mode == "piMono" ? "piMono" : "acp"
+  // Mirrors the shared mapping used by ChatProvider and TaskChatState.
 
   func testTaskChatModeMappingDefaultNil() {
     // When chatBridgeMode is not set, defaults to "piMono"
     let mode: String? = nil
-    let resolved = mode ?? "piMono"
-    let harness = resolved == "piMono" ? "piMono" : "acp"
+    let resolved = ChatProvider.BridgeMode(rawValue: mode ?? "piMono") ?? .piMono
+    let harness = ChatProvider.harnessMode(for: resolved)
 
     XCTAssertEqual(harness, "piMono")
   }
 
   func testTaskChatModeMappingPiMono() {
-    let mode = "piMono"
-    let harness = mode == "piMono" ? "piMono" : "acp"
-
-    XCTAssertEqual(harness, "piMono")
+    XCTAssertEqual(ChatProvider.harnessMode(for: .piMono), "piMono")
   }
 
   func testTaskChatModeMappingClaudeCode() {
-    let mode = "claudeCode"
-    let harness = mode == "piMono" ? "piMono" : "acp"
+    XCTAssertEqual(ChatProvider.harnessMode(for: .userClaude), "acp")
+  }
 
-    XCTAssertEqual(harness, "acp")
+  func testTaskChatModeMappingHermes() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .hermes), "hermes")
+  }
+
+  func testTaskChatModeMappingOpenClaw() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .openClaw), "openclaw")
   }
 
   func testTaskChatModeMappingAgentSDK() {
-    // Legacy "agentSDK" mode should fall through to acp harness
-    let mode = "agentSDK"
-    let harness = mode == "piMono" ? "piMono" : "acp"
+    XCTAssertEqual(ChatProvider.harnessMode(for: .omiAI), "piMono")
+  }
 
-    XCTAssertEqual(harness, "acp")
+  func testHarnessToAdapterMappingFailsClosed() {
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .piMono).rawValue, "pi-mono")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .acp).rawValue, "acp")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .hermes).rawValue, "hermes")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .openclaw).rawValue, "openclaw")
+    XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
+  }
+
+  func testLocalAgentProviderDetectorUsesExplicitCommand() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .hermes,
+      environment: ["OMI_HERMES_ADAPTER_COMMAND": " /usr/local/bin/hermes acp "],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertTrue(availability.isAvailable)
+    XCTAssertEqual(availability.status, .available(command: "/usr/local/bin/hermes acp"))
+  }
+
+  func testLocalAgentProviderDetectorFindsExecutableInActivationPath() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("openclaw")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .openclaw,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  func testLocalAgentProviderDetectorIgnoresArbitraryPathEntries() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let executable = root.appendingPathComponent("hermes")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .hermes,
+      environment: ["PATH": root.path],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+  }
+
+  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .openclaw,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(
+      availability.setupPrompt,
+      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+    XCTAssertEqual(
+      availability.toolError,
+      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -169,16 +235,43 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(p.tagline.isEmpty)
   }
 
-  func testAIProviderAllContainsBothProviders() {
-    XCTAssertEqual(AIProvider.all.count, 2)
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude"])
+  func testAIProviderAllContainsSupportedProviders() {
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
     XCTAssertEqual(AIProvider.from(bridgeMode: "piMono")?.id, "piMono")
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
+  }
+
+  func testProviderDirectiveRoutesAskOpenClawToOpenClawHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.provider.harnessMode, .openclaw)
+    XCTAssertEqual(directive?.rewrittenQuery, "how it's going")
+    XCTAssertEqual(directive?.title, "OpenClaw")
+  }
+
+  func testProviderDirectiveRoutesHermesToHermesHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
+
+    XCTAssertEqual(directive?.provider, .hermes)
+    XCTAssertEqual(directive?.provider.harnessMode, .hermes)
+    XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
+    XCTAssertEqual(directive?.title, "Hermes")
+  }
+
+  func testProviderDirectiveIgnoresNonProviderQuestions() {
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
   }
 
   // MARK: - Rename completeness: no ACPBridge / acp-bridge in Swift sources

@@ -9,11 +9,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     var id: Int64?
 
     var taskId: String                    // action_items backendId
-    var acpSessionId: String?             // Legacy ACP adapter-native session ID for resume/adoption
     var messageId: String                 // UUID from ChatMessage.id
     var sender: String                    // "user" or "ai"
     var messageText: String
     var contentBlocksJson: String?        // JSON-encoded content blocks for AI messages
+    var resourcesJson: String?            // JSON-encoded attachment/artifact resources
     var embedding: Data?                  // 3072 Float32s for vector search (Gemini)
 
     var createdAt: Date
@@ -28,11 +28,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     init(
         id: Int64? = nil,
         taskId: String,
-        acpSessionId: String? = nil,
         messageId: String,
         sender: String,
         messageText: String,
         contentBlocksJson: String? = nil,
+        resourcesJson: String? = nil,
         embedding: Data? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -41,11 +41,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     ) {
         self.id = id
         self.taskId = taskId
-        self.acpSessionId = acpSessionId
         self.messageId = messageId
         self.sender = sender
         self.messageText = messageText
         self.contentBlocksJson = contentBlocksJson
+        self.resourcesJson = resourcesJson
         self.embedding = embedding
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -60,22 +60,23 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     // MARK: - ChatMessage Conversion
 
     /// Create a record from a ChatMessage for a given task
-    static func from(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) -> TaskChatMessageRecord {
+    static func from(_ message: ChatMessage, taskId: String) -> TaskChatMessageRecord {
         let senderStr = message.sender == .user ? "user" : "ai"
 
         // Encode content blocks as JSON for AI messages
         var blocksJson: String?
         if message.sender == .ai && !message.contentBlocks.isEmpty {
-            blocksJson = encodeContentBlocks(message.contentBlocks)
+            blocksJson = ChatContentBlockCodec.encode(message.contentBlocks)
         }
+        let resourcesJson = ChatResource.encodeResourcesForPersistence(message.displayResources)
 
         return TaskChatMessageRecord(
             taskId: taskId,
-            acpSessionId: acpSessionId,
             messageId: message.id,
             sender: senderStr,
             messageText: message.text,
             contentBlocksJson: blocksJson,
+            resourcesJson: resourcesJson,
             createdAt: message.createdAt,
             updatedAt: Date()
         )
@@ -84,7 +85,10 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     /// Convert back to a ChatMessage for UI display
     func toChatMessage() -> ChatMessage {
         let chatSender: ChatSender = sender == "user" ? .user : .ai
-        let blocks = contentBlocksJson.flatMap { Self.decodeContentBlocks($0) } ?? []
+        let blocks = contentBlocksJson.flatMap { ChatContentBlockCodec.decode($0) } ?? []
+        let resources = ChatResource.hydrateFileStates(
+            resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
+        )
 
         return ChatMessage(
             id: messageId,
@@ -92,85 +96,13 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
             createdAt: createdAt,
             sender: chatSender,
             isStreaming: false,
-            contentBlocks: blocks
+            contentBlocks: blocks,
+            resources: resources
         )
     }
 
-    // MARK: - Content Block Serialization
-
-    /// Encode ChatContentBlock array to JSON string
-    private static func encodeContentBlocks(_ blocks: [ChatContentBlock]) -> String? {
-        var encoded: [[String: Any]] = []
-        for block in blocks {
-            switch block {
-            case .text(let id, let text):
-                encoded.append(["type": "text", "id": id, "text": text])
-            case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
-                var dict: [String: Any] = [
-                    "type": "toolCall",
-                    "id": id,
-                    "name": name,
-                    "status": status == .completed ? "completed" : "running"
-                ]
-                if let toolUseId { dict["toolUseId"] = toolUseId }
-                if let input {
-                    dict["inputSummary"] = input.summary
-                    if let details = input.details { dict["inputDetails"] = details }
-                }
-                if let output { dict["output"] = output }
-                encoded.append(dict)
-            case .thinking(let id, let text):
-                encoded.append(["type": "thinking", "id": id, "text": text])
-            case .discoveryCard(let id, let title, let summary, let fullText):
-                encoded.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
-            }
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        return json
-    }
-
-    /// Decode JSON string back to ChatContentBlock array
-    private static func decodeContentBlocks(_ json: String) -> [ChatContentBlock]? {
-        guard let data = json.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
-
-        var blocks: [ChatContentBlock] = []
-        for dict in array {
-            guard let type = dict["type"] as? String,
-                  let id = dict["id"] as? String else { continue }
-
-            switch type {
-            case "text":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.text(id: id, text: text))
-            case "toolCall":
-                let name = dict["name"] as? String ?? ""
-                let statusStr = dict["status"] as? String ?? "completed"
-                let status: ToolCallStatus = statusStr == "running" ? .running : .completed
-                let toolUseId = dict["toolUseId"] as? String
-                let input: ToolCallInput?
-                if let summary = dict["inputSummary"] as? String {
-                    input = ToolCallInput(summary: summary, details: dict["inputDetails"] as? String)
-                } else {
-                    input = nil
-                }
-                let output = dict["output"] as? String
-                blocks.append(.toolCall(id: id, name: name, status: status, toolUseId: toolUseId, input: input, output: output))
-            case "thinking":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.thinking(id: id, text: text))
-            case "discoveryCard":
-                let title = dict["title"] as? String ?? ""
-                let summary = dict["summary"] as? String ?? ""
-                let fullText = dict["fullText"] as? String ?? ""
-                blocks.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
-            default:
-                break
-            }
-        }
-        return blocks
-    }
+    // Resource JSON encoding lives on ChatResource (protocol layer).
+    // Content-block encode/decode lives on ChatContentBlockCodec.
 }
 
 // MARK: - Task Chat Message Storage
@@ -226,8 +158,8 @@ actor TaskChatMessageStorage {
 
     /// Save a ChatMessage for a task (convenience)
     @discardableResult
-    func saveMessage(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) async throws -> TaskChatMessageRecord {
-        let record = TaskChatMessageRecord.from(message, taskId: taskId, acpSessionId: acpSessionId)
+    func saveMessage(_ message: ChatMessage, taskId: String) async throws -> TaskChatMessageRecord {
+        let record = TaskChatMessageRecord.from(message, taskId: taskId)
         let db = try await ensureInitialized()
         let result = try await db.write { database -> TaskChatMessageRecord in
             let record = record
@@ -247,19 +179,6 @@ actor TaskChatMessageStorage {
                 .filter(Column("taskId") == taskId)
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
-        }
-    }
-
-    /// Get the ACP session ID for a task (from the most recent message)
-    func getACPSessionId(forTaskId taskId: String) async throws -> String? {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            try TaskChatMessageRecord
-                .filter(Column("taskId") == taskId)
-                .filter(Column("acpSessionId") != nil)
-                .order(Column("createdAt").desc)
-                .fetchOne(database)?
-                .acpSessionId
         }
     }
 

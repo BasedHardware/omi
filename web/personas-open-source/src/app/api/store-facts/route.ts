@@ -30,7 +30,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
     }
 
-    const url = `https://api.omi.me/v2/integrations/${appId}/user/facts?uid=${uid}`;
+    // The Omi integration API exposes memories/facts via /user/memories
+    // (POST), validated against integration-public-openapi.json. The legacy
+    // /user/facts path did not exist on the backend.
+    const url = `https://api.omi.me/v2/integrations/${appId}/user/memories?uid=${uid}`;
     const headers = {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
