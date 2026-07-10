@@ -131,6 +131,18 @@ export function getRecordShortcut(): RecordShortcutState {
   return { accelerator: recordSlot.getAccelerator(), registered: recordSlot.isRegistered() }
 }
 
+/** Suspend the record chord while the settings UI captures raw keys — otherwise
+ * pressing the CURRENT chord during a rebind fires the shortcut (navigates the
+ * app away) instead of being captured. The overlay chord has its own
+ * suspend/resume path (overlay/ipc.ts); the settings rebind suspends both. */
+export function suspendRecordShortcut(): void {
+  recordSlot?.suspend()
+}
+
+export function resumeRecordShortcut(): void {
+  recordSlot?.resume()
+}
+
 /** Test-only: drop the record slot so suites start from a clean singleton. */
 export function __resetRecordShortcutForTests(): void {
   recordSlot = null

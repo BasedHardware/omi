@@ -89,6 +89,11 @@ export function setTrayUpdateReady(ready: boolean): void {
   render()
 }
 
+/** Whether a live Tray exists (E2E asserts the real thing, not a constant). */
+export function isTrayCreated(): boolean {
+  return !!tray && !tray.isDestroyed()
+}
+
 export function destroyTray(): void {
   if (tray && !tray.isDestroyed()) tray.destroy()
   tray = null

@@ -18,6 +18,8 @@ import { getOverlayWindow, toggleOverlay } from './overlay/window'
 import {
   registerOverlayShortcut,
   unregisterOverlayShortcut,
+  suspendOverlayShortcut,
+  resumeOverlayShortcut,
   OVERLAY_ACCELERATOR
 } from './overlay/shortcut'
 import { registerOverlayHandlers } from './overlay/ipc'
@@ -41,9 +43,15 @@ import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 import { initSentry } from './sentry'
 import { isQuitting, quitApp } from './lifecycle'
-import { createTray, updateTrayState, destroyTray } from './tray'
-import { initAutoUpdater } from './updater'
-import { registerRecordShortcut, setRecordAccelerator, getRecordShortcut } from './shortcuts'
+import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
+import { initAutoUpdater, getPendingUpdate } from './updater'
+import {
+  registerRecordShortcut,
+  setRecordAccelerator,
+  getRecordShortcut,
+  suspendRecordShortcut,
+  resumeRecordShortcut
+} from './shortcuts'
 import { getAppSettings, setAppSettings } from './appSettings'
 import { showBestEffortNotification } from './notify'
 
@@ -483,7 +491,7 @@ app.whenReady().then(async () => {
   // the lifecycle harness asserts via electronApp.evaluate.
   if (process.env.OMI_E2E === '1') {
     ;(globalThis as unknown as { __omiE2E?: Record<string, unknown> }).__omiE2E = {
-      trayCreated: true,
+      trayCreated: () => isTrayCreated(),
       // The harness must target the MAIN window — getAllWindows() also returns
       // the insight toast / overlay, which have different close semantics.
       mainWindowId: mainWindow.id
@@ -558,6 +566,22 @@ app.whenReady().then(async () => {
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
   ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  // Query the staged update on demand (the update:ready event fires once,
+  // usually while Settings isn't mounted — see updater.getPendingUpdate).
+  ipcMain.handle('update:get-pending', () => getPendingUpdate())
+
+  // Suspend/resume global chords while the settings UI captures raw keys for a
+  // rebind — otherwise pressing the CURRENT chord fires it instead of being
+  // captured. (The overlay's own recorder uses overlay:suspendShortcut.)
+  ipcMain.on('shortcuts:suspend-capture', () => {
+    suspendRecordShortcut()
+    suspendOverlayShortcut()
+  })
+  ipcMain.on('shortcuts:resume-capture', () => {
+    resumeRecordShortcut()
+    resumeOverlayShortcut()
+  })
+
   ipcMain.handle('shortcuts:set-record', (_e, accelerator: string) => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) {
       return { ok: false, registered: getRecordShortcut().registered }

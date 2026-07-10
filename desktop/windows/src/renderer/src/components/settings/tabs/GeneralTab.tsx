@@ -107,9 +107,12 @@ function RecordHotkeyRow(): React.JSX.Element {
   }, [])
 
   // While recording, capture raw keydowns. A complete, valid combo commits via
-  // setRecordHotkey; Esc cancels.
+  // setRecordHotkey; Esc cancels. Global chords are suspended for the duration —
+  // otherwise pressing the CURRENT chord (Ctrl+Space / Shift+Space) fires the
+  // shortcut and navigates away instead of being captured.
   useEffect(() => {
     if (!recording) return
+    window.omi?.suspendShortcutCapture?.()
     const onKeyDown = (e: KeyboardEvent): void => {
       e.preventDefault()
       e.stopPropagation()
@@ -138,7 +141,10 @@ function RecordHotkeyRow(): React.JSX.Element {
       })()
     }
     window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.omi?.resumeShortcutCapture?.()
+    }
   }, [recording])
 
   const tokens = accel ? acceleratorToTokens(accel) : []
@@ -199,6 +205,11 @@ function UpdateReadyRow(): React.JSX.Element | null {
   const [version, setVersion] = useState<string | null>(null)
 
   useEffect(() => {
+    // The one-shot update:ready event almost always fires while this row is
+    // unmounted (background download) — query the staged update on mount too.
+    void window.omi?.getPendingUpdate?.().then((p) => {
+      if (p?.version) setVersion(p.version)
+    })
     return window.omi?.onUpdateReady?.((info) => setVersion(info.version))
   }, [])
 

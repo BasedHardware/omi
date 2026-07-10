@@ -173,7 +173,10 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('update:ready', listener)
   },
   getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
-  setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator)
+  setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
+  suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
+  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture')
 }
 
 const omiOverlay: OmiOverlayApi = {

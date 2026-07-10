@@ -344,6 +344,13 @@ export type OmiBridgeApi = {
   /** Rebind the record chord (persisted). Never throws on a conflict — returns
    *  registered=false when the chord is owned by another app. */
   setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** The update staged for install-on-quit, if any (query on Settings mount —
+   *  the one-shot update:ready event usually fires while Settings is unmounted). */
+  getPendingUpdate: () => Promise<{ version: string } | null>
+  /** Release all global chords while a rebind UI captures raw keys (pressing the
+   *  current chord must be captured, not fire the shortcut). Always pair with resume. */
+  suspendShortcutCapture: () => void
+  resumeShortcutCapture: () => void
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>

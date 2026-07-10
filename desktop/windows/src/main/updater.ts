@@ -13,6 +13,13 @@ import { setTrayUpdateReady } from './tray'
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000 // every 4h
 
 let started = false
+let pendingUpdate: { version: string } | null = null
+
+/** The update staged for install-on-quit, if any. The update:ready event fires
+ * once (usually while nobody is on Settings), so the UI queries this on mount. */
+export function getPendingUpdate(): { version: string } | null {
+  return pendingUpdate
+}
 
 export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void {
   if (started) return
@@ -27,6 +34,7 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
 
   autoUpdater.on('update-downloaded', (info) => {
     const version = typeof info?.version === 'string' ? info.version : ''
+    pendingUpdate = { version }
     const win = getMainWindow()
     if (win && !win.isDestroyed()) win.webContents.send('update:ready', { version })
     setTrayUpdateReady(true)

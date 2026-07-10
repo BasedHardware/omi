@@ -56,10 +56,10 @@ test('single instance, tray, close-hides-to-tray, and app:quit really quits', as
   // Wait until the main window exists (createWindow ran).
   await app.firstWindow()
 
-  // (b) The tray was created after ready.
+  // (b) A REAL tray exists after ready (the hook calls into the tray module).
   const trayCreated = await app.evaluate(() => {
     const hook = globalThis.__omiE2E
-    return !!(hook && hook.trayCreated)
+    return !!(hook && typeof hook.trayCreated === 'function' && hook.trayCreated())
   })
   assert.equal(trayCreated, true, 'tray should be created after ready')
 
