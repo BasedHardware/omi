@@ -59,15 +59,6 @@ type Session = {
   // We buffer those pre-OPEN chunks (bounded) and flush them on 'open'.
   pending: Buffer[]
   pendingBytes: number
-  // PTT: 'finalize' was requested while the socket was still CONNECTING. Sent
-  // right after the pre-connect flush on 'open', so a hold released mid-handshake
-  // still gets a prompt trailing segment instead of waiting out Deepgram's
-  // silence endpointing.
-  finalizePending: boolean
-  // PTT: finalize was requested (sent or queued). Audio arriving after this is
-  // dropped — the released key is the source of truth for what the capture
-  // contains, so late speech can never leak into the transcript.
-  finalized: boolean
 }
 
 // Cap the pre-connect buffer (~5s of 16 kHz mono PCM16 = 160 KB). If the socket
@@ -153,9 +144,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     mode,
     closed: false,
     pending: [],
-    pendingBytes: 0,
-    finalizePending: false,
-    finalized: false
+    pendingBytes: 0
   }
   sessions.set(args.sessionId, session)
   const t0 = Date.now()
@@ -178,17 +167,6 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       }
       session.pending = []
       session.pendingBytes = 0
-    }
-    // Release happened while we were still connecting — deliver the queued
-    // finalize now that the flushed audio is on the wire.
-    if (session.finalizePending) {
-      session.finalizePending = false
-      console.log(`[omi-listen] finalize ${args.sessionId} (queued during connect)`)
-      try {
-        ws.send('finalize')
-      } catch {
-        /* ignore */
-      }
     }
     emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected' })
   })
@@ -252,9 +230,6 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
   if (!s) return
-  // Finalize already requested — the capture is sealed. Drop late audio so speech
-  // after the hold was released can never appear in the transcript.
-  if (s.finalized) return
   if (s.ws.readyState === WebSocket.OPEN) {
     s.ws.send(pcm)
     return
@@ -275,22 +250,14 @@ function feedSession(sessionId: string, pcm: ArrayBuffer): void {
 /**
  * PTT-only: ask the transcribe-stream backend to flush buffered audio and finalize
  * Deepgram so the trailing segment is emitted promptly (~0.3s), instead of waiting
- * out silence. A text frame the backend recognizes; harmless no-op mid-session on
- * the conversation endpoint (v4/listen ignores unknown text), but we only send it
- * for PTT sessions.
+ * out silence. CONTRACT: the renderer only calls this after it has observed the
+ * 'connected' message — a hold released while still connecting skips the stream
+ * lane entirely and batch-transcribes its locally-retained buffer instead, so a
+ * not-OPEN call here is simply a no-op.
  */
 function finalizeSession(sessionId: string): void {
   const s = sessions.get(sessionId)
-  if (!s || s.mode !== 'ptt') return
-  s.finalized = true // seal the capture: feeds from here on are dropped
-  if (s.ws.readyState === WebSocket.CONNECTING) {
-    // Handshake still in flight — queue it; the 'open' handler sends it right
-    // after flushing the buffered audio.
-    console.log(`[omi-listen] finalize ${sessionId} queued (still connecting)`)
-    s.finalizePending = true
-    return
-  }
-  if (s.ws.readyState !== WebSocket.OPEN) return
+  if (!s || s.mode !== 'ptt' || s.ws.readyState !== WebSocket.OPEN) return
   console.log(`[omi-listen] finalize ${sessionId}`)
   try {
     s.ws.send('finalize')

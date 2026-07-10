@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 
-// Regression: releasing a PTT hold while the WebSocket is still CONNECTING used to
-// drop the 'finalize' frame entirely (finalizeSession returned unless OPEN), so the
-// backend waited out Deepgram's slow silence endpointing — the "transcribing forever
-// / does nothing" symptom. The fix queues the finalize and sends it on 'open', right
-// after the pre-connect audio flush.
+// Main-process PTT lane contract:
+// - Audio fed while the socket is CONNECTING is buffered and flushed on 'open',
+//   in order — speech during the handshake is never lost to the stream lane.
+// - 'finalize' is only sent on an OPEN socket. The renderer only requests it
+//   after observing 'connected'; a not-open call is a no-op (a hold released
+//   mid-handshake batch-transcribes its locally-retained buffer instead).
+// - A new PTT hold supersedes any prior PTT session for the same window, so
+//   handshakes never pile up and contend (the old hold's stream death just means
+//   it falls back to batch).
 
 const h = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
@@ -55,9 +59,9 @@ vi.mock('electron', () => ({
 import { registerOmiListenHandlers } from './omiListen'
 
 const ipc = {
-  start: (sessionId: string) =>
+  start: (sessionId: string, ownerId = 1) =>
     h.ipcHandlers.get('omi-listen:start')!(
-      { sender: { id: 1 } },
+      { sender: { id: ownerId } },
       { sessionId, token: 'tok', language: 'en', source: 'mic', mode: 'ptt' }
     ),
   feed: (sessionId: string, bytes: number) =>
@@ -73,25 +77,20 @@ beforeAll(() => {
   registerOmiListenHandlers()
 })
 
-describe('PTT finalize vs. connect race', () => {
-  it('queues finalize sent while CONNECTING and delivers it on open, AFTER the audio flush', () => {
-    ipc.start('race-1')
+describe('PTT stream lane', () => {
+  it('buffers pre-OPEN audio and flushes it in order on open', () => {
+    ipc.start('flush-1')
     const ws = lastWs()
-    // Hold released mid-handshake: audio buffered, finalize requested — nothing on
-    // the wire yet (socket not open).
-    ipc.feed('race-1', 8192)
-    ipc.finalize('race-1')
+    ipc.feed('flush-1', 8192)
+    ipc.feed('flush-1', 4096)
     expect(ws.sent).toHaveLength(0)
-
     ws.simulateOpen()
-    // Buffered audio first, then the queued finalize — order matters, or the
-    // backend would finalize before it has the speech.
     expect(ws.sent).toHaveLength(2)
-    expect(Buffer.isBuffer(ws.sent[0])).toBe(true)
-    expect(ws.sent[1]).toBe('finalize')
+    expect((ws.sent[0] as Buffer).byteLength).toBe(8192)
+    expect((ws.sent[1] as Buffer).byteLength).toBe(4096)
   })
 
-  it('sends finalize immediately when the socket is already OPEN', () => {
+  it('sends finalize on an OPEN socket', () => {
     ipc.start('open-1')
     const ws = lastWs()
     ws.simulateOpen()
@@ -99,37 +98,34 @@ describe('PTT finalize vs. connect race', () => {
     expect(ws.sent).toContain('finalize')
   })
 
-  it('does not resend a queued finalize on a later finalize call', () => {
-    ipc.start('dedupe-1')
+  it('finalize while still CONNECTING is a no-op (renderer contract: batch instead)', () => {
+    ipc.start('early-1')
     const ws = lastWs()
-    ipc.finalize('dedupe-1')
+    ipc.feed('early-1', 8192)
+    ipc.finalize('early-1')
     ws.simulateOpen()
-    expect(ws.sent.filter((m) => m === 'finalize')).toHaveLength(1)
+    // The buffered audio flushes, but no finalize was queued or sent.
+    expect(ws.sent.filter((m) => m === 'finalize')).toHaveLength(0)
+    expect(ws.sent).toHaveLength(1)
   })
 
-  it('drops audio fed after finalize while still CONNECTING (release seals the capture)', () => {
-    // Regression: post-release speech used to keep streaming and land in the
-    // transcript ("said okay after letting go and it picked it up").
-    ipc.start('seal-1')
-    const ws = lastWs()
-    ipc.feed('seal-1', 8192) // spoken during the hold — kept
-    ipc.finalize('seal-1') // key released
-    ipc.feed('seal-1', 4096) // spoken after release — must be dropped
-    ws.simulateOpen()
-    expect(ws.sent).toHaveLength(2) // held audio + 'finalize', nothing else
-    expect(Buffer.isBuffer(ws.sent[0])).toBe(true)
-    expect((ws.sent[0] as Buffer).byteLength).toBe(8192)
-    expect(ws.sent[1]).toBe('finalize')
+  it('a new PTT hold supersedes the prior PTT session for the same window', () => {
+    ipc.start('hold-a', 7)
+    const first = lastWs()
+    ipc.start('hold-b', 7)
+    const second = lastWs()
+    expect(first.readyState).toBe(h.FakeWebSocket.CLOSED)
+    expect(second.readyState).toBe(h.FakeWebSocket.CONNECTING)
+    // The superseded session is gone — feeding it is a no-op.
+    ipc.feed('hold-a', 8192)
+    second.simulateOpen()
+    expect(first.sent).toHaveLength(0)
   })
 
-  it('drops audio fed after finalize on an OPEN socket', () => {
-    ipc.start('seal-2')
-    const ws = lastWs()
-    ws.simulateOpen()
-    ipc.feed('seal-2', 8192)
-    ipc.finalize('seal-2')
-    ipc.feed('seal-2', 4096) // post-release — dropped
-    expect(ws.sent).toHaveLength(2)
-    expect(ws.sent[1]).toBe('finalize')
+  it('does not supersede a different window\'s PTT session', () => {
+    ipc.start('win1-hold', 11)
+    const first = lastWs()
+    ipc.start('win2-hold', 12)
+    expect(first.readyState).toBe(h.FakeWebSocket.CONNECTING)
   })
 })
