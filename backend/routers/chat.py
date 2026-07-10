@@ -388,6 +388,7 @@ def send_message(
                 callback_data=callback_data,
                 chat_session=chat_session,
                 context=data.context,
+                platform=x_app_platform,
             ):
                 if chunk:
                     msg = chunk.replace("\n", "__CRLF__")
@@ -532,7 +533,9 @@ def create_voice_message_stream(
     # process
     async def generate_stream():
         quota_recorded = False
-        async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
+        async for chunk in process_voice_message_segment_stream(
+            first_wav, uid, language=resolved_language, platform=x_app_platform
+        ):
             if not quota_recorded and chunk.startswith('message: '):
                 payload = chunk.removeprefix('message: ').strip()
                 try:

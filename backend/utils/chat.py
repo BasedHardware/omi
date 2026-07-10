@@ -299,6 +299,7 @@ async def process_voice_message_segment_stream(
     path: str,
     uid: str,
     language: str = 'multi',
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
     schedule_syncing_temporal_file_deletion(path)
@@ -401,7 +402,9 @@ async def process_voice_message_segment_stream(
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
     try:
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
+        async for chunk in execute_graph_chat_stream(
+            uid, messages, app, cited=False, callback_data=callback_data, platform=platform
+        ):
             if chunk:
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
