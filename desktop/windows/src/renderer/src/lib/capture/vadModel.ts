@@ -24,8 +24,8 @@ import * as ort from 'onnxruntime-web/wasm'
 // self-hosted /vad/ path only works in production builds. These ?url imports
 // give dev-servable module URLs; production keeps /vad/ (the build-emitted
 // duplicate wasm is stripped by the drop-duplicate-ort-wasm vite plugin).
-import ortMjsUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.mjs?url'
-import ortWasmUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.wasm?url'
+import ortMjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url'
+import ortWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url'
 
 /** v5 runs on 512-sample (32ms @16kHz) frames. */
 export const SILERO_FRAME_SAMPLES = 512
