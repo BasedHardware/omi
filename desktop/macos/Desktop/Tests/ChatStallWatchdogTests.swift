@@ -27,6 +27,12 @@ final class ChatStallWatchdogTests: XCTestCase {
     XCTAssertNil(ChatProvider.stoppedTurnErrorMessage(watchdogFired: false))
   }
 
+  func testToolStallStopSurfacesToolTimeoutMessage() {
+    XCTAssertEqual(
+      ChatProvider.stoppedTurnErrorMessage(watchdogFired: false, toolStallAbortFired: true),
+      "A tool took too long. Try again.")
+  }
+
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch
 
   func testWatchdogMarksGenerationBeforeInterrupting() throws {
@@ -60,9 +66,22 @@ final class ChatStallWatchdogTests: XCTestCase {
       "the .stopped catch must check the watchdog marker")
     XCTAssertNotNil(
       source.range(
-        of: #"stoppedTurnErrorMessage\(\s*watchdogFired:\s*watchdogFired\s*\)"#,
+        of: #"stoppedTurnErrorMessage\(\s*watchdogFired:\s*watchdogFired[\s\S]*?toolStallAbortFired:\s*toolStallAbortFired\s*\)"#,
         options: .regularExpression),
       "the .stopped catch must derive its message from the shared helper")
+  }
+
+  func testToolStallGuardMarksGenerationBeforeInterrupting() throws {
+    let source = try chatProviderSource()
+    guard let mark = source.range(
+      of: #"sendToolStallAbortGeneration\s*=\s*sendGen"#, options: .regularExpression)
+    else {
+      return XCTFail("tool stall guard must mark the active generation")
+    }
+    XCTAssertNotNil(
+      source[mark.upperBound...].range(
+        of: #"resolvedAgentClient\(\)\s*\.\s*interrupt\(\)"#, options: .regularExpression),
+      "tool stall guard must interrupt after marking its generation")
   }
 
   // MARK: - Helpers

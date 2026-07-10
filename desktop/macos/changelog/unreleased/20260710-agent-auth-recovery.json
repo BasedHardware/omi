@@ -1,3 +1,3 @@
 {
-  "change": "Fixed background agents failing instead of asking you to reconnect when their Claude credentials expire"
+  "change": "Background agents now stay on Omi's managed cloud route, while explicit User Claude sign-in is bounded and opens its reconnect flow automatically. Stalled tool calls now stop before a chat can hang for three minutes."
 }

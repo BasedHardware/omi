@@ -914,6 +914,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// watchdog in sendMessage() and the `.stopped` catch branch.
     private var sendWatchdogFiredGeneration: Int?
 
+    /// A per-tool guard fires before the whole-turn watchdog when an adapter
+    /// leaves a tool request active without making forward progress.
+    private var sendToolStallAbortGeneration: Int?
+
+    private static let perToolStallAbortMs = 90_000
+
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
     @Published var sessionsLoadError: String?
@@ -1038,6 +1044,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var claudeAuthMethods: [[String: Any]] = []
     /// OAuth URL to open in browser (sent by bridge when auth is needed)
     @Published var claudeAuthUrl: String?
+    /// Prevent duplicate browser launches for the same explicit User Claude flow.
+    private var claudeAuthLaunchRequested = false
     /// Whether the user has a cached Claude OAuth token
     @Published var isClaudeConnected = false
     /// Cumulative tokens used in the current session via Omi account
@@ -1403,11 +1411,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self?.claudeAuthMethods = methods
                         self?.claudeAuthUrl = authUrl
                         self?.isClaudeAuthRequired = true
+                        self?.startClaudeAuth()
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
                         self?.isClaudeAuthRequired = false
+                        self?.claudeAuthLaunchRequested = false
                         self?.checkClaudeConnectionStatus()
                     }
                 }
@@ -1668,13 +1678,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// credential storage, and ACP subprocess restart.
     func startClaudeAuth() {
         guard isUserClaudeMode else { return }
+        guard !claudeAuthLaunchRequested else { return }
 
         if let urlString = claudeAuthUrl, let url = URL(string: urlString) {
+            claudeAuthLaunchRequested = true
             log("ChatProvider: Opening Claude OAuth URL in browser")
             NSWorkspace.shared.open(url)
         } else {
             logError("ChatProvider: No auth URL available from bridge")
             isClaudeAuthRequired = false
+            claudeAuthLaunchRequested = false
         }
     }
 
@@ -4144,14 +4157,37 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // gaps when no bridge events arrive. Cancelled via defer on
             // scope exit (success or throw).
             let stallTickTask = Task { [weak self] in
+                var issuedToolStallAbort = false
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
                     if Task.isCancelled { break }
                     let nowMs = ChatProvider.monotonicNowMs()
                     let transitions = await stallDetector.tick(atMs: nowMs)
-                    if transitions.isEmpty { continue }
-                    await MainActor.run { [weak self] in
-                        self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    if !transitions.isEmpty {
+                        await MainActor.run { [weak self] in
+                            self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                        }
+                    }
+                    if !issuedToolStallAbort {
+                        let overdueToolIds = await stallDetector.toolIdsExceeding(
+                            durationMs: Self.perToolStallAbortMs,
+                            atMs: nowMs
+                        )
+                        if !overdueToolIds.isEmpty {
+                            issuedToolStallAbort = true
+                            let shouldInterrupt = await MainActor.run { () -> Bool in
+                                guard let self, self.isSending, self.sendGeneration == sendGen else { return false }
+                                self.sendToolStallAbortGeneration = sendGen
+                                log(
+                                    "ChatProvider: tool stall guard fired at \\(Self.perToolStallAbortMs / 1_000)s "
+                                        + "(active_tools=\\(overdueToolIds.count)); interrupting bridge"
+                                )
+                                return true
+                            }
+                            if shouldInterrupt {
+                                await self?.resolvedAgentClient().interrupt()
+                            }
+                        }
                     }
                 }
             }
@@ -4193,11 +4229,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self?.claudeAuthMethods = methods
                         self?.claudeAuthUrl = authUrl
                         self?.isClaudeAuthRequired = true
+                        self?.startClaudeAuth()
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
                         self?.isClaudeAuthRequired = false
+                        self?.claudeAuthLaunchRequested = false
                         self?.checkClaudeConnectionStatus()
                     }
                 }
@@ -4501,9 +4539,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // instead of letting the turn vanish (the watchdog's own error-set
                 // races this catch and bails once `isSending` is released here).
                 let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
+                let toolStallAbortFired = (sendToolStallAbortGeneration == sendGen)
                 sendWatchdogFiredGeneration = nil
+                sendToolStallAbortGeneration = nil
                 currentError = nil
-                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(watchdogFired: watchdogFired) {
+                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
+                    watchdogFired: watchdogFired,
+                    toolStallAbortFired: toolStallAbortFired
+                ) {
                     errorMessage = timeoutMessage
                 } else {
                     stoppedByUser = true
@@ -4970,8 +5013,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
     /// the turn timed out, so surface "Response took too long" rather than letting
     /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.
-    nonisolated static func stoppedTurnErrorMessage(watchdogFired: Bool) -> String? {
-        watchdogFired ? "Response took too long. Try again." : nil
+    nonisolated static func stoppedTurnErrorMessage(
+        watchdogFired: Bool,
+        toolStallAbortFired: Bool = false
+    ) -> String? {
+        if toolStallAbortFired {
+            return "A tool took too long. Try again."
+        }
+        return watchdogFired ? "Response took too long. Try again." : nil
     }
 
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.

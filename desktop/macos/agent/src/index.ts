@@ -833,10 +833,29 @@ async function main(): Promise<void> {
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
-  registry.register("acp", () => acpAdapter, 1);
+  // ACP reads the user's local Claude Code credential.  Do not even expose it
+  // to managed Omi runs; switching to User Claude restarts the bridge with
+  // `defaultAdapterId === "acp"` and registers it there.
+  if (defaultAdapterId === "acp") {
+    registry.register("acp", () => acpAdapter, 1);
+  }
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
+  const recoverRunInput = (adapterId: string) => {
+    if (adapterId !== "acp") return {};
+    let recoveries = 0;
+    return {
+      maxAttempts: 3,
+      recoverAfterError: async (error: unknown) => {
+        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
+        recoveries += 1;
+        logErr("ACP auth required during run; starting OAuth flow before retry");
+        await startAuthFlow();
+        return true;
+      },
+    };
+  };
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -952,8 +971,10 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    defaultAdapterId,
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
+    recoverRunInput,
   };
   const transport = new JsonlTransport({
     kernel,

@@ -151,6 +151,7 @@ export class KernelCore {
   protected readonly registry: AdapterRegistry;
   protected readonly runtimeNodeId: string;
   protected readonly artifactStorage?: OmiArtifactStorage;
+  protected readonly recoverRunInput?: AgentRuntimeKernelOptions["recoverRunInput"];
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
@@ -162,6 +163,7 @@ export class KernelCore {
     this.registry = options.registry;
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
+    this.recoverRunInput = options.recoverRunInput;
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -204,6 +206,16 @@ export class KernelCore {
   ): Promise<KernelRunResult> {
 
     const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    if (!input.recoverAfterError) {
+      const recovery = this.recoverRunInput?.(adapterId);
+      if (recovery) {
+        input = {
+          ...input,
+          maxAttempts: input.maxAttempts ?? recovery.maxAttempts,
+          recoverAfterError: recovery.recoverAfterError,
+        };
+      }
+    }
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;

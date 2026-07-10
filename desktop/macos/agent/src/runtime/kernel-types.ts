@@ -242,6 +242,8 @@ export interface SendAgentMessageInput {
   cwd?: string;
   model?: string;
   mcpServers?: Record<string, unknown>[];
+  maxAttempts?: number;
+  recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
 }
 
@@ -260,6 +262,8 @@ export interface SpawnBackgroundAgentInput {
   model?: string;
   mcpServers?: Record<string, unknown>[];
   mode?: RunMode;
+  maxAttempts?: number;
+  recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
 }
 
@@ -290,6 +294,8 @@ export interface DelegateAgentInput {
   context?: string;
   maxDepth?: number;
   maxBudgetUsd?: number;
+  maxAttempts?: number;
+  recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
 }
 
@@ -317,6 +323,11 @@ export interface DelegateAgentResult {
 
 export type KernelEventSubscriber = (event: AgentEvent) => void;
 
+/** Adapter-scoped recovery applied by the kernel to every run entry point. */
+export type KernelRunRecoveryPolicy = (
+  adapterId: string,
+) => Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError">;
+
 export class StaleAdapterBindingError extends Error {
   constructor(message = "Adapter binding is stale") {
     super(message);
@@ -329,4 +340,5 @@ export interface AgentRuntimeKernelOptions {
   registry: AdapterRegistry;
   runtimeNodeId?: string;
   artifactStorage?: OmiArtifactStorage;
+  recoverRunInput?: KernelRunRecoveryPolicy;
 }

@@ -1512,6 +1512,59 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("inherits the managed adapter for background agents instead of local ACP", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono" },
+        "spawn_agent",
+        {
+          objective: "research managed routing",
+          visible: true,
+          requestId: "spawn-managed-routing-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "succeeded";
+    });
+    expect(spawned.session.defaultAdapterId).toBe("pi-mono");
+    expect(adapter.executed).toHaveLength(1);
+    store.close();
+  });
+
+  it("rejects an explicit local ACP override from a managed agent", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono" },
+        "spawn_agent",
+        {
+          objective: "do not use local credentials",
+          visible: true,
+          adapterId: "acp",
+          requestId: "spawn-managed-local-acp-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Local Claude is available only when the User Claude mode is selected.",
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
   it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
@@ -1756,6 +1809,51 @@ describe("agent control tools", () => {
         latestActivity: expect.stringContaining("spawn bridge failed after acceptance"),
       }),
     );
+    store.close();
+  });
+
+  it("retries an accepted ACP spawn after control-tool credential recovery", async () => {
+    const authError = new Error("Invalid authentication credentials");
+    let recoveries = 0;
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "acp",
+      4,
+      undefined,
+      (adapterId) =>
+        adapterId === "acp"
+          ? {
+              maxAttempts: 2,
+              recoverAfterError: async (error) => {
+                recoveries += 1;
+                return error === authError;
+              },
+            }
+          : {},
+    );
+    adapter.failNextExecutionError = authError;
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "research PXMX",
+        visible: true,
+        requestId: "spawn-auth-recovery-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "succeeded";
+    });
+    expect(recoveries).toBe(1);
+    expect(store.allRows("SELECT attempt_no, retry_reason, status FROM run_attempts WHERE run_id = ? ORDER BY attempt_no", [
+      spawned.run.runId,
+    ])).toEqual([
+      expect.objectContaining({ attempt_no: 1, retry_reason: null, status: "failed" }),
+      expect.objectContaining({ attempt_no: 2, retry_reason: "recoverable_error", status: "succeeded" }),
+    ]);
     store.close();
   });
 

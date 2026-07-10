@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
-import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
+import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { serializeArtifact } from "./artifact-serialization.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
@@ -323,14 +323,43 @@ export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentCo
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
+  /**
+   * The adapter selected by the owning desktop surface.  New background work
+   * must inherit this route rather than silently selecting a local provider.
+   */
+  defaultAdapterId?: string;
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
+  recoverRunInput?: (
+    adapterId: string,
+  ) => Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError">;
   buildMcpServers?: (
     mode: "ask" | "act",
     cwd: string | undefined,
     sessionKey: string | undefined,
     context: McpServerBuildContext
   ) => Record<string, unknown>[];
+}
+
+function controlRunRecovery(
+  context: AgentControlToolContext,
+  adapterId: string,
+): Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError"> {
+  return context.recoverRunInput?.(adapterId) ?? {};
+}
+
+function defaultControlAdapterId(context: AgentControlToolContext): string {
+  return context.defaultAdapterId ?? "acp";
+}
+
+function assertAdapterAllowedForControlRun(context: AgentControlToolContext, adapterId: string): void {
+  // ACP is the user's locally authenticated Claude Code process.  A managed
+  // Omi session must never drift into it merely because a control-tool input
+  // omitted an adapter id.  Local ACP remains available only when the parent
+  // desktop surface explicitly selected the User Claude harness.
+  if (adapterId === "acp" && defaultControlAdapterId(context) !== "acp") {
+    throw new Error("Local Claude is available only when the User Claude mode is selected.");
+  }
 }
 
 export interface ActiveControlToolOwnerInput {
@@ -608,6 +637,7 @@ export async function handleAgentControlToolCall(
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
+          ...controlRunRecovery(context, adapterId),
           ownerId,
           requestId,
           metadata: { ...(parsed.metadata ?? {}) },
@@ -635,9 +665,11 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? "acp";
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? defaultControlAdapterId(context);
+        assertAdapterAllowedForControlRun(context, adapterId);
         const result = await context.kernel.spawnBackgroundAgent({
           ...parsed,
+          ...controlRunRecovery(context, adapterId),
           adapterId,
           defaultAdapterId: adapterId,
           ownerId,
@@ -670,7 +702,10 @@ export async function handleAgentControlToolCall(
         const adapterId =
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
-          (parsed.parentRunId ? undefined : "acp");
+          (parsed.parentRunId ? undefined : defaultControlAdapterId(context));
+        if (adapterId) {
+          assertAdapterAllowedForControlRun(context, adapterId);
+        }
         const visiblePillExternalRefId = parsed.visible
           ? (parsed.externalRefId ?? randomUUID())
           : parsed.externalRefId;
@@ -682,7 +717,7 @@ export async function handleAgentControlToolCall(
           ownerId,
           requestId,
           clientId: parsed.clientId,
-          adapterId: adapterId ?? "acp",
+          adapterId: adapterId ?? defaultControlAdapterId(context),
           surfaceKind: childSurfaceKind,
           externalRefKind: childExternalRefKind,
           externalRefId: visiblePillExternalRefId,
@@ -690,6 +725,7 @@ export async function handleAgentControlToolCall(
         });
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
+            ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
             mode: "spawn",
             parentRunId: parsed.parentRunId,
             objective: parsed.objective,
@@ -716,6 +752,7 @@ export async function handleAgentControlToolCall(
           });
         }
         const result = await context.kernel.spawnBackgroundAgent({
+          ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
           ownerId,
           clientId: parsed.clientId,
           requestId,
@@ -749,6 +786,7 @@ export async function handleAgentControlToolCall(
         const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
         const result = await context.kernel.delegateAgent({
+          ...controlRunRecovery(context, adapterId),
           mode: "call",
           parentRunId: parsed.parentRunId,
           objective: parsed.objective,
