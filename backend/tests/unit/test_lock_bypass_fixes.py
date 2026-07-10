@@ -1062,18 +1062,19 @@ class TestScheduledDailySummaryLockFilter:
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
-            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-                with patch(
-                    'utils.other.notifications.generate_comprehensive_daily_summary',
-                    return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
-                ) as mock_gen:
-                    daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
-                    daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
-                    with patch('utils.other.notifications.send_notification'):
-                        from utils.other.notifications import _send_summary_notification
+        # The daily recap is no longer gated on is_trial_paywalled (#9357 removed that call from
+        # _send_summary_notification), so this test only exercises the locked-conversation filter.
+        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+            with patch(
+                'utils.other.notifications.generate_comprehensive_daily_summary',
+                return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
+            ) as mock_gen:
+                daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+                daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
+                with patch('utils.other.notifications.send_notification'):
+                    from utils.other.notifications import _send_summary_notification
 
-                        _send_summary_notification(('test-uid', 'token', 'UTC'))
+                    _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # generate_comprehensive_daily_summary must be called only with unlocked conversations
         mock_gen.assert_called_once()
@@ -1089,12 +1090,13 @@ class TestScheduledDailySummaryLockFilter:
         conversations_db.get_conversations = MagicMock(return_value=[_make_conversation(locked=True)])
         daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
-        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
-            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-                with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
-                    from utils.other.notifications import _send_summary_notification
+        # Recap is no longer gated on is_trial_paywalled (#9357); only the all-locked early return
+        # is under test here.
+        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+            with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
+                from utils.other.notifications import _send_summary_notification
 
-                    _send_summary_notification(('test-uid', 'token', 'UTC'))
+                _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # Should not call LLM when no unlocked conversations remain
         mock_gen.assert_not_called()
