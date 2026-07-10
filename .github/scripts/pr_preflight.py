@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -11,7 +12,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from pr_metadata import PullRequestMetadata, load_from_gh
+from pr_metadata import PullRequestMetadata, load_from_api, load_from_gh
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,12 @@ def select_checks(files: list[str]) -> list[Check]:
     return checks
 
 
-def resolve_pr_metadata(root: Path, body_file: Path | None) -> PullRequestMetadata | None:
+def resolve_pr_metadata(
+    root: Path,
+    body_file: Path | None,
+    repository: str | None,
+    pr_number: int | None,
+) -> PullRequestMetadata | None:
     if body_file:
         return PullRequestMetadata(
             number=0,
@@ -60,6 +66,8 @@ def resolve_pr_metadata(root: Path, body_file: Path | None) -> PullRequestMetada
             labels=(),
             source=str(body_file.resolve()),
         )
+    if repository and pr_number:
+        return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
     try:
         return load_from_gh(root)
     except RuntimeError as exc:
@@ -74,7 +82,7 @@ def command_for_check(
     base: str,
     head: str,
     body_path: Path,
-    labels: tuple[str, ...],
+    skip_changelog: bool,
 ) -> list[str]:
     python = sys.executable
     commands = {
@@ -100,7 +108,7 @@ def command_for_check(
             base,
             "--head",
             head,
-            *(["--skip"] if "no-changelog-needed" in labels else []),
+            *(["--skip"] if skip_changelog else []),
         ],
         "desktop-e2e-flow-coverage": [
             python,
@@ -136,6 +144,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--pr-body-file", type=Path)
+    parser.add_argument("--repository", help="GitHub repository as owner/name; requires --pr-number")
+    parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
+    parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
     parser.add_argument("--root", type=Path)
     return parser.parse_args()
@@ -143,6 +154,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if bool(args.repository) != bool(args.pr_number):
+        print("FAIL: --repository and --pr-number must be supplied together", file=sys.stderr)
+        return 2
     root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
     started = time.monotonic()
     try:
@@ -158,8 +172,22 @@ def main() -> int:
     if args.list:
         return 0
 
-    metadata = resolve_pr_metadata(root, args.pr_body_file)
+    try:
+        metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
+    except RuntimeError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
     labels = metadata.labels if metadata else ()
+    head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
+    if not head_branch:
+        head_branch = subprocess.run(
+            ["git", "symbolic-ref", "--short", "-q", "HEAD"],
+            cwd=root,
+            check=False,
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
+    skip_changelog = "no-changelog-needed" in labels or head_branch.startswith("changelog/v")
     if metadata:
         print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
 
@@ -176,7 +204,7 @@ def main() -> int:
             if check.name == "diff-hygiene":
                 returncode = check_diff_hygiene(root, args.base, args.head, files)
             else:
-                command = command_for_check(check, files_path, args.base, args.head, body_path, labels)
+                command = command_for_check(check, files_path, args.base, args.head, body_path, skip_changelog)
                 returncode = subprocess.run(command, cwd=root, check=False).returncode
             elapsed = time.monotonic() - phase_started
             status = "PASS" if returncode == 0 else "FAIL"
