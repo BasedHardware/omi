@@ -1,3 +1,0 @@
-{
-  "change": "Made the desktop brain map reopen faster by preserving its scene during navigation and reusing cached layouts when the graph has not changed."
-}
