@@ -37,6 +37,8 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@google/genai": "^2.11.0",
+    "@openai/agents-realtime": "^0.13.1",
     "@ricky0123/vad-web": "^0.0.30",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
