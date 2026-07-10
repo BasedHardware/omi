@@ -8,12 +8,15 @@ import 'package:flutter_sound/flutter_sound.dart';
 
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/mic/mic_arbiter.dart';
+import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
+  late IMicRecorderService _phoneMic;
   late IDeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
@@ -21,7 +24,23 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
+    final micArbiter = MicArbiter();
+    sm._mic = ArbitratedMic(
+      inner: MicRecorderBackgroundService(runner: BackgroundService()),
+      arbiter: micArbiter,
+      owner: 'mic',
+    );
+    // Conversation capture uses the native AVAudioEngine recorder on iOS;
+    // everything else (chat voice memos, speech profile, all of Android)
+    // stays on the flutter_sound path. The shared arbiter keeps the two
+    // stacks from contending for the microphone.
+    sm._phoneMic = Platform.isIOS
+        ? ArbitratedMic(
+            inner: NativeMicRecorderService(),
+            arbiter: micArbiter,
+            owner: 'conversation',
+          )
+        : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -38,6 +57,10 @@ class ServiceManager {
   }
 
   IMicRecorderService get mic => _mic;
+
+  /// The recorder for conversation capture: native on iOS, flutter_sound
+  /// elsewhere. Chat voice memos and speech profile keep using [mic].
+  IMicRecorderService get phoneMic => _phoneMic;
 
   IDeviceService get device => _device;
 
@@ -62,6 +85,9 @@ class ServiceManager {
     ConnectivityService().dispose();
     await _wal.stop();
     _mic.stop();
+    if (!identical(_phoneMic, _mic)) {
+      _phoneMic.stop();
+    }
     _device.stop();
   }
 }
