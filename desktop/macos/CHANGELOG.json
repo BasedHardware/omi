@@ -2,6 +2,23 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.67",
+      "date": "2026-07-10",
+      "changes": [
+        "Fixed a stalled AI chat response silently ending with no message — it now shows \"Response took too long. Try again.\" so you know to retry",
+        "Improved Conversations so cached details load instantly without hiding newer summaries, statuses, titles, stars, or folders",
+        "Kept conversation details and edits isolated across account changes while preserving simultaneous title, star, and folder updates",
+        "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)",
+        "Fixed the This device memory filter for new desktop conversations and memories",
+        "Made the desktop brain map reopen faster by preserving its scene during navigation and reusing cached layouts when the graph has not changed.",
+        "Fixed Reset Onboarding clearing signed-in state incorrectly and leaving the app in a broken half-onboarded state",
+        "Preserved unsent chat drafts separately across the main app, notch, agents, tasks, restarts, and updates",
+        "Made desktop updates safer with qualified beta releases, explicit stable and beta channels, and verified post-relaunch install reporting",
+        "Made push-to-talk and realtime voice more reliable during barge-in, provider delays, playback fallbacks, and rapid repeated turns.",
+        "Improved transcription cloud/local fallback reliability and memory sync stability."
+      ]
+    },
+    {
       "version": "0.12.66",
       "date": "2026-07-09",
       "changes": [

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Reset Onboarding clearing signed-in state incorrectly and leaving the app in a broken half-onboarded state"
-}
