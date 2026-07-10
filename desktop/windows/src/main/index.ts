@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCaptur
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { supportsMica } from './windowsVersion'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import {
@@ -244,23 +245,40 @@ function maybeShowCloseToTrayNotice(): void {
 
 function createWindow(): BrowserWindow {
   // Create the browser window. 1280x820 gives the two-column Record layout
-  // (transcript + screen sidebar) room without overflow; min-size prevents the
-  // sidebar from clipping below a usable threshold.
+  // (transcript + screen sidebar) room without overflow; the 500px floor keeps
+  // a narrow snapped window usable (the sidebar collapses).
+  //
+  // Windows-11 chrome: the native title bar is hidden and replaced by the
+  // Window Controls Overlay (native caption buttons → Snap Layouts hover
+  // works); the renderer draws its own 36px drag strip. On 22H2+ the window
+  // gets the Mica system backdrop (the renderer goes translucent via
+  // data-mica); older builds fall back to the flat token canvas.
+  const mica = supportsMica()
   const mainWindow = new BrowserWindow({
     title: 'omi',
     width: 1280,
     height: 820,
-    minWidth: 1024,
-    minHeight: 640,
+    minWidth: 500,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    frame: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      // Matches --bg-primary / --text-tertiary. The overlay paints only the
+      // caption-button cluster, so under Mica the near-identical solid is
+      // visually seamless.
+      color: '#0f0f0f',
+      symbolColor: '#b0b0b0',
+      height: 36
+    },
     transparent: false,
-    backgroundColor: '#121212',
+    ...(mica ? { backgroundMaterial: 'mica' as const } : { backgroundColor: '#0f0f0f' }),
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
+      // Tell the preload whether Mica is active (renderer sets data-mica).
+      additionalArguments: [`--omi-mica=${mica ? '1' : '0'}`],
       // webSecurity stays ON. The Omi API CORS gap is handled by the header
       // injection + OPTIONS-preflight forcing in the webRequest hooks below, so
       // we no longer weaken the renderer's web security to work around it.

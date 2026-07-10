@@ -536,6 +536,10 @@ export type OmiBridgeApi = {
   onMeetingToast: (cb: (p: MeetingToastPayload) => void) => () => void
   perfFirstPaint: () => void
   perfMark: (name: string) => void
+  /** True when the main window was created with the Win11 Mica background
+   *  material (22H2+). The renderer sets data-mica on the root so the canvas
+   *  goes translucent; flat solid fallback everywhere else. */
+  micaEnabled: boolean
   // Animation bench (OMI_ANIM_BENCH): the renderer probe reports a jank summary
   // for the startup entrance animations back to main.
   perfAnimResult: (stats: Record<string, number>) => void

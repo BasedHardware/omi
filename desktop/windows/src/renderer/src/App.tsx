@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
 import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
+import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
@@ -74,11 +75,15 @@ function AppShellInner(): React.JSX.Element {
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
 
   return (
-    <div className="app-canvas flex h-full min-h-0">
-      {!hideSidebar && <Sidebar />}
-      <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
-        <MainViews />
-      </main>
+    <div className="app-canvas flex h-full min-h-0 flex-col">
+      {/* Native-caption drag strip (Window Controls Overlay). */}
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        {!hideSidebar && <Sidebar />}
+        <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
+          <MainViews />
+        </main>
+      </div>
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -93,6 +98,16 @@ function AppShellInner(): React.JSX.Element {
       <BackgroundConsentInterstitial />
     </div>
   )
+}
+
+// Marks the root when the window was created with the Win11 Mica material so
+// the canvas goes translucent (globals.css html[data-mica]). Main window only
+// — the bar/toast/capture windows own their own transparent backgrounds.
+function useMicaChrome(): void {
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    if (window.omi?.micaEnabled) document.documentElement.dataset.mica = 'true'
+  }, [])
 }
 
 function AppShell(): React.JSX.Element {
@@ -112,6 +127,7 @@ function AppShell(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   const { user, loading } = useAuth()
+  useMicaChrome()
   // Under the perf bench, treat the user as already onboarded so the authed
   // shell mounts (a returning user always is). The onboarding flag lives in
   // origin-scoped localStorage, which the file:// bench profile can't inherit
@@ -162,6 +178,7 @@ function App(): React.JSX.Element {
   if (loading) {
     return (
       <div className="app-canvas flex h-full items-center justify-center">
+        {!IS_SECONDARY_WINDOW && <TitleBar variant="overlay" />}
         <SandboxBadge />
         <Spinner label="Loading Omi…" />
       </div>
@@ -182,7 +199,19 @@ function App(): React.JSX.Element {
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />
-        <Route path="/login" element={user ? <Navigate to="/home" replace /> : <Login />} />
+        <Route
+          path="/login"
+          element={
+            user ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <>
+                <TitleBar variant="overlay" />
+                <Login />
+              </>
+            )
+          }
+        />
         <Route
           path="/onboarding"
           element={
@@ -196,7 +225,10 @@ function App(): React.JSX.Element {
               // capture during onboarding is owned by the always-alive capture
               // window now (it seeds the hot currentScreen cache), so no capture
               // host is mounted here.
-              <Onboarding />
+              <>
+                <TitleBar variant="overlay" />
+                <Onboarding />
+              </>
             )
           }
         />

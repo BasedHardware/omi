@@ -164,6 +164,10 @@ const omi: OmiBridgeApi = {
   },
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
+  // Main-window chrome: whether the window was created with a Windows 11 Mica
+  // background material (renderer goes translucent so the material shows).
+  // Passed via additionalArguments at window construction.
+  micaEnabled: process.argv.includes('--omi-mica=1'),
   perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),
   isAnimBench: process.env.OMI_ANIM_BENCH === '1',
   benchEcho: (x: number) => ipcRenderer.invoke('bench:echo', x),
