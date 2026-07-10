@@ -1,3 +1,0 @@
-{
-  "change": "Background agents now stay on Omi's managed cloud route and operate as leaf workers. Explicit User Claude sign-in uses a validated, bounded reconnect flow, and failed agent-control actions show as failures instead of misleading completion. Stalled tool calls now stop before a chat can hang for three minutes."
-}
