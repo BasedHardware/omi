@@ -3177,5 +3177,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Подключите ваши Meta Glasses",
+    "pairingDescMetaGlasses": "Выполните сопряжение очков в приложении Meta AI, затем нажмите «Подключить» в Omi. Можно привязать несколько пар и выбрать активную.",
+    "metaGlassesUnavailable": "Приложение Meta AI не найдено. Установите Meta AI и включите режим разработчика, чтобы подключить очки.",
+    "metaGlassesRegistering": "Завершите подключение в приложении Meta AI и вернитесь в Omi.",
+    "metaGlassesCameraPermission": "Разрешите доступ к камере в приложении Meta AI",
+    "metaGlassesCaptureModeLabel": "Режим записи",
+    "metaGlassesModeCameraMic": "Камера + микрофон",
+    "metaGlassesModeMicOnly": "Только микрофон",
+    "metaGlassesStartCapture": "Начать запись",
+    "metaGlassesStopCapture": "Остановить запись",
+    "metaGlassesGestureHint": "Управление жестами для очков Meta не поддерживается в этой сборке.",
+    "connectAnotherDevice": "Подключить другое устройство",
+    "myDevices": "Мои устройства",
+    "metaGlassesAutoCapture": "Автозапись при подключении",
+    "metaGlassesShowPreview": "Живой предпросмотр",
+    "metaGlassesPendingPhotos": "{count} фото ожидают синхронизации",
+    "metaGlassesPairInMetaAI": "Настройте в приложении Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Очки охлаждаются — съемка приостановлена",
+    "metaGlassesFolded": "Разложите очки, чтобы продолжить съемку",
+    "metaGlassesCaptureFrequency": "Частота съёмки",
+    "metaGlassesEvery10s": "Каждые 10 с",
+    "metaGlassesEvery30s": "Каждые 30 с",
+    "metaGlassesEvery1min": "Каждую 1 мин",
+    "metaGlassesEvery5min": "Каждые 5 мин",
+    "metaGlassesGestures": "Жесты"
 }

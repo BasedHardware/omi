@@ -9597,4 +9597,95 @@ class AppLocalizationsBs extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Greška pri povezivanju s Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Povežite svoje Meta Glasses';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Uparite naočale u aplikaciji Meta AI, zatim dodirnite Poveži u Omi. Možete povezati više pari i odabrati koji je aktivan.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Aplikacija Meta AI nije pronađena. Instalirajte Meta AI i omogućite način rada za programere da biste povezali naočale.';
+
+  @override
+  String get metaGlassesRegistering => 'Dovršite povezivanje u aplikaciji Meta AI, a zatim se vratite u Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Dozvolite pristup kameri u aplikaciji Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Način snimanja';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Samo mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Pokreni snimanje';
+
+  @override
+  String get metaGlassesStopCapture => 'Zaustavi snimanje';
+
+  @override
+  String get metaGlassesGestureHint => 'Kontrole gestama za Meta naočale nisu podržane u ovoj verziji.';
+
+  @override
+  String get connectAnotherDevice => 'Poveži drugi uređaj';
+
+  @override
+  String get myDevices => 'Moji uređaji';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatsko snimanje pri povezivanju';
+
+  @override
+  String get metaGlassesShowPreview => 'Pregled uživo';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotografija čeka sinhronizaciju';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Podesite u aplikaciji Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Naočale se hlade — snimanje je pauzirano';
+
+  @override
+  String get metaGlassesFolded => 'Otvorite naočale da nastavite snimanje';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Učestalost snimanja';
+
+  @override
+  String get metaGlassesEvery10s => 'Svakih 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Svakih 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Svake 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Svakih 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gestovi';
 }

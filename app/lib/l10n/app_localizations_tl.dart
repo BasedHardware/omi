@@ -9660,4 +9660,96 @@ class AppLocalizationsTl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error sa pagkonekta sa Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Ikonekta ang iyong Meta Glasses';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'I-pair ang iyong salamin sa Meta AI app, pagkatapos ay i-tap ang Connect sa Omi. Maaari kang mag-link ng higit sa isang pares at piliin kung alin ang aktibo.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Hindi natagpuan ang Meta AI app. I-install ang Meta AI at i-enable ang Developer Mode para ikonekta ang iyong salamin.';
+
+  @override
+  String get metaGlassesRegistering => 'Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik sa Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Payagan ang access sa camera sa Meta AI app';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Capture mode';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Camera + mikropono';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Mikropono lamang';
+
+  @override
+  String get metaGlassesStartCapture => 'Simulan ang pag-capture';
+
+  @override
+  String get metaGlassesStopCapture => 'Ihinto ang pag-capture';
+
+  @override
+  String get metaGlassesGestureHint =>
+      'Hindi sinusuportahan ang mga kontrol sa galaw para sa Meta glasses sa build na ito.';
+
+  @override
+  String get connectAnotherDevice => 'Ikonekta ang isa pang device';
+
+  @override
+  String get myDevices => 'Aking Mga Device';
+
+  @override
+  String get metaGlassesAutoCapture => 'Awtomatikong pag-capture kapag nakakonekta';
+
+  @override
+  String get metaGlassesShowPreview => 'Live preview';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count larawan ang naghihintay ma-sync';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'I-set up sa Meta AI app';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Lumalamig ang salamin — naka-pause ang pag-capture';
+
+  @override
+  String get metaGlassesFolded => 'Buksan ang salamin para magpatuloy sa pag-capture';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Dalas ng pagkuha';
+
+  @override
+  String get metaGlassesEvery10s => 'Bawat 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Bawat 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Bawat 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Bawat 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Mga galaw';
 }

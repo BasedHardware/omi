@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Conectează-ți Meta Glasses",
+    "pairingDescMetaGlasses": "Asociază ochelarii în aplicația Meta AI, apoi atinge Conectare în Omi. Poți lega mai multe perechi și alege care este activă.",
+    "metaGlassesUnavailable": "Aplicația Meta AI nu a fost găsită. Instalează Meta AI și activează modul pentru dezvoltatori pentru a conecta ochelarii.",
+    "metaGlassesRegistering": "Finalizează conectarea în aplicația Meta AI, apoi revino în Omi.",
+    "metaGlassesCameraPermission": "Permite accesul la cameră în aplicația Meta AI",
+    "metaGlassesCaptureModeLabel": "Mod de captură",
+    "metaGlassesModeCameraMic": "Cameră + microfon",
+    "metaGlassesModeMicOnly": "Doar microfon",
+    "metaGlassesStartCapture": "Pornește captura",
+    "metaGlassesStopCapture": "Oprește captura",
+    "metaGlassesGestureHint": "Comenzile prin gesturi pentru ochelarii Meta nu sunt acceptate în această versiune.",
+    "connectAnotherDevice": "Conectează alt dispozitiv",
+    "myDevices": "Dispozitivele mele",
+    "metaGlassesAutoCapture": "Captură automată la conectare",
+    "metaGlassesShowPreview": "Previzualizare live",
+    "metaGlassesPendingPhotos": "{count} fotografii așteaptă sincronizarea",
+    "metaGlassesPairInMetaAI": "Configurează în aplicația Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Ochelarii se răcesc — capturarea este întreruptă",
+    "metaGlassesFolded": "Deschide ochelarii pentru a continua capturarea",
+    "metaGlassesCaptureFrequency": "Frecvența capturii",
+    "metaGlassesEvery10s": "La fiecare 10 s",
+    "metaGlassesEvery30s": "La fiecare 30 s",
+    "metaGlassesEvery1min": "La fiecare 1 min",
+    "metaGlassesEvery5min": "La fiecare 5 min",
+    "metaGlassesGestures": "Gesturi"
 }

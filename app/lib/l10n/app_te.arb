@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "మీ Meta Glasses కనెక్ట్ చేయండి",
+    "pairingDescMetaGlasses": "Meta AI యాప్‌లో మీ గ్లాసెస్‌ను పెయిర్ చేసి, ఆపై Omi లో Connect నొక్కండి. ఒకటి కంటే ఎక్కువ జతలను లింక్ చేసి, యాక్టివ్‌గా ఉండేదాన్ని ఎంచుకోవచ్చు.",
+    "metaGlassesUnavailable": "Meta AI యాప్ కనబడలేదు. గ్లాసెస్ కనెక్ట్ చేయడానికి Meta AI ఇన్‌స్టాల్ చేసి, డెవలపర్ మోడ్ ప్రారంభించండి.",
+    "metaGlassesRegistering": "Meta AI యాప్‌లో కనెక్షన్ పూర్తి చేసి, ఆపై Omi కి తిరిగి రండి.",
+    "metaGlassesCameraPermission": "Meta AI యాప్‌లో కెమెరా యాక్సెస్‌ను అనుమతించండి",
+    "metaGlassesCaptureModeLabel": "క్యాప్చర్ మోడ్",
+    "metaGlassesModeCameraMic": "కెమెరా + మైక్",
+    "metaGlassesModeMicOnly": "మైక్ మాత్రమే",
+    "metaGlassesStartCapture": "క్యాప్చర్ ప్రారంభించండి",
+    "metaGlassesStopCapture": "క్యాప్చర్ ఆపండి",
+    "metaGlassesGestureHint": "ఈ బిల్డ్‌లో Meta కళ్లద్దాల కోసం gesture నియంత్రణలు మద్దతు ఇవ్వబడవు.",
+    "connectAnotherDevice": "మరో పరికరాన్ని కనెక్ట్ చేయండి",
+    "myDevices": "నా పరికరాలు",
+    "metaGlassesAutoCapture": "కనెక్ట్ అయినప్పుడు ఆటో-క్యాప్చర్",
+    "metaGlassesShowPreview": "లైవ్ ప్రివ్యూ",
+    "metaGlassesPendingPhotos": "{count} ఫోటోలు సింక్ కోసం వేచి ఉన్నాయి",
+    "metaGlassesPairInMetaAI": "Meta AI యాప్‌లో సెటప్ చేయండి",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "కళ్లజోడు చల్లబడుతోంది — క్యాప్చర్ పాజ్ అయింది",
+    "metaGlassesFolded": "క్యాప్చర్ కొనసాగించడానికి కళ్లజోడును విప్పండి",
+    "metaGlassesCaptureFrequency": "క్యాప్చర్ ఫ్రీక్వెన్సీ",
+    "metaGlassesEvery10s": "ప్రతి 10 సె",
+    "metaGlassesEvery30s": "ప్రతి 30 సె",
+    "metaGlassesEvery1min": "ప్రతి 1 నిమి",
+    "metaGlassesEvery5min": "ప్రతి 5 నిమి",
+    "metaGlassesGestures": "సంజ్ఞలు"
 }

@@ -82,6 +82,10 @@ class CaptureController extends ChangeNotifier
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
   Timer? _inProgressConversationRefreshTimer;
+  static const Duration _photoUploadAckTimeout = Duration(seconds: 10);
+  final Map<String, Completer<void>> _pendingPhotoUploadAcks = {};
+  final Map<String, String> _pendingPhotoUploadIdsByPermanent = {};
+  String? _metaWearablesCaptureConversationId;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
 
@@ -307,6 +311,8 @@ class CaptureController extends ChangeNotifier
         return 'limitless';
       case DeviceType.raybanMeta:
         return 'rayban_meta';
+      case DeviceType.metaWearables:
+        return 'meta_wearables';
     }
   }
 
@@ -1132,6 +1138,7 @@ class CaptureController extends ChangeNotifier
       // Ray-Ban Meta audio is bridged from the platform HFP route, so there is
       // no native BLE GATT target; capture runs on the foreground Dart path.
       case DeviceType.raybanMeta:
+      case DeviceType.metaWearables:
         return null;
     }
   }
@@ -1233,40 +1240,103 @@ class CaptureController extends ChangeNotifier
     await connection.performCameraStartPhotoController();
     _blePhotoStream = await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
-        final rotatedImageBytes = rotateImage(orientedImage);
-        final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-        final String base64Image = base64Encode(rotatedImageBytes);
-
-        // Add placeholder to UI for immediate feedback
-        photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-        photos = List.from(photos);
-        notifyListeners();
-
-        // Chunking Logic
-        const int chunkSize = 8192; // 8KB chunks
-        final totalChunks = (base64Image.length / chunkSize).ceil();
-
-        for (int i = 0; i < totalChunks; i++) {
-          final start = i * chunkSize;
-          final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
-          final chunk = base64Image.substring(start, end);
-
-          final payload = jsonEncode({
-            'type': 'image_chunk',
-            'id': tempId,
-            'index': i,
-            'total': totalChunks,
-            'data': chunk,
-          });
-
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(payload); // Send the JSON string
-          }
-          await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
-        }
+        await ingestCapturedImage(rotateImage(orientedImage));
       },
     );
     notifyListeners();
+  }
+
+  Future<bool> ingestCapturedImage(Uint8List imageBytes, {bool addToUi = true, DateTime? capturedAt}) async {
+    final takenAt = capturedAt ?? DateTime.now();
+    final tempId = 'temp_img_${takenAt.millisecondsSinceEpoch}';
+    final base64Image = base64Encode(imageBytes);
+    final ack = _pendingPhotoUploadAcks[tempId] = Completer<void>();
+
+    if (addToUi) {
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: takenAt));
+      photos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      photos = List.from(photos);
+      notifyListeners();
+    }
+
+    try {
+      if (_socket?.state != SocketServiceState.connected) return false;
+
+      const chunkSize = 8192;
+      final totalChunks = (base64Image.length / chunkSize).ceil();
+
+      for (var i = 0; i < totalChunks; i++) {
+        final start = i * chunkSize;
+        final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
+        final chunk = base64Image.substring(start, end);
+
+        final payload = jsonEncode({
+          'type': 'image_chunk',
+          'id': tempId,
+          'index': i,
+          'total': totalChunks,
+          'data': chunk,
+        });
+
+        if (_socket?.state != SocketServiceState.connected) return false;
+        _socket?.send(payload);
+        await Future.delayed(const Duration(milliseconds: 20));
+      }
+
+      return await _waitForPhotoUploadAck(tempId, ack);
+    } finally {
+      _pendingPhotoUploadAcks.remove(tempId);
+      _pendingPhotoUploadIdsByPermanent.removeWhere((_, pendingTempId) => pendingTempId == tempId);
+    }
+  }
+
+  Future<bool> cacheCapturedImage(
+    Uint8List imageBytes, {
+    bool addToUi = true,
+    DateTime? capturedAt,
+    String? deviceUuid,
+    String? deviceName,
+    String? frameSha256,
+  }) async {
+    final takenAt = capturedAt ?? DateTime.now();
+    final tempId = 'temp_meta_${takenAt.millisecondsSinceEpoch}';
+    final base64Image = base64Encode(imageBytes);
+
+    if (addToUi) {
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: takenAt));
+      photos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      photos = List.from(photos);
+      notifyListeners();
+    }
+
+    final cached = await cacheMetaWearablesPhoto(
+      imageBytes,
+      capturedAt: takenAt,
+      conversationId: _metaWearablesCaptureConversationId,
+      deviceUuid: deviceUuid,
+      deviceName: deviceName,
+      frameSha256: frameSha256,
+    );
+    if (cached == null || cached.conversationId.isEmpty || cached.photoId.isEmpty) return false;
+
+    _metaWearablesCaptureConversationId = cached.conversationId;
+    final photoIndex = photos.indexWhere((p) => p.id == tempId);
+    if (photoIndex != -1) {
+      photos[photoIndex].id = cached.photoId;
+      _segmentsPhotosVersion++;
+      notifyListeners();
+    }
+    return true;
+  }
+
+  Future<bool> _waitForPhotoUploadAck(String tempId, Completer<void> ack) async {
+    try {
+      await ack.future.timeout(_photoUploadAckTimeout);
+      return true;
+    } on TimeoutException {
+      Logger.debug('CaptureController: photo upload ack timed out for $tempId');
+      return false;
+    }
   }
 
   void clearTranscripts() {
@@ -1772,6 +1842,8 @@ class CaptureController extends ChangeNotifier
     if (event is PhotoProcessingEvent) {
       final tempId = event.tempId;
       final permanentId = event.photoId;
+      _pendingPhotoUploadIdsByPermanent[permanentId] = tempId;
+      _completePhotoUploadAck(tempId);
       final photoIndex = photos.indexWhere((p) => p.id == tempId);
       if (photoIndex != -1) {
         photos[photoIndex].id = permanentId;
@@ -1793,6 +1865,13 @@ class CaptureController extends ChangeNotifier
         notifyListeners();
       }
       return;
+    }
+  }
+
+  void _completePhotoUploadAck(String tempId) {
+    final ack = _pendingPhotoUploadAcks[tempId];
+    if (ack != null && !ack.isCompleted) {
+      ack.complete();
     }
   }
 

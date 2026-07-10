@@ -9639,4 +9639,96 @@ class AppLocalizationsEl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Σφάλμα σύνδεσης με Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Συνδέστε τα Meta Glasses σας';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Συζεύξτε τα γυαλιά σας στην εφαρμογή Meta AI και μετά πατήστε Σύνδεση στο Omi. Μπορείτε να συνδέσετε περισσότερα από ένα ζευγάρια και να επιλέξετε ποιο είναι ενεργό.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Δεν βρέθηκε η εφαρμογή Meta AI. Εγκαταστήστε το Meta AI και ενεργοποιήστε τη λειτουργία προγραμματιστή για να συνδέσετε τα γυαλιά σας.';
+
+  @override
+  String get metaGlassesRegistering => 'Ολοκληρώστε τη σύνδεση στην εφαρμογή Meta AI και επιστρέψτε στο Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Επιτρέψτε την πρόσβαση στην κάμερα στην εφαρμογή Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Λειτουργία εγγραφής';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Κάμερα + μικρόφωνο';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Μόνο μικρόφωνο';
+
+  @override
+  String get metaGlassesStartCapture => 'Έναρξη εγγραφής';
+
+  @override
+  String get metaGlassesStopCapture => 'Διακοπή εγγραφής';
+
+  @override
+  String get metaGlassesGestureHint =>
+      'Τα χειριστήρια χειρονομιών για τα γυαλιά Meta δεν υποστηρίζονται σε αυτήν την έκδοση.';
+
+  @override
+  String get connectAnotherDevice => 'Σύνδεση άλλης συσκευής';
+
+  @override
+  String get myDevices => 'Οι συσκευές μου';
+
+  @override
+  String get metaGlassesAutoCapture => 'Αυτόματη εγγραφή κατά τη σύνδεση';
+
+  @override
+  String get metaGlassesShowPreview => 'Ζωντανή προεπισκόπηση';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count φωτογραφίες σε αναμονή συγχρονισμού';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Ρυθμίστε στην εφαρμογή Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Τα γυαλιά κρυώνουν — η λήψη τέθηκε σε παύση';
+
+  @override
+  String get metaGlassesFolded => 'Ξεδίπλωσε τα γυαλιά για να συνεχιστεί η λήψη';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Συχνότητα λήψης';
+
+  @override
+  String get metaGlassesEvery10s => 'Κάθε 10 δλ';
+
+  @override
+  String get metaGlassesEvery30s => 'Κάθε 30 δλ';
+
+  @override
+  String get metaGlassesEvery1min => 'Κάθε 1 λεπ';
+
+  @override
+  String get metaGlassesEvery5min => 'Κάθε 5 λεπ';
+
+  @override
+  String get metaGlassesGestures => 'Χειρονομίες';
 }

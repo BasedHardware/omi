@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Povežite svoje Meta Glasses",
+    "pairingDescMetaGlasses": "Uparite naočale u aplikaciji Meta AI, zatim dodirnite Poveži u Omi. Možete povezati više pari i odabrati koji je aktivan.",
+    "metaGlassesUnavailable": "Aplikacija Meta AI nije pronađena. Instalirajte Meta AI i omogućite način rada za programere da biste povezali naočale.",
+    "metaGlassesRegistering": "Dovršite povezivanje u aplikaciji Meta AI, a zatim se vratite u Omi.",
+    "metaGlassesCameraPermission": "Dozvolite pristup kameri u aplikaciji Meta AI",
+    "metaGlassesCaptureModeLabel": "Način snimanja",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Samo mikrofon",
+    "metaGlassesStartCapture": "Pokreni snimanje",
+    "metaGlassesStopCapture": "Zaustavi snimanje",
+    "metaGlassesGestureHint": "Kontrole gestama za Meta naočale nisu podržane u ovoj verziji.",
+    "connectAnotherDevice": "Poveži drugi uređaj",
+    "myDevices": "Moji uređaji",
+    "metaGlassesAutoCapture": "Automatsko snimanje pri povezivanju",
+    "metaGlassesShowPreview": "Pregled uživo",
+    "metaGlassesPendingPhotos": "{count} fotografija čeka sinhronizaciju",
+    "metaGlassesPairInMetaAI": "Podesite u aplikaciji Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Naočale se hlade — snimanje je pauzirano",
+    "metaGlassesFolded": "Otvorite naočale da nastavite snimanje",
+    "metaGlassesCaptureFrequency": "Učestalost snimanja",
+    "metaGlassesEvery10s": "Svakih 10 s",
+    "metaGlassesEvery30s": "Svakih 30 s",
+    "metaGlassesEvery1min": "Svake 1 min",
+    "metaGlassesEvery5min": "Svakih 5 min",
+    "metaGlassesGestures": "Gestovi"
 }

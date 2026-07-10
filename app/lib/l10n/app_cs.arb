@@ -3111,5 +3111,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Připojte své Meta Glasses",
+    "pairingDescMetaGlasses": "Spárujte brýle v aplikaci Meta AI a poté klepněte na Připojit v Omi. Můžete propojit více párů a vybrat, který je aktivní.",
+    "metaGlassesUnavailable": "Aplikace Meta AI nebyla nalezena. Nainstalujte Meta AI a zapněte režim pro vývojáře, abyste brýle připojili.",
+    "metaGlassesRegistering": "Dokončete připojení v aplikaci Meta AI a vraťte se do Omi.",
+    "metaGlassesCameraPermission": "Povolte přístup ke kameře v aplikaci Meta AI",
+    "metaGlassesCaptureModeLabel": "Režim záznamu",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Pouze mikrofon",
+    "metaGlassesStartCapture": "Spustit záznam",
+    "metaGlassesStopCapture": "Zastavit záznam",
+    "metaGlassesGestureHint": "Ovládání gesty pro brýle Meta není v této verzi podporováno.",
+    "connectAnotherDevice": "Připojit další zařízení",
+    "myDevices": "Moje zařízení",
+    "metaGlassesAutoCapture": "Automatický záznam po připojení",
+    "metaGlassesShowPreview": "Živý náhled",
+    "metaGlassesPendingPhotos": "{count} fotek čeká na synchronizaci",
+    "metaGlassesPairInMetaAI": "Nastavte v aplikaci Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Brýle se ochlazují — snímání je pozastaveno",
+    "metaGlassesFolded": "Rozložte brýle, aby snímání pokračovalo",
+    "metaGlassesCaptureFrequency": "Frekvence snímání",
+    "metaGlassesEvery10s": "Každých 10 s",
+    "metaGlassesEvery30s": "Každých 30 s",
+    "metaGlassesEvery1min": "Každou 1 min",
+    "metaGlassesEvery5min": "Každých 5 min",
+    "metaGlassesGestures": "Gesta"
 }

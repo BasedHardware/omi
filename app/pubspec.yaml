@@ -131,6 +131,8 @@ dependencies:
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
+  meta_wearables_dat_flutter:
+    path: third_party/meta_wearables_dat_flutter
 
 dependency_overrides:
   js: ^0.7.1

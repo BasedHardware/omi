@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Ikonekta ang iyong Meta Glasses",
+    "pairingDescMetaGlasses": "I-pair ang iyong salamin sa Meta AI app, pagkatapos ay i-tap ang Connect sa Omi. Maaari kang mag-link ng higit sa isang pares at piliin kung alin ang aktibo.",
+    "metaGlassesUnavailable": "Hindi natagpuan ang Meta AI app. I-install ang Meta AI at i-enable ang Developer Mode para ikonekta ang iyong salamin.",
+    "metaGlassesRegistering": "Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik sa Omi.",
+    "metaGlassesCameraPermission": "Payagan ang access sa camera sa Meta AI app",
+    "metaGlassesCaptureModeLabel": "Capture mode",
+    "metaGlassesModeCameraMic": "Camera + mikropono",
+    "metaGlassesModeMicOnly": "Mikropono lamang",
+    "metaGlassesStartCapture": "Simulan ang pag-capture",
+    "metaGlassesStopCapture": "Ihinto ang pag-capture",
+    "metaGlassesGestureHint": "Hindi sinusuportahan ang mga kontrol sa galaw para sa Meta glasses sa build na ito.",
+    "connectAnotherDevice": "Ikonekta ang isa pang device",
+    "myDevices": "Aking Mga Device",
+    "metaGlassesAutoCapture": "Awtomatikong pag-capture kapag nakakonekta",
+    "metaGlassesShowPreview": "Live preview",
+    "metaGlassesPendingPhotos": "{count} larawan ang naghihintay ma-sync",
+    "metaGlassesPairInMetaAI": "I-set up sa Meta AI app",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Lumalamig ang salamin — naka-pause ang pag-capture",
+    "metaGlassesFolded": "Buksan ang salamin para magpatuloy sa pag-capture",
+    "metaGlassesCaptureFrequency": "Dalas ng pagkuha",
+    "metaGlassesEvery10s": "Bawat 10 s",
+    "metaGlassesEvery30s": "Bawat 30 s",
+    "metaGlassesEvery1min": "Bawat 1 min",
+    "metaGlassesEvery5min": "Bawat 5 min",
+    "metaGlassesGestures": "Mga galaw"
 }

@@ -3110,5 +3110,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Verbinde deine Meta Glasses",
+    "pairingDescMetaGlasses": "Kopple deine Brille in der Meta AI App und tippe dann in Omi auf Verbinden. Du kannst mehrere Brillen verknüpfen und die aktive auswählen.",
+    "metaGlassesUnavailable": "Meta AI App nicht gefunden. Installiere Meta AI und aktiviere den Entwicklermodus, um deine Brille zu verbinden.",
+    "metaGlassesRegistering": "Schließe die Verbindung in der Meta AI App ab und kehre zu Omi zurück.",
+    "metaGlassesCameraPermission": "Erlaube den Kamerazugriff in der Meta AI App",
+    "metaGlassesCaptureModeLabel": "Aufnahmemodus",
+    "metaGlassesModeCameraMic": "Kamera + Mikrofon",
+    "metaGlassesModeMicOnly": "Nur Mikrofon",
+    "metaGlassesStartCapture": "Aufnahme starten",
+    "metaGlassesStopCapture": "Aufnahme stoppen",
+    "metaGlassesGestureHint": "Gestensteuerung für Meta-Brillen wird in diesem Build nicht unterstützt.",
+    "connectAnotherDevice": "Weiteres Gerät verbinden",
+    "myDevices": "Meine Geräte",
+    "metaGlassesAutoCapture": "Automatische Aufnahme bei Verbindung",
+    "metaGlassesShowPreview": "Live-Vorschau",
+    "metaGlassesPendingPhotos": "{count} Fotos warten auf Synchronisierung",
+    "metaGlassesPairInMetaAI": "In der Meta AI App einrichten",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Die Brille kühlt ab — Aufnahme pausiert",
+    "metaGlassesFolded": "Klappe die Brille auf, um weiter aufzunehmen",
+    "metaGlassesCaptureFrequency": "Aufnahmefrequenz",
+    "metaGlassesEvery10s": "Alle 10 s",
+    "metaGlassesEvery30s": "Alle 30 s",
+    "metaGlassesEvery1min": "Jede 1 Min",
+    "metaGlassesEvery5min": "Alle 5 Min",
+    "metaGlassesGestures": "Gesten"
 }

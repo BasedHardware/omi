@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Anslut dina Meta Glasses",
+    "pairingDescMetaGlasses": "Parkoppla dina glasögon i Meta AI-appen och tryck sedan på Anslut i Omi. Du kan länka flera par och välja vilket som är aktivt.",
+    "metaGlassesUnavailable": "Meta AI-appen hittades inte. Installera Meta AI och aktivera utvecklarläget för att ansluta dina glasögon.",
+    "metaGlassesRegistering": "Slutför anslutningen i Meta AI-appen och återgå till Omi.",
+    "metaGlassesCameraPermission": "Tillåt kameraåtkomst i Meta AI-appen",
+    "metaGlassesCaptureModeLabel": "Inspelningsläge",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Endast mikrofon",
+    "metaGlassesStartCapture": "Starta inspelning",
+    "metaGlassesStopCapture": "Stoppa inspelning",
+    "metaGlassesGestureHint": "Geststyrning för Meta-glasögon stöds inte i den här versionen.",
+    "connectAnotherDevice": "Anslut en annan enhet",
+    "myDevices": "Mina enheter",
+    "metaGlassesAutoCapture": "Automatisk inspelning vid anslutning",
+    "metaGlassesShowPreview": "Live-förhandsvisning",
+    "metaGlassesPendingPhotos": "{count} foton väntar på synkronisering",
+    "metaGlassesPairInMetaAI": "Konfigurera i Meta AI-appen",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Glasögonen svalnar — inspelning pausad",
+    "metaGlassesFolded": "Fäll upp glasögonen för att fortsätta spela in",
+    "metaGlassesCaptureFrequency": "Tagningsfrekvens",
+    "metaGlassesEvery10s": "Var 10:e s",
+    "metaGlassesEvery30s": "Var 30:e s",
+    "metaGlassesEvery1min": "Varje 1 min",
+    "metaGlassesEvery5min": "Var 5:e min",
+    "metaGlassesGestures": "Gester"
 }

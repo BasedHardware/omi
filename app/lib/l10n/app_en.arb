@@ -11276,5 +11276,120 @@
                 "type": "String"
             }
         }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Connect your Meta Glasses",
+    "pairingDescMetaGlasses": "Pair your glasses in the Meta AI app, then tap Connect in Omi. You can link more than one pair and choose which one is active.",
+    "metaGlassesUnavailable": "Meta AI app not detected. Install Meta AI and enable Developer Mode to connect your glasses.",
+    "metaGlassesRegistering": "Finish connecting in the Meta AI app, then return to Omi.",
+    "metaGlassesCameraPermission": "Allow camera access in the Meta AI app",
+    "@metaGlasses": {
+        "description": "Product name for Meta smart glasses"
+    },
+    "@pairingTitleMetaGlasses": {
+        "description": "Pairing title for Meta Glasses"
+    },
+    "@pairingDescMetaGlasses": {
+        "description": "Pairing description for Meta Glasses"
+    },
+    "@metaGlassesUnavailable": {
+        "description": "Shown when the Meta AI companion app is missing"
+    },
+    "@metaGlassesRegistering": {
+        "description": "Shown while Meta Glasses registration is in progress"
+    },
+    "@metaGlassesCameraPermission": {
+        "description": "Row prompting the wearable camera permission"
+    },
+    "metaGlassesCaptureModeLabel": "Capture mode",
+    "metaGlassesModeCameraMic": "Camera + Mic",
+    "metaGlassesModeMicOnly": "Mic only",
+    "metaGlassesStartCapture": "Start capture",
+    "metaGlassesStopCapture": "Stop capture",
+    "metaGlassesGestureHint": "Gesture controls are not supported for Meta glasses in this build.",
+    "connectAnotherDevice": "Connect another device",
+    "@metaGlassesCaptureModeLabel": {
+        "description": "Label for the Meta Glasses capture mode selector"
+    },
+    "@metaGlassesModeCameraMic": {
+        "description": "Capture mode: camera photos plus microphone"
+    },
+    "@metaGlassesModeMicOnly": {
+        "description": "Capture mode: microphone only"
+    },
+    "@metaGlassesStartCapture": {
+        "description": "Button starting glasses capture"
+    },
+    "@metaGlassesStopCapture": {
+        "description": "Button stopping glasses capture"
+    },
+    "@metaGlassesGestureHint": {
+        "description": "Message that Meta glasses gesture controls are unavailable"
+    },
+    "@connectAnotherDevice": {
+        "description": "Button revealing the scanner to add one more device"
+    },
+    "myDevices": "My Devices",
+    "@myDevices": {
+        "description": "Title of the multi-device hub page"
+    },
+    "metaGlassesAutoCapture": "Auto-capture when connected",
+    "metaGlassesShowPreview": "Live preview",
+    "metaGlassesPendingPhotos": "{count} photos waiting to sync",
+    "@metaGlassesAutoCapture": {
+        "description": "Toggle: start glasses capture automatically when they connect"
+    },
+    "@metaGlassesShowPreview": {
+        "description": "Toggle revealing the live camera preview"
+    },
+    "@metaGlassesPendingPhotos": {
+        "description": "Count of locally buffered glasses photos not yet sent to the backend",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "metaGlassesPairInMetaAI": "Set up in the Meta AI app",
+    "@metaGlassesPairInMetaAI": {
+        "description": "Status for paired glasses whose Bluetooth link is down (setup incomplete or out of range)"
+    },
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "@metaGlassesTypeRayBanMeta": {
+        "description": "Device type label for Ray-Ban Meta glasses"
+    },
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "@metaGlassesTypeRayBanDisplay": {
+        "description": "Device type label for Meta Ray-Ban Display glasses"
+    },
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "@metaGlassesTypeOakleyMeta": {
+        "description": "Device type label for Oakley Meta glasses"
+    },
+    "metaGlassesOverheating": "Glasses are cooling down — capture paused",
+    "metaGlassesFolded": "Unfold your glasses to keep capturing",
+    "metaGlassesCaptureFrequency": "Capture frequency",
+    "metaGlassesEvery10s": "Every 10s",
+    "metaGlassesEvery30s": "Every 30s",
+    "metaGlassesEvery1min": "Every 1 min",
+    "metaGlassesEvery5min": "Every 5 min",
+    "metaGlassesGestures": "Gestures",
+    "@metaGlassesCaptureFrequency": {
+        "description": "Label for the capture interval selector"
+    },
+    "@metaGlassesEvery10s": {
+        "description": "Capture interval option: every 10 seconds"
+    },
+    "@metaGlassesEvery30s": {
+        "description": "Capture interval option: every 30 seconds"
+    },
+    "@metaGlassesEvery1min": {
+        "description": "Capture interval option: every 1 minute"
+    },
+    "@metaGlassesEvery5min": {
+        "description": "Capture interval option: every 5 minutes"
+    },
+    "@metaGlassesGestures": {
+        "description": "Section label for glasses gesture settings"
     }
 }

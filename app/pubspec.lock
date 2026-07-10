@@ -1397,6 +1397,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.18.0"
+  meta_wearables_dat_flutter:
+    dependency: "direct main"
+    description:
+      path: "third_party/meta_wearables_dat_flutter"
+      relative: true
+    source: path
+    version: "0.7.1"
   mgrs_dart:
     dependency: transitive
     description:

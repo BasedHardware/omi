@@ -3142,5 +3142,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Prijunkite savo Meta Glasses",
+    "pairingDescMetaGlasses": "Susiekite akinius programoje „Meta AI“, tada Omi palieskite „Prijungti“. Galite susieti kelias poras ir pasirinkti, kuri aktyvi.",
+    "metaGlassesUnavailable": "Programa „Meta AI“ nerasta. Norėdami prijungti akinius, įdiekite „Meta AI“ ir įjunkite kūrėjo režimą.",
+    "metaGlassesRegistering": "Užbaikite prijungimą programoje „Meta AI“ ir grįžkite į Omi.",
+    "metaGlassesCameraPermission": "Leiskite prieigą prie kameros programoje „Meta AI“",
+    "metaGlassesCaptureModeLabel": "Fiksavimo režimas",
+    "metaGlassesModeCameraMic": "Kamera + mikrofonas",
+    "metaGlassesModeMicOnly": "Tik mikrofonas",
+    "metaGlassesStartCapture": "Pradėti fiksavimą",
+    "metaGlassesStopCapture": "Sustabdyti fiksavimą",
+    "metaGlassesGestureHint": "Gestų valdikliai Meta akiniams šiame leidime nepalaikomi.",
+    "connectAnotherDevice": "Prijungti kitą įrenginį",
+    "myDevices": "Mano įrenginiai",
+    "metaGlassesAutoCapture": "Automatinis fiksavimas prisijungus",
+    "metaGlassesShowPreview": "Tiesioginė peržiūra",
+    "metaGlassesPendingPhotos": "{count} nuotraukos laukia sinchronizavimo",
+    "metaGlassesPairInMetaAI": "Nustatykite programoje „Meta AI“",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Akiniai vėsta — fiksavimas pristabdytas",
+    "metaGlassesFolded": "Išskleiskite akinius, kad fiksavimas tęstųsi",
+    "metaGlassesCaptureFrequency": "Fiksavimo dažnis",
+    "metaGlassesEvery10s": "Kas 10 s",
+    "metaGlassesEvery30s": "Kas 30 s",
+    "metaGlassesEvery1min": "Kas 1 min",
+    "metaGlassesEvery5min": "Kas 5 min",
+    "metaGlassesGestures": "Gestai"
 }

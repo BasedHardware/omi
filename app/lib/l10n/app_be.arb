@@ -10720,5 +10720,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Падключыце вашы Meta Glasses",
+    "pairingDescMetaGlasses": "Спалучыце акуляры ў праграме Meta AI, затым націсніце «Падключыць» у Omi. Можна звязаць некалькі пар і выбраць актыўную.",
+    "metaGlassesUnavailable": "Праграма Meta AI не знойдзена. Усталюйце Meta AI і ўключыце рэжым распрацоўшчыка, каб падключыць акуляры.",
+    "metaGlassesRegistering": "Завяршыце падключэнне ў праграме Meta AI і вярніцеся ў Omi.",
+    "metaGlassesCameraPermission": "Дазвольце доступ да камеры ў праграме Meta AI",
+    "metaGlassesCaptureModeLabel": "Рэжым запісу",
+    "metaGlassesModeCameraMic": "Камера + мікрафон",
+    "metaGlassesModeMicOnly": "Толькі мікрафон",
+    "metaGlassesStartCapture": "Пачаць запіс",
+    "metaGlassesStopCapture": "Спыніць запіс",
+    "metaGlassesGestureHint": "Кіраванне жэстамі для акуляраў Meta не падтрымліваецца ў гэтай зборцы.",
+    "connectAnotherDevice": "Падключыць іншую прыладу",
+    "myDevices": "Мае прылады",
+    "metaGlassesAutoCapture": "Аўтазапіс пры падключэнні",
+    "metaGlassesShowPreview": "Жывы перадпрагляд",
+    "metaGlassesPendingPhotos": "{count} фота чакаюць сінхранізацыі",
+    "metaGlassesPairInMetaAI": "Наладзьце ў праграме Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Акуляры астываюць — здымка прыпынена",
+    "metaGlassesFolded": "Раскрыйце акуляры, каб працягваць здымку",
+    "metaGlassesCaptureFrequency": "Частата здымкаў",
+    "metaGlassesEvery10s": "Кожныя 10 с",
+    "metaGlassesEvery30s": "Кожныя 30 с",
+    "metaGlassesEvery1min": "Кожную хвіліну",
+    "metaGlassesEvery5min": "Кожныя 5 хвілін",
+    "metaGlassesGestures": "Жэсты"
 }

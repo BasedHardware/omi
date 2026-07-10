@@ -17846,6 +17846,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error connecting to Ray-Ban Meta: {error}'**
   String errorConnectingRayBanMeta(String error);
+
+  /// Product name for Meta smart glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Meta Glasses'**
+  String get metaGlasses;
+
+  /// Pairing title for Meta Glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Meta Glasses'**
+  String get pairingTitleMetaGlasses;
+
+  /// Pairing description for Meta Glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your glasses in the Meta AI app, then tap Connect in Omi. You can link more than one pair and choose which one is active.'**
+  String get pairingDescMetaGlasses;
+
+  /// Shown when the Meta AI companion app is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Meta AI app not detected. Install Meta AI and enable Developer Mode to connect your glasses.'**
+  String get metaGlassesUnavailable;
+
+  /// Shown while Meta Glasses registration is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Finish connecting in the Meta AI app, then return to Omi.'**
+  String get metaGlassesRegistering;
+
+  /// Row prompting the wearable camera permission
+  ///
+  /// In en, this message translates to:
+  /// **'Allow camera access in the Meta AI app'**
+  String get metaGlassesCameraPermission;
+
+  /// Label for the Meta Glasses capture mode selector
+  ///
+  /// In en, this message translates to:
+  /// **'Capture mode'**
+  String get metaGlassesCaptureModeLabel;
+
+  /// Capture mode: camera photos plus microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Camera + Mic'**
+  String get metaGlassesModeCameraMic;
+
+  /// Capture mode: microphone only
+  ///
+  /// In en, this message translates to:
+  /// **'Mic only'**
+  String get metaGlassesModeMicOnly;
+
+  /// Button starting glasses capture
+  ///
+  /// In en, this message translates to:
+  /// **'Start capture'**
+  String get metaGlassesStartCapture;
+
+  /// Button stopping glasses capture
+  ///
+  /// In en, this message translates to:
+  /// **'Stop capture'**
+  String get metaGlassesStopCapture;
+
+  /// Message that Meta glasses gesture controls are unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Gesture controls are not supported for Meta glasses in this build.'**
+  String get metaGlassesGestureHint;
+
+  /// Button revealing the scanner to add one more device
+  ///
+  /// In en, this message translates to:
+  /// **'Connect another device'**
+  String get connectAnotherDevice;
+
+  /// Title of the multi-device hub page
+  ///
+  /// In en, this message translates to:
+  /// **'My Devices'**
+  String get myDevices;
+
+  /// Toggle: start glasses capture automatically when they connect
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-capture when connected'**
+  String get metaGlassesAutoCapture;
+
+  /// Toggle revealing the live camera preview
+  ///
+  /// In en, this message translates to:
+  /// **'Live preview'**
+  String get metaGlassesShowPreview;
+
+  /// Count of locally buffered glasses photos not yet sent to the backend
+  ///
+  /// In en, this message translates to:
+  /// **'{count} photos waiting to sync'**
+  String metaGlassesPendingPhotos(int count);
+
+  /// Status for paired glasses whose Bluetooth link is down (setup incomplete or out of range)
+  ///
+  /// In en, this message translates to:
+  /// **'Set up in the Meta AI app'**
+  String get metaGlassesPairInMetaAI;
+
+  /// Device type label for Ray-Ban Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Ray-Ban Meta'**
+  String get metaGlassesTypeRayBanMeta;
+
+  /// Device type label for Meta Ray-Ban Display glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Meta Ray-Ban Display'**
+  String get metaGlassesTypeRayBanDisplay;
+
+  /// Device type label for Oakley Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Oakley Meta'**
+  String get metaGlassesTypeOakleyMeta;
+
+  /// No description provided for @metaGlassesOverheating.
+  ///
+  /// In en, this message translates to:
+  /// **'Glasses are cooling down — capture paused'**
+  String get metaGlassesOverheating;
+
+  /// No description provided for @metaGlassesFolded.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfold your glasses to keep capturing'**
+  String get metaGlassesFolded;
+
+  /// Label for the capture interval selector
+  ///
+  /// In en, this message translates to:
+  /// **'Capture frequency'**
+  String get metaGlassesCaptureFrequency;
+
+  /// Capture interval option: every 10 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Every 10s'**
+  String get metaGlassesEvery10s;
+
+  /// Capture interval option: every 30 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Every 30s'**
+  String get metaGlassesEvery30s;
+
+  /// Capture interval option: every 1 minute
+  ///
+  /// In en, this message translates to:
+  /// **'Every 1 min'**
+  String get metaGlassesEvery1min;
+
+  /// Capture interval option: every 5 minutes
+  ///
+  /// In en, this message translates to:
+  /// **'Every 5 min'**
+  String get metaGlassesEvery5min;
+
+  /// Section label for glasses gesture settings
+  ///
+  /// In en, this message translates to:
+  /// **'Gestures'**
+  String get metaGlassesGestures;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

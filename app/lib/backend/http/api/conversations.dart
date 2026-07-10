@@ -4,14 +4,25 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
-import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
-import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+class MetaWearablesPhotoCacheResult {
+  final String conversationId;
+  final String photoId;
+
+  const MetaWearablesPhotoCacheResult({required this.conversationId, required this.photoId});
+
+  factory MetaWearablesPhotoCacheResult.fromJson(Map<String, dynamic> json) {
+    return MetaWearablesPhotoCacheResult(
+      conversationId: json['conversation_id']?.toString() ?? '',
+      photoId: json['photo_id']?.toString() ?? '',
+    );
+  }
+}
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
@@ -23,7 +34,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   if (response == null) return null;
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {
     // TODO: Server returns 304 doesn't recover
     PlatformManager.instance.crashReporter.reportCrash(
@@ -33,6 +44,51 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     );
   }
   return null;
+}
+
+Future<MetaWearablesPhotoCacheResult?> cacheMetaWearablesPhoto(
+  Uint8List imageBytes, {
+  DateTime? capturedAt,
+  String? conversationId,
+  String? deviceUuid,
+  String? deviceName,
+  String? frameSha256,
+}) async {
+  final takenAt = capturedAt ?? DateTime.now();
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/meta-wearables/photos/cache',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode(buildMetaWearablesPhotoCachePayload(
+      imageBytes,
+      capturedAt: takenAt,
+      conversationId: conversationId,
+      deviceUuid: deviceUuid,
+      deviceName: deviceName,
+      frameSha256: frameSha256,
+    )),
+  );
+  if (response == null || response.statusCode != 200) return null;
+  return MetaWearablesPhotoCacheResult.fromJson(jsonDecode(response.body));
+}
+
+@visibleForTesting
+Map<String, dynamic> buildMetaWearablesPhotoCachePayload(
+  Uint8List imageBytes, {
+  required DateTime capturedAt,
+  String? conversationId,
+  String? deviceUuid,
+  String? deviceName,
+  String? frameSha256,
+}) {
+  return {
+    'base64': base64Encode(imageBytes),
+    'captured_at': capturedAt.toUtc().toIso8601String(),
+    if (conversationId != null) 'conversation_id': conversationId,
+    if (deviceUuid != null) 'device_uuid': deviceUuid,
+    if (deviceName != null) 'device_name': deviceName,
+    if (frameSha256 != null) 'frame_sha256': frameSha256,
+  };
 }
 
 Future<List<ServerConversation>> getConversations({
@@ -94,9 +150,8 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -114,7 +169,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   if (response == null) return null;
   Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return ServerConversation.fromJson(jsonDecode(response.body));
   }
   return null;
 }
@@ -153,9 +208,7 @@ Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String event
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromGenerated(
-      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
   }
   debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
   return null;
@@ -172,9 +225,7 @@ Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromGenerated(
-      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
   }
   // 404 means no overlapping event found - not an error, just no match
   if (response.statusCode == 404) {
@@ -209,12 +260,7 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
-        .map(
-          (event) =>
-              CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink.fromJson(event as Map<String, dynamic>)),
-        )
-        .toList();
+    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
   }
   debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
   return [];
@@ -229,7 +275,7 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return ServerConversation.fromJson(jsonDecode(response.body));
   } else if (response.statusCode == 402) {
     Logger.debug('Unlimited Plan Required for conversation: $conversationId');
     return null;
@@ -285,28 +331,17 @@ class TranscriptsResponse {
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
-    return TranscriptsResponse.fromGeneratedWireJson(json);
+    return TranscriptsResponse(
+      deepgram: _parseTranscriptSegments(json['deepgram']),
+      soniox: _parseTranscriptSegments(json['soniox']),
+      whisperx: _parseTranscriptSegments(json['whisperx']),
+      speechmatics: _parseTranscriptSegments(json['speechmatics']),
+    );
   }
 
-  factory TranscriptsResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
-    List<TranscriptSegment> readSegments(String key) {
-      final segments = json[key];
-      if (segments is! List) return [];
-      return segments
-          .map(
-            (segment) => TranscriptSegment.fromGenerated(
-              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>),
-            ),
-          )
-          .toList();
-    }
-
-    return TranscriptsResponse(
-      deepgram: readSegments('deepgram'),
-      soniox: readSegments('soniox'),
-      whisperx: readSegments('whisperx'),
-      speechmatics: readSegments('speechmatics'),
-    );
+  static List<TranscriptSegment> _parseTranscriptSegments(dynamic value) {
+    if (value is! List) return const [];
+    return value.whereType<Map<String, dynamic>>().map(TranscriptSegment.fromJson).toList();
   }
 }
 
@@ -320,7 +355,8 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
   if (response == null) return TranscriptsResponse();
   Logger.debug('getConversationTranscripts: ${response.body}');
   if (response.statusCode == 200) {
-    return TranscriptsResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
+    return TranscriptsResponse.fromJson(transcripts);
   }
   return TranscriptsResponse();
 }
@@ -488,16 +524,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
 
   if (response.statusCode == 200) {
     // Fast-path: server processed synchronously and returned the result.
-    return UploadFilesResult.done(
-      SyncLocalFilesResponse.fromGenerated(
-        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-      ),
-    );
+    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
   }
   if (response.statusCode == 202) {
-    final start = SyncJobStartResponse.fromGenerated(
-      wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
     if (start.jobId.isEmpty) {
       throw Exception('Upload accepted but no job id returned');
     }
@@ -560,12 +590,7 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   try {
-    return SyncJobFetch(
-      SyncJobFetchOutcome.ok,
-      SyncJobStatusResponse.fromGenerated(
-        wire.GeneratedSyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-      ),
-    );
+    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
     Logger.debug('fetchSyncJobStatus parse error: $e');
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
@@ -594,9 +619,11 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
-    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
-    return (convos, data.currentPage, data.totalPages);
+    List<dynamic> items = (jsonDecode(response.body))['items'];
+    int currentPage = (jsonDecode(response.body))['current_page'];
+    int totalPages = (jsonDecode(response.body))['total_pages'];
+    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
+    return (convos, currentPage, totalPages);
   }
   return (<ServerConversation>[], 0, 0);
 }
@@ -610,9 +637,7 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
   );
   if (response == null) return '';
   if (response.statusCode == 200) {
-    return wire.GeneratedConversationTestPromptResponse.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    ).summary;
+    return jsonDecode(response.body)['summary'];
   } else {
     return '';
   }
@@ -644,7 +669,7 @@ Future<ActionItemsResponse> getActionItems({
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return action_items_wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
     return const ActionItemsResponse(actionItems: [], hasMore: false);
@@ -662,10 +687,8 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
   if (response == null) return [];
   Logger.debug('getConversationSuggestedApps: ${response.body}');
   if (response.statusCode == 200) {
-    final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-    return data.suggestedApps.map(App.fromGeneratedDetail).toList();
+    var data = jsonDecode(response.body);
+    return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
   }
   return [];
 }
@@ -689,15 +712,11 @@ class MergeConversationsResponse {
   });
 
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
-    return MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse.fromJson(json));
-  }
-
-  factory MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse generated) {
     return MergeConversationsResponse(
-      status: generated.status,
-      message: generated.message,
-      warning: generated.warning,
-      conversationIds: generated.conversationIds,
+      status: json['status'] ?? 'merging',
+      message: json['message'] ?? 'Merge started',
+      warning: json['warning'],
+      conversationIds: List<String>.from(json['conversation_ids'] ?? []),
     );
   }
 }
@@ -721,9 +740,7 @@ Future<MergeConversationsResponse?> mergeConversations(List<String> conversation
   Logger.debug('mergeConversations: ${response.body}');
 
   if (response.statusCode == 200) {
-    return MergeConversationsResponse.fromGenerated(
-      wire.GeneratedMergeConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-    );
+    return MergeConversationsResponse.fromJson(jsonDecode(response.body));
   } else {
     Logger.debug('mergeConversations error: ${response.statusCode} - ${response.body}');
     return null;

@@ -9587,4 +9587,95 @@ class AppLocalizationsLt extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Klaida jungiantis prie Ray-Ban Meta: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Prijunkite savo Meta Glasses';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Susiekite akinius programoje „Meta AI“, tada Omi palieskite „Prijungti“. Galite susieti kelias poras ir pasirinkti, kuri aktyvi.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Programa „Meta AI“ nerasta. Norėdami prijungti akinius, įdiekite „Meta AI“ ir įjunkite kūrėjo režimą.';
+
+  @override
+  String get metaGlassesRegistering => 'Užbaikite prijungimą programoje „Meta AI“ ir grįžkite į Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Leiskite prieigą prie kameros programoje „Meta AI“';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Fiksavimo režimas';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofonas';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Tik mikrofonas';
+
+  @override
+  String get metaGlassesStartCapture => 'Pradėti fiksavimą';
+
+  @override
+  String get metaGlassesStopCapture => 'Sustabdyti fiksavimą';
+
+  @override
+  String get metaGlassesGestureHint => 'Gestų valdikliai Meta akiniams šiame leidime nepalaikomi.';
+
+  @override
+  String get connectAnotherDevice => 'Prijungti kitą įrenginį';
+
+  @override
+  String get myDevices => 'Mano įrenginiai';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatinis fiksavimas prisijungus';
+
+  @override
+  String get metaGlassesShowPreview => 'Tiesioginė peržiūra';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count nuotraukos laukia sinchronizavimo';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Nustatykite programoje „Meta AI“';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Akiniai vėsta — fiksavimas pristabdytas';
+
+  @override
+  String get metaGlassesFolded => 'Išskleiskite akinius, kad fiksavimas tęstųsi';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Fiksavimo dažnis';
+
+  @override
+  String get metaGlassesEvery10s => 'Kas 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Kas 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Kas 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Kas 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gestai';
 }

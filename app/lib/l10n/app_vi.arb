@@ -3147,5 +3147,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Kết nối Meta Glasses của bạn",
+    "pairingDescMetaGlasses": "Ghép nối kính trong ứng dụng Meta AI, sau đó nhấn Kết nối trong Omi. Bạn có thể liên kết nhiều cặp và chọn cặp đang hoạt động.",
+    "metaGlassesUnavailable": "Không tìm thấy ứng dụng Meta AI. Hãy cài đặt Meta AI và bật Chế độ nhà phát triển để kết nối kính.",
+    "metaGlassesRegistering": "Hoàn tất kết nối trong ứng dụng Meta AI, sau đó quay lại Omi.",
+    "metaGlassesCameraPermission": "Cho phép truy cập camera trong ứng dụng Meta AI",
+    "metaGlassesCaptureModeLabel": "Chế độ ghi",
+    "metaGlassesModeCameraMic": "Camera + micrô",
+    "metaGlassesModeMicOnly": "Chỉ micrô",
+    "metaGlassesStartCapture": "Bắt đầu ghi",
+    "metaGlassesStopCapture": "Dừng ghi",
+    "metaGlassesGestureHint": "Các điều khiển bằng cử chỉ cho kính Meta không được hỗ trợ trong bản dựng này.",
+    "connectAnotherDevice": "Kết nối thiết bị khác",
+    "myDevices": "Thiết bị của tôi",
+    "metaGlassesAutoCapture": "Tự động ghi khi kết nối",
+    "metaGlassesShowPreview": "Xem trước trực tiếp",
+    "metaGlassesPendingPhotos": "{count} ảnh đang chờ đồng bộ",
+    "metaGlassesPairInMetaAI": "Thiết lập trong ứng dụng Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Kính đang hạ nhiệt — đã tạm dừng ghi lại",
+    "metaGlassesFolded": "Mở kính ra để tiếp tục ghi lại",
+    "metaGlassesCaptureFrequency": "Tần suất chụp",
+    "metaGlassesEvery10s": "Mỗi 10 giây",
+    "metaGlassesEvery30s": "Mỗi 30 giây",
+    "metaGlassesEvery1min": "Mỗi 1 phút",
+    "metaGlassesEvery5min": "Mỗi 5 phút",
+    "metaGlassesGestures": "Cử chỉ"
 }

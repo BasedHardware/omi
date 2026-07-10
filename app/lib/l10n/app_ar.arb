@@ -3109,5 +3109,34 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "قم بتوصيل نظارات Meta Glasses",
+    "pairingDescMetaGlasses": "قم بإقران نظارتك في تطبيق Meta AI، ثم اضغط على «اتصال» في Omi. يمكنك ربط أكثر من نظارة واختيار النشطة منها.",
+    "metaGlassesUnavailable": "لم يتم العثور على تطبيق Meta AI. قم بتثبيت Meta AI وتفعيل وضع المطوّر لتوصيل نظارتك.",
+    "metaGlassesRegistering": "أكمل الاتصال في تطبيق Meta AI ثم عد إلى Omi.",
+    "metaGlassesCameraPermission": "اسمح بالوصول إلى الكاميرا في تطبيق Meta AI",
+    "metaGlassesCaptureModeLabel": "وضع الالتقاط",
+    "metaGlassesModeCameraMic": "الكاميرا + الميكروفون",
+    "metaGlassesModeMicOnly": "الميكروفون فقط",
+    "metaGlassesStartCapture": "بدء الالتقاط",
+    "metaGlassesStopCapture": "إيقاف الالتقاط",
+    "metaGlassesGestureHint": "عناصر التحكم بالإيماءات غير مدعومة لنظارات Meta في هذا الإصدار.",
+    "connectAnotherDevice": "توصيل جهاز آخر",
+    "myDevices": "أجهزتي",
+    "metaGlassesAutoCapture": "التقاط تلقائي عند الاتصال",
+    "metaGlassesShowPreview": "معاينة مباشرة",
+    "metaGlassesPendingPhotos": "{count} صور بانتظار المزامنة",
+    "metaGlassesPairInMetaAI": "قم بالإعداد في تطبيق Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "النظارة تبرد الآن — تم إيقاف الالتقاط مؤقتًا",
+    "metaGlassesFolded": "افتح النظارة للمتابعة في الالتقاط",
+    "metaGlassesCaptureFrequency": "تكرار الالتقاط",
+    "metaGlassesEvery10s": "كل 10 ثوانٍ",
+    "metaGlassesEvery30s": "كل 30 ثانية",
+    "metaGlassesEvery1min": "كل دقيقة",
+    "metaGlassesEvery5min": "كل 5 دقائق",
+    "metaGlassesGestures": "الإيماءات"
 }

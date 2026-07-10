@@ -113,6 +113,7 @@ class DeviceUtils {
         case DeviceType.friendPendant:
           return Assets.images.friendPendant.path;
         case DeviceType.raybanMeta:
+        case DeviceType.metaWearables:
           return Assets.images.raybanMeta.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi

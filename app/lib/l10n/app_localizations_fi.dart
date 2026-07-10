@@ -9571,4 +9571,95 @@ class AppLocalizationsFi extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Virhe yhdistettäessä Ray-Ban Metaan: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'Yhdistä Meta Glasses -lasisi';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Muodosta lasien laitepari Meta AI -sovelluksessa ja napauta sitten Omissa Yhdistä. Voit liittää useita laseja ja valita, mitkä ovat aktiiviset.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Meta AI -sovellusta ei löytynyt. Asenna Meta AI ja ota kehittäjätila käyttöön yhdistääksesi lasit.';
+
+  @override
+  String get metaGlassesRegistering => 'Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa Omiin.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Salli kameran käyttö Meta AI -sovelluksessa';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Tallennustila';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofoni';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Vain mikrofoni';
+
+  @override
+  String get metaGlassesStartCapture => 'Aloita tallennus';
+
+  @override
+  String get metaGlassesStopCapture => 'Lopeta tallennus';
+
+  @override
+  String get metaGlassesGestureHint => 'Meta-lasien eleohjausta ei tueta tässä koontiversiossa.';
+
+  @override
+  String get connectAnotherDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get myDevices => 'Omat laitteet';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automaattinen tallennus yhdistettäessä';
+
+  @override
+  String get metaGlassesShowPreview => 'Live-esikatselu';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count kuvaa odottaa synkronointia';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Määritä Meta AI -sovelluksessa';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Lasit jäähtyvät — tallennus keskeytetty';
+
+  @override
+  String get metaGlassesFolded => 'Avaa lasit jatkaaksesi tallennusta';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Kuvaustaajuus';
+
+  @override
+  String get metaGlassesEvery10s => 'Joka 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Joka 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Joka 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Joka 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Eleet';
 }

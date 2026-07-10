@@ -9640,4 +9640,95 @@ class AppLocalizationsTa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta உடன் இணைப்பதில் பிழை: $error';
   }
+
+  @override
+  String get metaGlasses => 'Meta Glasses';
+
+  @override
+  String get pairingTitleMetaGlasses => 'உங்கள் Meta Glasses-ஐ இணைக்கவும்';
+
+  @override
+  String get pairingDescMetaGlasses =>
+      'Meta AI ஆப்பில் உங்கள் கண்ணாடியை இணைத்து, பிறகு Omi-இல் Connect-ஐத் தட்டவும். ஒன்றுக்கு மேற்பட்ட ஜோடிகளை இணைத்து, செயலில் உள்ளதைத் தேர்ந்தெடுக்கலாம்.';
+
+  @override
+  String get metaGlassesUnavailable =>
+      'Meta AI ஆப் கிடைக்கவில்லை. கண்ணாடியை இணைக்க Meta AI-ஐ நிறுவி, டெவலப்பர் பயன்முறையை இயக்கவும்.';
+
+  @override
+  String get metaGlassesRegistering => 'Meta AI ஆப்பில் இணைப்பை முடித்து, பிறகு Omi-க்குத் திரும்பவும்.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Meta AI ஆப்பில் கேமரா அணுகலை அனுமதிக்கவும்';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'பதிவு பயன்முறை';
+
+  @override
+  String get metaGlassesModeCameraMic => 'கேமரா + மைக்';
+
+  @override
+  String get metaGlassesModeMicOnly => 'மைக் மட்டும்';
+
+  @override
+  String get metaGlassesStartCapture => 'பதிவைத் தொடங்கு';
+
+  @override
+  String get metaGlassesStopCapture => 'பதிவை நிறுத்து';
+
+  @override
+  String get metaGlassesGestureHint => 'இந்த build-இல் Meta கண்ணாடிகளுக்கான சைகை கட்டுப்பாடுகள் ஆதரிக்கப்படவில்லை.';
+
+  @override
+  String get connectAnotherDevice => 'மற்றொரு சாதனத்தை இணைக்கவும்';
+
+  @override
+  String get myDevices => 'என் சாதனங்கள்';
+
+  @override
+  String get metaGlassesAutoCapture => 'இணைக்கும்போது தானியங்கு பதிவு';
+
+  @override
+  String get metaGlassesShowPreview => 'நேரடி முன்னோட்டம்';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count புகைப்படங்கள் ஒத்திசைவுக்காக காத்திருக்கின்றன';
+  }
+
+  @override
+  String get metaGlassesPairInMetaAI => 'Meta AI ஆப்பில் அமைக்கவும்';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'கண்ணாடி குளிர்கிறது — பிடிப்பு இடைநிறுத்தப்பட்டது';
+
+  @override
+  String get metaGlassesFolded => 'பிடிப்பைத் தொடர கண்ணாடியைத் திறக்கவும்';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'படமெடுப்பு அதிர்வெண்';
+
+  @override
+  String get metaGlassesEvery10s => 'ஒவ்வொரு 10 வி';
+
+  @override
+  String get metaGlassesEvery30s => 'ஒவ்வொரு 30 வி';
+
+  @override
+  String get metaGlassesEvery1min => 'ஒவ்வொரு 1 நி';
+
+  @override
+  String get metaGlassesEvery5min => 'ஒவ்வொரு 5 நி';
+
+  @override
+  String get metaGlassesGestures => 'சைகைகள்';
 }
