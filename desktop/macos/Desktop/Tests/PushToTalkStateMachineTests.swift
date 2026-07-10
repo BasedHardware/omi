@@ -47,4 +47,22 @@ final class PushToTalkStateMachineTests: XCTestCase {
       return false
     }.count, 1)
   }
+
+  @MainActor
+  func testHeadlessAutomationRunsRealLifecycleWithoutMicrophonePermission() {
+    let manager = PushToTalkManager.shared
+    manager.cleanup()
+    defer { manager.cleanup() }
+
+    let started = manager.beginPushToTalkForAutomation()
+    XCTAssertEqual(started["listening"], "true")
+    XCTAssertEqual(VoiceTurnCoordinator.shared.activeTurn?.phase, .recording)
+
+    let stopped = manager.endPushToTalkForAutomation()
+    XCTAssertEqual(stopped["finalized"], "true")
+    XCTAssertEqual(VoiceTurnCoordinator.shared.model.turn?.phase, .terminal(.tooShort))
+    XCTAssertEqual(VoiceTurnCoordinator.shared.model.turn?.projection.hint, "Hold longer to record")
+    XCTAssertEqual(VoiceTurnCoordinator.shared.model.staleEventCount, 0)
+    XCTAssertEqual(VoiceTurnCoordinator.shared.model.invalidTransitionCount, 0)
+  }
 }

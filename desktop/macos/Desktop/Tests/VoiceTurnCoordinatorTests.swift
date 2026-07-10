@@ -209,6 +209,19 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
       XCTAssertEqual(VoiceTurnCoordinator.routeLabel(route), expected, "turn=\(turnID)")
     }
   }
+
+  func testTimelineNeverStoresAssociatedSpeechPayloads() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let marker = "secret-timeline-marker-442"
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.transcriptChanged(turnID: turnID, text: marker))
+    coordinator.send(.playbackFailed(turnID: VoiceTurnID(), leaseID: nil, message: marker))
+
+    let events = coordinator.timelineSnapshot().map(\.event)
+    XCTAssertTrue(events.contains("transcript_changed"))
+    XCTAssertTrue(events.contains("playback_failed"))
+    XCTAssertFalse(events.joined().contains(marker))
+  }
 }
 
 @MainActor

@@ -267,6 +267,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
   case hintChanged(turnID: VoiceTurnID, text: String)
   case responseWaitingChanged(turnID: VoiceTurnID, active: Bool)
   case responseActiveChanged(turnID: VoiceTurnID, active: Bool)
+  case clearPresentation(turnID: VoiceTurnID)
   case deadlineFired(turnID: VoiceTurnID, deadline: VoiceTurnDeadline)
   case finish(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason)
   case cancel(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason)
@@ -287,11 +288,49 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .playbackStarted(let turnID, _), .playbackDrained(let turnID, _),
       .playbackFailed(let turnID, _, _), .transcriptChanged(let turnID, _),
       .hintChanged(let turnID, _), .responseWaitingChanged(let turnID, _),
-      .responseActiveChanged(let turnID, _), .deadlineFired(let turnID, _),
+      .responseActiveChanged(let turnID, _), .clearPresentation(let turnID),
+      .deadlineFired(let turnID, _),
       .finish(let turnID, _), .cancel(let turnID, _):
       return turnID
     case .cleanup, .reset:
       return nil
+    }
+  }
+
+  /// A bounded diagnostics label that never includes transcript, hint, or error payloads.
+  var diagnosticLabel: String {
+    switch self {
+    case .start: return "start"
+    case .openLockWindow: return "open_lock_window"
+    case .lock: return "lock"
+    case .finalize: return "finalize"
+    case .captureStarted: return "capture_started"
+    case .captureFailed: return "capture_failed"
+    case .selectRoute: return "select_route"
+    case .hubReady: return "hub_ready"
+    case .hubCommitAccepted: return "hub_commit_accepted"
+    case .hubCommitDeferred: return "hub_commit_deferred"
+    case .hubCommitDeferredForReplacement: return "hub_commit_deferred_for_replacement"
+    case .transcriptionStarted: return "transcription_started"
+    case .transcriptionFinal: return "transcription_final"
+    case .transcriptionFailed: return "transcription_failed"
+    case .providerResponseStarted: return "provider_response_started"
+    case .providerTurnFinished: return "provider_turn_finished"
+    case .toolStarted: return "tool_started"
+    case .toolFinished: return "tool_finished"
+    case .playbackStarted: return "playback_started"
+    case .playbackDrained: return "playback_drained"
+    case .playbackFailed: return "playback_failed"
+    case .transcriptChanged: return "transcript_changed"
+    case .hintChanged: return "hint_changed"
+    case .responseWaitingChanged: return "response_waiting_changed"
+    case .responseActiveChanged: return "response_active_changed"
+    case .clearPresentation: return "clear_presentation"
+    case .deadlineFired: return "deadline_fired"
+    case .finish: return "finish"
+    case .cancel: return "cancel"
+    case .cleanup: return "cleanup"
+    case .reset: return "reset"
     }
   }
 }
@@ -343,6 +382,9 @@ struct VoiceTurnReducer {
         effects.append(.cancelAllDeadlines(turnID: terminal.id))
       }
       model.turn = VoiceTurn(id: turnID, intent: intent)
+      model.staleEventCount = 0
+      model.invalidTransitionCount = 0
+      model.duplicateTerminalCount = 0
       schedule(.captureStart, after: deadlines.captureStart, in: &model, effects: &effects)
       return VoiceTurnReduction(model: model, effects: effects)
     }
@@ -677,6 +719,17 @@ struct VoiceTurnReducer {
         model.turn?.projection.isResponseWaiting = false
       }
 
+    case .clearPresentation:
+      model.turn?.projection.isListening = false
+      model.turn?.projection.isLocked = false
+      model.turn?.projection.isFollowUp = false
+      model.turn?.projection.transcript = ""
+      model.turn?.projection.hint = ""
+      model.turn?.projection.isThinking = false
+      model.turn?.projection.isResponseWaiting = false
+      model.turn?.projection.isResponseActive = false
+      cancel(.hintVisibility, in: &model, effects: &effects)
+
     case .deadlineFired(_, let deadline):
       guard turn.deadlines.contains(deadline) else {
         stale(&model, event: event, effects: &effects)
@@ -830,7 +883,7 @@ struct VoiceTurnReducer {
     effects: inout [VoiceTurnEffect]
   ) {
     model.staleEventCount += 1
-    effects.append(.staleEventDropped(turnID: event.turnID, event: String(describing: event)))
+    effects.append(.staleEventDropped(turnID: event.turnID, event: event.diagnosticLabel))
   }
 
   private func invalid(
@@ -842,7 +895,7 @@ struct VoiceTurnReducer {
     effects.append(
       .invalidTransition(
         turnID: event.turnID,
-        event: String(describing: event),
+        event: event.diagnosticLabel,
         phase: model.turn?.phase))
   }
 }

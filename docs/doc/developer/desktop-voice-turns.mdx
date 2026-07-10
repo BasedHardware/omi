@@ -45,6 +45,8 @@ Gemini audio is also gated by its manual activity window. Audio and commit reque
 
 Provider-specific barge-in is an atomic handoff. Reducer terminalization preserves an active hub runtime long enough for OpenAI to cancel its in-session response or Gemini to create a fresh replacement session. Preparation, seed refresh, permission, authentication, transcription, and persistence work capture immutable turn ownership and revalidate it after every suspension.
 
+Continuity persistence resolves the user transcript at the write boundary. A provider transcript is preferred when it is present and compatible with configured voice languages; otherwise the already-running local full-buffer decode gets a bounded wait. Barge-in replacement awaits that immutable resolution before recording the interrupted exchange, refreshing the kernel seed, and opening the new provider session. Agent delegation follows the same rule: resolution must still own the tool turn immediately before the canonical spawn side effect, and only a successful spawn may produce the success acknowledgement and durable handoff.
+
 ## UI and error signals
 
 `VoiceTurnUIProjection` is the semantic source for listening, lock, transcript, thinking, response-waiting, response-active, and terminal hints. `PTTBarPresenter` is the only writer for those floating-bar fields. User-facing failures stay visible briefly as actionable hints; developer signals remain available through typed terminal diagnostics, stale-event and invalid-transition counts, and the bounded event timeline.
@@ -54,3 +56,5 @@ Provider-specific barge-in is an atomic handoff. Reducer terminalization preserv
 Reducer tests use deterministic events and fake-clock deadlines. Cover the happy path plus races that can change ownership: late capture completion, old session or response callbacks, warm-wait fallback, deferred and replacement commits, pending tools, provider-finish versus playback-drain ordering, competing leases, barge-in, cleanup from every phase, duplicate terminal events, and randomized stale-event sequences.
 
 Integration tests verify the coordinator's real effects and presentation adapter. Provider and playback tests verify normalized callbacks and lease enforcement. Keep tests hermetic: no live provider, network, sleep, or ordering dependency in CI.
+
+The tier-2 `ptt-lifecycle` harness flow drives the real `ptt_start` and `ptt_stop` bridge actions, then checks the typed phase and anomaly counters. A file belongs in that flow's `covers` list only when those steps exercise its behavior; typed chat-only flows do not claim PTT reducer coverage.

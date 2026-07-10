@@ -302,6 +302,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           log(
             "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
           )
+          self.recordSelectedVoiceFallback(
+            to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
           self.enqueueSystemSpeech(text)
           self.startSynthesisIfNeeded(mode: mode)
           self.clearFloatingPillResponseGlowIfIdle()
@@ -401,6 +403,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           await MainActor.run {
             guard let self, self.playbackGeneration == generation else { return }
             self.isOneShotSynthesizing = false
+            self.recordSelectedVoiceFallback(
+              to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
           }
         }
@@ -441,8 +445,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
             guard let self, self.playbackGeneration == generation else { return }
             self.isOneShotSynthesizing = false
             if let cachedFallback {
+              self.recordSelectedVoiceFallback(
+                to: "cached_openai_tts", reason: "provider_5xx", outcome: .recovered)
               self.startPlayback(cachedFallback, fallbackText: phrase)
             } else {
+              self.recordSelectedVoiceFallback(
+                to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
               self.enqueueSystemSpeech(phrase)
             }
           }
@@ -526,8 +534,28 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       log(
         "FloatingBarVoicePlaybackService: audio playback failed, falling back to system voice: \(error.localizedDescription)"
       )
+      recordSelectedVoiceFallback(
+        to: fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? "none" : "system_voice_fallback",
+        reason: "enqueue_failed",
+        outcome: fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? .exhausted : .degraded)
       enqueueSystemSpeech(fallbackText)
     }
+  }
+
+  private func recordSelectedVoiceFallback(
+    to: String,
+    reason: String,
+    outcome: DesktopFallbackOutcome
+  ) {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: activePTTLease == nil ? "other" : "ptt_cascade",
+      from: "openai_tts",
+      to: to,
+      reason: reason,
+      outcome: outcome,
+      extra: ["user_visible": outcome != .recovered])
   }
 
   private func enqueueSystemSpeech(_ text: String) {
@@ -563,6 +591,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       self.activePlayerFallbackText = ""
       if !flag, !fallbackText.isEmpty {
         log("FloatingBarVoicePlaybackService: player ended unsuccessfully; using system voice")
+        self.recordSelectedVoiceFallback(
+          to: "system_voice_fallback", reason: "enqueue_failed", outcome: .degraded)
         self.enqueueSystemSpeech(fallbackText)
         return
       }

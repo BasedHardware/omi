@@ -106,6 +106,45 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     XCTAssertFalse(committed.pendingCommit)
   }
 
+  func testOpenAICancelReclaimsActiveResponseIdentity() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    session.markReadyForTesting()
+    _ = await session.inputLifecycleSnapshot()
+    let identity = RealtimeHubEventIdentity(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("voice-response"))
+    await session.seedOpenAIIdentityMapsForTesting(
+      identity: identity,
+      responseID: "provider-response",
+      inputItemID: "input-item")
+
+    session.cancelActiveResponse()
+    let canceled = await session.inputLifecycleSnapshot()
+
+    XCTAssertEqual(canceled.responseIdentityCount, 0)
+    XCTAssertEqual(canceled.inputIdentityCount, 1)
+  }
+
+  func testOpenAICompletedTranscriptReclaimsInputIdentity() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    let identity = RealtimeHubEventIdentity(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("voice-response"))
+    await session.seedOpenAIIdentityMapsForTesting(
+      identity: identity,
+      responseID: "provider-response",
+      inputItemID: "input-item")
+
+    await session.receiveOpenAIEventForTesting([
+      "type": "conversation.item.input_audio_transcription.completed",
+      "item_id": "input-item",
+      "transcript": "fixture",
+    ])
+    let completed = await session.inputLifecycleSnapshot()
+
+    XCTAssertEqual(completed.inputIdentityCount, 0)
+  }
+
   private func makeSession(
     provider: RealtimeHubProvider,
     delegate: RealtimeHubSessionDelegate

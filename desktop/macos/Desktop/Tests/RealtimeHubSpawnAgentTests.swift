@@ -15,10 +15,9 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
-  func testSpawnAgentDoesNotSwitchVoicesWhenModelDidNotSpeakBeforeToolCall() throws {
+  func testSpawnAgentUsesCanonicalDelegationPath() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("if !audioReceivedThisTurn {"))
     XCTAssertTrue(source.contains("let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn"))
     XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
     XCTAssertTrue(source.contains("let resolvedAck = resolution.ack?.trimmingCharacters"))
@@ -31,12 +30,45 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("Started background agent"))
     XCTAssertTrue(
       source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
-    XCTAssertTrue(
-      source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
-    XCTAssertTrue(
-      source.contains(
-        "self.acquireVoiceOutput(.deterministicAgentAck, reason: \"spawn_agent_success\")"))
+    XCTAssertTrue(source.contains("await self.handleRealtimeDelegationRequest("))
+    XCTAssertTrue(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation("))
+    XCTAssertFalse(source.contains("name: \"spawn_agent\", arguments: toolArgs"))
     XCTAssertFalse(source.contains("speak(ack)"))
+  }
+
+  func testDelayedDelegationResolutionCannotCrossBargeInBoundary() async {
+    var current = true
+    let resolution = await RealtimeDelegationExecutionGate.resolveIfCurrent(
+      resolve: {
+        await Task.yield()
+        current = false
+        return "resolved"
+      },
+      isCurrent: { current })
+
+    XCTAssertNil(resolution)
+  }
+
+  func testStaleDelegationCannotExecuteSpawnSideEffect() {
+    var spawnCount = 0
+
+    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
+      isCurrent: { false },
+      operation: {
+        spawnCount += 1
+        return "Agent started."
+      })
+
+    XCTAssertNil(result)
+    XCTAssertEqual(spawnCount, 0)
+  }
+
+  func testFailedDelegationProducesNoSuccessAcknowledgement() {
+    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
+      isCurrent: { true },
+      operation: { nil })
+
+    XCTAssertNil(result)
   }
 
   func testRealtimeHubBlocksModelInitiatedPillDismissalWithoutExplicitUserRequest() throws {
@@ -113,11 +145,12 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("let userText = turnTranscript"))
-    XCTAssertTrue(source.contains("guard\n      isCurrentToolTurn("))
+    XCTAssertTrue(source.contains("RealtimeDelegationExecutionGate.resolveIfCurrent("))
     XCTAssertTrue(
       source.contains(
         "source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch"))
     XCTAssertTrue(source.contains("dropping stale spawn_agent resolution before side effects"))
+    XCTAssertTrue(source.contains("RealtimeDelegationExecutionGate.performIfCurrent("))
     XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
     XCTAssertTrue(
       source.contains(
@@ -144,7 +177,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
     XCTAssertTrue(source.contains("let completedTurnIdempotencyKey = turnIdempotencyKey"))
     XCTAssertFalse(source.contains("self?.turnIdempotencyKey ="))
-    XCTAssertTrue(source.contains("var usedLocal = false"))
+    XCTAssertTrue(source.contains("let resolution = await Self.resolveTranscript("))
+    XCTAssertTrue(source.contains("resolution.usedLocalTranscript"))
     XCTAssertTrue(source.contains("idempotencyKey: completedTurnIdempotencyKey"))
     XCTAssertFalse(source.contains("rememberVoiceContinuityTurn("))
     XCTAssertFalse(source.contains("replaceVoiceContinuityTurn("))

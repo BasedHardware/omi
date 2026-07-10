@@ -634,6 +634,60 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(model.staleEventCount, initialStaleCount + 250)
   }
 
+  func testClearPresentationIsARealReducerTransition() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    model = reduce(model, .transcriptChanged(turnID: turnID, text: "private words")).model
+    model = reduce(model, .responseActiveChanged(turnID: turnID, active: true)).model
+
+    let cleared = reduce(model, .clearPresentation(turnID: turnID))
+
+    XCTAssertEqual(cleared.model.turn?.projection, .idle)
+    XCTAssertEqual(cleared.model.turn?.phase, .recording)
+  }
+
+  func testDiagnosticLabelsNeverContainSpeechOrErrorPayloads() {
+    let marker = "secret-marker-9381"
+    let turnID = VoiceTurnID()
+    let events: [VoiceTurnEvent] = [
+      .transcriptChanged(turnID: turnID, text: marker),
+      .transcriptionFinal(turnID: turnID, text: marker),
+      .playbackFailed(turnID: turnID, leaseID: nil, message: marker),
+      .captureFailed(turnID: turnID, captureID: nil, message: marker),
+    ]
+
+    for event in events {
+      XCTAssertFalse(event.diagnosticLabel.contains(marker))
+      let stale = reduce(.idle, event)
+      guard case .staleEventDropped(_, let label) = stale.effects.last else {
+        return XCTFail("expected stale diagnostic effect")
+      }
+      XCTAssertEqual(label, event.diagnosticLabel)
+      XCTAssertFalse(label.contains(marker))
+    }
+  }
+
+  func testNewTurnResetsPerTurnAnomalyCounters() {
+    let turnA = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnA, intent: .hold)).model
+    model = reduce(model, .finalize(turnID: VoiceTurnID())).model
+    model =
+      reduce(
+        model,
+        .hubCommitAccepted(turnID: turnA, sessionID: VoiceSessionID(), responseID: nil)
+      ).model
+    XCTAssertEqual(model.staleEventCount, 1)
+    XCTAssertEqual(model.invalidTransitionCount, 1)
+
+    let turnB = VoiceTurnID()
+    model = reduce(model, .start(turnID: turnB, intent: .hold)).model
+
+    XCTAssertEqual(model.turn?.id, turnB)
+    XCTAssertEqual(model.staleEventCount, 0)
+    XCTAssertEqual(model.invalidTransitionCount, 0)
+    XCTAssertEqual(model.duplicateTerminalCount, 0)
+  }
+
   private func reduce(_ model: VoiceTurnModel, _ event: VoiceTurnEvent) -> VoiceTurnReduction {
     reducer.reduce(model, event)
   }

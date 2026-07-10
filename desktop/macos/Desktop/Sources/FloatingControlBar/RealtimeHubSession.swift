@@ -86,6 +86,8 @@ struct RealtimeHubInputLifecycleSnapshot: Equatable {
   let pendingAudioChunkCount: Int
   let pendingVideoFrameCount: Int
   let pendingCommit: Bool
+  let responseIdentityCount: Int
+  let inputIdentityCount: Int
 }
 #endif
 
@@ -264,6 +266,9 @@ final class RealtimeHubSession: NSObject {
             self.openAIPendingResponseIdentities[pendingIndex].canceled = true
           }
           self.send(json: ["type": "response.cancel"])
+          if let activeResponseID = self.openAIActiveResponseID {
+            self.openAIResponseIdentities.removeValue(forKey: activeResponseID)
+          }
           self.openAIResponseActive = false
           self.openAIResponseCreatePending = false
           self.openAIActiveResponseID = nil
@@ -301,13 +306,40 @@ final class RealtimeHubSession: NSObject {
             activityOpen: self.activityOpen,
             pendingAudioChunkCount: self.pendingAudio.count,
             pendingVideoFrameCount: self.pendingVideo.count,
-            pendingCommit: self.pendingCommit))
+            pendingCommit: self.pendingCommit,
+            responseIdentityCount: self.openAIResponseIdentities.count,
+            inputIdentityCount: self.openAIInputItemIdentities.count))
       }
     }
   }
 
   func markReadyForTesting() {
     q.async { [weak self] in self?.markReady() }
+  }
+
+  func seedOpenAIIdentityMapsForTesting(
+    identity: RealtimeHubEventIdentity,
+    responseID: String,
+    inputItemID: String
+  ) async {
+    await withCheckedContinuation { continuation in
+      q.async {
+        self.openAIResponseActive = true
+        self.openAIActiveResponseID = responseID
+        self.openAIResponseIdentities[responseID] = identity
+        self.openAIInputItemIdentities[inputItemID] = identity
+        continuation.resume()
+      }
+    }
+  }
+
+  func receiveOpenAIEventForTesting(_ event: [String: Any]) async {
+    await withCheckedContinuation { continuation in
+      q.async {
+        self.handleOpenAI(event)
+        continuation.resume()
+      }
+    }
   }
 #endif
 
@@ -971,7 +1003,9 @@ final class RealtimeHubSession: NSObject {
         emitTranscript(t, isFinal: false, identity: identity)
       }
     case "conversation.item.input_audio_transcription.completed":
-      guard let identity = openAIInputIdentity(for: e) else { return }
+      guard let itemID = e["item_id"] as? String,
+        let identity = openAIInputItemIdentities.removeValue(forKey: itemID)
+      else { return }
       if let t = e["transcript"] as? String {
         log("\(tag): heard \"\(t.prefix(120))\"")
         emitTranscript(t, isFinal: true, identity: identity)

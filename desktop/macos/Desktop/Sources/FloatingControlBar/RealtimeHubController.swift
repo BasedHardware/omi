@@ -92,6 +92,22 @@ enum RealtimeHubLifecyclePolicy {
   static func canStartGeneralWarmSession(replacementPending: Bool) -> Bool {
     !replacementPending
   }
+
+  static func shouldResumeCanceledTurnRefresh(
+    fenceTurnID: VoiceTurnID?,
+    terminalTurnID: VoiceTurnID
+  ) -> Bool {
+    fenceTurnID != terminalTurnID
+  }
+}
+
+enum RealtimeNativeAudioScheduleFailureAction: Equatable {
+  case keepTextFallback
+  case failTurnAfterPartialPlayback
+
+  static func decide(playbackAlreadyStarted: Bool) -> RealtimeNativeAudioScheduleFailureAction {
+    playbackAlreadyStarted ? .failTurnAfterPartialPlayback : .keepTextFallback
+  }
 }
 
 enum RealtimeHubToolFailureKind: String, Equatable {
@@ -199,6 +215,63 @@ struct InterruptedTurnPayload: Equatable {
   }
 }
 
+struct RealtimeHubTranscriptResolution: Equatable {
+  let userText: String
+  let providerLanguage: String?
+  let localTranscript: String?
+  let localLanguage: String?
+  let usedLocalTranscript: Bool
+}
+
+enum RealtimeHubTranscriptPolicy {
+  static func resolve(
+    providerText: String,
+    preferredLanguages: [String],
+    localTranscript: String?,
+    localLanguage: String?
+  ) -> RealtimeHubTranscriptResolution {
+    let provider = providerText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let local = localTranscript?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerLanguage =
+      provider.isEmpty
+      ? nil : PTTLanguageIdentifier.dominantLanguage(of: provider, hints: [])
+    let providerMismatches =
+      !provider.isEmpty && !preferredLanguages.isEmpty
+      && (providerLanguage.map { !preferredLanguages.contains($0) } ?? false)
+    let localMatchesPreference =
+      preferredLanguages.isEmpty
+      || localLanguage.map(preferredLanguages.contains) == true
+    let shouldUseLocal =
+      (provider.isEmpty || providerMismatches)
+      && local?.isEmpty == false && localMatchesPreference
+
+    return RealtimeHubTranscriptResolution(
+      userText: shouldUseLocal ? local! : provider,
+      providerLanguage: providerLanguage,
+      localTranscript: local,
+      localLanguage: localLanguage,
+      usedLocalTranscript: shouldUseLocal)
+  }
+}
+
+enum RealtimeDelegationExecutionGate {
+  static func resolveIfCurrent<T: Sendable>(
+    resolve: () async -> T,
+    isCurrent: () -> Bool
+  ) async -> T? {
+    let value = await resolve()
+    return isCurrent() ? value : nil
+  }
+
+  static func performIfCurrent<T>(
+    isCurrent: () -> Bool,
+    operation: () -> T?
+  ) -> T? {
+    guard isCurrent() else { return nil }
+    return operation()
+  }
+}
+
 enum RealtimeHubEventOwnership {
   static func accepts(
     _ identity: RealtimeHubEventIdentity?,
@@ -250,11 +323,12 @@ enum RealtimeHubBargeInAction: Equatable {
 
 enum RealtimeHubBargeInContinuity {
   static func prepareReplacementSession(
-    interruptedTurn: InterruptedTurnPayload?,
+    resolveInterruptedTurn: () async -> InterruptedTurnPayload?,
     recordInterruptedTurn: (InterruptedTurnPayload) async -> Void,
     refreshVoiceSeed: () async -> Bool,
     startReplacementSession: () -> Void
   ) async {
+    let interruptedTurn = await resolveInterruptedTurn()
     if let interruptedTurn {
       await recordInterruptedTurn(interruptedTurn)
     }
@@ -360,6 +434,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var deferredSessionRefreshTask: Task<Void, Never>?
   private var canceledTurnRewarmTask: Task<Void, Never>?
   private var cancelContinuityFenceActive = false
+  private var cancelContinuityFenceTurnID: VoiceTurnID?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
   private var pendingBargeInAuth: HubAuth?
@@ -836,6 +911,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         guard let self else { return }
         if await self.refreshVoiceSeedAfterPersistenceFence(reason: reason) {
           self.cancelContinuityFenceActive = false
+          self.cancelContinuityFenceTurnID = nil
           self.canceledTurnRewarmTask = nil
           log("RealtimeHub: applying deferred voice seed refresh after turn persistence")
           self.teardownSession()
@@ -946,6 +1022,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else {
       log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
     }
+  }
+
+  func voiceTurnDidTerminate(turnID: VoiceTurnID) {
+    guard pendingSessionRefreshReason != nil else { return }
+    guard
+      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
+        fenceTurnID: cancelContinuityFenceTurnID,
+        terminalTurnID: turnID)
+    else { return }
+
+    if cancelContinuityFenceActive {
+      canceledTurnRewarmTask?.cancel()
+      canceledTurnRewarmTask = nil
+    }
+    applyPendingSessionRefreshIfIdle()
   }
 
   /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
@@ -1187,21 +1278,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return json
   }
 
-  private func recordTurnToKernel(
-    userText: String,
-    assistantText: String,
-    interrupted: Bool,
-    idempotencyKey: String
-  ) {
-    enqueueTurnPersistence { [weak self] in
-      await self?.recordTurnToKernelAwaiting(
-        userText: userText,
-        assistantText: assistantText,
-        interrupted: interrupted,
-        idempotencyKey: idempotencyKey)
-    }
-  }
-
   @discardableResult
   private func enqueueTurnPersistence(
     _ operation: @escaping @MainActor () async -> Void
@@ -1275,13 +1351,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func completeBargeInReplacementAfterContinuity(
-    interruptedTurn: InterruptedTurnPayload?
+    interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?
   ) {
     bargeInContinuityTask?.cancel()
     bargeInContinuityTask = Task { @MainActor [weak self] in
       guard let self else { return }
       await RealtimeHubBargeInContinuity.prepareReplacementSession(
-        interruptedTurn: interruptedTurn,
+        resolveInterruptedTurn: {
+          guard let interruptedTurnTask else { return nil }
+          return await interruptedTurnTask.value
+        },
         recordInterruptedTurn: { [weak self] turn in
           guard
             let task = self?.enqueueTurnPersistence({ [weak self] in
@@ -1316,9 +1395,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   @discardableResult
-  private func restartSessionForBargeIn(interruptedTurn: InterruptedTurnPayload?) -> Bool {
+  private func restartSessionForBargeIn(
+    interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?
+  ) -> Bool {
     guard prepareBargeInReplacement() else { return false }
-    completeBargeInReplacementAfterContinuity(interruptedTurn: interruptedTurn)
+    completeBargeInReplacementAfterContinuity(interruptedTurnTask: interruptedTurnTask)
     return true
   }
 
@@ -1542,7 +1623,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       providerResponseInFlight: providerResponseInFlight,
       playbackActive: realtimePlaybackActive || voicePlaybackActive,
       strategy: session?.bargeInStrategy ?? .inSessionCancel)
-    let interruptedTurn = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
+    let interruptedTurnTask = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
     let turnID =
       requestedTurnID
       ?? VoiceTurnCoordinator.shared.activeTurnID
@@ -1575,9 +1656,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     turnIdempotencyKey = UUID().uuidString
-    if let interruptedTurn {
+    if let interruptedTurnTask {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
         enqueueTurnPersistence { [weak self] in
+          guard let interruptedTurn = await interruptedTurnTask.value else { return }
           await self?.recordTurnToKernelAwaiting(
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
@@ -1617,7 +1699,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
       // that socket can leave the next PTT turn queued behind the old generation, so
       // replace the connection and let the fresh session buffer this new turn while it opens.
-      if restartSessionForBargeIn(interruptedTurn: interruptedTurn) {
+      if restartSessionForBargeIn(interruptedTurnTask: interruptedTurnTask) {
         replacementSessionOwnsInputTurn = true
         deferredFreshSessionSeedPrefetch = true
         log("RealtimeHub: barge-in — replacing session for clean next turn")
@@ -1705,16 +1787,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  private func captureInterruptedTurnPayloadIfNeeded() -> InterruptedTurnPayload? {
+  private func captureInterruptedTurnPayloadIfNeeded() -> Task<InterruptedTurnPayload?, Never>? {
     guard !turnRecorded else { return nil }
-    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !heard.isEmpty else { return nil }
-    return InterruptedTurnPayload(
-      userText: heard,
-      assistantText: InterruptedTurnPayload.visibleAssistantText(
-        partialAssistantText: assistantText),
-      idempotencyKey: turnIdempotencyKey
-    )
+    let providerText = turnTranscript
+    let localTask = fullLIDTask
+    guard !providerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || localTask != nil
+    else { return nil }
+    let preferredLanguages = AssistantSettings.shared.voiceBaseLanguages
+    let partialAssistantText = assistantText
+    let idempotencyKey = turnIdempotencyKey
+    return Task {
+      let resolution = await Self.resolveTranscript(
+        providerText: providerText,
+        preferredLanguages: preferredLanguages,
+        localTask: localTask)
+      guard !resolution.userText.isEmpty else { return nil }
+      return InterruptedTurnPayload(
+        userText: resolution.userText,
+        assistantText: InterruptedTurnPayload.visibleAssistantText(
+          partialAssistantText: partialAssistantText),
+        idempotencyKey: idempotencyKey)
+    }
   }
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
@@ -1789,7 +1882,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Full-buffer decode for the bubble-fallback transcript (both providers). Kicked
     // BEFORE the session guard; if the commit is rejected the result is simply unused.
     // Runs during the seconds the model spends answering; consumed at turn-done.
-    if !turnAudio16k.isEmpty, !candidates.isEmpty {
+    if !turnAudio16k.isEmpty {
       let audio = turnAudio16k
       fullLIDTask = Task.detached(priority: .userInitiated) {
         await PTTLanguageIdentifier.shared.identify(pcm16k: audio, candidates: candidates)
@@ -1898,6 +1991,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  private static func resolveTranscript(
+    providerText: String,
+    preferredLanguages: [String],
+    localTask: Task<PTTLanguageIdentifier.Verdict, Never>?
+  ) async -> RealtimeHubTranscriptResolution {
+    let trimmedProvider = providerText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerLanguage =
+      trimmedProvider.isEmpty
+      ? nil : PTTLanguageIdentifier.dominantLanguage(of: trimmedProvider, hints: [])
+    let needsLocal =
+      trimmedProvider.isEmpty
+      || (!preferredLanguages.isEmpty
+        && (providerLanguage.map { !preferredLanguages.contains($0) } ?? false))
+    let verdict =
+      needsLocal && localTask != nil
+      ? await value(of: localTask!, timeoutMs: 1500) : nil
+    return RealtimeHubTranscriptPolicy.resolve(
+      providerText: trimmedProvider,
+      preferredLanguages: preferredLanguages,
+      localTranscript: verdict?.transcript,
+      localLanguage: verdict?.languageCode)
+  }
+
   /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
   /// turn behind, or the model answers the non-speech later.
   @discardableResult
@@ -1938,6 +2054,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Give every abandoned turn a fresh socket boundary before a later turn
       // can enqueue new pending identities on the same transport.
       cancelContinuityFenceActive = true
+      cancelContinuityFenceTurnID = requestedTurnID
       teardownSession()
       pendingSessionRefreshReason = "voice_seed_changed"
       canceledTurnRewarmTask?.cancel()
@@ -1957,6 +2074,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           return
         }
         self.cancelContinuityFenceActive = false
+        self.cancelContinuityFenceTurnID = nil
         self.canceledTurnRewarmTask = nil
         if self.pendingSessionRefreshReason == "voice_seed_changed" {
           self.pendingSessionRefreshReason = nil
@@ -2113,10 +2231,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // reply is audible even if capture teardown restore is delayed by hardware.
     SystemAudioMuteController.shared.restore()
     guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else {
-      log(
-        "RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed"
-      )
-      if VoiceTurnCoordinator.shared.activeTurn?.activeLease?.id == lease.id {
+      let playbackAlreadyStarted =
+        VoiceTurnCoordinator.shared.activeTurn?.activeLease?.id == lease.id
+      switch RealtimeNativeAudioScheduleFailureAction.decide(
+        playbackAlreadyStarted: playbackAlreadyStarted)
+      {
+      case .keepTextFallback:
+        log(
+          "RealtimeHub[\(providerTag)]: first native audio chunk could not be scheduled; keeping text fallback armed"
+        )
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "realtime_hub",
+          from: "native_realtime",
+          to: "selected_voice_fallback",
+          reason: "enqueue_failed",
+          outcome: .degraded,
+          extra: ["user_visible": false])
+      case .failTurnAfterPartialPlayback:
+        log(
+          "RealtimeHub[\(providerTag)]: native audio stream failed after playback started; refusing duplicate full-text fallback"
+        )
         VoiceTurnCoordinator.shared.send(
           .playbackFailed(
             turnID: lease.turnID,
@@ -2161,10 +2295,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       if !audioReceivedThisTurn, !reply.isEmpty,
         let lease = acquireVoiceOutput(.selectedVoiceFallback, reason: "text_no_native_audio")
       {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "realtime_hub",
+          from: "native_realtime",
+          to: "selected_voice_fallback",
+          reason: "capability_mismatch",
+          outcome: .degraded,
+          extra: ["user_visible": false])
         responseGlowGate.markPlaybackActive()
         FloatingBarVoicePlaybackService.shared.speakOneShot(reply, lease: lease)
+      } else if !audioReceivedThisTurn, reply.isEmpty {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "realtime_hub",
+          from: "native_realtime",
+          to: "none",
+          reason: "capability_mismatch",
+          outcome: .exhausted,
+          extra: ["user_visible": true])
       }
-      if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
+      if !reply.isEmpty { log("RealtimeHub: reply received chars=\(reply.count)") }
     }
   }
 
@@ -2497,31 +2646,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      if !providerName.isEmpty && providerName != "openclaw" && providerName != "hermes" {
-        sendToolResultIfCurrent(
-          source: source, callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.",
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        await self.handleRealtimeDelegationRequest(
+          brief: objective,
+          title: arguments["title"] as? String,
+          providerName: providerName,
+          source: source,
+          callId: callId,
+          name: name,
           expectedTurnEpoch: toolTurnEpoch)
-        return
-      }
-      runToolAndSpeak(
-        source: source,
-        callId: callId, name: name, detail: "\"\(objective.prefix(60))\"",
-        emptyText: "Started a background agent.",
-        errorText: "Could not start the background agent right now.",
-        expectedTurnEpoch: toolTurnEpoch
-      ) {
-        var toolArgs = arguments
-        toolArgs["objective"] = objective
-        let result = try await self.agentControlService.executeVoiceTool(
-          name: "spawn_agent", arguments: toolArgs)
-        if !objective.isEmpty,
-          self.acquireVoiceOutput(.deterministicAgentAck, reason: "spawn_agent_success") != nil
-        {
-          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-        }
-        await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
-        return result
       }
     case .screenshot:
       // Raw pixels enter provider context only after an explicit screenshot tool call.
@@ -2581,21 +2715,28 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
 
-    let resolution = await AgentDelegationResolver.shared.resolve(
-      .init(
-        surface: .realtimeVoice,
-        userText: userText,
-        proposedBrief: brief,
-        proposedTitle: title,
-        proposedAck: nil,
-        directedProvider: directedProvider,
-        topLevelContext: voiceSessionSeedContext(),
-        agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
-        explicitDelegationRequested: true))
-    guard
-      isCurrentToolTurn(
-        source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)
-    else {
+    let resolution = await RealtimeDelegationExecutionGate.resolveIfCurrent(
+      resolve: {
+        await AgentDelegationResolver.shared.resolve(
+          .init(
+            surface: .realtimeVoice,
+            userText: userText,
+            proposedBrief: brief,
+            proposedTitle: title,
+            proposedAck: nil,
+            directedProvider: directedProvider,
+            topLevelContext: voiceSessionSeedContext(),
+            agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
+            explicitDelegationRequested: true))
+      },
+      isCurrent: {
+        self.isCurrentToolTurn(
+          source: source,
+          callId: callId,
+          name: name,
+          expectedTurnEpoch: expectedTurnEpoch)
+      })
+    guard let resolution else {
       log("RealtimeHub[\(providerTag)]: dropping stale spawn_agent resolution before side effects")
       return
     }
@@ -2651,16 +2792,33 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ShortcutSettings.shared.selectedModel.isEmpty
       ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
     guard
-      let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
-        .init(
-          originalUserText: userText,
-          brief: resolvedBrief,
-          title: resolution.title
-            ?? ((title?.isEmpty == false) ? title : directedProvider?.displayName),
-          spokenAck: resolution.ack,
-          directedProvider: directedProvider),
-        model: model,
-        fromVoice: false)
+      isCurrentToolTurn(
+        source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)
+    else {
+      log("RealtimeHub[\(providerTag)]: dropping stale spawn_agent immediately before spawn")
+      return
+    }
+    guard
+      let pill = RealtimeDelegationExecutionGate.performIfCurrent(
+        isCurrent: {
+          self.isCurrentToolTurn(
+            source: source,
+            callId: callId,
+            name: name,
+            expectedTurnEpoch: expectedTurnEpoch)
+        },
+        operation: {
+          AgentDelegationExecutor.shared.spawnResolvedDelegation(
+            .init(
+              originalUserText: userText,
+              brief: resolvedBrief,
+              title: resolution.title
+                ?? ((title?.isEmpty == false) ? title : directedProvider?.displayName),
+              spokenAck: resolution.ack,
+              directedProvider: directedProvider),
+            model: model,
+            fromVoice: false)
+        })
     else {
       assistantText = "What should the background agent do?"
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
@@ -2716,7 +2874,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     log(
-      "RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)"
+      "RealtimeHub[\(providerTag)]: turn done — transcript_chars=\(heard.count) audio=\(audioReceivedThisTurn)"
     )
     if realtimePlaybackActive {
       log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
@@ -2725,59 +2883,40 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !turnRecorded {
       turnRecorded = true
       let completedTurnIdempotencyKey = turnIdempotencyKey
-      if let handoff = pendingVoiceAgentHandoff {
-        pendingVoiceAgentHandoff = nil
-        let handoffReply = "Started background agent \"\(handoff.title)\" for: \(handoff.brief)"
-        recordTurnToKernel(
-          userText: heard,
-          assistantText: handoffReply,
+      let handoff = pendingVoiceAgentHandoff
+      pendingVoiceAgentHandoff = nil
+      let candidates = AssistantSettings.shared.voiceBaseLanguages
+      let fullTask = fullLIDTask
+      let provider = providerTag
+      enqueueTurnPersistence { [weak self] in
+        let resolution = await Self.resolveTranscript(
+          providerText: heard,
+          preferredLanguages: candidates,
+          localTask: fullTask)
+        if resolution.usedLocalTranscript {
+          log(
+            "RealtimeHub: provider transcript language did not match the configured voice languages; using bounded local decode for continuity"
+          )
+        }
+        let persistedReply =
+          handoff.map {
+            "Started background agent \"\($0.title)\" for: \($0.brief)"
+          } ?? reply
+        await self?.recordTurnToKernelAwaiting(
+          userText: resolution.userText,
+          assistantText: persistedReply,
           interrupted: false,
           idempotencyKey: completedTurnIdempotencyKey)
-      } else {
-        let candidates = AssistantSettings.shared.voiceBaseLanguages
-        let fullTask = fullLIDTask
-        let provider = providerTag
-        enqueueTurnPersistence { [weak self] in
-          var userText = heard
-          var providerLang: String?
-          var usedLocal = false
-          var localTranscript: String?
-          var localLang: String?
-          if !candidates.isEmpty, let fullTask {
-            providerLang =
-              heard.isEmpty
-              ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
-            let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
-            if mismatch {
-              let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
-              localTranscript = verdict?.transcript
-              localLang = verdict?.languageCode
-              if let local = localTranscript, !local.isEmpty, localLang != nil {
-                log(
-                  "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
-                    + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
-                )
-                userText = local
-                usedLocal = true
-              }
-            }
-          }
-          await self?.recordTurnToKernelAwaiting(
-            userText: userText,
-            assistantText: reply,
-            interrupted: false,
-            idempotencyKey: completedTurnIdempotencyKey)
-          self?.lastTurnDiagnostics = [
-            "provider": provider,
-            "provider_transcript": heard,
-            "provider_transcript_language": providerLang ?? "",
-            "saved_user_text": userText,
-            "used_local_transcript": usedLocal ? "true" : "false",
-            "local_transcript": localTranscript ?? "",
-            "local_language": localLang ?? "",
-            "assistant_reply": reply,
-          ]
-        }
+        self?.lastTurnDiagnostics = [
+          "provider": provider,
+          "provider_transcript": heard,
+          "provider_transcript_language": resolution.providerLanguage ?? "",
+          "saved_user_text": resolution.userText,
+          "used_local_transcript": resolution.usedLocalTranscript ? "true" : "false",
+          "local_transcript": resolution.localTranscript ?? "",
+          "local_language": resolution.localLanguage ?? "",
+          "assistant_reply": persistedReply,
+        ]
       }
     }
     if !pendingCompletedAgentDeltaAckIds.isEmpty {

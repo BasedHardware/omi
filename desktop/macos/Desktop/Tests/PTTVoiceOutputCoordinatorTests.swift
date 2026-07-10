@@ -18,6 +18,10 @@ final class PTTVoiceOutputCoordinatorTests: XCTestCase {
 
     XCTAssertTrue(source.contains("startPlayback(audioData, fallbackText: phrase)"))
     XCTAssertTrue(source.contains("no fallback speech available"))
+    XCTAssertTrue(source.contains("recordSelectedVoiceFallback("))
+    XCTAssertTrue(source.contains("to: \"system_voice_fallback\""))
+    XCTAssertTrue(source.contains("outcome: .degraded"))
+    XCTAssertTrue(source.contains("? .exhausted : .degraded"))
   }
   func testFallbackCannotStartAfterNativeRealtimeLease() {
     let coordinator = VoiceOutputCoordinator()

@@ -822,6 +822,24 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    register(
+      name: "ptt_turn_snapshot",
+      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+    ) { _ in
+      let coordinator = VoiceTurnCoordinator.shared
+      let turn = coordinator.model.turn
+      let terminalReason = turn?.terminalReason?.rawValue ?? ""
+      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
+      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
+      return [
+        "phase": phase,
+        "route": route,
+        "terminal_reason": terminalReason,
+        "stale_event_count": "\(coordinator.model.staleEventCount)",
+        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
+      ]
+    }
+
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(

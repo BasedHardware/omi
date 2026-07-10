@@ -64,6 +64,8 @@ class PushToTalkManager: ObservableObject {
   private var globalMonitor: Any?
   private var localMonitor: Any?
   private var barState: FloatingControlBarState?
+  private var automationBarState: FloatingControlBarState?
+  private var automationCaptureBypass = false
 
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
@@ -139,13 +141,7 @@ class PushToTalkManager: ObservableObject {
 
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
-    voiceTurnCoordinator.configure(barState: barState)
-    voiceTurnCoordinator.setEffectHandler { [weak self] effect in
-      self?.handleVoiceTurnEffect(effect)
-    }
-    voiceTurnCoordinator.setSnapshotHandler { [weak self] model in
-      self?.handleVoiceTurnSnapshot(model)
-    }
+    configureVoiceTurnCoordinator(barState: barState)
     hasMicPermission = AudioCaptureService.checkPermission()
     installEventMonitors()
     // Realtime hub: wire it to the bar and warm the WS if it's enabled + BYOK-keyed,
@@ -156,6 +152,16 @@ class PushToTalkManager: ObservableObject {
       RealtimeHubController.shared.ensureWarm()
     }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  private func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
+    voiceTurnCoordinator.configure(barState: barState)
+    voiceTurnCoordinator.setEffectHandler { [weak self] effect in
+      self?.handleVoiceTurnEffect(effect)
+    }
+    voiceTurnCoordinator.setSnapshotHandler { [weak self] model in
+      self?.handleVoiceTurnSnapshot(model)
+    }
   }
 
   func cleanup() {
@@ -254,6 +260,7 @@ class PushToTalkManager: ObservableObject {
       _ = FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: leaseID)
     case .terminal(let record):
       _ = VoiceOutputCoordinator.shared.endTurn(record.turnID)
+      RealtimeHubController.shared.voiceTurnDidTerminate(turnID: record.turnID)
       performTerminalCleanup()
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines,
          .staleEventDropped, .invalidTransition:
@@ -524,6 +531,7 @@ class PushToTalkManager: ObservableObject {
     activeTracer = nil
     currentVoiceTurnID = nil
     finalizationTurnID = nil
+    automationCaptureBypass = false
   }
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.
@@ -572,8 +580,17 @@ class PushToTalkManager: ObservableObject {
   /// `endPushToTalkForAutomation()`.
   @discardableResult
   func beginPushToTalkForAutomation() -> [String: String] {
+    if barState == nil {
+      let state = FloatingControlBarState()
+      automationBarState = state
+      barState = state
+      configureVoiceTurnCoordinator(barState: state)
+    }
+    automationCaptureBypass = true
     startListening()
-    return ["state": "\(state)", "listening": state == .listening ? "true" : "false"]
+    let isRecording = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
+    if !isRecording { automationCaptureBypass = false }
+    return ["state": "\(state)", "listening": isRecording ? "true" : "false"]
   }
 
   /// Release an in-progress push-to-talk capture the same way a long-hold key-up does
@@ -583,7 +600,7 @@ class PushToTalkManager: ObservableObject {
   /// active.
   @discardableResult
   func endPushToTalkForAutomation() -> [String: String] {
-    let wasActive = state == .listening || state == .lockedListening
+    let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if wasActive { finalize() }
     return ["state": "\(state)", "finalized": wasActive ? "true" : "false"]
   }
@@ -1223,6 +1240,12 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startAudioTranscription() {
+    if automationCaptureBypass, let turnID = currentVoiceTurnID {
+      micCaptureGeneration &+= 1
+      voiceTurnCoordinator.send(
+        .captureStarted(turnID: turnID, captureID: VoiceCaptureID(micCaptureGeneration)))
+      return
+    }
     // Always re-check permission (it can be granted at any time via System Settings)
     hasMicPermission = AudioCaptureService.checkPermission()
 

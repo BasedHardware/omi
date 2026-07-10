@@ -251,7 +251,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     )
 
     await RealtimeHubBargeInContinuity.prepareReplacementSession(
-      interruptedTurn: interrupted,
+      resolveInterruptedTurn: { interrupted },
       recordInterruptedTurn: { turn in
         steps.append("record:\(turn.idempotencyKey)")
       },
@@ -271,7 +271,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var steps: [String] = []
 
     await RealtimeHubBargeInContinuity.prepareReplacementSession(
-      interruptedTurn: nil,
+      resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         steps.append("record")
       },
@@ -292,7 +292,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var refreshAttempts = 0
 
     await RealtimeHubBargeInContinuity.prepareReplacementSession(
-      interruptedTurn: nil,
+      resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         XCTFail("no interrupted turn should be recorded")
       },
@@ -306,6 +306,93 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       })
 
     XCTAssertEqual(steps, ["seed:1", "seed:2", "seed:3", "session"])
+  }
+
+  func testReplacementWaitsForLateTranscriptBeforePersistenceSeedAndSession() async {
+    var steps: [String] = []
+
+    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: {
+        steps.append("resolve:start")
+        await Task.yield()
+        steps.append("resolve:done")
+        return InterruptedTurnPayload(
+          userText: "late transcript",
+          assistantText: "partial",
+          idempotencyKey: "late-turn")
+      },
+      recordInterruptedTurn: { _ in steps.append("record") },
+      refreshVoiceSeed: {
+        steps.append("seed")
+        return true
+      },
+      startReplacementSession: { steps.append("session") })
+
+    XCTAssertEqual(steps, ["resolve:start", "resolve:done", "record", "seed", "session"])
+  }
+
+  func testTranscriptPolicyUsesLocalDecodeWhenProviderTranscriptIsLate() {
+    let resolution = RealtimeHubTranscriptPolicy.resolve(
+      providerText: "",
+      preferredLanguages: [],
+      localTranscript: "locally decoded request",
+      localLanguage: "en")
+
+    XCTAssertEqual(resolution.userText, "locally decoded request")
+    XCTAssertTrue(resolution.usedLocalTranscript)
+  }
+
+  func testTranscriptPolicyKeepsValidProviderTranscript() {
+    let resolution = RealtimeHubTranscriptPolicy.resolve(
+      providerText: "the provider transcript",
+      preferredLanguages: ["en"],
+      localTranscript: "local alternative",
+      localLanguage: "en")
+
+    XCTAssertEqual(resolution.userText, "the provider transcript")
+    XCTAssertFalse(resolution.usedLocalTranscript)
+  }
+
+  func testTranscriptPolicyCorrectsConfiguredLanguageMismatch() {
+    let resolution = RealtimeHubTranscriptPolicy.resolve(
+      providerText: "ciao come stai",
+      preferredLanguages: ["en"],
+      localTranscript: "open the calendar",
+      localLanguage: "en")
+
+    XCTAssertEqual(resolution.userText, "open the calendar")
+    XCTAssertTrue(resolution.usedLocalTranscript)
+  }
+
+  func testCanceledTurnFenceResumesOnlyAfterAnotherTurnTerminates() {
+    let canceled = VoiceTurnID()
+    let next = VoiceTurnID()
+
+    XCTAssertFalse(
+      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
+        fenceTurnID: canceled, terminalTurnID: canceled))
+    XCTAssertTrue(
+      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
+        fenceTurnID: canceled, terminalTurnID: next))
+  }
+
+  func testNativeAudioFailureKeepsTextFallbackOnlyBeforePlaybackStarts() {
+    XCTAssertEqual(
+      RealtimeNativeAudioScheduleFailureAction.decide(playbackAlreadyStarted: false),
+      .keepTextFallback)
+    XCTAssertEqual(
+      RealtimeNativeAudioScheduleFailureAction.decide(playbackAlreadyStarted: true),
+      .failTurnAfterPartialPlayback)
+
+    let coordinator = VoiceOutputCoordinator()
+    let turnID = coordinator.beginTurn()
+    guard case .acquired(let native) = coordinator.acquire(.nativeRealtime, turnID: turnID) else {
+      return XCTFail("native lane should acquire")
+    }
+    XCTAssertTrue(coordinator.release(native))
+    guard case .acquired(let fallback) = coordinator.acquire(.selectedVoiceFallback, turnID: turnID)
+    else { return XCTFail("selected voice fallback should remain available") }
+    XCTAssertEqual(fallback.lane, .selectedVoiceFallback)
   }
 
   func testInterruptedTurnVisibleAssistantTextKeepsPartialReplyOnly() {

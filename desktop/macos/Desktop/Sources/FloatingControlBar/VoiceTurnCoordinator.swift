@@ -297,8 +297,7 @@ final class VoiceTurnCoordinator {
   }
 
   private static func eventLabel(_ event: VoiceTurnEvent) -> String {
-    let raw = String(describing: event)
-    return String(raw.prefix(96))
+    event.diagnosticLabel
   }
 
   static func phaseLabel(_ phase: VoiceTurnPhase) -> String {
