@@ -9,6 +9,9 @@ class AppLocalizationsPl extends AppLocalizations {
   AppLocalizationsPl([String locale = 'pl']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesja wygasła — zaloguj się ponownie.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

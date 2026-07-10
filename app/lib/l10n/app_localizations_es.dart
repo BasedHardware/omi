@@ -9,6 +9,9 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'La sesión ha caducado — vuelve a iniciar sesión.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

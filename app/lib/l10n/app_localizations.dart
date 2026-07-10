@@ -189,6 +189,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// Message shown after an expired authenticated session returns the user to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired — sign in again.'**
+  String get sessionExpiredSignInAgain;
+
   /// The app title displayed in various places
   ///
   /// In en, this message translates to:

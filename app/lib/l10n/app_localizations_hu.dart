@@ -9,6 +9,9 @@ class AppLocalizationsHu extends AppLocalizations {
   AppLocalizationsHu([String locale = 'hu']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'A munkamenet lejárt — jelentkezz be újra.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

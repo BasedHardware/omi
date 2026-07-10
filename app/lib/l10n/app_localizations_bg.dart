@@ -9,6 +9,9 @@ class AppLocalizationsBg extends AppLocalizations {
   AppLocalizationsBg([String locale = 'bg']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесията изтече — влезте отново.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

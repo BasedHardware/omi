@@ -1,5 +1,6 @@
 {
     "@@locale": "ur",
+    "sessionExpiredSignInAgain": "سیشن کی میعاد ختم ہو گئی — دوبارہ سائن ان کریں۔",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

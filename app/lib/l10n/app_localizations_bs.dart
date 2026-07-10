@@ -9,6 +9,9 @@ class AppLocalizationsBs extends AppLocalizations {
   AppLocalizationsBs([String locale = 'bs']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesija je istekla — prijavite se ponovo.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

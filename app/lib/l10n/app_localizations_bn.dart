@@ -9,6 +9,9 @@ class AppLocalizationsBn extends AppLocalizations {
   AppLocalizationsBn([String locale = 'bn']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'সেশনের মেয়াদ শেষ হয়েছে — আবার সাইন ইন করুন।';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

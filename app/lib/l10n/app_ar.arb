@@ -1,5 +1,6 @@
 {
     "@@locale": "ar",
+    "sessionExpiredSignInAgain": "انتهت صلاحية الجلسة — سجّل الدخول مرة أخرى.",
     "appTitle": "Omi",
     "conversationTab": "المحادثة",
     "transcriptTab": "النص المكتوب",

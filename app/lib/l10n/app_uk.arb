@@ -1,5 +1,6 @@
 {
     "@@locale": "uk",
+    "sessionExpiredSignInAgain": "Сеанс завершено — увійдіть знову.",
     "appTitle": "Omi",
     "conversationTab": "Розмова",
     "transcriptTab": "Транскрипція",

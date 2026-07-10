@@ -9,6 +9,9 @@ class AppLocalizationsNo extends AppLocalizations {
   AppLocalizationsNo([String locale = 'no']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Økten er utløpt — logg på igjen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
