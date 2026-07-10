@@ -17981,6 +17981,24 @@
         "title": "TaskUpdateCandidate",
         "type": "object"
       },
+      "TaskWorkflowControl": {
+        "additionalProperties": false,
+        "description": "Per-user universal-contract migration control; defaults preserve legacy behavior.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "workflow_mode": {
+            "$ref": "#/components/schemas/TaskWorkflowMode",
+            "default": "off"
+          }
+        },
+        "title": "TaskWorkflowControl",
+        "type": "object"
+      },
       "TaskWorkflowMode": {
         "enum": [
           "off",
@@ -27695,6 +27713,83 @@
           }
         ],
         "summary": "Create Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/control": {
+      "get": {
+        "operationId": "get_candidate_workflow_control_v1_candidates_control_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskWorkflowControl"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Candidate Workflow Control",
         "tags": [
           "candidates"
         ]

@@ -16,7 +16,7 @@ from models.candidate import (
     CandidateResolutionRequest,
     CandidateStatus,
 )
-from models.task_intelligence import TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.task_links import TaskLinkValidationError
@@ -90,6 +90,11 @@ def migrate_staged_candidates(
 ):
     control = task_control_db.get_task_workflow_control(uid)
     return migrate_staged_tasks(uid, control, after_id=request.after_id, limit=request.limit)
+
+
+@router.get('/v1/candidates/control', response_model=TaskWorkflowControl, tags=['candidates'])
+def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)) -> TaskWorkflowControl:
+    return task_control_db.get_task_workflow_control(uid)
 
 
 @router.post('/v1/candidates/integrations/drain', tags=['candidates'])

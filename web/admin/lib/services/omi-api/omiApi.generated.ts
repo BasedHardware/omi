@@ -2949,6 +2949,11 @@ export interface TaskUpdateCandidate {
   workstream_id?: string | null;
 }
 
+export interface TaskWorkflowControl {
+  account_generation?: number;
+  workflow_mode?: TaskWorkflowMode;
+}
+
 export type TaskWorkflowMode = "off" | "shadow" | "write" | "read";
 
 export interface TestDailySummaryRequest {
@@ -3789,6 +3794,7 @@ export interface OmiApiSchemas {
   "TaskStatus": TaskStatus;
   "TaskSupersedeCandidate": TaskSupersedeCandidate;
   "TaskUpdateCandidate": TaskUpdateCandidate;
+  "TaskWorkflowControl": TaskWorkflowControl;
   "TaskWorkflowMode": TaskWorkflowMode;
   "TestDailySummaryRequest": TestDailySummaryRequest;
   "TestPromptRequest": TestPromptRequest;
@@ -4666,6 +4672,16 @@ export interface OmiApiPaths {
       operationId: "create_candidate_v1_candidates_post";
       responses: {
         "200": CandidateRecord;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/control": {
+    get: {
+      operationId: "get_candidate_workflow_control_v1_candidates_control_get";
+      responses: {
+        "200": TaskWorkflowControl;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8909,6 +8925,21 @@ export async function create_candidate_v1_candidates_post(body: CandidateCreate,
       ...init?.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_candidate_workflow_control_v1_candidates_control_get(init?: OmiApiClientInit): Promise<TaskWorkflowControl> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/control`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -13605,4 +13636,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 368 client methods generated.
+// Total: 369 client methods generated.

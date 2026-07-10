@@ -620,6 +620,10 @@ extension PostHogManager {
         ])
     }
 
+    func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
+        track("Task Intelligence Attribution", properties: event.analyticsProperties)
+    }
+
     func taskPromoted(taskCount: Int) {
         track("Task Promoted", properties: [
             "task_count": taskCount

@@ -640,6 +640,38 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    register(
+      name: "task_capture_fixture",
+      summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
+      params: ["facts_json"]
+    ) { params in
+      guard let json = params["facts_json"], let data = json.data(using: .utf8) else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be canonical capture facts JSON")
+      }
+      guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be a JSON object")
+      }
+      func value<T>(_ camel: String, _ snake: String, default fallback: T) -> T {
+        payload[camel] as? T ?? payload[snake] as? T ?? fallback
+      }
+      let facts = ScreenCaptureFacts(
+        explicitCommand: value("explicitCommand", "explicit_command", default: false),
+        clearCommitment: value("clearCommitment", "clear_commitment", default: false),
+        concreteDeliverable: value("concreteDeliverable", "concrete_deliverable", default: true),
+        directRequest: value("directRequest", "direct_request", default: false),
+        inferredNextStep: value("inferredNextStep", "inferred_next_step", default: false),
+        owner: value("owner", "owner", default: "unknown"),
+        publicBroadcast: value("publicBroadcast", "public_broadcast", default: false),
+        directMention: value("directMention", "direct_mention", default: false),
+        alreadyDone: value("alreadyDone", "already_done", default: false),
+        duplicateOf: payload["duplicateOf"] as? String ?? payload["duplicate_of"] as? String,
+        refinesTask: payload["refinesTask"] as? String ?? payload["refines_task"] as? String,
+        captureConfidence: value("captureConfidence", "capture_confidence", default: 0.5),
+        ownershipConfidence: value("ownershipConfidence", "ownership_confidence", default: 0.5)
+      )
+      return ["outcome": ScreenCapturePolicy.evaluate(facts).rawValue]
+    }
+
     // Runs the exact service + outcome mapping the ChatGPT/Claude import
     // sheets use, so harnesses can assert outcome copy without driving the
     // TextEditor. Writes real memories on success, like the sheet would.

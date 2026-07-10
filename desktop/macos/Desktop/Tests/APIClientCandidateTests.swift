@@ -1,0 +1,144 @@
+import XCTest
+
+@testable import Omi_Computer
+
+private struct CapturedCandidateRequest {
+  let url: URL
+  let method: String
+  let headers: [String: String]
+  let body: Data?
+}
+
+private final class CandidateURLCapture: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private static var request: CapturedCandidateRequest?
+
+  static func reset() {
+    lock.lock()
+    request = nil
+    lock.unlock()
+  }
+
+  static func captured() -> CapturedCandidateRequest? {
+    lock.lock()
+    defer { lock.unlock() }
+    return request
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    Self.lock.lock()
+    Self.request = CapturedCandidateRequest(
+      url: request.url!,
+      method: request.httpMethod ?? "GET",
+      headers: request.allHTTPHeaderFields ?? [:],
+      body: Self.bodyData(from: request)
+    )
+    Self.lock.unlock()
+
+    let response = HTTPURLResponse(
+      url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data("{}".utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+
+  private static func bodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+
+    var data = Data()
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+      let count = stream.read(buffer, maxLength: 4096)
+      if count <= 0 { break }
+      data.append(buffer, count: count)
+    }
+    return data
+  }
+}
+
+final class APIClientCandidateTests: XCTestCase {
+  override func setUp() {
+    super.setUp()
+    CandidateURLCapture.reset()
+    setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
+  }
+
+  override func tearDown() {
+    unsetenv("OMI_PYTHON_API_URL")
+    CandidateURLCapture.reset()
+    super.tearDown()
+  }
+
+  func testCreateCandidateSendsGenerationIdempotencyAndPrivacySafeEvidence() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    let candidate = OmiAPI.CandidateCreate.taskCreate(
+      OmiAPI.TaskCreateCandidate(
+        captureConfidence: 0.95,
+        evidenceRefs: [
+          OmiAPI.EvidenceRef(
+            deviceId: "device-hash",
+            excerptHash: nil,
+            id: "screen-42",
+            kind: .local_screen,
+            scope: .device_local,
+            version: "capture.v1"
+          )
+        ],
+        goalId: nil,
+        ownershipConfidence: 0.95,
+        proposedAction: "create",
+        sourceSurface: "screen",
+        subjectKind: "task",
+        taskChange: OmiAPI.TaskCreatePayload(
+          description_: "Send Sarah the revised budget",
+          dueAt: nil,
+          dueConfidence: nil,
+          owner: .user,
+          priority: .high,
+          recurrenceParentId: nil,
+          recurrenceRule: nil
+        ),
+        workstreamId: nil
+      )
+    )
+
+    do {
+      let _: OmiAPI.CandidateRecord = try await client.createCanonicalCandidate(
+        candidate,
+        idempotencyKey: "screen:device-hash:42",
+        accountGeneration: 7
+      )
+      XCTFail("The stubbed service should fail after capturing the request")
+    } catch {
+      // The retryable transport failure is expected; request construction is the subject under test.
+    }
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/candidates")
+    XCTAssertEqual(request.method, "POST")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "screen:device-hash:42")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "7")
+    XCTAssertEqual(request.headers["Authorization"], "Bearer test-token")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let evidence = try XCTUnwrap((json["evidence_refs"] as? [[String: Any]])?.first)
+    XCTAssertEqual(evidence["kind"] as? String, "local_screen")
+    XCTAssertEqual(evidence["scope"] as? String, "device_local")
+    XCTAssertEqual(evidence["id"] as? String, "screen-42")
+    XCTAssertNil(json["screenshot"])
+    XCTAssertNil(json["window_title"])
+    XCTAssertNil(json["source_app"])
+  }
+}

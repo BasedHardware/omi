@@ -19,15 +19,36 @@ actor TaskPromotionService {
     /// Promote any pending staged tasks immediately on service start, then keep a
     /// short safety-net ticking to catch anything that slips through event-driven paths.
     func start() {
-        startSafetyTimer()
-        log("TaskPromotion: Service started")
-        // Fire an immediate promote so a staged task that was inserted while the service
-        // was stopped (e.g. across an app restart, or via manual backend insert during a
-        // demo) gets a notification within seconds instead of waiting for the first
-        // safety-timer tick.
         Task { [weak self] in
-            await self?.promoteIfNeeded()
+            guard let self else { return }
+            await self.startLegacyPromotion()
         }
+    }
+
+    private func startLegacyPromotion() async {
+        startSafetyTimer()
+        log("TaskPromotion: Legacy compatibility service started")
+        await promoteIfNeeded()
+    }
+
+    private func legacyPromotionEnabled() async -> Bool {
+        do {
+            let control = try await APIClient.shared.getCandidateWorkflowControl()
+            return TaskCaptureModePolicy.allowsLegacyPromotion(control.workflowMode)
+        } catch {
+            DesktopDiagnosticsManager.shared.recordFallback(
+                area: "other",
+                from: "workflow_control",
+                to: "promotion_disabled",
+                reason: "other",
+                outcome: .degraded
+            )
+            return false
+        }
+    }
+
+    private func legacyTaskNotificationEnabled() async -> Bool {
+        await TaskLegacyEffectGate.live.isAllowed(.notification)
     }
 
     func stop() {
@@ -57,6 +78,7 @@ actor TaskPromotionService {
     /// Returns the list of promoted tasks so callers can insert them directly.
     @discardableResult
     func promoteIfNeeded(shouldNotify: Bool = true, bypassDebounce: Bool = false) async -> [TaskActionItem] {
+        guard await legacyPromotionEnabled() else { return [] }
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
             return []
@@ -79,7 +101,12 @@ actor TaskPromotionService {
 
         for _ in 0..<maxIterations {
             do {
-                let response = try await APIClient.shared.promoteTopStagedTask()
+                guard let response = try await TaskLegacyEffectGate.live.perform(.promotion, operation: {
+                    try await APIClient.shared.promoteTopStagedTask()
+                }) else {
+                    log("TaskPromotion: Mode changed; stopping before promotion write")
+                    break
+                }
 
                 if response.promoted, let promotedTask = response.promotedTask {
                     lastPromotedAt = Date()
@@ -99,7 +126,8 @@ actor TaskPromotionService {
                     let notificationsEnabled = await MainActor.run {
                         TaskAssistantSettings.shared.notificationsEnabled
                     }
-                    if shouldNotify && notificationsEnabled {
+                    let modeAllowsNotification = await legacyTaskNotificationEnabled()
+                    if shouldNotify && notificationsEnabled && modeAllowsNotification {
                         let message = "New task: \(promotedTask.description)"
                         let context = Self.buildNotificationContext(from: promotedTask)
                         await MainActor.run {

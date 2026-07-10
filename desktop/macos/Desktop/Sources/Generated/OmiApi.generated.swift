@@ -2818,6 +2818,42 @@ public enum OmiAPI {
   }
 
 
+  public struct TaskWorkflowControl: Codable {
+    public let accountGeneration: Int?
+    public let workflowMode: TaskWorkflowMode?
+
+    private enum CodingKeys: String, CodingKey {
+      case accountGeneration = "account_generation"
+      case workflowMode = "workflow_mode"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
+    }
+
+    public init(accountGeneration: Int?, workflowMode: TaskWorkflowMode?) {
+      self.accountGeneration = accountGeneration
+      self.workflowMode = workflowMode
+    }
+  }
+
+
+  public enum TaskWorkflowMode: String, Codable, CaseIterable {
+    case off
+    case shadow
+    case write
+    case read
+    case _unknown = "__unknown__"
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.singleValueContainer()
+      let raw = try c.decode(String.self)
+      self = TaskWorkflowMode(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
   public struct TranscriptSegment: Codable {
     public let end: Double
     public let id: String?
@@ -5063,6 +5099,25 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(CandidateRecord.self, from: data)
+  }
+
+  public static func getCandidateWorkflowControlV1CandidatesControlGet(client: OmiApiClient) async throws -> TaskWorkflowControl {
+    let _path = "/v1/candidates/control"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(TaskWorkflowControl.self, from: data)
   }
 
   public static func drainCandidateIntegrationsV1CandidatesIntegrationsDrainPost(client: OmiApiClient, limit: Int? = nil) async throws -> [String: Int] {
@@ -11274,5 +11329,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 368 Swift client methods generated.
+  // Total: 369 Swift client methods generated.
 }

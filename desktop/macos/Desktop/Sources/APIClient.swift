@@ -2864,6 +2864,64 @@ extension APIClient {
 
 }
 
+// MARK: - Canonical Candidates API
+
+extension APIClient {
+  func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
+    try await get("v1/candidates/control")
+  }
+
+  func createCanonicalCandidate(
+    _ candidate: OmiAPI.CandidateCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateRecord {
+    try await candidateMutation(
+      endpoint: "v1/candidates",
+      method: "POST",
+      body: candidate,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func acceptCanonicalCandidate(
+    candidateID: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await candidateMutation(
+      endpoint: "v1/candidates/\(candidateID)/accept",
+      method: "POST",
+      body: Optional<String>.none,
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func getCanonicalCandidate(candidateID: String) async throws -> OmiAPI.CandidateRecord {
+    try await get("v1/candidates/\(candidateID)")
+  }
+
+  private func candidateMutation<Response: Decodable, Body: Encodable>(
+    endpoint: String,
+    method: String,
+    body: Body?,
+    idempotencyKey: String?,
+    accountGeneration: Int
+  ) async throws -> Response {
+    guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    request.allHTTPHeaderFields = try await buildHeaders()
+    request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
+    if let body { request.httpBody = try JSONEncoder().encode(body) }
+    return try await performRequest(request)
+  }
+}
+
 /// Response types for task sharing
 struct ShareTasksResponse: Codable {
   let url: String

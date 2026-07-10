@@ -45,6 +45,7 @@ def test_candidate_router_publishes_complete_lifecycle_openapi():
     assert set(paths['/v1/candidates/{candidate_id}/reject']) == {'post'}
     assert set(paths['/v1/candidates/{candidate_id}/expire']) == {'post'}
     assert set(paths['/v1/candidates/migrate-staged']) == {'post'}
+    assert set(paths['/v1/candidates/control']) == {'get'}
     assert set(paths['/v1/candidates/integrations/drain']) == {'post'}
     create_parameters = paths['/v1/candidates']['post']['parameters']
     required_contract_headers = {
@@ -67,6 +68,13 @@ def test_candidate_router_publishes_complete_lifecycle_openapi():
     assert task_union['discriminator']['propertyName'] == 'proposed_action'
     assert len(task_union['oneOf']) == 5
     assert len(app.openapi()['components']['schemas']['CandidateRecord']['oneOf']) == 6
+
+
+def test_candidate_workflow_control_exposes_current_mode_and_generation(monkeypatch):
+    control = TaskWorkflowControl(workflow_mode='read', account_generation=8)
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+
+    assert candidates_router.get_candidate_workflow_control(uid='user-1') == control
 
 
 def test_candidate_record_serialization_satisfies_its_response_schema():

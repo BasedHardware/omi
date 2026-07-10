@@ -62,6 +62,7 @@ TARGET_SCHEMAS = (
     'TaskCancelCandidate',
     'TaskSupersedeCandidate',
     'CandidateResolutionRequest',
+    'TaskWorkflowControl',
     'Workstream',
     'WorkstreamCreateCandidate',
     'WorkstreamUpdate',
