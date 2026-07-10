@@ -56,7 +56,10 @@ SCHEMA_GROUPS = {
     'action_items_folders': {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',
         'schemas': (
+            'EvidenceRef',
             'ActionItemResponse',
+            'ActionItemCreateRequest',
+            'ActionItemUpdateRequest',
             'ActionItemsResponse',
             'ActionItemsSearchResponse',
             'PendingSyncResponse',
@@ -70,6 +73,43 @@ SCHEMA_GROUPS = {
             'Folder',
             'FolderMutationResponse',
             'BulkMoveConversationsResponse',
+        ),
+    },
+    'task_intelligence': {
+        'output': DEFAULT_OUTPUT_DIR / 'task_intelligence_wire.g.dart',
+        'schemas': (
+            'EvidenceRef',
+            'ActionItemResponse',
+            'TaskCreatePayload',
+            'TaskChangePayload',
+            'GoalMetric',
+            'CandidateRecord',
+            'CandidateListResponse',
+            'CandidateResolutionReceipt',
+            'CandidateCreate',
+            'TaskCreateCandidate',
+            'TaskUpdateCandidate',
+            'TaskCompleteCandidate',
+            'TaskCancelCandidate',
+            'TaskSupersedeCandidate',
+            'CandidateResolutionRequest',
+            'WorkstreamProposal',
+            'WorkstreamProposal-Output',
+            'GoalResponse',
+            'GoalUpdate',
+            'GoalDetailProjection',
+            'GoalProgressEvent',
+            'Workstream',
+            'WorkstreamCreateCandidate',
+            'WorkstreamUpdate',
+            'WorkstreamDetailProjection',
+            'WorkstreamEvent',
+            'WorkstreamEventCreate',
+            'ArtifactDescriptor',
+            'ArtifactDescriptorCreate',
+            'ArtifactStatusTransitionRequest',
+            'ContinuationCheckpoint',
+            'ContinuationCheckpointUpsert',
         ),
     },
     'api_keys': {
@@ -306,6 +346,7 @@ SCHEMA_GROUPS = {
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',
         'schemas': (
+            'GoalMetric',
             'GoalResponse',
             'GoalSuggestionResponse',
             'AdviceResponse',
@@ -325,6 +366,11 @@ DART_FIELD_NAME_OVERRIDES = {
 }
 DART_CLASS_NAME_OVERRIDES = {
     'routers__payment__PricingOption': 'PaymentPricingOption',
+}
+PRESENCE_AWARE_PATCH_SCHEMAS = {
+    'ActionItemUpdateRequest',
+    'GoalUpdate',
+    'WorkstreamUpdate',
 }
 
 
@@ -365,7 +411,8 @@ def dart_field_name(wire_name: str) -> str:
 
 
 def generated_class_name(schema_name: str) -> str:
-    return f'Generated{DART_CLASS_NAME_OVERRIDES.get(schema_name, schema_name)}'
+    raw_name = DART_CLASS_NAME_OVERRIDES.get(schema_name, schema_name)
+    return f"Generated{re.sub(r'[^A-Za-z0-9_]', '', raw_name)}"
 
 
 def unwrap_nullable(schema: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -403,6 +450,14 @@ def dart_type_for(
     any_of = schema.get('anyOf')
     if isinstance(any_of, list):
         non_null = [item for item in any_of if item.get('type') != 'null']
+        ref_names = {item['$ref'].rsplit('/', 1)[-1] for item in non_null if item.get('$ref')}
+        if ref_names == {'TaskCreatePayload', 'TaskChangePayload'}:
+            nullable = any(item.get('type') == 'null' for item in any_of) or not required
+            return DartType(
+                'GeneratedCandidateTaskChange',
+                nullable=nullable,
+                ref_schema='CandidateTaskChange',
+            )
         if len(non_null) == 1 and len(non_null) != len(any_of):
             unwrapped = non_null[0]
             nullable = True
@@ -410,6 +465,12 @@ def dart_type_for(
             len(non_null) == 2
             and any(item.get('$ref') for item in non_null)
             and any(is_untyped_object_schema(item) and not item.get('properties') for item in non_null)
+        ):
+            nullable = any(item.get('type') == 'null' for item in any_of) or not required
+            return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
+        elif non_null and all(
+            item.get('$ref') and all_schemas.get(item['$ref'].rsplit('/', 1)[-1], {}).get('type') == 'object'
+            for item in non_null
         ):
             nullable = any(item.get('type') == 'null' for item in any_of) or not required
             return DartType('Map<String, dynamic>', nullable=nullable, is_map=True)
@@ -646,7 +707,10 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
     lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
     lines.append(f'    return {class_name}(')
     for field in fields:
-        lines.append(f'      {field.dart_name}: {read_expr(field)},')
+        if schema_name == 'CandidateRecord' and field.wire_name == 'task_change':
+            lines.append('      taskChange: GeneratedCandidateTaskChange.fromCandidateJson(json),')
+        else:
+            lines.append(f'      {field.dart_name}: {read_expr(field)},')
     lines.append('    );')
     lines.append('  }')
     if emit_list_factory and len(fields) == 1 and fields[0].dart_type.list_item:
@@ -665,6 +729,163 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
     for field in fields:
         lines.append(f"      '{field.wire_name}': {to_json_expr(field)},")
     lines.append('    };')
+    lines.append('  }')
+    lines.append('}')
+    return '\n'.join(lines)
+
+
+def emit_candidate_task_change() -> str:
+    return '''class GeneratedCandidateTaskChange {
+  final GeneratedTaskCreatePayload? create;
+  final GeneratedTaskChangePayload? change;
+
+  const GeneratedCandidateTaskChange.create(GeneratedTaskCreatePayload value)
+      : create = value,
+        change = null;
+  const GeneratedCandidateTaskChange.change(GeneratedTaskChangePayload value)
+      : create = null,
+        change = value;
+
+  static GeneratedCandidateTaskChange? fromCandidateJson(Map<String, dynamic> json) {
+    final value = _readMap(json['task_change']);
+    if (value == null) return null;
+    final action = _readString(json['proposed_action']);
+    final subjectKind = _readString(json['subject_kind']);
+    if (action == 'create' && subjectKind == 'task') {
+      return GeneratedCandidateTaskChange.create(GeneratedTaskCreatePayload.fromJson(value));
+    }
+    if (const {'update', 'complete', 'cancel', 'supersede'}.contains(action)) {
+      return GeneratedCandidateTaskChange.change(GeneratedTaskChangePayload.fromJson(value));
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => create?.toJson() ?? change?.toJson() ?? const {};
+}'''
+
+
+def emit_candidate_create() -> str:
+    return '''class GeneratedCandidateCreate {
+  final GeneratedTaskCreateCandidate? taskCreate;
+  final GeneratedTaskUpdateCandidate? taskUpdate;
+  final GeneratedTaskCompleteCandidate? taskComplete;
+  final GeneratedTaskCancelCandidate? taskCancel;
+  final GeneratedTaskSupersedeCandidate? taskSupersede;
+  final GeneratedWorkstreamCreateCandidate? workstreamCreate;
+
+  const GeneratedCandidateCreate.taskCreate(GeneratedTaskCreateCandidate value)
+      : taskCreate = value, taskUpdate = null, taskComplete = null, taskCancel = null,
+        taskSupersede = null, workstreamCreate = null;
+  const GeneratedCandidateCreate.taskUpdate(GeneratedTaskUpdateCandidate value)
+      : taskCreate = null, taskUpdate = value, taskComplete = null, taskCancel = null,
+        taskSupersede = null, workstreamCreate = null;
+  const GeneratedCandidateCreate.taskComplete(GeneratedTaskCompleteCandidate value)
+      : taskCreate = null, taskUpdate = null, taskComplete = value, taskCancel = null,
+        taskSupersede = null, workstreamCreate = null;
+  const GeneratedCandidateCreate.taskCancel(GeneratedTaskCancelCandidate value)
+      : taskCreate = null, taskUpdate = null, taskComplete = null, taskCancel = value,
+        taskSupersede = null, workstreamCreate = null;
+  const GeneratedCandidateCreate.taskSupersede(GeneratedTaskSupersedeCandidate value)
+      : taskCreate = null, taskUpdate = null, taskComplete = null, taskCancel = null,
+        taskSupersede = value, workstreamCreate = null;
+  const GeneratedCandidateCreate.workstreamCreate(GeneratedWorkstreamCreateCandidate value)
+      : taskCreate = null, taskUpdate = null, taskComplete = null, taskCancel = null,
+        taskSupersede = null, workstreamCreate = value;
+
+  factory GeneratedCandidateCreate.fromJson(Map<String, dynamic> json) {
+    final subjectKind = _readString(json['subject_kind']);
+    final action = _readString(json['proposed_action']);
+    if (subjectKind == 'task') {
+      switch (action) {
+        case 'create': return GeneratedCandidateCreate.taskCreate(GeneratedTaskCreateCandidate.fromJson(json));
+        case 'update': return GeneratedCandidateCreate.taskUpdate(GeneratedTaskUpdateCandidate.fromJson(json));
+        case 'complete': return GeneratedCandidateCreate.taskComplete(GeneratedTaskCompleteCandidate.fromJson(json));
+        case 'cancel': return GeneratedCandidateCreate.taskCancel(GeneratedTaskCancelCandidate.fromJson(json));
+        case 'supersede': return GeneratedCandidateCreate.taskSupersede(GeneratedTaskSupersedeCandidate.fromJson(json));
+      }
+    }
+    if (subjectKind == 'workstream' && action == 'create') {
+      return GeneratedCandidateCreate.workstreamCreate(GeneratedWorkstreamCreateCandidate.fromJson(json));
+    }
+    throw FormatException('Unsupported Candidate discriminator: $subjectKind/$action');
+  }
+
+  Map<String, dynamic> toJson() =>
+      taskCreate?.toJson() ?? taskUpdate?.toJson() ?? taskComplete?.toJson() ??
+      taskCancel?.toJson() ?? taskSupersede?.toJson() ?? workstreamCreate?.toJson() ?? const {};
+}'''
+
+
+def emit_patch_field() -> str:
+    return '''class GeneratedPatchField<T> {
+  final bool isPresent;
+  final T? value;
+
+  const GeneratedPatchField.omitted() : isPresent = false, value = null;
+  const GeneratedPatchField.value(this.value) : isPresent = true;
+}'''
+
+
+def emit_patch_reader() -> str:
+    return '''GeneratedPatchField<T> _readPatchField<T>(
+  Map<String, dynamic> json,
+  String name,
+  T? Function(dynamic) converter,
+) {
+  if (!json.containsKey(name)) return const GeneratedPatchField.omitted();
+  final raw = json[name];
+  if (raw == null) return const GeneratedPatchField.value(null);
+  final value = converter(raw);
+  if (value == null) throw FormatException('Invalid field: $name');
+  return GeneratedPatchField.value(value);
+}'''
+
+
+def patch_to_json_expr(field: Field) -> str:
+    value = f'{field.dart_name}.value'
+    typ = field.dart_type
+    if typ.list_item:
+        item = typ.list_item
+        if item.ref_schema:
+            return f'{value}?.map((value) => value.toJson()).toList()'
+        if item.is_date_time:
+            return f'{value}?.map((value) => value.toUtc().toIso8601String()).toList()'
+        return value
+    if typ.ref_schema:
+        return f'{value}?.toJson()'
+    if typ.is_date_time:
+        return f'{value}?.toUtc().toIso8601String()'
+    return value
+
+
+def emit_patch_class(schema_name: str, fields: list[Field]) -> str:
+    class_name = generated_class_name(schema_name)
+    lines = [f'class {class_name} {{']
+    for field in fields:
+        lines.append(f'  final GeneratedPatchField<{field.dart_type.name}> {field.dart_name};')
+    lines.append('')
+    lines.append(f'  const {class_name}({{')
+    for field in fields:
+        lines.append(f'    this.{field.dart_name} = const GeneratedPatchField.omitted(),')
+    lines.append('  });')
+    lines.append('')
+    lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
+    lines.append(f'    return {class_name}(')
+    for field in fields:
+        lines.append(
+            f'      {field.dart_name}: _readPatchField<{field.dart_type.name}>('
+            f'json, {json.dumps(field.wire_name)}, {converter_name(field.dart_type)}),'
+        )
+    lines.append('    );')
+    lines.append('  }')
+    lines.append('')
+    lines.append('  Map<String, dynamic> toJson() {')
+    lines.append('    final json = <String, dynamic>{};')
+    for field in fields:
+        lines.append(f'    if ({field.dart_name}.isPresent) {{')
+        lines.append(f"      json['{field.wire_name}'] = {patch_to_json_expr(field)};")
+        lines.append('    }')
+    lines.append('    return json;')
     lines.append('  }')
     lines.append('}')
     return '\n'.join(lines)
@@ -849,7 +1070,25 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
         f'// Generated by backend/scripts/generate_dart_models.py --group {group} from docs/api-reference/app-client-openapi.json.',
         '',
     ]
+    if group in {'action_items_folders', 'task_intelligence'}:
+        chunks.extend([emit_patch_field(), ''])
+    if group == 'task_intelligence':
+        chunks.extend([emit_candidate_task_change(), ''])
     for schema_name in target_schemas:
+        if schema_name == 'CandidateCreate':
+            chunks.extend([emit_candidate_create(), ''])
+            continue
+        if schema_name in PRESENCE_AWARE_PATCH_SCHEMAS:
+            chunks.extend(
+                [
+                    emit_patch_class(
+                        schema_name,
+                        fields_for_schema(schema_name, schemas[schema_name], target_schemas, schemas),
+                    ),
+                    '',
+                ]
+            )
+            continue
         chunks.append(
             emit_class(
                 schema_name,
@@ -858,6 +1097,8 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
             )
         )
         chunks.append('')
+    if group in {'action_items_folders', 'task_intelligence'}:
+        chunks.extend([emit_patch_reader(), ''])
     chunks.append(emit_helpers())
     chunks.append('')
     return '\n'.join(chunks)

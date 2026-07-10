@@ -1184,7 +1184,7 @@ struct Structured: Codable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
-      OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
+      OmiAPI.ActionItem(candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -1254,12 +1254,18 @@ struct ActionItem: Codable, Identifiable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let wire = OmiAPI.ActionItem(
+      candidateAction: nil,
+      captureConfidence: nil,
+      captureKind: nil,
+      captureOwner: nil,
       completed: completed,
       completedAt: nil,
       conversationId: nil,
       createdAt: nil,
       description_: description,
       dueAt: nil,
+      ownershipConfidence: nil,
+      targetTaskId: nil,
       updatedAt: nil
     )
     try wire.encode(to: encoder)
@@ -2657,52 +2663,21 @@ extension APIClient {
     priority: String? = nil,
     metadata: [String: Any]? = nil,
     goalId: String? = nil,
+    clearGoalId: Bool = false,
+    workstreamId: String? = nil,
+    clearWorkstreamId: Bool = false,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    supersededBy: String? = nil,
+    source: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
-    recurrenceRule: String? = nil
+    recurrenceRule: String? = nil,
+    recurrenceParentId: String? = nil
   ) async throws -> TaskActionItem {
-    struct UpdateRequest: Encodable {
-      let completed: Bool?
-      let description: String?
-      let dueAt: String?
-      let includeDueAt: Bool
-      let clearDueAt: Bool
-      let priority: String?
-      let metadata: String?
-      let goalId: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-
-      enum CodingKeys: String, CodingKey {
-        case completed, description, priority, metadata
-        case dueAt = "due_at"
-        case clearDueAt = "clear_due_at"
-        case goalId = "goal_id"
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-      }
-
-      func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(completed, forKey: .completed)
-        try container.encodeIfPresent(description, forKey: .description)
-        if includeDueAt {
-          if let dueAt {
-            try container.encode(dueAt, forKey: .dueAt)
-          } else {
-            try container.encodeNil(forKey: .dueAt)
-          }
-        }
-        if clearDueAt {
-          try container.encode(true, forKey: .clearDueAt)
-        }
-        try container.encodeIfPresent(priority, forKey: .priority)
-        try container.encodeIfPresent(metadata, forKey: .metadata)
-        try container.encodeIfPresent(goalId, forKey: .goalId)
-        try container.encodeIfPresent(relevanceScore, forKey: .relevanceScore)
-        try container.encodeIfPresent(recurrenceRule, forKey: .recurrenceRule)
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2715,17 +2690,29 @@ extension APIClient {
       }
     }
 
-    let request = UpdateRequest(
-      completed: completed,
-      description: description,
-      dueAt: dueAt.map { formatter.string(from: $0) },
-      includeDueAt: clearDueAt || dueAt != nil,
-      clearDueAt: clearDueAt,
-      priority: priority,
+    let wire = OmiAPI.ActionItemUpdateRequest(
+      clearDueAt: taskPatchField(clearDueAt ? true : nil),
+      completed: taskPatchField(completed),
+      description_: taskPatchField(description),
+      dueAt: taskPatchField(dueAt.map { formatter.string(from: $0) }),
+      dueConfidence: taskPatchField(dueConfidence),
+      goalId: clearGoalId ? .null : taskPatchField(goalId),
+      indentLevel: taskPatchField(indentLevel),
+      owner: taskPatchField(owner.flatMap(OmiAPI.TaskOwner.init(rawValue:))),
+      priority: taskPatchField(priority.flatMap(OmiAPI.TaskPriority.init(rawValue:))),
+      provenance: taskPatchField(provenance),
+      recurrenceParentId: taskPatchField(recurrenceParentId),
+      recurrenceRule: taskPatchField(recurrenceRule),
+      sortOrder: taskPatchField(sortOrder),
+      source: taskPatchField(source),
+      status: taskPatchField(status.flatMap(OmiAPI.TaskStatus.init(rawValue:))),
+      supersededBy: taskPatchField(supersededBy),
+      workstreamId: clearWorkstreamId ? .null : taskPatchField(workstreamId)
+    )
+    let request = try taskMutationBody(
+      wire,
       metadata: metadataString,
-      goalId: goalId,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule
+      relevanceScore: relevanceScore
     )
 
     return try await patch("v1/action-items/\(id)", body: request)
@@ -2746,29 +2733,16 @@ extension APIClient {
     metadata: [String: Any]? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil
+    recurrenceParentId: String? = nil,
+    goalId: String? = nil,
+    workstreamId: String? = nil,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil
   ) async throws -> TaskActionItem {
-    struct CreateRequest: Encodable {
-      let description: String
-      let dueAt: String?
-      let source: String?
-      let priority: String?
-      let category: String?
-      let metadata: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-      let recurrenceParentId: String?
-
-      enum CodingKeys: String, CodingKey {
-        case description
-        case dueAt = "due_at"
-        case source, priority, category, metadata
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-        case recurrenceParentId = "recurrence_parent_id"
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2781,19 +2755,59 @@ extension APIClient {
       }
     }
 
-    let request = CreateRequest(
-      description: description,
+    let wire = OmiAPI.ActionItemCreateRequest(
+      appleReminderId: nil,
+      completed: nil,
+      conversationId: nil,
+      description_: description,
       dueAt: dueAt.map { formatter.string(from: $0) },
+      dueConfidence: dueConfidence,
+      exportDate: nil,
+      exportPlatform: nil,
+      exported: nil,
+      goalId: goalId,
+      indentLevel: indentLevel,
+      isLocked: nil,
+      owner: owner.flatMap(OmiAPI.TaskOwner.init(rawValue:)),
+      priority: priority.flatMap(OmiAPI.TaskPriority.init(rawValue:)),
+      provenance: provenance,
+      recurrenceParentId: recurrenceParentId,
+      recurrenceRule: recurrenceRule,
+      sortOrder: sortOrder,
       source: source,
-      priority: priority,
+      status: status.flatMap(OmiAPI.TaskStatus.init(rawValue:)),
+      workstreamId: workstreamId
+    )
+    let request = try taskMutationBody(
+      wire,
       category: category,
       metadata: metadataString,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule,
-      recurrenceParentId: recurrenceParentId
+      relevanceScore: relevanceScore
     )
 
     return try await post("v1/action-items", body: request)
+  }
+
+  private func taskMutationBody<Wire: Encodable>(
+    _ wire: Wire,
+    category: String? = nil,
+    metadata: String? = nil,
+    relevanceScore: Int? = nil
+  ) throws -> OmiAnyCodable {
+    let data = try JSONEncoder().encode(wire)
+    guard var body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw APIError.invalidResponse
+    }
+    // Released desktop clients still send these compatibility-only fields.
+    // Canonical fields remain owned by the generated OpenAPI request DTO.
+    if let category { body["category"] = category }
+    if let metadata { body["metadata"] = metadata }
+    if let relevanceScore { body["relevance_score"] = relevanceScore }
+    return OmiAnyCodable(body)
+  }
+
+  private func taskPatchField<Value: Codable>(_ value: Value?) -> OmiAPI.OmiPatchField<Value> {
+    value.map(OmiAPI.OmiPatchField.value) ?? .omitted
   }
 
   /// Batch update relevance scores for multiple action items
@@ -3179,6 +3193,16 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let recurrenceRule: String?
   /// ID of original parent task in recurrence chain
   let recurrenceParentId: String?
+  /// Canonical compatibility task identifier, when distinct from `id`.
+  let taskId: String?
+  /// Canonical lifecycle status: active, completed, cancelled, superseded.
+  let taskStatus: String?
+  /// Canonical ownership classification: user, other, unknown.
+  let taskOwner: String?
+  let workstreamId: String?
+  let dueConfidence: Double?
+  let provenance: [OmiAPI.EvidenceRef]?
+  let supersededBy: String?
 
   // Ordering (synced to backend)
   var sortOrder: Int?  // Sort position within category
@@ -3218,6 +3242,9 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
       && lhs.priority == rhs.priority && lhs.category == rhs.category && lhs.deleted == rhs.deleted
       && lhs.deletedBy == rhs.deletedBy && lhs.goalId == rhs.goalId
       && lhs.recurrenceRule == rhs.recurrenceRule
+      && lhs.taskId == rhs.taskId && lhs.taskStatus == rhs.taskStatus
+      && lhs.taskOwner == rhs.taskOwner && lhs.workstreamId == rhs.workstreamId
+      && lhs.dueConfidence == rhs.dueConfidence && lhs.supersededBy == rhs.supersededBy
   }
 
   enum CodingKeys: String, CodingKey {
@@ -3235,6 +3262,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     case fromStaged = "from_staged"
     case recurrenceRule = "recurrence_rule"
     case recurrenceParentId = "recurrence_parent_id"
+    case taskId = "task_id"
+    case taskStatus = "status"
+    case taskOwner = "owner"
+    case workstreamId = "workstream_id"
+    case dueConfidence = "due_confidence"
+    case provenance
+    case supersededBy = "superseded_by"
     case sortOrder = "sort_order"
     case indentLevel = "indent_level"
     case relevanceScore = "relevance_score"
@@ -3263,6 +3297,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     fromStaged: Bool? = nil,
     recurrenceRule: String? = nil,
     recurrenceParentId: String? = nil,
+    taskId: String? = nil,
+    taskStatus: String? = nil,
+    taskOwner: String? = nil,
+    workstreamId: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    supersededBy: String? = nil,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
@@ -3298,6 +3339,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.fromStaged = fromStaged
     self.recurrenceRule = recurrenceRule
     self.recurrenceParentId = recurrenceParentId
+    self.taskId = taskId
+    self.taskStatus = taskStatus
+    self.taskOwner = taskOwner
+    self.workstreamId = workstreamId
+    self.dueConfidence = dueConfidence
+    self.provenance = provenance
+    self.supersededBy = supersededBy
     self.sortOrder = sortOrder
     self.indentLevel = indentLevel
     self.relevanceScore = relevanceScore
@@ -3315,16 +3363,29 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
-    completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
-    conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
-    source = try container.decodeIfPresent(String.self, forKey: .source)
-    priority = try container.decodeIfPresent(String.self, forKey: .priority)
+    // Keep the generated app-client contract as the wire authority while the
+    // domain model continues to carry desktop-only state and legacy aliases.
+    let wire = try? OmiAPI.ActionItemResponse(from: decoder)
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let standard = ISO8601DateFormatter()
+    func parseWireDate(_ value: String?) -> Date? {
+      value.flatMap { fractional.date(from: $0) ?? standard.date(from: $0) }
+    }
+
+    id = try wire?.id ?? container.decode(String.self, forKey: .id)
+    description = try wire?.description_ ?? container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    completed = try wire?.completed ?? container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
+    createdAt = try parseWireDate(wire?.createdAt)
+      ?? container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    updatedAt = try parseWireDate(wire?.updatedAt)
+      ?? container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    dueAt = try parseWireDate(wire?.dueAt) ?? container.decodeIfPresent(Date.self, forKey: .dueAt)
+    completedAt = try parseWireDate(wire?.completedAt)
+      ?? container.decodeIfPresent(Date.self, forKey: .completedAt)
+    conversationId = try wire?.conversationId ?? container.decodeIfPresent(String.self, forKey: .conversationId)
+    source = try wire?.source ?? container.decodeIfPresent(String.self, forKey: .source)
+    priority = try wire?.priority?.rawValue ?? container.decodeIfPresent(String.self, forKey: .priority)
     metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
     category = try container.decodeIfPresent(String.self, forKey: .category)
     deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted)
@@ -3332,12 +3393,19 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
     keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
-    goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
+    goalId = try wire?.goalId ?? container.decodeIfPresent(String.self, forKey: .goalId)
     fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
-    recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule)
-    recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
-    sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
-    indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
+    recurrenceRule = try wire?.recurrenceRule ?? container.decodeIfPresent(String.self, forKey: .recurrenceRule)
+    recurrenceParentId = try wire?.recurrenceParentId ?? container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
+    taskId = try wire?.taskId ?? container.decodeIfPresent(String.self, forKey: .taskId)
+    taskStatus = try wire?.status?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskStatus)
+    taskOwner = try wire?.owner?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskOwner)
+    workstreamId = try wire?.workstreamId ?? container.decodeIfPresent(String.self, forKey: .workstreamId)
+    dueConfidence = try wire?.dueConfidence ?? container.decodeIfPresent(Double.self, forKey: .dueConfidence)
+    provenance = try wire?.provenance ?? container.decodeIfPresent([OmiAPI.EvidenceRef].self, forKey: .provenance)
+    supersededBy = try wire?.supersededBy ?? container.decodeIfPresent(String.self, forKey: .supersededBy)
+    sortOrder = try wire?.sortOrder ?? container.decodeIfPresent(Int.self, forKey: .sortOrder)
+    indentLevel = try wire?.indentLevel ?? container.decodeIfPresent(Int.self, forKey: .indentLevel)
     relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
 
     // Local-only fields, not decoded from API

@@ -36,9 +36,16 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
         'struct Conversation:',
         'struct Structured:',
         'struct ActionItemResponse:',
+        'struct ActionItemCreateRequest:',
+        'struct ActionItemUpdateRequest:',
         'struct ActionItem:',
         'struct MemoryDB:',
         'struct GoalResponse:',
+        'struct GoalDetailProjection:',
+        'struct CandidateRecord:',
+        'struct WorkstreamDetailProjection:',
+        'struct ArtifactDescriptor:',
+        'struct ContinuationCheckpoint:',
         'struct TranscriptSegment:',
         'struct Geolocation:',
         'struct AppResult:',
@@ -49,6 +56,14 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
     assert 'public enum ConversationStatus:' in generated
     assert 'public enum MemoryCategory:' in generated
     assert 'public enum GoalType:' in generated
+    assert 'public enum CandidateTaskChange: Codable {' in generated
+    assert 'public enum CandidateCreate: Codable {' in generated
+    assert 'public enum OmiPatchField<Value: Codable>: Codable {' in generated
+    assert 'public let goalId: OmiPatchField<String>' in generated
+    assert 'public struct GoalUpdate: Codable {' in generated
+    assert 'public let desiredOutcome: OmiPatchField<String>' in generated
+    assert 'public let nextReviewAt: OmiPatchField<String>' in generated
+    assert 'taskChange = .create(try c.decode(TaskCreatePayload.self' in generated
 
 
 def test_swift_generator_handles_refs_optionals_and_enums():
@@ -87,6 +102,16 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     assert 'public let tags: [String]?' in widget_block
     # AdditionalProperties renders as a typed dictionary.
     assert '[String: Double]?' in widget_block
+
+
+def test_swift_generator_sanitizes_openapi_component_names():
+    rendered = generate_swift_openapi_types._render_struct(
+        'WorkstreamProposal-Output',
+        {'type': 'object', 'properties': {'title': {'type': 'string'}}, 'required': ['title']},
+    )
+
+    assert 'public struct WorkstreamProposalOutput: Codable {' in rendered
+    assert 'WorkstreamProposal-Output' not in rendered
 
 
 def test_swift_generator_module_helper_is_emitted():

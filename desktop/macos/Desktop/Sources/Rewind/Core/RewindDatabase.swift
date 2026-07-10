@@ -2326,6 +2326,20 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addCanonicalTaskContractV1") { db in
+            try db.alter(table: "action_items") { t in
+                t.add(column: "canonicalTaskId", .text)
+                t.add(column: "taskStatus", .text)
+                t.add(column: "taskOwner", .text)
+                t.add(column: "goalId", .text)
+                t.add(column: "workstreamId", .text)
+                t.add(column: "dueConfidence", .double)
+                t.add(column: "provenanceJson", .text)
+                t.add(column: "supersededBy", .text)
+                t.add(column: "completedAt", .datetime)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

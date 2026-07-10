@@ -25,13 +25,43 @@ export interface Action {
 }
 
 export interface ActionItem {
+  candidate_action?: "create" | "update" | "complete" | null;
+  capture_confidence?: number | null;
+  capture_kind?: "explicit_command" | "clear_commitment" | "direct_request" | "inferred_next_step" | null;
+  capture_owner?: "user" | "other" | "unknown" | null;
   completed?: boolean;
   completed_at?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  ownership_confidence?: number | null;
+  target_task_id?: string | null;
   updated_at?: string | null;
+}
+
+export interface ActionItemCreateRequest {
+  apple_reminder_id?: string | null;
+  completed?: boolean | null;
+  conversation_id?: string | null;
+  description: string;
+  due_at?: string | null;
+  due_confidence?: number | null;
+  export_date?: string | null;
+  export_platform?: string | null;
+  exported?: boolean;
+  goal_id?: string | null;
+  indent_level?: number;
+  is_locked?: boolean;
+  owner?: TaskOwner;
+  priority?: TaskPriority | null;
+  provenance?: Array<EvidenceRef>;
+  recurrence_parent_id?: string | null;
+  recurrence_rule?: string | null;
+  sort_order?: number;
+  source?: string;
+  status?: TaskStatus | null;
+  workstream_id?: string | null;
 }
 
 export interface ActionItemIdsResponse {
@@ -46,14 +76,50 @@ export interface ActionItemResponse {
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  due_confidence?: number | null;
   export_date?: string | null;
   export_platform?: string | null;
   exported?: boolean;
+  goal_id?: string | null;
   id: string;
   indent_level?: number;
   is_locked?: boolean;
+  owner?: TaskOwner;
+  priority?: TaskPriority | null;
+  provenance?: Array<EvidenceRef>;
+  recurrence_parent_id?: string | null;
+  recurrence_rule?: string | null;
   sort_order?: number;
+  source?: string;
+  status?: TaskStatus;
+  superseded_by?: string | null;
+  task_id?: string | null;
   updated_at?: string | null;
+  workstream_id?: string | null;
+}
+
+export interface ActionItemUpdateRequest {
+  apple_reminder_id?: string | null;
+  clear_due_at?: boolean;
+  completed?: boolean | null;
+  description?: string | null;
+  due_at?: string | null;
+  due_confidence?: number | null;
+  export_date?: string | null;
+  export_platform?: string | null;
+  exported?: boolean | null;
+  goal_id?: string | null;
+  indent_level?: number | null;
+  owner?: TaskOwner | null;
+  priority?: TaskPriority | null;
+  provenance?: Array<EvidenceRef> | null;
+  recurrence_parent_id?: string | null;
+  recurrence_rule?: string | null;
+  sort_order?: number | null;
+  source?: string | null;
+  status?: TaskStatus | null;
+  superseded_by?: string | null;
+  workstream_id?: string | null;
 }
 
 export interface ActionItemsResponse {
@@ -447,6 +513,40 @@ export interface AppleHealthSyncResponse {
   synced_at: string;
 }
 
+export interface ArtifactDescriptor {
+  artifact_id: string;
+  content_hash: string;
+  created_at: string;
+  evidence_event_ids?: Array<string>;
+  evidence_refs?: Array<EvidenceRef>;
+  kind: string;
+  logical_key: string;
+  source_run_id?: string | null;
+  status?: ArtifactStatus;
+  supersedes_artifact_id?: string | null;
+  uri: string;
+  version: number;
+  workstream_id: string;
+}
+
+export interface ArtifactDescriptorCreate {
+  content_hash: string;
+  evidence_event_ids?: Array<string>;
+  evidence_refs?: Array<EvidenceRef>;
+  kind: string;
+  logical_key: string;
+  source_run_id?: string | null;
+  supersedes_artifact_id?: string | null;
+  uri: string;
+  version: number;
+}
+
+export type ArtifactStatus = "draft" | "awaiting_review" | "approved" | "delivered" | "superseded";
+
+export interface ArtifactStatusTransitionRequest {
+  status: ArtifactStatus;
+}
+
 export interface AsanaProjectsResponse {
   projects?: Array<Record<string, unknown>>;
 }
@@ -518,7 +618,7 @@ export interface BYOKActiveResponse {
 }
 
 export interface BatchActionItemsRequest {
-  action_items: Array<routers__developer__CreateActionItemRequest>;
+  action_items: Array<CreateActionItemRequest>;
 }
 
 export interface BatchActionItemsResponse {
@@ -666,6 +766,95 @@ export interface CancelSubscriptionRequest {
   reason_details?: string | null;
 }
 
+export type CandidateAction = "create" | "update" | "complete" | "cancel" | "supersede";
+
+export type CandidateCreate = TaskCandidate | WorkstreamCreateCandidate;
+
+export interface CandidateListResponse {
+  candidates: Array<CandidateRecord>;
+  has_more?: boolean;
+}
+
+export interface CandidateMigrationReport {
+  account_generation: number;
+  checkpoint?: string | null;
+  created: number;
+  dry_run: boolean;
+  failed: number;
+  failure_ids: Array<string>;
+  reconciled: number;
+  scanned: number;
+  unchanged: number;
+  workflow_mode: TaskWorkflowMode;
+}
+
+export interface CandidateMigrationRequest {
+  after_id?: string | null;
+  limit?: number;
+}
+
+export interface CandidateRecord {
+  proposed_action?: "create";
+  subject_kind?: "task";
+  task_change: TaskCreatePayload;
+  task_id?: null;
+  workstream_proposal?: null;
+} | {
+  proposed_action?: "update";
+  subject_kind?: "task";
+  task_change: TaskChangePayload;
+  task_id: string;
+  workstream_proposal?: null;
+} | {
+  proposed_action?: "complete";
+  subject_kind?: "task";
+  task_change: TaskChangePayload & {
+  status: "completed";
+};
+  task_id: string;
+  workstream_proposal?: null;
+} | {
+  proposed_action?: "cancel";
+  subject_kind?: "task";
+  task_change: TaskChangePayload & {
+  status: "cancelled";
+};
+  task_id: string;
+  workstream_proposal?: null;
+} | {
+  proposed_action?: "supersede";
+  subject_kind?: "task";
+  task_change: TaskChangePayload & {
+  status: "superseded";
+};
+  task_id: string;
+  workstream_proposal?: null;
+} | {
+  proposed_action?: "create";
+  subject_kind?: "workstream";
+  task_change?: null;
+  task_id?: null;
+  workstream_proposal: WorkstreamProposal_Output;
+}
+
+export interface CandidateResolutionReceipt {
+  candidate_id: string;
+  newly_resolved: boolean;
+  receipt_id: string;
+  resolved_at: string;
+  status: CandidateStatus;
+  task_id?: string | null;
+  workstream_id?: string | null;
+}
+
+export interface CandidateResolutionRequest {
+  reason?: string | null;
+}
+
+export type CandidateStatus = "pending" | "accepted" | "rejected" | "expired";
+
+export type CandidateSubjectKind = "task" | "workstream";
+
 export type CategoryEnum = "personal" | "education" | "health" | "finance" | "legal" | "philosophy" | "spiritual" | "science" | "entrepreneurship" | "parenting" | "romantic" | "travel" | "inspiration" | "technology" | "business" | "social" | "work" | "sports" | "politics" | "literature" | "history" | "architecture" | "music" | "weather" | "news" | "entertainment" | "psychology" | "real" | "design" | "family" | "economics" | "environment" | "other";
 
 export interface ChartData {
@@ -753,6 +942,23 @@ export interface ClickUpSpacesResponse {
 
 export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
+}
+
+export interface ContinuationCheckpoint {
+  checkpoint_id: string;
+  context_summary: string;
+  evidence_refs?: Array<EvidenceRef>;
+  last_event_sequence: number;
+  runtime_id: string;
+  updated_at: string;
+  workstream_id: string;
+}
+
+export interface ContinuationCheckpointUpsert {
+  context_summary: string;
+  evidence_refs?: Array<EvidenceRef>;
+  last_event_sequence: number;
+  runtime_id: string;
 }
 
 export interface Conversation {
@@ -851,7 +1057,6 @@ export interface ConversationsCountResponse {
 
 export interface CreateActionItemRequest {
   completed?: boolean;
-  conversation_id?: string | null;
   description: string;
   due_at?: string | null;
 }
@@ -919,13 +1124,17 @@ export interface CreateFolderRequest {
 }
 
 export interface CreateGoalRequest {
-  current_value?: number;
-  goal_type?: routers__developer__GoalType;
-  max_value?: number;
-  min_value?: number;
-  target_value: number;
+  current_value?: number | null;
+  desired_outcome?: string | null;
+  goal_type?: GoalType | null;
+  horizon_at?: string | null;
+  max_value?: number | null;
+  min_value?: number | null;
+  success_criteria?: Array<string>;
+  target_value?: number | null;
   title: string;
   unit?: string | null;
+  why_it_matters?: string | null;
 }
 
 export interface CreateMemoryRequest {
@@ -1161,15 +1370,24 @@ export interface DeveloperFolder {
 export interface DeveloperGoal {
   created_at: string;
   current_value: number;
+  desired_outcome: string;
+  focus_rank?: number | null;
+  goal_id: string;
   goal_type: string;
+  horizon_at?: string | null;
   id: string;
   is_active: boolean;
   max_value: number;
+  metric?: GoalMetric | null;
   min_value: number;
+  source: string;
+  status: string;
+  success_criteria?: Array<string>;
   target_value: number;
   title: string;
   unit?: string | null;
   updated_at: string;
+  why_it_matters?: string | null;
 }
 
 export interface DeveloperMemory {
@@ -1265,6 +1483,19 @@ export interface Evidence {
   source_signal?: string;
   source_type?: string;
 }
+
+export type EvidenceKind = "conversation" | "memory_item" | "workstream_event" | "artifact" | "chat_message" | "local_screen" | "external";
+
+export interface EvidenceRef {
+  device_id?: string | null;
+  excerpt_hash?: string | null;
+  id: string;
+  kind: EvidenceKind;
+  scope: EvidenceScope;
+  version?: string | null;
+}
+
+export type EvidenceScope = "canonical" | "device_local";
 
 export interface ExecuteToolRequest {
   params?: Record<string, unknown>;
@@ -1428,18 +1659,37 @@ export interface Geolocation {
 }
 
 export interface GoalCreate {
-  current_value?: number;
-  goal_type?: GoalType;
-  max_value?: number;
-  min_value?: number;
-  target_value: number;
+  current_value?: number | null;
+  desired_outcome?: string | null;
+  goal_type?: GoalType | null;
+  horizon_at?: string | null;
+  max_value?: number | null;
+  metric?: GoalMetric | null;
+  min_value?: number | null;
+  source?: GoalSource;
+  status?: GoalStatus;
+  success_criteria?: Array<string>;
+  target_value?: number | null;
   title: string;
   unit?: string | null;
+  why_it_matters?: string | null;
 }
 
 export interface GoalDeleteResponse {
   deleted_id: string;
   success: boolean;
+}
+
+export interface GoalDetailProjection {
+  active_threads: Array<Workstream>;
+  goal: GoalResponse;
+  progress_events: Array<GoalProgressEvent>;
+  tasks: Array<ActionItemResponse>;
+}
+
+export interface GoalFocusRequest {
+  focus_rank?: number | null;
+  replacement_goal_id?: string | null;
 }
 
 export interface GoalHistoryEntryResponse {
@@ -1448,20 +1698,79 @@ export interface GoalHistoryEntryResponse {
   value: number;
 }
 
+export interface GoalLifecycleRequest {
+  relationship_disposition: GoalRelationshipDisposition;
+  status: GoalStatus;
+}
+
+export interface GoalMetric {
+  current: number;
+  max?: number | null;
+  min?: number | null;
+  target: number;
+  type: GoalType;
+  unit?: string | null;
+}
+
+export interface GoalOriginWorkIntent {
+  anchor_task_description: string;
+  goal_id: string;
+  objective: string;
+  origin?: "goal";
+  title: string;
+}
+
+export interface GoalProgressEvent {
+  created_at: string;
+  event_id: string;
+  evidence_refs?: Array<EvidenceRef>;
+  goal_id: string;
+  kind: GoalProgressEventKind;
+  metric?: GoalMetric | null;
+  sequence: number;
+  summary: string;
+}
+
+export interface GoalProgressEventCreate {
+  evidence_refs?: Array<EvidenceRef>;
+  kind: GoalProgressEventKind;
+  metric?: GoalMetric | null;
+  summary: string;
+}
+
+export type GoalProgressEventKind = "evidence" | "metric_update" | "milestone" | "status_change";
+
+export type GoalRelationshipDisposition = "retain" | "detach";
+
 export interface GoalResponse {
   advice?: string | null;
   created_at: string;
   current_value: number;
+  desired_outcome: string;
+  ended_at?: string | null;
+  focus_rank?: number | null;
+  goal_id: string;
   goal_type: string;
+  horizon_at?: string | null;
   id: string;
   is_active: boolean;
+  latest_progress_sequence?: number;
   max_value: number;
+  metric?: GoalMetric | null;
   min_value: number;
+  source: GoalSource;
+  status: GoalStatus;
+  success_criteria?: Array<string>;
   target_value: number;
   title: string;
   unit?: string | null;
   updated_at: string;
+  why_it_matters?: string | null;
 }
+
+export type GoalSource = "user" | "ai_suggested" | "imported";
+
+export type GoalStatus = "background" | "focused" | "paused" | "achieved" | "abandoned";
 
 export interface GoalSuggestionResponse {
   reasoning: string;
@@ -1475,12 +1784,18 @@ export interface GoalSuggestionResponse {
 export type GoalType = "boolean" | "scale" | "numeric";
 
 export interface GoalUpdate {
+  clear_metric?: boolean;
   current_value?: number | null;
+  desired_outcome?: string | null;
+  horizon_at?: string | null;
   max_value?: number | null;
+  metric?: GoalMetric | null;
   min_value?: number | null;
+  success_criteria?: Array<string> | null;
   target_value?: number | null;
   title?: string | null;
   unit?: string | null;
+  why_it_matters?: string | null;
 }
 
 export interface GoogleCalendarEvent {
@@ -2487,6 +2802,84 @@ export interface TaskAssistantSettings {
   notifications_enabled?: boolean | null;
 }
 
+export interface TaskCancelCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "cancel";
+  source_surface: string;
+  subject_kind?: "task";
+  task_change: TaskChangePayload;
+  task_id: string;
+  workstream_id?: string | null;
+}
+
+export type TaskCandidate = TaskCreateCandidate | TaskUpdateCandidate | TaskCompleteCandidate | TaskCancelCandidate | TaskSupersedeCandidate;
+
+export interface TaskChangePayload {
+  description?: string | null;
+  due_at?: string | null;
+  due_confidence?: number | null;
+  owner?: TaskOwner | null;
+  priority?: TaskPriority | null;
+  recurrence_parent_id?: string | null;
+  recurrence_rule?: string | null;
+  status?: TaskStatus | null;
+  superseded_by?: string | null;
+}
+
+export interface TaskCompleteCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "complete";
+  source_surface: string;
+  subject_kind?: "task";
+  task_change: TaskChangePayload;
+  task_id: string;
+  workstream_id?: string | null;
+}
+
+export interface TaskCreateCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "create";
+  source_surface: string;
+  subject_kind?: "task";
+  task_change: TaskCreatePayload;
+  workstream_id?: string | null;
+}
+
+export interface TaskCreatePayload {
+  description: string;
+  due_at?: string | null;
+  due_confidence?: number | null;
+  owner?: TaskOwner;
+  priority?: TaskPriority | null;
+  recurrence_parent_id?: string | null;
+  recurrence_rule?: string | null;
+}
+
+export interface TaskGoalLinkImport {
+  goal_id: string;
+  task_id: string;
+}
+
+export interface TaskGoalLinkImportReport {
+  failed: number;
+  failure_task_ids: Array<string>;
+  imported: number;
+  unchanged: number;
+}
+
+export interface TaskGoalLinkImportRequest {
+  links: Array<TaskGoalLinkImport>;
+}
+
 export interface TaskIntegrationData {
   access_token?: string | null;
   connected?: boolean;
@@ -2516,6 +2909,47 @@ export interface TaskIntegrationsResponse {
   default_app: string | null;
   integrations: Record<string, unknown>;
 }
+
+export interface TaskOriginWorkIntent {
+  objective?: string | null;
+  origin?: "task";
+  task_id: string;
+  title?: string | null;
+}
+
+export type TaskOwner = "user" | "other" | "unknown";
+
+export type TaskPriority = "high" | "medium" | "low";
+
+export type TaskStatus = "active" | "completed" | "cancelled" | "superseded";
+
+export interface TaskSupersedeCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "supersede";
+  source_surface: string;
+  subject_kind?: "task";
+  task_change: TaskChangePayload;
+  task_id: string;
+  workstream_id?: string | null;
+}
+
+export interface TaskUpdateCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "update";
+  source_surface: string;
+  subject_kind?: "task";
+  task_change: TaskChangePayload;
+  task_id: string;
+  workstream_id?: string | null;
+}
+
+export type TaskWorkflowMode = "off" | "shadow" | "write" | "read";
 
 export interface TestDailySummaryRequest {
   date?: string | null;
@@ -2627,15 +3061,9 @@ export interface UpdateActionItemDescriptionRequest {
 }
 
 export interface UpdateActionItemRequest {
-  apple_reminder_id?: string | null;
   completed?: boolean | null;
   description?: string | null;
   due_at?: string | null;
-  export_date?: string | null;
-  export_platform?: string | null;
-  exported?: boolean | null;
-  indent_level?: number | null;
-  sort_order?: number | null;
 }
 
 export interface UpdateAnnouncementRequest {
@@ -2674,11 +3102,15 @@ export interface UpdateFolderRequest {
 
 export interface UpdateGoalRequest {
   current_value?: number | null;
+  desired_outcome?: string | null;
+  horizon_at?: string | null;
   max_value?: number | null;
   min_value?: number | null;
+  success_criteria?: Array<string> | null;
   target_value?: number | null;
   title?: string | null;
   unit?: string | null;
+  why_it_matters?: string | null;
 }
 
 export interface UpdateMemoryRequest {
@@ -2837,26 +3269,99 @@ export interface VoiceMessageTranscriptionResponse {
 
 export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary";
 
+export interface WorkIntentReceipt {
+  created_at: string;
+  goal_id?: string | null;
+  newly_created: boolean;
+  receipt_id: string;
+  task_id: string;
+  workstream_id: string;
+}
+
+export interface Workstream {
+  created_at: string;
+  current_state_summary?: string;
+  goal_id?: string | null;
+  last_meaningful_progress_at?: string | null;
+  latest_event_sequence?: number;
+  next_review_at?: string | null;
+  objective: string;
+  status: WorkstreamStatus;
+  title: string;
+  updated_at: string;
+  workstream_id: string;
+}
+
+export interface WorkstreamCreateCandidate {
+  capture_confidence: number;
+  evidence_refs: Array<EvidenceRef>;
+  goal_id?: string | null;
+  ownership_confidence: number;
+  proposed_action?: "create";
+  source_surface: string;
+  subject_kind?: "workstream";
+  workstream_id?: string | null;
+  workstream_proposal: WorkstreamProposal;
+}
+
+export interface WorkstreamDetailProjection {
+  artifacts: Array<ArtifactDescriptor>;
+  checkpoints: Array<ContinuationCheckpoint>;
+  recent_events: Array<WorkstreamEvent>;
+  tasks: Array<ActionItemResponse>;
+  workstream: Workstream;
+}
+
+export interface WorkstreamEvent {
+  created_at: string;
+  event_id: string;
+  evidence_refs?: Array<EvidenceRef>;
+  kind: WorkstreamEventKind;
+  sensitivity: WorkstreamSensitivity;
+  sequence: number;
+  summary: string;
+  workstream_id: string;
+}
+
+export interface WorkstreamEventCreate {
+  evidence_refs?: Array<EvidenceRef>;
+  kind: WorkstreamEventKind;
+  sensitivity?: WorkstreamSensitivity;
+  summary: string;
+}
+
+export type WorkstreamEventKind = "user_note" | "conversation" | "message" | "screen_observation" | "task_change" | "decision" | "agent_update" | "artifact_version" | "external_update" | "system";
+
+export interface WorkstreamProposal {
+  anchor_task: TaskCreatePayload;
+  objective: string;
+  title: string;
+}
+
+export interface WorkstreamProposal_Output {
+  anchor_task: TaskCreatePayload;
+  objective: string;
+  title: string;
+}
+
+export type WorkstreamSensitivity = "normal" | "sensitive" | "restricted";
+
+export type WorkstreamStatus = "open" | "paused" | "completed" | "archived";
+
+export interface WorkstreamUpdate {
+  current_state_summary?: string | null;
+  next_review_at?: string | null;
+  objective?: string | null;
+  status?: WorkstreamStatus | null;
+  title?: string | null;
+}
+
 export interface WrappedStatusResponse {
   error?: string | null;
   progress?: Record<string, unknown> | null;
   result?: Record<string, unknown> | null;
   status: string;
   year?: number;
-}
-
-export interface routers__developer__CreateActionItemRequest {
-  completed?: boolean;
-  description: string;
-  due_at?: string | null;
-}
-
-export type routers__developer__GoalType = "boolean" | "scale" | "numeric";
-
-export interface routers__developer__UpdateActionItemRequest {
-  completed?: boolean | null;
-  description?: string | null;
-  due_at?: string | null;
 }
 
 export interface routers__memories__BatchMemoriesRequest {
@@ -2887,8 +3392,10 @@ export interface OmiApiSchemas {
   "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
   "Action": Action;
   "ActionItem": ActionItem;
+  "ActionItemCreateRequest": ActionItemCreateRequest;
   "ActionItemIdsResponse": ActionItemIdsResponse;
   "ActionItemResponse": ActionItemResponse;
+  "ActionItemUpdateRequest": ActionItemUpdateRequest;
   "ActionItemsResponse": ActionItemsResponse;
   "ActionItemsSearchResponse": ActionItemsSearchResponse;
   "ActionType": ActionType;
@@ -2936,6 +3443,10 @@ export interface OmiApiSchemas {
   "AppThumbnailUploadResponse": AppThumbnailUploadResponse;
   "AppleHealthSyncData": AppleHealthSyncData;
   "AppleHealthSyncResponse": AppleHealthSyncResponse;
+  "ArtifactDescriptor": ArtifactDescriptor;
+  "ArtifactDescriptorCreate": ArtifactDescriptorCreate;
+  "ArtifactStatus": ArtifactStatus;
+  "ArtifactStatusTransitionRequest": ArtifactStatusTransitionRequest;
   "AsanaProjectsResponse": AsanaProjectsResponse;
   "AsanaWorkspacesResponse": AsanaWorkspacesResponse;
   "AssistantSettingsResponse": AssistantSettingsResponse;
@@ -2976,6 +3487,16 @@ export interface OmiApiSchemas {
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
+  "CandidateAction": CandidateAction;
+  "CandidateCreate": CandidateCreate;
+  "CandidateListResponse": CandidateListResponse;
+  "CandidateMigrationReport": CandidateMigrationReport;
+  "CandidateMigrationRequest": CandidateMigrationRequest;
+  "CandidateRecord": CandidateRecord;
+  "CandidateResolutionReceipt": CandidateResolutionReceipt;
+  "CandidateResolutionRequest": CandidateResolutionRequest;
+  "CandidateStatus": CandidateStatus;
+  "CandidateSubjectKind": CandidateSubjectKind;
   "CategoryEnum": CategoryEnum;
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
@@ -2991,6 +3512,8 @@ export interface OmiApiSchemas {
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "ContinuationCheckpoint": ContinuationCheckpoint;
+  "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
   "Conversation": Conversation;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
@@ -3060,6 +3583,9 @@ export interface OmiApiSchemas {
   "ErrorResponse": ErrorResponse;
   "Event": Event;
   "Evidence": Evidence;
+  "EvidenceKind": EvidenceKind;
+  "EvidenceRef": EvidenceRef;
+  "EvidenceScope": EvidenceScope;
   "ExecuteToolRequest": ExecuteToolRequest;
   "ExecuteToolResponse": ExecuteToolResponse;
   "ExternalIntegration": ExternalIntegration;
@@ -3084,8 +3610,19 @@ export interface OmiApiSchemas {
   "Geolocation": Geolocation;
   "GoalCreate": GoalCreate;
   "GoalDeleteResponse": GoalDeleteResponse;
+  "GoalDetailProjection": GoalDetailProjection;
+  "GoalFocusRequest": GoalFocusRequest;
   "GoalHistoryEntryResponse": GoalHistoryEntryResponse;
+  "GoalLifecycleRequest": GoalLifecycleRequest;
+  "GoalMetric": GoalMetric;
+  "GoalOriginWorkIntent": GoalOriginWorkIntent;
+  "GoalProgressEvent": GoalProgressEvent;
+  "GoalProgressEventCreate": GoalProgressEventCreate;
+  "GoalProgressEventKind": GoalProgressEventKind;
+  "GoalRelationshipDisposition": GoalRelationshipDisposition;
   "GoalResponse": GoalResponse;
+  "GoalSource": GoalSource;
+  "GoalStatus": GoalStatus;
   "GoalSuggestionResponse": GoalSuggestionResponse;
   "GoalType": GoalType;
   "GoalUpdate": GoalUpdate;
@@ -3234,9 +3771,25 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "Targeting": Targeting;
   "TaskAssistantSettings": TaskAssistantSettings;
+  "TaskCancelCandidate": TaskCancelCandidate;
+  "TaskCandidate": TaskCandidate;
+  "TaskChangePayload": TaskChangePayload;
+  "TaskCompleteCandidate": TaskCompleteCandidate;
+  "TaskCreateCandidate": TaskCreateCandidate;
+  "TaskCreatePayload": TaskCreatePayload;
+  "TaskGoalLinkImport": TaskGoalLinkImport;
+  "TaskGoalLinkImportReport": TaskGoalLinkImportReport;
+  "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;
   "TaskIntegrationData": TaskIntegrationData;
   "TaskIntegrationMutationResponse": TaskIntegrationMutationResponse;
   "TaskIntegrationsResponse": TaskIntegrationsResponse;
+  "TaskOriginWorkIntent": TaskOriginWorkIntent;
+  "TaskOwner": TaskOwner;
+  "TaskPriority": TaskPriority;
+  "TaskStatus": TaskStatus;
+  "TaskSupersedeCandidate": TaskSupersedeCandidate;
+  "TaskUpdateCandidate": TaskUpdateCandidate;
+  "TaskWorkflowMode": TaskWorkflowMode;
   "TestDailySummaryRequest": TestDailySummaryRequest;
   "TestPromptRequest": TestPromptRequest;
   "TesterAccessRequest": TesterAccessRequest;
@@ -3282,10 +3835,19 @@ export interface OmiApiSchemas {
   "VerifyPhoneNumberResponse": VerifyPhoneNumberResponse;
   "VoiceMessageTranscriptionResponse": VoiceMessageTranscriptionResponse;
   "WebhookType": WebhookType;
+  "WorkIntentReceipt": WorkIntentReceipt;
+  "Workstream": Workstream;
+  "WorkstreamCreateCandidate": WorkstreamCreateCandidate;
+  "WorkstreamDetailProjection": WorkstreamDetailProjection;
+  "WorkstreamEvent": WorkstreamEvent;
+  "WorkstreamEventCreate": WorkstreamEventCreate;
+  "WorkstreamEventKind": WorkstreamEventKind;
+  "WorkstreamProposal": WorkstreamProposal;
+  "WorkstreamProposal-Output": WorkstreamProposal_Output;
+  "WorkstreamSensitivity": WorkstreamSensitivity;
+  "WorkstreamStatus": WorkstreamStatus;
+  "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
-  "routers__developer__CreateActionItemRequest": routers__developer__CreateActionItemRequest;
-  "routers__developer__GoalType": routers__developer__GoalType;
-  "routers__developer__UpdateActionItemRequest": routers__developer__UpdateActionItemRequest;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
   "routers__memories__BatchMemoriesResponse": routers__memories__BatchMemoriesResponse;
   "routers__payment__PricingOption": routers__payment__PricingOption;
@@ -4091,6 +4653,85 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/candidates": {
+    get: {
+      operationId: "list_candidates_v1_candidates_get";
+      responses: {
+        "200": CandidateListResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_candidate_v1_candidates_post";
+      responses: {
+        "200": CandidateRecord;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/integrations/drain": {
+    post: {
+      operationId: "drain_candidate_integrations_v1_candidates_integrations_drain_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/migrate-staged": {
+    post: {
+      operationId: "migrate_staged_candidates_v1_candidates_migrate_staged_post";
+      responses: {
+        "200": CandidateMigrationReport;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/{candidate_id}": {
+    get: {
+      operationId: "get_candidate_v1_candidates__candidate_id__get";
+      responses: {
+        "200": CandidateRecord;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/{candidate_id}/accept": {
+    post: {
+      operationId: "accept_candidate_v1_candidates__candidate_id__accept_post";
+      responses: {
+        "200": CandidateResolutionReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/{candidate_id}/expire": {
+    post: {
+      operationId: "expire_candidate_v1_candidates__candidate_id__expire_post";
+      responses: {
+        "200": CandidateResolutionReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/{candidate_id}/reject": {
+    post: {
+      operationId: "reject_candidate_v1_candidates__candidate_id__reject_post";
+      responses: {
+        "200": CandidateResolutionReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations": {
     get: {
       operationId: "get_conversations_v1_conversations_get";
@@ -4889,6 +5530,36 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/goals/{goal_id}/detail": {
+    get: {
+      operationId: "get_goal_detail_v1_goals__goal_id__detail_get";
+      responses: {
+        "200": GoalDetailProjection;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/{goal_id}/focus": {
+    post: {
+      operationId: "focus_goal_v1_goals__goal_id__focus_post";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "unfocus_goal_v1_goals__goal_id__focus_delete";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/goals/{goal_id}/history": {
     get: {
       operationId: "get_goal_history_v1_goals__goal_id__history_get";
@@ -4900,6 +5571,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/goals/{goal_id}/lifecycle": {
+    post: {
+      operationId: "transition_goal_lifecycle_v1_goals__goal_id__lifecycle_post";
+      responses: {
+        "200": GoalResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/goals/{goal_id}/progress": {
     patch: {
       operationId: "update_goal_progress_v1_goals__goal_id__progress_patch";
@@ -4907,6 +5588,25 @@ export interface OmiApiPaths {
         "200": GoalResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/{goal_id}/progress-events": {
+    get: {
+      operationId: "list_goal_progress_events_v1_goals__goal_id__progress_events_get";
+      responses: {
+        "200": Array<GoalProgressEvent>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "append_goal_progress_event_v1_goals__goal_id__progress_events_post";
+      responses: {
+        "200": GoalProgressEvent;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -6365,6 +7065,116 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/work-intents": {
+    post: {
+      operationId: "resolve_work_intent_v1_work_intents_post";
+      responses: {
+        "200": WorkIntentReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workflow-migrations/task-goal-links": {
+    post: {
+      operationId: "import_task_goal_links_v1_workflow_migrations_task_goal_links_post";
+      responses: {
+        "200": TaskGoalLinkImportReport;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}": {
+    get: {
+      operationId: "get_workstream_detail_v1_workstreams__workstream_id__get";
+      responses: {
+        "200": WorkstreamDetailProjection;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_workstream_v1_workstreams__workstream_id__patch";
+      responses: {
+        "200": Workstream;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}/artifacts": {
+    get: {
+      operationId: "list_artifact_descriptors_v1_workstreams__workstream_id__artifacts_get";
+      responses: {
+        "200": Array<ArtifactDescriptor>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_artifact_descriptor_v1_workstreams__workstream_id__artifacts_post";
+      responses: {
+        "200": ArtifactDescriptor;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}/artifacts/{artifact_id}/status": {
+    patch: {
+      operationId: "transition_artifact_status_v1_workstreams__workstream_id__artifacts__artifact_id__status_patch";
+      responses: {
+        "200": ArtifactDescriptor;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}/checkpoints": {
+    get: {
+      operationId: "list_continuation_checkpoints_v1_workstreams__workstream_id__checkpoints_get";
+      responses: {
+        "200": Array<ContinuationCheckpoint>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}/checkpoints/{runtime_id}": {
+    put: {
+      operationId: "upsert_continuation_checkpoint_v1_workstreams__workstream_id__checkpoints__runtime_id__put";
+      responses: {
+        "200": ContinuationCheckpoint;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/workstreams/{workstream_id}/events": {
+    get: {
+      operationId: "list_workstream_events_v1_workstreams__workstream_id__events_get";
+      responses: {
+        "200": Array<WorkstreamEvent>;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "append_workstream_event_v1_workstreams__workstream_id__events_post";
+      responses: {
+        "200": WorkstreamEvent;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/wrapped/{year}": {
     get: {
       operationId: "get_wrapped_status_v1_wrapped__year__get";
@@ -6776,7 +7586,7 @@ export async function get_action_items_v1_action_items_get(query: { limit?: numb
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_action_item_v1_action_items_post(body: CreateActionItemRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
+export async function create_action_item_v1_action_items_post(body: ActionItemCreateRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items`;
   const _search = "";
@@ -6810,7 +7620,7 @@ export async function accept_shared_action_items_v1_action_items_accept_post(bod
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_action_items_batch_v1_action_items_batch_post(body: Array<CreateActionItemRequest>, init?: OmiApiClientInit): Promise<BatchCreateActionItemsResponse> {
+export async function create_action_items_batch_v1_action_items_batch_post(body: Array<ActionItemCreateRequest>, init?: OmiApiClientInit): Promise<BatchCreateActionItemsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/batch`;
   const _search = "";
@@ -6976,7 +7786,7 @@ export async function get_action_item_v1_action_items__action_item_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_action_item_v1_action_items__action_item_id__patch(path: { action_item_id: string }, body: UpdateActionItemRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
+export async function update_action_item_v1_action_items__action_item_id__patch(path: { action_item_id: string }, body: ActionItemUpdateRequest, init?: OmiApiClientInit): Promise<ActionItemResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/${path.action_item_id}`;
   const _search = "";
@@ -8069,6 +8879,140 @@ export async function get_calendar_onboarding_status_v1_calendar_onboarding_stat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function create_candidate_v1_candidates_post(body: CandidateCreate, init?: OmiApiClientInit): Promise<CandidateRecord> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function drain_candidate_integrations_v1_candidates_integrations_drain_post(query: { limit?: number }, init?: OmiApiClientInit): Promise<unknown> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/integrations/drain`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function migrate_staged_candidates_v1_candidates_migrate_staged_post(body: CandidateMigrationRequest, init?: OmiApiClientInit): Promise<CandidateMigrationReport> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/migrate-staged`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_candidate_v1_candidates__candidate_id__get(path: { candidate_id: string }, init?: OmiApiClientInit): Promise<CandidateRecord> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/${path.candidate_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function accept_candidate_v1_candidates__candidate_id__accept_post(path: { candidate_id: string }, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/${path.candidate_id}/accept`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function expire_candidate_v1_candidates__candidate_id__expire_post(path: { candidate_id: string }, body: CandidateResolutionRequest, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/${path.candidate_id}/expire`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function reject_candidate_v1_candidates__candidate_id__reject_post(path: { candidate_id: string }, body: CandidateResolutionRequest, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/${path.candidate_id}/reject`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
@@ -8684,7 +9628,7 @@ export async function listActionItems(query: { conversation_id?: string | null, 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function createActionItem(body: routers__developer__CreateActionItemRequest, init?: OmiApiClientInit): Promise<DeveloperActionItem> {
+export async function createActionItem(body: CreateActionItemRequest, init?: OmiApiClientInit): Promise<DeveloperActionItem> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/action-items`;
   const _search = "";
@@ -8718,7 +9662,7 @@ export async function createActionItemsBatch(body: BatchActionItemsRequest, init
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function updateActionItem(path: { action_item_id: string }, body: routers__developer__UpdateActionItemRequest, init?: OmiApiClientInit): Promise<DeveloperActionItem> {
+export async function updateActionItem(path: { action_item_id: string }, body: UpdateActionItemRequest, init?: OmiApiClientInit): Promise<DeveloperActionItem> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/action-items/${path.action_item_id}`;
   const _search = "";
@@ -9298,10 +10242,13 @@ export async function get_current_goal_advice_v1_goals_advice_get(init?: OmiApiC
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_all_goals_v1_goals_all_get(init?: OmiApiClientInit): Promise<Array<GoalResponse>> {
+export async function get_all_goals_v1_goals_all_get(query: { include_ended?: boolean }, init?: OmiApiClientInit): Promise<Array<GoalResponse>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/all`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
@@ -9392,6 +10339,53 @@ export async function get_goal_advice_v1_goals__goal_id__advice_get(path: { goal
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_goal_detail_v1_goals__goal_id__detail_get(path: { goal_id: string }, init?: OmiApiClientInit): Promise<GoalDetailProjection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/detail`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function focus_goal_v1_goals__goal_id__focus_post(path: { goal_id: string }, body: GoalFocusRequest, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/focus`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function unfocus_goal_v1_goals__goal_id__focus_delete(path: { goal_id: string }, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/focus`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_goal_history_v1_goals__goal_id__history_get(path: { goal_id: string }, query: { days?: number }, init?: OmiApiClientInit): Promise<Array<GoalHistoryEntryResponse>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/${path.goal_id}/history`;
@@ -9410,6 +10404,23 @@ export async function get_goal_history_v1_goals__goal_id__history_get(path: { go
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function transition_goal_lifecycle_v1_goals__goal_id__lifecycle_post(path: { goal_id: string }, body: GoalLifecycleRequest, init?: OmiApiClientInit): Promise<GoalResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/lifecycle`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function update_goal_progress_v1_goals__goal_id__progress_patch(path: { goal_id: string }, query: { current_value: number }, init?: OmiApiClientInit): Promise<GoalResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/${path.goal_id}/progress`;
@@ -9423,6 +10434,41 @@ export async function update_goal_progress_v1_goals__goal_id__progress_patch(pat
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_goal_progress_events_v1_goals__goal_id__progress_events_get(path: { goal_id: string }, query: { limit?: number }, init?: OmiApiClientInit): Promise<Array<GoalProgressEvent>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/progress-events`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function append_goal_progress_event_v1_goals__goal_id__progress_events_post(path: { goal_id: string }, body: GoalProgressEventCreate, init?: OmiApiClientInit): Promise<GoalProgressEvent> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/${path.goal_id}/progress-events`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -11768,6 +12814,191 @@ export async function update_transcription_preferences_endpoint_v1_users_transcr
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function resolve_work_intent_v1_work_intents_post(body: TaskOriginWorkIntent | GoalOriginWorkIntent, init?: OmiApiClientInit): Promise<WorkIntentReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/work-intents`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function import_task_goal_links_v1_workflow_migrations_task_goal_links_post(body: TaskGoalLinkImportRequest, init?: OmiApiClientInit): Promise<TaskGoalLinkImportReport> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workflow-migrations/task-goal-links`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_workstream_detail_v1_workstreams__workstream_id__get(path: { workstream_id: string }, init?: OmiApiClientInit): Promise<WorkstreamDetailProjection> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_workstream_v1_workstreams__workstream_id__patch(path: { workstream_id: string }, body: WorkstreamUpdate, init?: OmiApiClientInit): Promise<Workstream> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_artifact_descriptors_v1_workstreams__workstream_id__artifacts_get(path: { workstream_id: string }, query: { limit?: number }, init?: OmiApiClientInit): Promise<Array<ArtifactDescriptor>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/artifacts`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function create_artifact_descriptor_v1_workstreams__workstream_id__artifacts_post(path: { workstream_id: string }, body: ArtifactDescriptorCreate, init?: OmiApiClientInit): Promise<ArtifactDescriptor> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/artifacts`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function transition_artifact_status_v1_workstreams__workstream_id__artifacts__artifact_id__status_patch(path: { workstream_id: string, artifact_id: string }, body: ArtifactStatusTransitionRequest, init?: OmiApiClientInit): Promise<ArtifactDescriptor> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/artifacts/${path.artifact_id}/status`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_continuation_checkpoints_v1_workstreams__workstream_id__checkpoints_get(path: { workstream_id: string }, init?: OmiApiClientInit): Promise<Array<ContinuationCheckpoint>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/checkpoints`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function upsert_continuation_checkpoint_v1_workstreams__workstream_id__checkpoints__runtime_id__put(path: { workstream_id: string, runtime_id: string }, body: ContinuationCheckpointUpsert, init?: OmiApiClientInit): Promise<ContinuationCheckpoint> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/checkpoints/${path.runtime_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_workstream_events_v1_workstreams__workstream_id__events_get(path: { workstream_id: string }, query: { after_sequence?: number, limit?: number }, init?: OmiApiClientInit): Promise<Array<WorkstreamEvent>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/events`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function append_workstream_event_v1_workstreams__workstream_id__events_post(path: { workstream_id: string }, body: WorkstreamEventCreate, init?: OmiApiClientInit): Promise<WorkstreamEvent> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/workstreams/${path.workstream_id}/events`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_wrapped_status_v1_wrapped__year__get(path: { year: number }, init?: OmiApiClientInit): Promise<WrappedStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/wrapped/${path.year}`;
@@ -12374,4 +13605,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 368 client methods generated.

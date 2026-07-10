@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "create_request": {
+    "description": "Send the budget",
+    "due_at": "2026-07-10T17:00:00Z",
+    "due_confidence": 0.9,
+    "goal_id": "goal-1",
+    "workstream_id": "workstream-1",
+    "owner": "user",
+    "source": "conversation",
+    "status": "active",
+    "priority": "high",
+    "provenance": [
+      {
+        "kind": "conversation",
+        "id": "conversation-1",
+        "scope": "canonical"
+      },
+      {
+        "kind": "local_screen",
+        "id": "screen-1",
+        "scope": "device_local",
+        "device_id": "mac-1"
+      }
+    ],
+    "sort_order": 4,
+    "indent_level": 1,
+    "recurrence_rule": "weekly",
+    "recurrence_parent_id": "task-parent"
+  },
+  "create_response": {
+    "id": "task-1",
+    "task_id": "task-1",
+    "description": "Send the budget",
+    "completed": false,
+    "created_at": "2026-07-09T12:00:00Z",
+    "updated_at": "2026-07-09T12:01:00Z",
+    "completed_at": null,
+    "due_at": "2026-07-10T17:00:00Z",
+    "due_confidence": 0.9,
+    "goal_id": "goal-1",
+    "workstream_id": "workstream-1",
+    "owner": "user",
+    "source": "conversation",
+    "status": "active",
+    "priority": "high",
+    "provenance": [
+      {
+        "kind": "conversation",
+        "id": "conversation-1",
+        "scope": "canonical"
+      },
+      {
+        "kind": "local_screen",
+        "id": "screen-1",
+        "scope": "device_local",
+        "device_id": "mac-1"
+      }
+    ],
+    "sort_order": 4,
+    "indent_level": 1,
+    "recurrence_rule": "weekly",
+    "recurrence_parent_id": "task-parent"
+  },
+  "list_response": {
+    "action_items": [
+      {
+        "id": "task-1",
+        "task_id": "task-1",
+        "description": "Send the budget",
+        "completed": false,
+        "created_at": "2026-07-09T12:00:00Z",
+        "updated_at": "2026-07-09T12:01:00Z",
+        "completed_at": null,
+        "due_at": "2026-07-10T17:00:00Z",
+        "due_confidence": 0.9,
+        "goal_id": "goal-1",
+        "workstream_id": "workstream-1",
+        "owner": "user",
+        "source": "conversation",
+        "status": "active",
+        "priority": "high",
+        "provenance": [
+          {
+            "kind": "conversation",
+            "id": "conversation-1",
+            "scope": "canonical"
+          },
+          {
+            "kind": "local_screen",
+            "id": "screen-1",
+            "scope": "device_local",
+            "device_id": "mac-1"
+          }
+        ],
+        "sort_order": 4,
+        "indent_level": 1,
+        "recurrence_rule": "weekly",
+        "recurrence_parent_id": "task-parent"
+      }
+    ],
+    "has_more": false
+  },
+  "update_request": {
+    "description": "Send the revised budget",
+    "completed": true,
+    "status": "completed",
+    "due_confidence": 1.0,
+    "goal_id": "goal-1",
+    "workstream_id": "workstream-1",
+    "owner": "user",
+    "source": "agent",
+    "priority": "medium",
+    "provenance": [
+      {
+        "kind": "artifact",
+        "id": "artifact-1",
+        "scope": "canonical",
+        "version": "2"
+      }
+    ],
+    "sort_order": 5,
+    "indent_level": 2,
+    "recurrence_rule": "monthly",
+    "recurrence_parent_id": "task-parent"
+  },
+  "update_response": {
+    "id": "task-1",
+    "task_id": "task-1",
+    "description": "Send the revised budget",
+    "completed": true,
+    "created_at": "2026-07-09T12:00:00Z",
+    "updated_at": "2026-07-09T13:00:00Z",
+    "completed_at": "2026-07-09T13:00:00Z",
+    "due_at": "2026-07-10T17:00:00Z",
+    "due_confidence": 1.0,
+    "goal_id": "goal-1",
+    "workstream_id": "workstream-1",
+    "owner": "user",
+    "source": "agent",
+    "status": "completed",
+    "priority": "medium",
+    "provenance": [
+      {
+        "kind": "artifact",
+        "id": "artifact-1",
+        "scope": "canonical",
+        "version": "2"
+      }
+    ],
+    "sort_order": 5,
+    "indent_level": 2,
+    "recurrence_rule": "monthly",
+    "recurrence_parent_id": "task-parent"
+  },
+  "linked_workstream": {
+    "workstream_id": "workstream-1",
+    "title": "Investor update",
+    "objective": "Send investors an accurate budget update",
+    "status": "open",
+    "goal_id": "goal-1",
+    "current_state_summary": "Budget revision is ready to send",
+    "latest_event_sequence": 3,
+    "created_at": "2026-07-09T11:00:00Z",
+    "updated_at": "2026-07-09T13:00:00Z"
+  },
+  "legacy_response": {
+    "id": "legacy-task-1",
+    "description": "Legacy task",
+    "completed": false,
+    "created_at": "2026-07-09T10:00:00Z",
+    "goal_id": null,
+    "workstream_id": null
+  }
+}
