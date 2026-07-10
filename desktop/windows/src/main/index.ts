@@ -543,10 +543,17 @@ app.whenReady().then(async () => {
   ipcMain.on('tray:state', (_e, state) => updateTrayState(state))
 
   // Launch-at-login (writes the HKCU Run key; --hidden → tray-only start).
+  // Packaged builds only: in dev process.execPath is the bare electron.exe
+  // WITHOUT the app path, so a dev-written Run entry would launch an empty
+  // Electron shell at every login (found live during Phase 1 verification).
   ipcMain.handle('app:get-login-item', () => ({
-    openAtLogin: app.getLoginItemSettings().openAtLogin
+    openAtLogin: app.isPackaged ? app.getLoginItemSettings().openAtLogin : false
   }))
   ipcMain.handle('app:set-login-item', (_e, enabled: boolean) => {
+    if (!app.isPackaged) {
+      console.log('[login-item] skipped in dev (execPath is bare electron.exe)')
+      return
+    }
     app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath, args: ['--hidden'] })
   })
 
