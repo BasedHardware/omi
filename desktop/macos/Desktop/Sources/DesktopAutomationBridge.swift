@@ -1378,7 +1378,9 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "resume_agent_stream is disabled on production bundles"]
       }
-      return await AgentRuntimeProcess.shared.debugResumeStream()
+      // debugResumeStream is nonisolated (off-actor SIGCONT) so it returns promptly
+      // even when the actor is blocked writing to the frozen process.
+      return AgentRuntimeProcess.shared.debugResumeStream()
     }
 
     register(
