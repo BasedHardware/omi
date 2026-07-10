@@ -37,12 +37,4 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
  */
 struct bt_conn *get_current_connection();
 
-/**
- * @brief Move the active BLE connection to low-power (slow interval + slave
- *        latency) or back to fast streaming params. No-op if not connected.
- *
- * Used to cut connection radio power while the mic is in AAD sleep.
- */
-void transport_conn_set_lowpower(bool low);
-
 #endif // TRANSPORT_H

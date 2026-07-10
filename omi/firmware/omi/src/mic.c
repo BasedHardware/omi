@@ -361,9 +361,8 @@ static void enter_hw_aad(void)
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
     /* BLE keeps advertising during sleep so a phone can connect at any time.
-     * If a phone IS connected, drop the link to low-power params (no audio to
-     * stream while asleep) to cut the connection's radio wakeups. */
-    transport_conn_set_lowpower(true);
+     * Connection parameters are left as negotiated -- forcing slow interval +
+     * slave latency here was causing dropped BLE connections. */
     /* Keep the SD powered while a phone is connected so it can sync recordings at
      * any time; only cut SD power when offline + idle. */
     if (!is_connected) {
@@ -390,10 +389,9 @@ static void exit_hw_aad(void)
     aad_wake_irq(false);
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
-    atomic_set(&aad_woke, 1);           /* reset silence timer in mic ctx */
-    transport_conn_set_lowpower(false); /* fast params for streaming (if connected) */
-    sd_request_power(true);             /* power on + remount SD before audio starts flowing */
-    mic_resume();                       /* dmic START reclaims CLK via pinctrl */
+    atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
+    sd_request_power(true);   /* power on + remount SD before audio starts flowing */
+    mic_resume();             /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 

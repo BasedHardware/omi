@@ -50,9 +50,6 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
-/* Set while we deliberately hold the link at low-power (slow) params during AAD
- * sleep, so the auto "interval too high -> re-request fast" logic stays quiet. */
-static atomic_t conn_lowpower = ATOMIC_INIT(0);
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -675,7 +672,6 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     is_connected = false;
-    atomic_set(&conn_lowpower, 0); /* next connection starts at fast params */
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_disable();
@@ -726,7 +722,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             latency,
             supervision_timeout);
 
-    if (interval > 24 && !atomic_get(&conn_lowpower)) {
+    if (interval > 24) {
         LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
         update_conn_params(conn);
     }
@@ -805,43 +801,6 @@ static void update_conn_params(struct bt_conn *conn)
     }
 
     LOG_WRN("bt_conn_le_param_update() still failed after retries (last err %d)", err);
-}
-
-void transport_conn_set_lowpower(bool low)
-{
-    /* Flag first so _le_param_updated() does not fight a slow interval. */
-    atomic_set(&conn_lowpower, low ? 1 : 0);
-
-    struct bt_conn *conn = current_connection;
-    if (conn == NULL) {
-        return; /* advertising-only: no link to slow down */
-    }
-    /* While the mic is in AAD sleep there is no audio to stream, so drop the
-     * connection to a slow interval + slave latency -> the net core services the
-     * radio a few times/sec instead of ~100x/sec. Fast params are restored on
-     * wake for low-latency streaming. */
-    const struct bt_le_conn_param slow = {
-        /* Small base interval so audio throughput is high the instant the mic
-         * wakes (avoids dropping the first ~1 s of speech during the slow->fast
-         * renegotiation); slave latency still skips idle events to save power. */
-        .interval_min = 32, /* 40 ms */
-        .interval_max = 40, /* 50 ms */
-        .latency = 2,
-        .timeout = 400, /* 4 s */
-    };
-    const struct bt_le_conn_param fast = {
-        .interval_min = 6,  /* 7.5 ms */
-        .interval_max = 12, /* 15 ms */
-        .latency = 0,
-        .timeout = 400,
-    };
-    const struct bt_le_conn_param *p = low ? &slow : &fast;
-    int err = bt_conn_le_param_update(conn, p);
-    if (err) {
-        LOG_WRN("conn param %s update failed (err %d)", low ? "slow" : "fast", err);
-    } else {
-        LOG_INF("conn params -> %s", low ? "low-power (200ms, latency 4)" : "fast (7.5-15ms)");
-    }
 }
 
 static void update_phy(struct bt_conn *conn)
