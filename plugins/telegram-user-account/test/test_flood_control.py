@@ -72,6 +72,26 @@ class TestRateLimit:
         rl = flood_control.RateLimit(max_per_hour=5, clock=lambda: 1000.0)
         assert rl.seconds_until_next_slot() == 0
 
+    def test_seconds_until_next_slot_reservations_only_no_crash(self):
+        """Edge case: capacity exhausted ONLY by in-flight reservations
+        (no committed sends). Must NOT crash with IndexError.
+        See cubic review #4669301493."""
+        rl = flood_control.RateLimit(max_per_hour=1, window_seconds=3600, clock=lambda: 1000.0)
+        assert rl.reserve_slot() is True
+        # _send_times is empty but effective_count == max_per_hour.
+        # Must return a positive int, not crash.
+        wait = rl.seconds_until_next_slot()
+        assert isinstance(wait, int)
+        assert wait >= 1
+
+    def test_in_window_count_includes_reservations(self):
+        """in_window_count accounts for reserved slots."""
+        rl = flood_control.RateLimit(max_per_hour=5, clock=lambda: 1000.0)
+        rl.record_send()
+        rl.record_send()
+        rl.reserve_slot()
+        assert rl.in_window_count() == 3  # 2 committed + 1 reserved
+
     def test_in_window_count(self):
         rl = flood_control.RateLimit(max_per_hour=10, clock=lambda: 1000.0)
         assert rl.in_window_count() == 0

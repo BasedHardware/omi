@@ -240,6 +240,15 @@ class RateLimit:
                 return 0
             # If we're full (committed + reserved), the caller
             # must wait for the oldest committed send to age out.
+            # Edge case: capacity is exhausted ONLY by in-flight
+            # reservations (no committed sends yet). We can't
+            # compute a rolling-window wait because _send_times
+            # is empty. Return a conservative estimate: the
+            # reservation will be released when the persona API
+            # call completes (timeout ~30-60s). Return the full
+            # window as a safe upper bound.
+            if not self._send_times:
+                return max(1, self.window_seconds)
             oldest = self._send_times[0]
             wait = self.window_seconds - (now - oldest)
             return max(1, int(wait))
