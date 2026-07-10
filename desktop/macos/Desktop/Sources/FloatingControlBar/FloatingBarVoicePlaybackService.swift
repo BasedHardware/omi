@@ -518,7 +518,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       player.enableRate = true
       player.rate = playbackRate
       player.prepareToPlay()
-      let started = !UserDefaults.standard.bool(forKey: "forceTTSPlaybackStartFalse")
+      let started = !UserDefaults.standard.bool(forKey: .forceTTSPlaybackStartFalse)
         && player.play()
       guard VoicePlaybackStartPolicy.accepts(started: started) else {
         throw NSError(
