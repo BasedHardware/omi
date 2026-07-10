@@ -39,6 +39,7 @@ from routers import (
     oauth,
     auth,
     action_items,
+    candidates,
     task_integrations,
     integrations,
     x_connector,
@@ -117,6 +118,7 @@ app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
+app.include_router(candidates.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)

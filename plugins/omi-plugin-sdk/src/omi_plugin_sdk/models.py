@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -51,6 +51,14 @@ class ActionItem(BaseModel):
     conversation_id: Optional[str] = Field(
         default=None, description="ID of the conversation this action item came from"
     )
+    capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
+        None
+    )
+    capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    candidate_action: Optional[Literal['create', 'update', 'complete']] = None
+    target_task_id: Optional[str] = None
 
     @staticmethod
     def actions_to_string(action_items: List["ActionItem"]) -> str:

@@ -93,6 +93,7 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -152,6 +153,7 @@ def _get_structured(
     people: Optional[List[Person]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        task_intelligence_capture = conversation_capture.capture_enabled(uid)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = users_db.get_user_language_preference(uid) or language_code
@@ -191,6 +193,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates(uid, structured),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        task_intelligence_capture=task_intelligence_capture,
                     )
                 return structured, False
 
@@ -242,6 +245,7 @@ def _get_structured(
                     photos=main_conv.photos,
                     existing_action_items=_fetch_dedup_candidates(uid, structured),
                     output_language_code=user_language,
+                    task_intelligence_capture=task_intelligence_capture,
                 )
             return structured, False
 
@@ -279,6 +283,7 @@ def _get_structured(
                 existing_action_items=_fetch_dedup_candidates(uid, structured),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                task_intelligence_capture=task_intelligence_capture,
             )
         return structured, False
     except Exception as e:
@@ -731,6 +736,9 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
+    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+        return
+
     action_items_data: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
 
@@ -744,6 +752,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
+            **conversation_capture.canonical_fields(action_item, conversation.id),
         }
         action_items_data.append(action_item_data)
 
@@ -753,10 +762,38 @@ def _save_action_items(uid: str, conversation: Conversation):
         old_ids = [item['id'] for item in old_items]
         if old_ids:
             delete_action_item_vectors_batch(uid, old_ids)
-        action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        document_ids = conversation_capture.legacy_document_ids(
+            uid,
+            conversation.id,
+            conversation.structured.action_items,
+        )
+        if document_ids is None:
+            action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        else:
+            action_items_db.retire_action_items_for_conversation(
+                uid,
+                conversation.id,
+                active_ids=document_ids,
+                replacements=conversation_capture.legacy_replacement_map(
+                    old_items,
+                    conversation.structured.action_items,
+                    document_ids,
+                ),
+            )
         # Save new action items
-        action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        action_item_ids = action_items_db.create_action_items_batch(
+            uid,
+            action_items_data,
+            document_ids=document_ids,
+        )
         logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+        conversation_capture.reconcile_after_legacy(
+            uid,
+            conversation.id,
+            conversation.structured.action_items,
+            action_item_ids,
+        )
 
         # Send FCM data messages for action items with due dates
         for idx, action_item in enumerate(conversation.structured.action_items):

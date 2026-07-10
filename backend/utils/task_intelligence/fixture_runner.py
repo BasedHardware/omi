@@ -1,17 +1,12 @@
 """Hermetic runners for versioned task-intelligence fixtures."""
 
-from dataclasses import dataclass
 from collections.abc import Callable
 from typing import Any
 
+from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capture_policy
+
 NormalizedSignals = dict[str, Any]
 FixtureAdapter = Callable[[dict[str, Any]], NormalizedSignals]
-
-
-@dataclass(frozen=True)
-class CapturePolicyResult:
-    outcome: str
-    interruption: str
 
 
 def _capture_stub_output(payload: dict[str, Any], *, modality: str) -> NormalizedSignals:
@@ -48,26 +43,6 @@ TEST_ADAPTERS: dict[str, FixtureAdapter] = {
     'legacy_reconciliation_contract': legacy_reconciliation_contract,
 }
 KNOWN_TEST_ADAPTERS = frozenset(TEST_ADAPTERS)
-
-
-def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
-    """Apply the deterministic part of the shared capture policy."""
-
-    if signals.get('duplicate_of'):
-        return CapturePolicyResult('propose_enrichment', 'none')
-    if signals.get('refines_task'):
-        return CapturePolicyResult('propose_update', 'none')
-    if signals.get('already_done'):
-        return CapturePolicyResult('propose_completion', 'inline_review')
-    if signals.get('public_broadcast') and not signals.get('direct_mention'):
-        return CapturePolicyResult('ignore', 'none')
-    if signals.get('explicit_command'):
-        return CapturePolicyResult('create_direct', 'invoking_surface_only')
-    if signals.get('clear_commitment') and signals.get('concrete_deliverable') and signals.get('owner') == 'user':
-        return CapturePolicyResult('auto_accept_silent', 'none')
-    if signals.get('direct_request') or signals.get('inferred_next_step'):
-        return CapturePolicyResult('pending_candidate', 'none')
-    return CapturePolicyResult('ignore', 'none')
 
 
 def run_capture_case(case: dict[str, Any], modality: str) -> CapturePolicyResult:

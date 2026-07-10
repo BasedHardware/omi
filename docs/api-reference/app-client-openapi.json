@@ -121,6 +121,68 @@
       },
       "ActionItem": {
         "properties": {
+          "candidate_action": {
+            "anyOf": [
+              {
+                "enum": [
+                  "create",
+                  "update",
+                  "complete"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Action"
+          },
+          "capture_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Confidence"
+          },
+          "capture_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "explicit_command",
+                  "clear_commitment",
+                  "direct_request",
+                  "inferred_next_step"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Kind"
+          },
+          "capture_owner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "other",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Owner"
+          },
           "completed": {
             "default": false,
             "title": "Completed",
@@ -182,6 +244,30 @@
             "description": "When the action item is due",
             "title": "Due At"
           },
+          "ownership_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownership Confidence"
+          },
+          "target_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Task Id"
+          },
           "updated_at": {
             "anyOf": [
               {
@@ -202,6 +288,222 @@
         "title": "ActionItem",
         "type": "object"
       },
+      "ActionItemCreateRequest": {
+        "description": "Released-client adapter; unknown historical fields remain ignored at this route boundary.",
+        "properties": {
+          "apple_reminder_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apple Reminder Id"
+          },
+          "completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "description": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Confidence"
+          },
+          "export_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Date"
+          },
+          "export_platform": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Platform"
+          },
+          "exported": {
+            "default": false,
+            "title": "Exported",
+            "type": "boolean"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "indent_level": {
+            "default": 0,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Indent Level",
+            "type": "integer"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/TaskOwner",
+            "default": "user"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Provenance",
+            "type": "array"
+          },
+          "recurrence_parent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Parent Id"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "sort_order": {
+            "default": 0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "source": {
+            "default": "manual",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ActionItemCreateRequest",
+        "type": "object"
+      },
       "ActionItemIdsResponse": {
         "properties": {
           "ids": {
@@ -219,6 +521,7 @@
         "type": "object"
       },
       "ActionItemResponse": {
+        "description": "Canonical response plus stable fields required by deployed old clients.",
         "properties": {
           "apple_reminder_id": {
             "anyOf": [
@@ -286,6 +589,19 @@
             ],
             "title": "Due At"
           },
+          "due_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Confidence"
+          },
           "export_date": {
             "anyOf": [
               {
@@ -314,7 +630,24 @@
             "title": "Exported",
             "type": "boolean"
           },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
           "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Id",
             "type": "string"
           },
@@ -328,10 +661,93 @@
             "title": "Is Locked",
             "type": "boolean"
           },
+          "owner": {
+            "$ref": "#/components/schemas/TaskOwner",
+            "default": "unknown"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Provenance",
+            "type": "array"
+          },
+          "recurrence_parent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Parent Id"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
           "sort_order": {
             "default": 0,
             "title": "Sort Order",
             "type": "integer"
+          },
+          "source": {
+            "default": "legacy",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus",
+            "default": "active"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
           },
           "updated_at": {
             "anyOf": [
@@ -344,6 +760,20 @@
               }
             ],
             "title": "Updated At"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
           }
         },
         "required": [
@@ -352,6 +782,263 @@
           "completed"
         ],
         "title": "ActionItemResponse",
+        "type": "object"
+      },
+      "ActionItemUpdateRequest": {
+        "description": "Released-client adapter with the desktop's explicit due-date clearing flag.",
+        "properties": {
+          "apple_reminder_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apple Reminder Id"
+          },
+          "clear_due_at": {
+            "default": false,
+            "title": "Clear Due At",
+            "type": "boolean"
+          },
+          "completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Confidence"
+          },
+          "export_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Date"
+          },
+          "export_platform": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Platform"
+          },
+          "exported": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "indent_level": {
+            "anyOf": [
+              {
+                "maximum": 3.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indent Level"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskOwner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EvidenceRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          },
+          "recurrence_parent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Parent Id"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "title": "ActionItemUpdateRequest",
         "type": "object"
       },
       "ActionItemsResponse": {
@@ -3211,7 +3898,7 @@
           "action_items": {
             "description": "List of action items to create",
             "items": {
-              "$ref": "#/components/schemas/routers__developer__CreateActionItemRequest"
+              "$ref": "#/components/schemas/CreateActionItemRequest"
             },
             "maxItems": 50,
             "title": "Action Items",
@@ -3951,6 +4638,659 @@
         },
         "title": "CancelSubscriptionRequest",
         "type": "object"
+      },
+      "CandidateAction": {
+        "enum": [
+          "create",
+          "update",
+          "complete",
+          "cancel",
+          "supersede"
+        ],
+        "title": "CandidateAction",
+        "type": "string"
+      },
+      "CandidateCreate": {
+        "description": "Strict request union; each wire arm contains only fields valid for that action.",
+        "discriminator": {
+          "mapping": {
+            "task": "#/components/schemas/TaskCandidate",
+            "workstream": "#/components/schemas/WorkstreamCreateCandidate"
+          },
+          "propertyName": "subject_kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskCandidate"
+          },
+          {
+            "$ref": "#/components/schemas/WorkstreamCreateCandidate"
+          }
+        ],
+        "title": "CandidateCreate"
+      },
+      "CandidateListResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateRecord"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidates"
+        ],
+        "title": "CandidateListResponse",
+        "type": "object"
+      },
+      "CandidateMigrationReport": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint"
+          },
+          "created": {
+            "minimum": 0.0,
+            "title": "Created",
+            "type": "integer"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "failed": {
+            "minimum": 0.0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "failure_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Failure Ids",
+            "type": "array"
+          },
+          "reconciled": {
+            "minimum": 0.0,
+            "title": "Reconciled",
+            "type": "integer"
+          },
+          "scanned": {
+            "minimum": 0.0,
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "unchanged": {
+            "minimum": 0.0,
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "workflow_mode": {
+            "$ref": "#/components/schemas/TaskWorkflowMode"
+          }
+        },
+        "required": [
+          "workflow_mode",
+          "account_generation",
+          "dry_run",
+          "scanned",
+          "created",
+          "reconciled",
+          "unchanged",
+          "failed",
+          "failure_ids"
+        ],
+        "title": "CandidateMigrationReport",
+        "type": "object"
+      },
+      "CandidateMigrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "after_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Id"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "CandidateMigrationRequest",
+        "type": "object"
+      },
+      "CandidateRecord": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "create"
+              },
+              "subject_kind": {
+                "const": "task"
+              },
+              "task_change": {
+                "$ref": "#/components/schemas/TaskCreatePayload"
+              },
+              "task_id": {
+                "type": "null"
+              },
+              "workstream_proposal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "task_change"
+            ]
+          },
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "update"
+              },
+              "subject_kind": {
+                "const": "task"
+              },
+              "task_change": {
+                "$ref": "#/components/schemas/TaskChangePayload"
+              },
+              "task_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              "workstream_proposal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "task_change",
+              "task_id"
+            ]
+          },
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "complete"
+              },
+              "subject_kind": {
+                "const": "task"
+              },
+              "task_change": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskChangePayload"
+                  },
+                  {
+                    "properties": {
+                      "status": {
+                        "const": "completed"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                ]
+              },
+              "task_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              "workstream_proposal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "task_change",
+              "task_id"
+            ]
+          },
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "cancel"
+              },
+              "subject_kind": {
+                "const": "task"
+              },
+              "task_change": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskChangePayload"
+                  },
+                  {
+                    "properties": {
+                      "status": {
+                        "const": "cancelled"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                ]
+              },
+              "task_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              "workstream_proposal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "task_change",
+              "task_id"
+            ]
+          },
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "supersede"
+              },
+              "subject_kind": {
+                "const": "task"
+              },
+              "task_change": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskChangePayload"
+                  },
+                  {
+                    "properties": {
+                      "status": {
+                        "const": "superseded"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "superseded_by"
+                    ]
+                  }
+                ]
+              },
+              "task_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              "workstream_proposal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "task_change",
+              "task_id"
+            ]
+          },
+          {
+            "properties": {
+              "proposed_action": {
+                "const": "create"
+              },
+              "subject_kind": {
+                "const": "workstream"
+              },
+              "task_change": {
+                "type": "null"
+              },
+              "task_id": {
+                "type": "null"
+              },
+              "workstream_proposal": {
+                "$ref": "#/components/schemas/WorkstreamProposal-Output"
+              }
+            },
+            "required": [
+              "workstream_proposal"
+            ]
+          }
+        ],
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "$ref": "#/components/schemas/CandidateAction"
+          },
+          "resolution_reason": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Reason"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "result_task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Task Id"
+          },
+          "result_workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Workstream Id"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CandidateStatus",
+            "default": "pending"
+          },
+          "subject_kind": {
+            "$ref": "#/components/schemas/CandidateSubjectKind"
+          },
+          "task_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskCreatePayload"
+              },
+              {
+                "$ref": "#/components/schemas/TaskChangePayload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Change"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          },
+          "workstream_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkstreamProposal-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subject_kind",
+          "proposed_action",
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "candidate_id",
+          "account_generation",
+          "idempotency_key",
+          "created_at"
+        ],
+        "title": "CandidateRecord",
+        "type": "object"
+      },
+      "CandidateResolutionReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "newly_resolved": {
+            "title": "Newly Resolved",
+            "type": "boolean"
+          },
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "resolved_at": {
+            "format": "date-time",
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CandidateStatus"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "status",
+          "receipt_id",
+          "newly_resolved",
+          "resolved_at"
+        ],
+        "title": "CandidateResolutionReceipt",
+        "type": "object"
+      },
+      "CandidateResolutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "CandidateResolutionRequest",
+        "type": "object"
+      },
+      "CandidateStatus": {
+        "enum": [
+          "pending",
+          "accepted",
+          "rejected",
+          "expired"
+        ],
+        "title": "CandidateStatus",
+        "type": "string"
+      },
+      "CandidateSubjectKind": {
+        "enum": [
+          "task",
+          "workstream"
+        ],
+        "title": "CandidateSubjectKind",
+        "type": "string"
       },
       "CategoryEnum": {
         "enum": [
@@ -5026,20 +6366,10 @@
             "title": "Completed",
             "type": "boolean"
           },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ID of the conversation this action item came from",
-            "title": "Conversation Id"
-          },
           "description": {
             "description": "The action item description",
+            "maxLength": 500,
+            "minLength": 1,
             "title": "Description",
             "type": "string"
           },
@@ -5053,7 +6383,7 @@
                 "type": "null"
               }
             ],
-            "description": "When the action item is due",
+            "description": "When the action item is due (ISO format with timezone)",
             "title": "Due At"
           }
         },
@@ -7530,6 +8860,90 @@
         ],
         "title": "Evidence",
         "type": "object"
+      },
+      "EvidenceKind": {
+        "enum": [
+          "conversation",
+          "memory_item",
+          "workstream_event",
+          "artifact",
+          "chat_message",
+          "local_screen",
+          "external"
+        ],
+        "title": "EvidenceKind",
+        "type": "string"
+      },
+      "EvidenceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "excerpt_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt Hash"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/EvidenceScope"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "scope"
+        ],
+        "title": "EvidenceRef",
+        "type": "object"
+      },
+      "EvidenceScope": {
+        "enum": [
+          "canonical",
+          "device_local"
+        ],
+        "title": "EvidenceScope",
+        "type": "string"
       },
       "ExecuteToolRequest": {
         "properties": {
@@ -14460,6 +15874,497 @@
         "title": "TaskAssistantSettings",
         "type": "object"
       },
+      "TaskCancelCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "cancel",
+            "default": "cancel",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "task_change": {
+            "$ref": "#/components/schemas/TaskChangePayload"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "task_id",
+          "task_change"
+        ],
+        "title": "TaskCancelCandidate",
+        "type": "object"
+      },
+      "TaskCandidate": {
+        "discriminator": {
+          "mapping": {
+            "cancel": "#/components/schemas/TaskCancelCandidate",
+            "complete": "#/components/schemas/TaskCompleteCandidate",
+            "create": "#/components/schemas/TaskCreateCandidate",
+            "supersede": "#/components/schemas/TaskSupersedeCandidate",
+            "update": "#/components/schemas/TaskUpdateCandidate"
+          },
+          "propertyName": "proposed_action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskCreateCandidate"
+          },
+          {
+            "$ref": "#/components/schemas/TaskUpdateCandidate"
+          },
+          {
+            "$ref": "#/components/schemas/TaskCompleteCandidate"
+          },
+          {
+            "$ref": "#/components/schemas/TaskCancelCandidate"
+          },
+          {
+            "$ref": "#/components/schemas/TaskSupersedeCandidate"
+          }
+        ]
+      },
+      "TaskChangePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Confidence"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskOwner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recurrence_parent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Parent Id"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          }
+        },
+        "title": "TaskChangePayload",
+        "type": "object"
+      },
+      "TaskCompleteCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "complete",
+            "default": "complete",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "task_change": {
+            "$ref": "#/components/schemas/TaskChangePayload"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "task_id",
+          "task_change"
+        ],
+        "title": "TaskCompleteCandidate",
+        "type": "object"
+      },
+      "TaskCreateCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "create",
+            "default": "create",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "task_change": {
+            "$ref": "#/components/schemas/TaskCreatePayload"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "task_change"
+        ],
+        "title": "TaskCreateCandidate",
+        "type": "object"
+      },
+      "TaskCreatePayload": {
+        "additionalProperties": false,
+        "description": "Candidate task-create payload; envelope metadata is intentionally absent.",
+        "properties": {
+          "description": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Confidence"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/TaskOwner",
+            "default": "unknown"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recurrence_parent_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Parent Id"
+          },
+          "recurrence_rule": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence Rule"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "TaskCreatePayload",
+        "type": "object"
+      },
       "TaskIntegrationData": {
         "description": "Data for a task integration connection",
         "properties": {
@@ -14694,6 +16599,226 @@
         ],
         "title": "TaskIntegrationsResponse",
         "type": "object"
+      },
+      "TaskOwner": {
+        "enum": [
+          "user",
+          "other",
+          "unknown"
+        ],
+        "title": "TaskOwner",
+        "type": "string"
+      },
+      "TaskPriority": {
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "title": "TaskPriority",
+        "type": "string"
+      },
+      "TaskStatus": {
+        "enum": [
+          "active",
+          "completed",
+          "cancelled",
+          "superseded"
+        ],
+        "title": "TaskStatus",
+        "type": "string"
+      },
+      "TaskSupersedeCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "supersede",
+            "default": "supersede",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "task_change": {
+            "$ref": "#/components/schemas/TaskChangePayload"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "task_id",
+          "task_change"
+        ],
+        "title": "TaskSupersedeCandidate",
+        "type": "object"
+      },
+      "TaskUpdateCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "update",
+            "default": "update",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "task_change": {
+            "$ref": "#/components/schemas/TaskChangePayload"
+          },
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "task_id",
+          "task_change"
+        ],
+        "title": "TaskUpdateCandidate",
+        "type": "object"
+      },
+      "TaskWorkflowMode": {
+        "enum": [
+          "off",
+          "shadow",
+          "write",
+          "read"
+        ],
+        "title": "TaskWorkflowMode",
+        "type": "string"
       },
       "TestDailySummaryRequest": {
         "properties": {
@@ -15323,18 +17448,6 @@
       },
       "UpdateActionItemRequest": {
         "properties": {
-          "apple_reminder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "EventKit calendarItemIdentifier",
-            "title": "Apple Reminder Id"
-          },
           "completed": {
             "anyOf": [
               {
@@ -15344,19 +17457,21 @@
                 "type": "null"
               }
             ],
-            "description": "Updated completion status",
+            "description": "New completion status",
             "title": "Completed"
           },
           "description": {
             "anyOf": [
               {
+                "maxLength": 500,
+                "minLength": 1,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Updated description",
+            "description": "New description",
             "title": "Description"
           },
           "due_at": {
@@ -15369,71 +17484,8 @@
                 "type": "null"
               }
             ],
-            "description": "Updated due date",
+            "description": "New due date (ISO format with timezone)",
             "title": "Due At"
-          },
-          "export_date": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When the item was exported",
-            "title": "Export Date"
-          },
-          "export_platform": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Platform the item was exported to",
-            "title": "Export Platform"
-          },
-          "exported": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Whether the item has been exported",
-            "title": "Exported"
-          },
-          "indent_level": {
-            "anyOf": [
-              {
-                "maximum": 3.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Indentation level (0-3)",
-            "title": "Indent Level"
-          },
-          "sort_order": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Manual sort order within category",
-            "title": "Sort Order"
           }
         },
         "title": "UpdateActionItemRequest",
@@ -16679,6 +18731,143 @@
         "title": "WebhookType",
         "type": "string"
       },
+      "WorkstreamCreateCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "minItems": 1,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "ownership_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ownership Confidence",
+            "type": "number"
+          },
+          "proposed_action": {
+            "const": "create",
+            "default": "create",
+            "title": "Proposed Action",
+            "type": "string"
+          },
+          "source_surface": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject_kind": {
+            "const": "workstream",
+            "default": "workstream",
+            "title": "Subject Kind",
+            "type": "string"
+          },
+          "workstream_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workstream Id"
+          },
+          "workstream_proposal": {
+            "$ref": "#/components/schemas/WorkstreamProposal"
+          }
+        },
+        "required": [
+          "capture_confidence",
+          "ownership_confidence",
+          "evidence_refs",
+          "source_surface",
+          "workstream_proposal"
+        ],
+        "title": "WorkstreamCreateCandidate",
+        "type": "object"
+      },
+      "WorkstreamProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_task": {
+            "$ref": "#/components/schemas/TaskCreatePayload"
+          },
+          "objective": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "anchor_task"
+        ],
+        "title": "WorkstreamProposal",
+        "type": "object"
+      },
+      "WorkstreamProposal-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_task": {
+            "$ref": "#/components/schemas/TaskCreatePayload"
+          },
+          "objective": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "anchor_task"
+        ],
+        "title": "WorkstreamProposal",
+        "type": "object"
+      },
       "WrappedStatusResponse": {
         "properties": {
           "error": {
@@ -16732,41 +18921,6 @@
         "title": "WrappedStatusResponse",
         "type": "object"
       },
-      "routers__developer__CreateActionItemRequest": {
-        "properties": {
-          "completed": {
-            "default": false,
-            "description": "Whether the action item is completed",
-            "title": "Completed",
-            "type": "boolean"
-          },
-          "description": {
-            "description": "The action item description",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Description",
-            "type": "string"
-          },
-          "due_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When the action item is due (ISO format with timezone)",
-            "title": "Due At"
-          }
-        },
-        "required": [
-          "description"
-        ],
-        "title": "CreateActionItemRequest",
-        "type": "object"
-      },
       "routers__developer__GoalType": {
         "enum": [
           "boolean",
@@ -16775,51 +18929,6 @@
         ],
         "title": "GoalType",
         "type": "string"
-      },
-      "routers__developer__UpdateActionItemRequest": {
-        "properties": {
-          "completed": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "New completion status",
-            "title": "Completed"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "New description",
-            "title": "Description"
-          },
-          "due_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "New due date (ISO format with timezone)",
-            "title": "Due At"
-          }
-        },
-        "title": "UpdateActionItemRequest",
-        "type": "object"
       },
       "routers__memories__BatchMemoriesRequest": {
         "properties": {
@@ -17222,7 +19331,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateActionItemRequest"
+                "$ref": "#/components/schemas/ActionItemCreateRequest"
               }
             }
           },
@@ -17485,7 +19594,7 @@
             "application/json": {
               "schema": {
                 "items": {
-                  "$ref": "#/components/schemas/CreateActionItemRequest"
+                  "$ref": "#/components/schemas/ActionItemCreateRequest"
                 },
                 "title": "Action Items",
                 "type": "array"
@@ -18337,7 +20446,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateActionItemRequest"
+                "$ref": "#/components/schemas/ActionItemUpdateRequest"
               }
             }
           },
@@ -23762,6 +25871,809 @@
         ]
       }
     },
+    "/v1/candidates": {
+      "get": {
+        "operationId": "list_candidates_v1_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CandidateStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Candidates",
+        "tags": [
+          "candidates"
+        ]
+      },
+      "post": {
+        "operationId": "create_candidate_v1_candidates_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/integrations/drain": {
+      "post": {
+        "operationId": "drain_candidate_integrations_v1_candidates_integrations_drain_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Drain Candidate Integrations",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/migrate-staged": {
+      "post": {
+        "operationId": "migrate_staged_candidates_v1_candidates_migrate_staged_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateMigrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateMigrationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Migrate Staged Candidates",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/{candidate_id}": {
+      "get": {
+        "operationId": "get_candidate_v1_candidates__candidate_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/{candidate_id}/accept": {
+      "post": {
+        "operationId": "accept_candidate_v1_candidates__candidate_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResolutionReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Accept Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/{candidate_id}/expire": {
+      "post": {
+        "operationId": "expire_candidate_v1_candidates__candidate_id__expire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResolutionReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Expire Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/v1/candidates/{candidate_id}/reject": {
+      "post": {
+        "operationId": "reject_candidate_v1_candidates__candidate_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResolutionReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reject Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
     "/v1/conversations": {
       "get": {
         "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
@@ -27391,7 +30303,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/routers__developer__CreateActionItemRequest"
+                "$ref": "#/components/schemas/CreateActionItemRequest"
               }
             }
           },
@@ -27554,7 +30466,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/routers__developer__UpdateActionItemRequest"
+                "$ref": "#/components/schemas/UpdateActionItemRequest"
               }
             }
           },

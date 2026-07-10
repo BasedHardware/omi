@@ -206,6 +206,17 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_task_sync = add("utils.task_sync")
     utils_task_sync.auto_sync_action_items_batch = MagicMock()
 
+    task_intelligence = ModuleType("utils.task_intelligence")
+    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    fakes["utils.task_intelligence"] = task_intelligence
+    conversation_capture = add("utils.task_intelligence.conversation_capture")
+    conversation_capture.capture_enabled = MagicMock(return_value=False)
+    conversation_capture.process_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.legacy_document_ids = MagicMock(return_value=None)
+    conversation_capture.reconcile_after_legacy = MagicMock()
+    task_intelligence.conversation_capture = conversation_capture
+
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
 

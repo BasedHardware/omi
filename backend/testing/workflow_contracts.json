@@ -49,6 +49,28 @@
   },
   "workflows": [
     {
+      "id": "task_candidate_resolution",
+      "risk": "high",
+      "sources": [
+        "backend/database/candidates.py",
+        "backend/utils/task_intelligence/candidate_service.py",
+        "backend/utils/task_intelligence/staged_migration.py",
+        "backend/routers/candidates.py"
+      ],
+      "tests": [
+        "tests/unit/test_candidate_lifecycle.py",
+        "tests/unit/test_staged_candidate_migration.py",
+        "tests/unit/test_candidates_router.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "candidate retries and concurrent acceptance create exactly one canonical task",
+        "account generation mismatches fail closed without product mutation",
+        "legacy terminal rows cannot reappear as pending candidates",
+        "accepted-task integration dispatch is durably outboxed, leased once, and retryable after failure"
+      ]
+    },
+    {
       "id": "desktop_update_channel_promotion",
       "risk": "high",
       "sources": [

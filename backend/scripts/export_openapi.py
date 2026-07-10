@@ -60,6 +60,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/app-categories',
     '/v1/apps',
     '/v1/calendar',
+    '/v1/candidates',
     '/v1/conversations',
     '/v1/dev',
     '/v1/fair-use',

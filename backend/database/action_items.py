@@ -62,8 +62,25 @@ def get_action_item_ids(uid: str) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-def _prepare_action_item_for_write(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
+def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
+    action_item_data = dict(action_item_data)
+    if not partial or 'status' in action_item_data or 'completed' in action_item_data:
+        status = action_item_data.get('status')
+        completed = action_item_data.get('completed')
+        if status is None:
+            status = 'completed' if completed is True else 'active'
+            action_item_data['status'] = status
+        if completed is None:
+            action_item_data['completed'] = status == 'completed'
+        elif completed != (status == 'completed'):
+            raise ValueError('completed must agree with canonical status')
+    if not partial:
+        action_item_data.setdefault('owner', 'unknown')
+        action_item_data.setdefault('source', 'legacy')
+        action_item_data.setdefault('provenance', [])
+        action_item_data.setdefault('sort_order', 0)
+        action_item_data.setdefault('indent_level', 0)
     # Ensure timestamps are properly formatted
     if 'created_at' in action_item_data and action_item_data['created_at']:
         if isinstance(action_item_data['created_at'], str):
@@ -92,6 +109,13 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any]) -> Dict[str
 
 def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
+    action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
+    action_item_data.setdefault('owner', 'unknown')
+    action_item_data.setdefault('source', 'legacy')
+    action_item_data.setdefault('provenance', [])
+    action_item_data.setdefault('sort_order', 0)
+    action_item_data.setdefault('indent_level', 0)
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
             if hasattr(action_item_data[field], 'timestamp'):
@@ -104,7 +128,13 @@ def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str,
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_key: Optional[str] = None) -> str:
+def create_action_item(
+    uid: str,
+    action_item_data: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
+    *,
+    document_id: Optional[str] = None,
+) -> str:
     """
     Create a new action item for a user.
 
@@ -120,6 +150,9 @@ def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_k
             document so future calls can find it. Callers that want
             content-based idempotency typically pass
             ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
+        document_id: Optional caller-reserved Firestore document id. Reusing
+            the id returns the existing document without rewriting it, making
+            a crash-retried create deterministic.
 
     Returns:
         The ID of the created (or pre-existing, when idempotency_key matches)
@@ -166,12 +199,26 @@ def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_k
     if idempotency_key:
         action_item_data['idempotency_key'] = idempotency_key
 
+    if document_id is not None:
+        if not document_id:
+            raise ValueError('document_id must not be empty')
+        doc_ref = action_items_ref.document(document_id)
+        if doc_ref.get().exists:
+            return document_id
+        doc_ref.set(action_item_data)
+        return document_id
+
     doc_ref = action_items_ref.add(action_item_data)[1]
 
     return doc_ref.id
 
 
-def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]]) -> List[str]:
+def create_action_items_batch(
+    uid: str,
+    action_items_data: List[Dict[str, Any]],
+    *,
+    document_ids: Optional[List[str]] = None,
+) -> List[str]:
     """
     Create multiple action items in a batch operation.
 
@@ -184,6 +231,8 @@ def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]])
     """
     if not action_items_data:
         return []
+    if document_ids is not None and len(document_ids) != len(action_items_data):
+        raise ValueError('document_ids must match action_items_data length')
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
@@ -191,7 +240,7 @@ def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]])
     batch = db.batch()
     doc_refs: List[str] = []
 
-    for action_item_data in action_items_data:
+    for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
 
         if 'created_at' not in action_item_data:
@@ -203,7 +252,9 @@ def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]])
         if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = action_items_ref.document()
+        doc_ref = (
+            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
+        )
         batch.set(doc_ref, action_item_data)
         doc_refs.append(doc_ref.id)
 
@@ -310,6 +361,8 @@ def get_action_items(
     action_items: List[Dict[str, Any]] = []
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
         data['id'] = doc.id
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
@@ -350,6 +403,11 @@ def _normalize_description(desc: Optional[str]) -> str:
     if s.endswith(' [screen]'):
         s = s[: -len(' [screen]')]
     return s.strip().lower()
+
+
+def normalize_action_item_description(description: str) -> str:
+    """Public normalization seam for cross-source idempotency keys."""
+    return _normalize_description(description)
 
 
 def get_active_action_item_by_description(uid: str, description: str) -> Optional[Dict[str, Any]]:
@@ -454,7 +512,7 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         True if updated successfully, False otherwise
     """
     # Prepare data
-    update_data = _prepare_action_item_for_write(update_data)
+    update_data = _prepare_action_item_for_write(update_data, partial=True)
 
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
@@ -615,6 +673,46 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     if count > 0:
         batch.commit()
 
+    return count
+
+
+def retire_action_items_for_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    active_ids: List[str],
+    replacements: Optional[Dict[str, str]] = None,
+) -> int:
+    """Soft-retire removed write-mode projections so accepted Candidate receipts keep a target."""
+    active_id_set = set(active_ids)
+    replacement_map = replacements or {}
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(action_items_collection)
+        .where(filter=FieldFilter('conversation_id', '==', conversation_id))
+    )
+    batch = db.batch()
+    count = 0
+    now = datetime.now(timezone.utc)
+    for doc in query.stream():
+        if doc.id in active_id_set:
+            continue
+        replacement_id = replacement_map.get(doc.id)
+        batch.update(
+            doc.reference,
+            {
+                'deleted': True,
+                'status': 'superseded' if replacement_id else 'cancelled',
+                'completed': False,
+                'completed_at': None,
+                'superseded_by': replacement_id,
+                'updated_at': now,
+            },
+        )
+        count += 1
+    if count:
+        batch.commit()
     return count
 
 

@@ -40,7 +40,7 @@ def _stub_collection(monkeypatch, existing_docs):
     Returns a tuple ``(action_items_ref, captured)`` where ``captured`` is a
     dict that records add() calls for assertions.
     """
-    captured = {'added': []}
+    captured = {'added': [], 'set': {}}
 
     fake_query = MagicMock()
     # Chain: .where(...).where(...).limit(N).stream() — every intermediate
@@ -59,6 +59,18 @@ def _stub_collection(monkeypatch, existing_docs):
         return (None, ref)
 
     fake_action_items_ref.add.side_effect = _add
+    document_refs = {}
+
+    def _document(document_id):
+        if document_id in document_refs:
+            return document_refs[document_id]
+        ref = MagicMock()
+        ref.get.side_effect = lambda: MagicMock(exists=document_id in captured['set'])
+        ref.set.side_effect = lambda payload: captured['set'].__setitem__(document_id, payload)
+        document_refs[document_id] = ref
+        return ref
+
+    fake_action_items_ref.document.side_effect = _document
 
     fake_user_doc = MagicMock()
     fake_user_doc.collection.return_value = fake_action_items_ref
@@ -115,6 +127,21 @@ def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
     assert result == 'newly-created-id'
     assert len(captured['added']) == 1
     assert captured['added'][0].get('idempotency_key') == 'abc123'
+
+
+def test_reserved_document_id_is_idempotent_across_crash_retry(monkeypatch):
+    captured = _stub_collection(monkeypatch, [])
+
+    first = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+    )
+    second = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+    )
+
+    assert first == second == 'task-reserved'
+    assert list(captured['set']) == ['task-reserved']
+    assert captured['added'] == []
 
 
 # ---------------------------------------------------------------------------

@@ -91,6 +91,15 @@ class TaskIntelligenceRolloutDecision(BaseModel):
     intelligence_product_enabled: bool
 
 
+class TaskWorkflowControl(BaseModel):
+    """Per-user universal-contract migration control; defaults preserve legacy behavior."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    workflow_mode: TaskWorkflowMode = TaskWorkflowMode.off
+    account_generation: int = Field(default=0, ge=0)
+
+
 class TaskIntelligenceAttributionEvent(BaseModel):
     """Privacy-safe attribution envelope.
 
@@ -147,6 +156,7 @@ class TaskIntelligenceAttributionEvent(BaseModel):
 
 
 __all__ = [
+    'StableId',
     'TaskIntelligenceAttributionEvent',
     'TaskIntelligenceConfidenceBand',
     'TaskIntelligenceEventType',
@@ -156,5 +166,6 @@ __all__ = [
     'TaskIntelligenceResolutionCode',
     'TaskIntelligenceRolloutDecision',
     'TaskIntelligenceSourceClass',
+    'TaskWorkflowControl',
     'TaskWorkflowMode',
 ]

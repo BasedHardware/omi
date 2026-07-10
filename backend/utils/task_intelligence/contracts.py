@@ -43,6 +43,7 @@ REQUIRED_SOURCE_IDS = {
     'goal_manual_api',
     'goal_ai_progress',
     'legacy_staged_promotion',
+    'canonical_candidate_resolution',
 }
 ALLOWED_POLICY_CLASSES = {'direct_command', 'shared_capture_policy', 'compatibility_migration'}
 BACKEND_WRITER_METHODS = {
@@ -172,6 +173,19 @@ def _python_writer_anchors(path: Path, *, repository_root: Path) -> set[tuple[st
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in direct_aliases:
             module_name, method = direct_aliases[node.id]
             discovered.add((relative_path, f'{module_name}.{method}'))
+    string_literals = {
+        node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    if {'action_items', 'candidates'}.issubset(string_literals):
+        transaction_writes = any(
+            isinstance(node, ast.Attribute)
+            and node.attr in {'set', 'update', 'create'}
+            and isinstance(node.value, ast.Name)
+            and 'transaction' in node.value.id
+            for node in ast.walk(tree)
+        )
+        if transaction_writes:
+            discovered.add((relative_path, 'canonical_firestore.action_items'))
     return discovered
 
 

@@ -64,8 +64,9 @@
         "owner": {"enum": ["user", "other", "unknown"]},
         "due_at": {"type": ["string", "null"], "format": "date-time"},
         "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "goal_id": {"$ref": "#/$defs/nullableStableId"},
-        "workstream_id": {"$ref": "#/$defs/nullableStableId"}
+        "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "recurrence_rule": {"type": ["string", "null"], "maxLength": 128},
+        "recurrence_parent_id": {"$ref": "#/$defs/nullableStableId"}
       },
       "required": ["description"]
     },
@@ -79,8 +80,9 @@
         "owner": {"enum": ["user", "other", "unknown"]},
         "due_at": {"type": ["string", "null"], "format": "date-time"},
         "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "goal_id": {"$ref": "#/$defs/nullableStableId"},
-        "workstream_id": {"$ref": "#/$defs/nullableStableId"},
+        "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "recurrence_rule": {"type": ["string", "null"], "maxLength": 128},
+        "recurrence_parent_id": {"$ref": "#/$defs/nullableStableId"},
         "superseded_by": {"$ref": "#/$defs/nullableStableId"}
       }
     },
