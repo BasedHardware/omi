@@ -1,11 +1,12 @@
 // Serves the packaged renderer over http://localhost:<port> instead of file://.
 //
-// Firebase's signInWithPopup validates window.location.origin against the
-// project's authorized domains; `localhost` is authorized (and is what dev mode
-// uses via the vite server on 5179), but a file:// origin fails hard with
-// auth/unauthorized-domain — so a packaged build that loadFile()s the renderer
-// can never sign in. Serving the same files over a loopback HTTP server gives
-// every window the authorized `localhost` origin in production too.
+// Firebase web auth persists the session in per-origin localStorage/IndexedDB
+// (and historically signInWithPopup also required an authorized origin); a
+// file:// origin breaks that persistence, so a packaged build that loadFile()s
+// the renderer would lose/limit auth state. Serving the same files over a
+// loopback HTTP server gives every window a real, stable `localhost` origin in
+// production too — sign-in itself now runs in the SYSTEM browser via the main
+// process (src/main/ipc/auth.ts) and only signInWithCustomToken happens here.
 //
 // The port is derived deterministically from the userData path (see
 // portDerivation.ts): web auth/localStorage state is per-origin INCLUDING the

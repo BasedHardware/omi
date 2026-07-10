@@ -58,6 +58,60 @@ export type ConversationPayload = {
 
 export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
 
+/**
+ * Cloud-sync outbox state for a local conversation row. The client OWNS retry
+ * idempotency (prod ignores client_session_id — a blind re-POST duplicates):
+ *
+ *   local_only ─▶ pending ─▶ posting ─▶ done
+ *                    ▲          │  ╲
+ *                    │          ▼   ▼
+ *                    └────── failed  unconfirmed ─▶ (dedupe check) ─▶ done │ posting
+ *
+ *  - 'local_only'  never queued for sync (legacy rows, chats).
+ *  - 'pending'     queued; persisted BEFORE the first POST attempt.
+ *  - 'posting'     a POST is in flight.
+ *  - 'done'        the cloud conversation exists (`cloudId` set).
+ *  - 'failed'      the POST definitively failed (an HTTP error response was
+ *                  received, so no conversation was created) — safe to re-post.
+ *  - 'unconfirmed' AMBIGUOUS failure (timeout / network drop after send): the
+ *                  backend may or may not have created the conversation. A retry
+ *                  MUST first dedupe against recent cloud conversations
+ *                  (started_at/finished_at match) before re-posting.
+ * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
+ */
+export type ConversationSyncState =
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
+
+/** One transcript segment in the `/v1/conversations/from-segments` request shape
+ * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
+ * session-relative seconds (stream timestamps compress silence out, so they are
+ * re-derived at arrival — see lib/sync/segmentRetention.ts). */
+export type SyncSegment = {
+  text: string
+  speaker?: string | null
+  speaker_id?: number | null
+  is_user: boolean
+  person_id?: string | null
+  start: number
+  end: number
+}
+
+/** Outbox transition persisted via updateLocalConversationSync. */
+export type ConversationSyncPatch = {
+  syncState: ConversationSyncState
+  /** Set (or clear with null) the cloud conversation id. Omit to leave as-is. */
+  cloudId?: string | null
+  /** Set (or clear with null) the last sync error. Omit to leave as-is. */
+  syncError?: string | null
+  /** Bump sync_attempts by one (set when a POST attempt starts). */
+  incrementAttempts?: boolean
+}
+
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
 // transcribed independently).
@@ -77,6 +131,16 @@ export type LocalConversation = {
   // User-given name. When null/absent a default ("Recording"/"Chat with Omi")
   // is shown instead.
   title?: string | null
+  // --- Cloud-sync outbox (screen recordings only; see ConversationSyncState) ---
+  /** Outbox state; absent/'local_only' = never queued (legacy rows, chats). */
+  syncState?: ConversationSyncState
+  /** Raw merged segments (from-segments wire shape) retained so a retry or
+   * backfill can re-POST without the original stream. Null for chats/legacy. */
+  segments?: SyncSegment[] | null
+  /** Cloud conversation id once synced. */
+  cloudId?: string | null
+  syncAttempts?: number
+  syncError?: string | null
 }
 
 export type ListenSource = 'mic' | 'system'
@@ -85,12 +149,20 @@ export type ListenSource = 'mic' | 'system'
  * Which backend transcription pipeline a session uses:
  *  - 'conversation' → `/v4/listen`: the full pipeline (speech profiles, speaker
  *    assignment, memory events) that keeps a per-uid server-side conversation.
- *    Used by continuous mic/screen recording.
+ *    Used by continuous MIC-ONLY recording (a single socket, so the backend's
+ *    racy per-uid conversation pointer is safe).
  *  - 'ptt' → `/v2/voice-message/transcribe-stream`: transcription-only, NO
  *    conversation lifecycle. Used by the overlay's hold-Space Ask box so separate
  *    holds never share a server-side conversation (which caused an earlier hold's
- *    speech to bleed into the next). Mirrors the macOS app's split. */
-export type ListenMode = 'conversation' | 'ptt'
+ *    speech to bleed into the next). Mirrors the macOS app's split.
+ *  - 'transcribe' → same transcribe-stream endpoint as 'ptt', but for the
+ *    long-lived SCREEN-session lanes (mic + system). A distinct mode value so the
+ *    PTT single-at-a-time supersede logic never kills a screen session. Zero
+ *    server-side conversations are created during the session; the client merges
+ *    both lanes' segments on stop and POSTs /v1/conversations/from-segments
+ *    (see lib/sync/), which makes the two-socket per-uid coalescing race
+ *    structurally impossible. */
+export type ListenMode = 'conversation' | 'ptt' | 'transcribe'
 
 export type ListenStartArgs = {
   sessionId: string
@@ -264,6 +336,13 @@ export type OmiBridgeApi = {
   listLocalConversations: () => Promise<LocalConversation[]>
   deleteLocalConversation: (id: string) => Promise<void>
   updateLocalConversationTitle: (id: string, title: string) => Promise<void>
+  /** Persist an outbox transition for a local conversation (cloud sync). */
+  updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) => Promise<void>
+  /** Atomically claim a row for POSTing (pending/failed/unconfirmed → posting).
+   *  Returns true iff this call won the claim; the compare-and-swap that keeps a
+   *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
+   *  attempt counter (manual re-sync of a wedged row). */
+  claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
   // The mic record chord (default Ctrl+Space, rebindable via setRecordHotkey)
   // fires on channel 'recorder:hotkey' from main; the callback receives the
   // capture mode to toggle ('mic'). Returns an unsubscribe function.
@@ -358,6 +437,11 @@ export type OmiBridgeApi = {
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
   readStickyNotes: () => Promise<StickyNotesReadResult>
+  // Auth: run the backend-mediated Google OAuth flow in the SYSTEM browser
+  // (main owns the loopback callback + token exchange; Google blocks embedded
+  // webview OAuth, so there is no in-app popup path). The renderer finishes
+  // with signInWithCustomToken on the returned custom token.
+  signInWithGoogle: () => Promise<GoogleSignInResult>
   // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
   // and REST reads; the renderer synthesizes the returned items and writes
   // /v3/memories + /v1/action-items itself (it holds the Firebase token).
@@ -705,6 +789,15 @@ export type StickyNotesReadResult = {
   /** set on read failure (locked + copy failed, corrupt db, etc.) */
   error?: string
 }
+
+// --- Auth: backend-mediated Google sign-in (system browser + loopback) ---
+
+/** Result of the main-process sign-in flow. On ok the renderer completes the
+ *  session with firebase signInWithCustomToken(customToken); email/name are
+ *  display-only claims decoded (unverified) from the Google id_token. */
+export type GoogleSignInResult =
+  | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
+  | { ok: false; error: string }
 
 // --- Integrations: Google (Gmail + Calendar) OAuth (parity 3d) ---
 

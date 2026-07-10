@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <title>omi</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <!-- NOTE (audit-accepted, 2026-07): several allowances below are remnants of
+         the deleted signInWithPopup flow (frame-src firebaseapp/accounts.google,
+         script-src apis.google/gstatic). Sign-in now runs in the SYSTEM browser
+         via main (src/main/ipc/auth.ts); tighten these in the Phase 8 CSP sweep. -->
     <meta
       http-equiv="Content-Security-Policy"
       content="

@@ -16,6 +16,7 @@ import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
+import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
 import { registerLocalGraphHandlers } from './ipc/localGraph'
 import { registerUsageHandlers } from './ipc/usage'
@@ -210,7 +211,9 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  updateLocalConversationTitle
+  updateLocalConversationTitle,
+  updateLocalConversationSync,
+  claimConversationForPosting
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -284,27 +287,11 @@ function createWindow(): BrowserWindow {
   })
   perfMark('window:created')
 
-  // Allow Firebase + Google OAuth popups to open as real Electron windows so
-  // signInWithPopup() can postMessage back to the opener. Everything else
-  // routes to the system browser.
+  // Everything window.open()ed routes to the system browser — there is no
+  // embedded OAuth popup anymore (Google blocks webview OAuth; sign-in runs the
+  // backend PKCE flow in the system browser via src/main/ipc/auth.ts).
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const url = details.url
-    const isOAuth =
-      url.startsWith('https://accounts.google.com/') ||
-      url.startsWith('https://based-hardware.firebaseapp.com/') ||
-      url.includes('/__/auth/') ||
-      url.includes('firebaseapp.com/__/auth')
-    if (isOAuth) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 480,
-          height: 720,
-          autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true }
-        }
-      }
-    }
     // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
@@ -454,6 +441,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
+  ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
+    updateLocalConversationSync(id, patch)
+  )
+  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
+    claimConversationForPosting(id, resetAttempts)
+  )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
@@ -467,6 +460,21 @@ app.whenReady().then(async () => {
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
   registerKgHandlers()
+  // Google sign-in (system browser + loopback). On success, surface the main
+  // window OVER the browser: Windows blocks background apps from stealing
+  // foreground focus, so a plain show()/focus() only flashes the taskbar —
+  // briefly forcing always-on-top makes the surface actually happen (same
+  // trick as integrations/oauth.ts focusOmi).
+  registerAuthHandlers(() => {
+    withMainWindow((win) => {
+      if (win.isMinimized()) win.restore()
+      win.setAlwaysOnTop(true)
+      win.show()
+      win.focus()
+      win.setAlwaysOnTop(false)
+    })
+    app.focus({ steal: true })
+  })
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()

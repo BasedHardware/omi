@@ -1,6 +1,9 @@
 import { auth } from './firebase'
 import { startOmiListen, type OmiListenHandle } from './omiListenClient'
-import type { BackendSegment, ListenSource, TranscriptLine } from '../../../shared/types'
+import type { BackendSegment, ListenMode, ListenSource, TranscriptLine } from '../../../shared/types'
+
+/** The session modes this client can drive ('ptt' rides lib/ptt/ instead). */
+export type TranscriptionMode = Extract<ListenMode, 'conversation' | 'transcribe'>
 
 // Conversation (/v4/listen) connects fast; a tight timeout surfaces failures
 // quickly. (Push-to-talk does NOT ride this client — see lib/ptt/, whose stream
@@ -22,10 +25,16 @@ export type TranscriptionCallbacks = {
   /** Fires for every non-segment backend event (e.g. `memory_creating`). Optional;
    *  quota events are still handled internally regardless. */
   onEvent?: (event: { type: string; raw: Record<string, unknown> }) => void
+  /** Fires with each RAW segment batch before line mapping. Screen sessions use
+   *  this to retain the from-segments fields (start/end/is_user/speaker_id/…)
+   *  that segmentToLine discards — see lib/sync/segmentRetention.ts. */
+  onSegments?: (segments: BackendSegment[]) => void
 }
 
 export type TranscriptionHandle = {
   stop: () => void
+  /** Flush the trailing segment of a 'transcribe' session now (no-op otherwise). */
+  finalize: () => void
 }
 
 function segmentToLine(seg: BackendSegment): TranscriptLine {
@@ -75,7 +84,8 @@ const QUOTA_MESSAGE =
 async function startWithOmi(
   source: ListenSource,
   cb: TranscriptionCallbacks,
-  onLost: (reason: string) => void
+  onLost: (reason: string) => void,
+  mode: TranscriptionMode
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
   let outcome: 'pending' | 'omi' | 'failed' = 'pending'
@@ -104,6 +114,7 @@ async function startWithOmi(
         },
         onSegments: (segs) => {
           if (outcome !== 'omi') return
+          cb.onSegments?.(segs)
           for (const s of segs) cb.onLine(segmentToLine(s))
         },
         onEvent: (ev) => {
@@ -160,7 +171,8 @@ async function startWithOmi(
             cb.onError(err)
           }
         }
-      }
+      },
+      mode
     )
       .then((h) => {
         // startOmiListen resolves as soon as the WS is *created* — long before
@@ -189,22 +201,35 @@ async function startWithOmi(
 }
 
 /**
- * Begin transcribing one audio source over Omi `/v4/listen` (the full
- * conversation pipeline with per-uid server-side state) — used by continuous
- * recording. Push-to-talk does NOT ride this client; it lives in `lib/ptt/`.
- * Omi is the only transcription backend: if it can't connect, runs out of free
- * quota, or its socket drops mid-session, the session ends and `onError` fires.
- * (There is no Deepgram fallback.)
+ * Begin transcribing one audio source.
+ *
+ * - mode 'conversation' (default): Omi `/v4/listen`, the full conversation
+ *   pipeline with per-uid server-side state — used by continuous MIC-ONLY
+ *   recording (one socket, so the backend's user-global pointer is safe).
+ * - mode 'transcribe': `/v2/voice-message/transcribe-stream`, transcription-only
+ *   — used for BOTH screen-session lanes so no server conversation exists until
+ *   the client posts from-segments on stop (see lib/sync/).
+ *
+ * Push-to-talk does NOT ride this client; it lives in `lib/ptt/`. Omi is the
+ * only transcription backend: if it can't connect, runs out of free quota, or
+ * its socket drops mid-session, the session ends and `onError` fires. (There is
+ * no Deepgram fallback.)
  */
 export async function startTranscription(
   source: ListenSource,
-  cb: TranscriptionCallbacks
+  cb: TranscriptionCallbacks,
+  mode: TranscriptionMode = 'conversation'
 ): Promise<TranscriptionHandle> {
   let active: OmiListenHandle | null = null
 
-  const omi = await startWithOmi(source, cb, (reason) => {
-    cb.onError(new Error(`Omi transcription stopped: ${reason}`))
-  })
+  const omi = await startWithOmi(
+    source,
+    cb,
+    (reason) => {
+      cb.onError(new Error(`Omi transcription stopped: ${reason}`))
+    },
+    mode
+  )
 
   if (omi) {
     active = omi
@@ -222,6 +247,13 @@ export async function startTranscription(
     stop: (): void => {
       try {
         active?.stop()
+      } catch {
+        /* ignore */
+      }
+    },
+    finalize: (): void => {
+      try {
+        active?.finalize()
       } catch {
         /* ignore */
       }

@@ -3,7 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { useRecording } from './useRecording'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import { invalidateConversationsCache, refreshCloudConversations } from '../lib/pageCache'
-import type { CaptureSource, TranscriptLine } from '../../../shared/types'
+import { createSegmentStore, type SegmentStore } from '../lib/sync/segmentRetention'
+import { mergeLanes } from '../lib/sync/mergeLanes'
+import { queueForSync } from '../lib/sync/outbox'
+import { syncLocalConversation } from '../lib/sync/conversationSync'
+import type { CaptureSource, LocalConversation, TranscriptLine } from '../../../shared/types'
+
+// How long stop() waits after asking both transcribe-stream lanes to finalize
+// before merging — the backend flushes the trailing segment in ~0.3s (3s worst
+// case per the PTT budget); this window catches it so the last words spoken
+// aren't dropped from the synced conversation.
+const FINALIZE_FLUSH_MS = 2_500
 
 function linesToString(lines: TranscriptLine[], interim: string): string {
   const parts = lines.map((l) => (l.speaker ? `${l.speaker}: ${l.text}` : l.text))
@@ -62,6 +72,10 @@ export function useRecorder(): UseRecorder {
   const [saving, setSaving] = useState(false)
   const micRef = useRef<TranscriptionHandle | null>(null)
   const systemRef = useRef<TranscriptionHandle | null>(null)
+  // Screen sessions retain each lane's RAW segments (wall-clock stamped) so stop()
+  // can merge them into a from-segments POST. Null for mic-only sessions.
+  const micStoreRef = useRef<SegmentStore | null>(null)
+  const systemStoreRef = useRef<SegmentStore | null>(null)
 
   // The decorative desktop-video preview lives in the capture window now (it
   // renders nothing here). We just track the picked source id so the capture
@@ -90,27 +104,51 @@ export function useRecorder(): UseRecorder {
     setMicBackend(null)
     setSystemBackend(null)
     setHasSystem(withSystem)
+    // Screen sessions: both lanes ride transcription-only sockets (mode
+    // 'transcribe') so the backend's racy per-uid conversation pointer is never
+    // in play — the conversation is created client-side on stop. Mic-only stays
+    // on /v4/listen (single socket; the server-created conversation is correct).
+    const mode = withSystem ? 'transcribe' : 'conversation'
+    const sessionStart = Date.now()
+    micStoreRef.current = withSystem ? createSegmentStore(sessionStart) : null
+    systemStoreRef.current = withSystem ? createSegmentStore(sessionStart) : null
     try {
-      micRef.current = await startTranscription('mic', {
-        onLine: (line) => {
-          setMicLines((prev) => [...prev, line])
-          setMicInterim('')
-        },
-        onInterim: setMicInterim,
-        onBackend: setMicBackend,
-        onError: (e) => console.error('Transcription (mic):', e)
-      })
-      if (withSystem) {
-        systemRef.current = await startTranscription('system', {
-          onLine: (line) => {
-            setSystemLines((prev) => [...prev, line])
-            setSystemInterim('')
+      // The two lanes are independent sockets — connect them concurrently so a
+      // screen-session start pays one handshake latency, not the sum of two.
+      const [mic, system] = await Promise.all([
+        startTranscription(
+          'mic',
+          {
+            onLine: (line) => {
+              setMicLines((prev) => [...prev, line])
+              setMicInterim('')
+            },
+            onInterim: setMicInterim,
+            onBackend: setMicBackend,
+            onError: (e) => console.error('Transcription (mic):', e),
+            onSegments: (segs) => micStoreRef.current?.add(segs, Date.now())
           },
-          onInterim: setSystemInterim,
-          onBackend: setSystemBackend,
-          onError: (e) => console.error('Transcription (system):', e)
-        })
-      }
+          mode
+        ),
+        withSystem
+          ? startTranscription(
+              'system',
+              {
+                onLine: (line) => {
+                  setSystemLines((prev) => [...prev, line])
+                  setSystemInterim('')
+                },
+                onInterim: setSystemInterim,
+                onBackend: setSystemBackend,
+                onError: (e) => console.error('Transcription (system):', e),
+                onSegments: (segs) => systemStoreRef.current?.add(segs, Date.now())
+              },
+              mode
+            )
+          : Promise.resolve(null)
+      ])
+      micRef.current = mic
+      systemRef.current = system
     } catch (e) {
       micRef.current?.stop()
       micRef.current = null
@@ -140,6 +178,15 @@ export function useRecorder(): UseRecorder {
   }
 
   const stop = async (): Promise<void> => {
+    if (hasSystem) {
+      // Ask both transcribe-stream lanes to flush their trailing segment, and
+      // give it a bounded window to arrive (segments land in the stores via
+      // onSegments) before tearing the sockets down.
+      setSaving(true)
+      micRef.current?.finalize()
+      systemRef.current?.finalize()
+      await new Promise((r) => setTimeout(r, FINALIZE_FLUSH_MS))
+    }
     micRef.current?.stop()
     micRef.current = null
     systemRef.current?.stop()
@@ -148,19 +195,20 @@ export function useRecorder(): UseRecorder {
     window.omi?.captureCommand?.({ type: 'screen-view', active: false })
 
     const session = stopSession()
-    if (!session) return
+    if (!session) {
+      setSaving(false)
+      return
+    }
 
-    // Mic-only sessions are backend-owned now: the cloud creates a titled
+    // Mic-only sessions are backend-owned: /v4/listen creates the titled cloud
     // conversation from the same stream, so saving a local copy would just be an
-    // untitled duplicate. Only screen sessions (which carry their own system-audio
-    // transcript) still save locally. Mic sessions just refresh the cloud list.
+    // untitled duplicate. Mic sessions just refresh the cloud list.
     if (!hasSystem) {
       refreshCloudConversations()
       navigate('/conversations', { replace: true })
       return
     }
 
-    setSaving(true)
     try {
       const transcript = formatTranscript({
         hasSystem,
@@ -169,22 +217,39 @@ export function useRecorder(): UseRecorder {
         systemLines,
         systemInterim
       })
-      await window.omi.insertLocalConversation({
-        id: session.conversationId,
-        startedAt: session.startedAt,
-        endedAt: session.endedAt,
-        transcript,
-        createdAt: Date.now()
-      })
-      // Saved locally only (the dev API key 401s on Omi's read/reprocess
-      // endpoints, so a pushed copy dead-ends). Cloud conversations are still
-      // read from Omi elsewhere.
+      // Merge both lanes' raw segments by wall-clock and queue the row in the
+      // sync outbox BEFORE the POST — an offline/failed post stays visible as
+      // "sync pending" and retries later (see lib/sync/outbox.ts).
+      const segments = mergeLanes(micStoreRef.current?.list() ?? [], systemStoreRef.current?.list() ?? [])
+      const conversation: LocalConversation = queueForSync(
+        {
+          id: session.conversationId,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          transcript,
+          createdAt: Date.now()
+        },
+        segments
+      )
+      await window.omi.insertLocalConversation(conversation)
       invalidateConversationsCache()
       navigate(`/conversations/${session.conversationId}`, { replace: true })
+      if (segments.length > 0) {
+        // Fire-and-forget: the outbox owns retries; the Conversations list
+        // reconciles the local row away once the cloud conversation appears.
+        void syncLocalConversation(conversation).then((out) => {
+          if (out?.status === 'done') {
+            refreshCloudConversations()
+            window.omi.notifyConversationsChanged()
+          }
+        })
+      }
     } catch (e) {
       console.error('Save failed:', e)
       alert(`Save failed: ${(e as Error).message}`)
     } finally {
+      micStoreRef.current = null
+      systemStoreRef.current = null
       setSaving(false)
     }
   }

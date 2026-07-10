@@ -5,6 +5,9 @@ interface ImportMetaEnv {
   readonly MAIN_VITE_GOOGLE_CLIENT_SECRET?: string
   /** Sentry DSN for main-process error reporting. Unset → reporting disabled. */
   readonly MAIN_VITE_SENTRY_DSN?: string
+  /** Omi backend base URL (shared VITE_ prefix — visible to all processes).
+   *  Main uses it for the sign-in authorize/token endpoints. */
+  readonly VITE_OMI_API_BASE?: string
 }
 
 interface ImportMeta {

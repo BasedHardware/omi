@@ -10,6 +10,10 @@ export type ConversationRow = {
   // For local rows: distinguishes captured recordings from saved Omi chats so
   // the list can badge them differently. Undefined for cloud rows.
   localKind?: 'recording' | 'chat'
+  // For local recording rows in the sync outbox: 'pending' (queued/in-flight/
+  // unconfirmed) or 'failed'. Undefined for chats, cloud rows, and legacy
+  // local-only rows (those show the "Not synced" badge instead).
+  sync?: 'pending' | 'failed'
   // True for optimistic placeholder rows shown immediately on finalize (titled
   // client-side, dropped once the backend's real conversation arrives).
   pending?: boolean

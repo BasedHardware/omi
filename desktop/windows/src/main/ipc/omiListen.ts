@@ -14,11 +14,17 @@ import {
  *
  * - 'conversation' → `/v4/listen`: the full pipeline (speech profiles, speaker
  *   assignment, memory events) that keeps a per-uid server-side conversation.
- *   Used for continuous recording. Codec `pcm16`.
- * - 'ptt' → `/v2/voice-message/transcribe-stream`: transcription-only, NO
- *   conversation lifecycle — so separate hold-to-talk captures never share state
- *   (an earlier hold's speech can't bleed into the next). Mirrors the macOS `.ptt`
- *   mode. NOTE: this endpoint requires `codec=linear16` (it rejects `pcm16` with a
+ *   Used for continuous MIC-ONLY recording. Codec `pcm16`.
+ * - 'ptt' and 'transcribe' → `/v2/voice-message/transcribe-stream`:
+ *   transcription-only, NO conversation lifecycle. 'ptt' is the overlay's
+ *   hold-to-talk (separate holds never share state — an earlier hold's speech
+ *   can't bleed into the next; mirrors the macOS `.ptt` mode). 'transcribe' is
+ *   the same endpoint for SCREEN-session lanes (mic + system): two /v4/listen
+ *   sockets from one uid coalesce via a racy user-global Redis pointer (verified
+ *   splitting/bleeding on prod), so screen lanes stream transcription-only and
+ *   the client creates the conversation on stop via from-segments. The distinct
+ *   mode value keeps PTT's supersede logic from killing screen sessions.
+ *   NOTE: this endpoint requires `codec=linear16` (it rejects `pcm16` with a
  *   1008 close); linear16 is the same little-endian PCM16 bytes we already send,
  *   just the name the endpoint expects.
  *
@@ -26,7 +32,7 @@ import {
  */
 export function buildListenEndpoint(mode: ListenMode, language: string): string {
   const lang = encodeURIComponent(language || 'en')
-  if (mode === 'ptt') {
+  if (mode === 'ptt' || mode === 'transcribe') {
     return (
       'wss://api.omi.me/v2/voice-message/transcribe-stream' +
       `?language=${lang}` +
@@ -302,16 +308,18 @@ function feedSession(sessionId: string, pcm: ArrayBuffer): void {
 }
 
 /**
- * PTT-only: ask the transcribe-stream backend to flush buffered audio and finalize
- * Deepgram so the trailing segment is emitted promptly (~0.3s), instead of waiting
- * out silence. CONTRACT: the renderer only calls this after it has observed the
- * 'connected' message — a hold released while still connecting skips the stream
- * lane entirely and batch-transcribes its locally-retained buffer instead, so a
- * not-OPEN call here is simply a no-op.
+ * Transcribe-stream sessions only ('ptt'/'transcribe'): ask the backend to flush
+ * buffered audio and finalize Deepgram so the trailing segment is emitted promptly
+ * (~0.3s), instead of waiting out silence. PTT CONTRACT: the renderer only calls
+ * this after it has observed the 'connected' message — a hold released while still
+ * connecting skips the stream lane entirely and batch-transcribes its
+ * locally-retained buffer instead, so a not-OPEN call here is simply a no-op.
+ * Screen sessions ('transcribe') call it at stop so trailing speech lands before
+ * the lanes are merged; a never-connected lane is likewise a no-op.
  */
 function finalizeSession(sessionId: string): void {
   const s = sessions.get(sessionId)
-  if (!s || s.mode !== 'ptt' || s.ws.readyState !== WebSocket.OPEN) return
+  if (!s || s.mode === 'conversation' || s.ws.readyState !== WebSocket.OPEN) return
   console.log(`[omi-listen] finalize ${sessionId}`)
   try {
     s.ws.send('finalize')
@@ -323,6 +331,15 @@ function finalizeSession(sessionId: string): void {
 function stopSession(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (s) killSession(sessionId, s, 'stop')
+}
+
+/** Close every session owned by a webContents that no longer exists — a crashed
+ * capture window leaves its sessions' WebSockets lingering until server timeout
+ * otherwise. Called by captureWindow on respawn. */
+export function killSessionsForOwner(ownerId: number): void {
+  for (const [id, s] of sessions) {
+    if (s.ownerId === ownerId) killSession(id, s, `owner ${ownerId} gone`)
+  }
 }
 
 export function registerOmiListenHandlers(): void {

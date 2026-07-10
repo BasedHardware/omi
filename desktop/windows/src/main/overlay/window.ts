@@ -9,6 +9,7 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import iconPath from '../../../resources/icon.png?asset'
 import { computeOverlayBounds, OVERLAY_WIDTH } from './bounds'
 import { rendererBaseUrl } from '../rendererServer'
 import { isQuitting } from '../lifecycle'
@@ -40,6 +41,9 @@ export function createOverlayWindow(): BrowserWindow {
     alwaysOnTop: true,
     hasShadow: true,
     focusable: true,
+    // Frameless + skipTaskbar, but still set the app icon so Alt-Tab/system
+    // listings never show the default Electron icon for this window.
+    icon: iconPath,
     // Pure-black base so any pre-paint frame and the acrylic's inactive fallback
     // read black, not grey. The DWM backdrop composites over this where the
     // renderer is transparent/translucent.

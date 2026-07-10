@@ -4,6 +4,7 @@ import type {
   OmiBridgeApi,
   OmiOverlayApi,
   LocalConversation,
+  ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
@@ -33,6 +34,10 @@ const omi: OmiBridgeApi = {
   deleteLocalConversation: (id: string) => ipcRenderer.invoke('db:deleteLocalConversation', id),
   updateLocalConversationTitle: (id: string, title: string) =>
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
+  updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
+    ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
+    ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)
@@ -90,6 +95,7 @@ const omi: OmiBridgeApi = {
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
+  signInWithGoogle: () => ipcRenderer.invoke('auth:google:signIn'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
   googleStatus: () => ipcRenderer.invoke('integrations:google:status'),

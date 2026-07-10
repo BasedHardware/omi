@@ -426,6 +426,44 @@ def _get_qa_rag_prompt(
 # The system prompt references this placeholder so the datetime instructions still make sense.
 CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user message)"
 
+# Allowlist mapping of `X-App-Platform` header values to a platform-context line for the
+# agentic system prompt. Header values are client-controlled, so only these exact values
+# ever reach the prompt — anything unrecognized adds nothing (the allowlist is the
+# injection guard; raw header text is never interpolated into the prompt).
+_PLATFORM_CONTEXT_LINES = {
+    'windows': (
+        "The user is using Omi on a Windows PC — when giving instructions or troubleshooting, "
+        "give Windows-appropriate steps (not macOS)."
+    ),
+    'macos': (
+        "The user is using Omi on a Mac — when giving instructions or troubleshooting, " "give macOS-appropriate steps."
+    ),
+    'ios': (
+        "The user is using Omi on an iPhone (iOS app) — when giving instructions or troubleshooting, "
+        "give iOS-appropriate steps."
+    ),
+    'android': (
+        "The user is using Omi on an Android phone — when giving instructions or troubleshooting, "
+        "give Android-appropriate steps."
+    ),
+}
+
+
+def _get_platform_context_section(platform: Optional[str]) -> str:
+    """Return a <user_platform> section for a recognized client platform, else ''.
+
+    Unknown or missing platform values return the empty string so the system prompt
+    stays byte-identical to the pre-platform behavior. The section is appended at the
+    very end of the prompt; platform is stable per client, so the Anthropic
+    cache_control prefix stays stable across requests from the same client.
+    """
+    if not platform:
+        return ""
+    line = _PLATFORM_CONTEXT_LINES.get(platform.strip().lower())
+    if not line:
+        return ""
+    return f"\n\n<user_platform>\n{line}\n</user_platform>"
+
 
 def get_user_timezone(uid: str) -> str:
     """Resolve the user's timezone, falling back to UTC when missing/invalid."""
@@ -470,6 +508,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     messages: Optional[List[Message]] = None,
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -486,11 +525,15 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
         app: Optional app/plugin for personalized behavior
         messages: Optional message history for file context
         context: Optional page context (type, id, title)
+        platform: Optional `X-App-Platform` header value; recognized values append a
+            platform-context section (see _get_platform_context_section), anything else
+            leaves the prompt unchanged
 
     Returns:
         System prompt string
     """
     user_name = get_user_name(uid)
+    platform_section = _get_platform_context_section(platform)
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already
@@ -592,7 +635,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip()
+        return base_prompt.strip() + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -816,7 +859,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip()
+    return base_prompt.strip() + platform_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails

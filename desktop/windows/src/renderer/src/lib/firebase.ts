@@ -2,12 +2,11 @@ import { initializeApp } from 'firebase/app'
 import {
   initializeAuth,
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
+  signInWithCustomToken,
   signOut,
+  updateProfile,
   onAuthStateChanged,
   browserLocalPersistence,
-  browserPopupRedirectResolver,
   type User
 } from 'firebase/auth'
 
@@ -21,25 +20,42 @@ const app = initializeApp({
 // is rehydrated deterministically. The previous getAuth(app) + async
 // setPersistence() raced: onAuthStateChanged could emit null before the persisted
 // user loaded, which made the (reloaded) overlay window falsely show signed-out.
-// The popup resolver must be supplied explicitly here so signInWithPopup keeps working.
 // Falls back to getAuth in non-browser environments (node/Vitest), where
-// initializeAuth's browser persistence/resolver can't initialize — keeps importing
+// initializeAuth's browser persistence can't initialize — keeps importing
 // modules that touch firebase unit-testable without changing runtime behavior.
 export const auth = (() => {
   try {
     return initializeAuth(app, {
-      persistence: browserLocalPersistence,
-      popupRedirectResolver: browserPopupRedirectResolver
+      persistence: browserLocalPersistence
     })
   } catch {
     return getAuth(app)
   }
 })()
 
+/**
+ * Google sign-in via the backend-mediated OAuth flow in the SYSTEM browser.
+ * The main process runs the whole PKCE + loopback dance (Google blocks OAuth
+ * inside embedded webviews, so the old signInWithPopup path is gone for good)
+ * and hands back a Firebase CUSTOM token; from signInWithCustomToken on,
+ * persistence and onAuthStateChanged behave exactly as before.
+ */
 export async function signInWithGoogle(): Promise<User> {
-  const provider = new GoogleAuthProvider()
-  const result = await signInWithPopup(auth, provider)
-  return result.user
+  const result = await window.omi.signInWithGoogle()
+  if (!result.ok) throw new Error(result.error)
+  const cred = await signInWithCustomToken(auth, result.customToken)
+  // Custom-token sessions can start with an empty displayName (fresh Firebase
+  // user record); best-effort seed it from the Google profile claims so the
+  // sidebar/home greeting show a name immediately.
+  const name = [result.givenName, result.familyName].filter(Boolean).join(' ')
+  if (name && !cred.user.displayName) {
+    try {
+      await updateProfile(cred.user, { displayName: name })
+    } catch {
+      /* cosmetic only */
+    }
+  }
+  return cred.user
 }
 
 export async function signOutUser(): Promise<void> {
