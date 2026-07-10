@@ -466,12 +466,22 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/sync-capture-manifest',
     headers: const {},
-    body: jsonEncode({'conversation_id': conversationId, 'files': claims}),
+    body: jsonEncode(
+      wire.GeneratedSyncCaptureManifestRequest(
+        conversationId: conversationId,
+        files: [
+          for (final claim in claims)
+            wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
+        ],
+      ).toJson(),
+    ),
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = jsonDecode(response!.body);
-  return body is Map<String, dynamic> && body['manifest'] is String ? body['manifest'] as String : null;
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
+    jsonDecode(response!.body) as Map<String, dynamic>,
+  );
+  return body.manifest;
 }
 
 /// Thrown when a sync upload is rate-limited (HTTP 429).

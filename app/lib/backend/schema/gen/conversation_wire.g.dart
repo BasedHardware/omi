@@ -894,6 +894,74 @@ class GeneratedSyncJobStatusResponse {
   }
 }
 
+class GeneratedSyncCaptureManifestFile {
+  final String name;
+  final String sha256;
+
+  const GeneratedSyncCaptureManifestFile({
+    required this.name,
+    required this.sha256,
+  });
+
+  factory GeneratedSyncCaptureManifestFile.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestFile(
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      sha256: _required(_readFieldValue<String>(_readField(json, const ["sha256"]), "sha256", _readString, requiredField: true, nullable: false), "sha256"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'sha256': sha256,
+    };
+  }
+}
+
+class GeneratedSyncCaptureManifestRequest {
+  final String conversationId;
+  final List<GeneratedSyncCaptureManifestFile> files;
+
+  const GeneratedSyncCaptureManifestRequest({
+    required this.conversationId,
+    required this.files,
+  });
+
+  factory GeneratedSyncCaptureManifestRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestRequest(
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      files: _required(_readFieldValue<List<GeneratedSyncCaptureManifestFile>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedSyncCaptureManifestFile.fromJson), requiredField: true, nullable: false), "files"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'files': files.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedSyncCaptureManifestResponse {
+  final String manifest;
+
+  const GeneratedSyncCaptureManifestResponse({
+    required this.manifest,
+  });
+
+  factory GeneratedSyncCaptureManifestResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestResponse(
+      manifest: _required(_readFieldValue<String>(_readField(json, const ["manifest"]), "manifest", _readString, requiredField: true, nullable: false), "manifest"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'manifest': manifest,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;
