@@ -393,76 +393,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // sustained freezes — the ones users actually feel — are reported.
       options.appHangTimeoutInterval = isDev ? 0 : 3.0
       options.beforeSend = { event in
-        // Allow user feedback through from all builds (dev + prod)
-        if event.message?.formatted.hasPrefix("User Report") == true { return event }
-        // Never send other events from dev builds — they pollute production Sentry data
-        if isDev { return nil }
-        // Filter out HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down
-        if let urlTag = event.tags?["url"],
-          urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
-            || urlTag.contains("trycloudflare.com")
-        {
-          return nil
-        }
-        // Filter out transient network/socket errors captured as exceptions —
-        // offline, timeouts, dropped connections, cancellations. These are not
-        // actionable app bugs and dominate event volume. (logError filters the
-        // message-event path; this covers SDK-auto and legacy exception captures.)
-        // NSURLErrorDomain: -999 cancelled, -1001 timeout, -1003/-1004 host/connect,
-        // -1005 lost, -1009 offline, -1011 bad response, -1020 not allowed.
-        // NSPOSIXErrorDomain: 54 reset, 57 not connected, 89 cancelled.
-        let transientNetworkCodes: [(domain: String, codes: [String])] = [
-          (
-            "NSURLErrorDomain",
-            ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]
-          ),
-          ("NSPOSIXErrorDomain", ["54", "57", "89"]),
-        ]
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            let value = exc.value
-            return transientNetworkCodes.contains { entry in
-              exc.type == entry.domain
-                && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
-            }
-          })
-        {
-          return nil
-        }
-        // Filter out backend Gemini key-expiry/auth failures. These mean the
-        // server-side API key needs rotation — a backend config issue, not a
-        // per-client bug. A single expired key otherwise floods Sentry with one
-        // event per request across every user.
-        if let message = event.message?.formatted {
-          let lower = message.lowercased()
-          if lower.contains("api key expired") || lower.contains("renew the api key")
-            || lower.contains("api_key_invalid")
-            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
-            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
-            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
-            // same flood (one bad key emits one event per task-extraction frame for every user).
-            || lower.contains("ai service authentication error")
-            // Backend rejects the auth header on batch (PTT) transcription with a 401
-            // INVALID_AUTH / "Invalid credentials." body — a transient stale-token or BYOK
-            // misconfig, not a per-client app bug. The 30s refresh timer recovers it; left
-            // unfiltered it floods Sentry (one event per failed batch). Same class as the
-            // AuthError.notSignedIn filter below.
-            || lower.contains("invalid_auth")
-          {
-            return nil
-          }
-        }
-        // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
-        // fails (network blip, expired token mid-refresh). The user is still signed in per
-        // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
-          })
-        {
-          return nil
-        }
-        return event
+        // The drop decision is extracted to the pure `shouldDropSentryEvent` so the
+        // filter list is unit-testable without constructing Sentry events (SET-05).
+        let drop = Self.shouldDropSentryEvent(
+          isUserReport: event.message?.formatted.hasPrefix("User Report") == true,
+          isDev: isDev,
+          urlTag: event.tags?["url"],
+          messageFormatted: event.message?.formatted,
+          exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
+        return drop ? nil : event
       }
     }
     log(
@@ -1606,5 +1545,63 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard !Task.isCancelled else { return }
       await SettingsSyncManager.shared.syncFromServer()
     }
+  }
+}
+
+extension AppDelegate {
+  /// Pure Sentry `beforeSend` triage (SET-05): decides whether an event must be
+  /// dropped (`beforeSend` returns nil). Extracted from the SDK closure so the drop
+  /// list is unit-testable; it takes only the event fields the closure inspects, so
+  /// no Sentry `Event` needs constructing in tests. Keep in lockstep with the
+  /// `options.beforeSend` closure in `applicationDidFinishLaunching`.
+  static func shouldDropSentryEvent(
+    isUserReport: Bool,
+    isDev: Bool,
+    urlTag: String?,
+    messageFormatted: String?,
+    exceptions: [(type: String, value: String)]
+  ) -> Bool {
+    // Always keep user feedback (dev + prod).
+    if isUserReport { return false }
+    // Never send other events from dev builds — they pollute production Sentry data.
+    if isDev { return true }
+    // Drop HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down.
+    if let urlTag,
+      urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
+        || urlTag.contains("trycloudflare.com")
+    {
+      return true
+    }
+    // Drop transient network/socket errors captured as exceptions (offline, timeouts,
+    // dropped connections, cancellations) — not actionable, dominate event volume.
+    let transientNetworkCodes: [(domain: String, codes: [String])] = [
+      ("NSURLErrorDomain", ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]),
+      ("NSPOSIXErrorDomain", ["54", "57", "89"]),
+    ]
+    if exceptions.contains(where: { exc in
+      transientNetworkCodes.contains { entry in
+        exc.type == entry.domain
+          && entry.codes.contains { exc.value.contains("Code=\($0)") || exc.value.contains("Code: \($0)") }
+      }
+    }) {
+      return true
+    }
+    // Drop backend Gemini key-expiry/auth failures — server-side key rotation, not a
+    // per-client bug; one bad key otherwise floods Sentry with one event per request.
+    if let lower = messageFormatted?.lowercased(),
+      lower.contains("api key expired") || lower.contains("renew the api key")
+        || lower.contains("api_key_invalid")
+        || lower.contains("ai service authentication error")
+        || lower.contains("invalid_auth")
+    {
+      return true
+    }
+    // Drop AuthError.notSignedIn — transient refresh failure; the 30s timer retries.
+    if exceptions.contains(where: {
+      $0.type == "Omi_Computer.AuthError" && $0.value.contains("notSignedIn")
+    }) {
+      return true
+    }
+    return false
   }
 }

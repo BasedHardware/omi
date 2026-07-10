@@ -912,6 +912,25 @@ class TasksViewModel: ObservableObject {
         return base + (itemIndex + 1) * spacing
     }
 
+    /// Rewrites `array`'s `sortOrder` for every task id named in `order`, using the
+    /// single `sortOrder` banding helper. `moveTask` applies this to each source array
+    /// the displayed list can be backed by (`store.incompleteTasks`,
+    /// `filteredFromDatabase`, `searchResults`) so they agree on the new order — a write
+    /// to only one diverges when filters/search are active. Ids not in `order` keep
+    /// their existing sortOrder. Extracted so the mirrored-array invariant is
+    /// unit-testable (TASK-07 / BL-030).
+    nonisolated static func applyReorder(
+        _ order: [String], categoryIndex: Int, to array: inout [TaskActionItem]
+    ) {
+        let itemCount = order.count
+        for (index, taskId) in order.enumerated() {
+            let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
+            if let i = array.firstIndex(where: { $0.id == taskId }) {
+                array[i].sortOrder = newSortOrder
+            }
+        }
+    }
+
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
@@ -933,23 +952,13 @@ class TasksViewModel: ObservableObject {
         // reassignment fires its own @Published; recomputeAllCaches at the end folds
         // them all into categorizedTasks.
         let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
-        let itemCount = order.count
-
-        func applyOrder(to array: inout [TaskActionItem]) {
-            for (index, taskId) in order.enumerated() {
-                let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
-                if let i = array.firstIndex(where: { $0.id == taskId }) {
-                    array[i].sortOrder = newSortOrder
-                }
-            }
-        }
 
         var incomplete = store.incompleteTasks
-        applyOrder(to: &incomplete)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
         store.incompleteTasks = incomplete
 
-        applyOrder(to: &filteredFromDatabase)
-        applyOrder(to: &searchResults)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
 
         // Recompute caches immediately so the UI updates. Suppress the async
         // SQLite requery — when filters are active, the requery would otherwise
