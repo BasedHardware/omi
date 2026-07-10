@@ -379,7 +379,8 @@ async function handleJsonRpc(
         toolName === "search_memories" ||
         toolName === "get_action_items" ||
         toolName === "create_action_item" ||
-        toolName === "update_action_item"
+        toolName === "update_action_item" ||
+        toolName === "check_calendar_availability"
       ) {
         // Backend RAG tools — forward to Swift which calls Python backend
         const result = await requestSwiftTool(toolName, args);

@@ -194,6 +194,8 @@ vendor_pcre2_for_ripgrep() {
     [[ -n "$dep" ]] || continue
     if ! pcre2="$(resolve_pcre2_for_dep "$dep")"; then
       echo "ERROR: $rg depends on $dep but neither that file nor a fallback libpcre2-8.0.dylib was found" >&2
+      echo "HINT: install Homebrew pcre2 so the Claude SDK ripgrep binary can be vendored into the app bundle:" >&2
+      echo "  brew install pcre2" >&2
       exit 1
     fi
 

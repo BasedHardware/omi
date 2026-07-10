@@ -530,7 +530,20 @@ if [ -d "$ONNX_FRAMEWORK" ]; then
 fi
 
 # Copy libwebp dylibs and rewrite load paths
-WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+WEBP_LIB=""
+if command -v pkg-config >/dev/null 2>&1; then
+    WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+fi
+if [ ! -f "$WEBP_LIB" ]; then
+    for candidate in \
+        /opt/homebrew/opt/webp/lib/libwebp.7.dylib \
+        /usr/local/opt/webp/lib/libwebp.7.dylib; do
+        if [ -f "$candidate" ]; then
+            WEBP_LIB="$candidate"
+            break
+        fi
+    done
+fi
 if [ -f "$WEBP_LIB" ]; then
     substep "Bundling libwebp"
     mkdir -p "$APP_BUNDLE/Contents/Frameworks"
@@ -722,9 +735,11 @@ step "Signing app with hardened runtime..."
 if [ -z "$SIGN_IDENTITY" ]; then
     # For dev builds: prefer Apple Development (matches Mac Development provisioning profile,
     # required for native Sign In with Apple). Fall back to Developer ID if unavailable.
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    # Skip revoked certs and use the SHA-1 hash — duplicate display names (revoked + valid)
+    # make name-based signing ambiguous.
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep -v REVOKED | grep "Apple Development" | head -1 | awk '{print $2}')
     if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep -v REVOKED | grep "Developer ID Application" | head -1 | awk '{print $2}')
     fi
     if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
         SIGN_IDENTITY="-"

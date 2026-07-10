@@ -219,6 +219,8 @@ struct DashboardPage: View {
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
+    @ObservedObject private var waCoordinator = WhatsAppReplyCoordinator.shared
+    @ObservedObject private var waState = WhatsAppState.shared
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
@@ -764,6 +766,12 @@ struct DashboardPage: View {
                 action: { navigate(to: .memories) }
             ),
             HomeStatItem(
+                title: "Messages",
+                value: messageMetricValue,
+                systemImage: "message.fill",
+                action: { navigate(to: .messages) }
+            ),
+            HomeStatItem(
                 title: "Screenshots",
                 value: screenshotMetricValue,
                 systemImage: "photo.on.rectangle.angled",
@@ -1278,6 +1286,7 @@ struct DashboardPage: View {
                 HomeSettingsMenuButton(
                     onRefer: openReferFriend,
                     onDiscord: openDiscord,
+                    onMessages: { navigate(to: .messages) },
                     onSettings: { navigate(to: .settings) }
                 )
             }
@@ -1311,6 +1320,13 @@ struct DashboardPage: View {
             }
             HomeAIChoiceButton(title: "Notes", brand: .appleNotes, isConnected: isImportConnectorConnected("apple-notes")) {
                 openImportConnector("apple-notes")
+            }
+            HomeAIChoiceButton(
+                title: "WhatsApp",
+                brand: .whatsapp,
+                isConnected: waState.connectionState.isConnected
+            ) {
+                openImportConnector("whatsapp")
             }
             HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true, isConnected: hasOmiDeviceHistory) {
                 openOmiDeviceWebsite()
@@ -1372,6 +1388,13 @@ struct DashboardPage: View {
 
     private var screenshotMetricValue: String {
         screenshotCount.map(formattedCount) ?? "—"
+    }
+
+    private var messageMetricValue: String {
+        if waState.connectionState.isConnected {
+            return formattedCount(waCoordinator.pendingDrafts.count)
+        }
+        return "—"
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -3893,6 +3916,7 @@ private struct HomeIconActionButton: View {
 private struct HomeSettingsMenuButton: View {
     let onRefer: () -> Void
     let onDiscord: () -> Void
+    let onMessages: () -> Void
     let onSettings: () -> Void
 
     @State private var isHovering = false
@@ -3933,6 +3957,11 @@ private struct HomeSettingsMenuButton: View {
 
                 Divider()
                     .padding(.vertical, 3)
+
+                popoverButton(title: "Messages", systemImage: "bubble.left.and.bubble.right.fill") {
+                    isPresented = false
+                    onMessages()
+                }
 
                 popoverButton(title: "Settings", systemImage: "gearshape.fill") {
                     isPresented = false

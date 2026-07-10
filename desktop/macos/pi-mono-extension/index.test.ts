@@ -1131,7 +1131,12 @@ test("OMI_TOOLS: top-level schemas keep the object contract", () => {
 test("OMI_TOOLS: agent control schemas keep runtime precondition guidance without top-level composites", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
   assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
+  assert.equal((inspectArtifacts?.parameters as any).oneOf, undefined);
   assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
+
+  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
+  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
+  assert.equal((delegateAgent?.parameters as any).oneOf, undefined);
   assert.ok(
     inspectArtifacts?.promptGuidelines?.some((guideline) =>
       guideline.includes("get_agent_run")
@@ -1191,6 +1196,7 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
     );
     assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} should not advertise top-level anyOf`);
     assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} should not advertise top-level allOf`);
+    assert.equal((tool!.parameters as any).oneOf, undefined, `${manifestTool.name} should not advertise top-level oneOf`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];
