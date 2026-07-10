@@ -74,6 +74,7 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('omi-capture:event', listener)
   },
   allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
+  e2e: process.env.OMI_E2E === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),

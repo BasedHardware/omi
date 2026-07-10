@@ -28,6 +28,8 @@
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
     "test:e2e:ptt": "node scripts/run-live-e2e.mjs src/main/ipc/pttTranscribe.e2e.test.ts",
     "test:e2e:conv-sync": "node scripts/run-live-e2e.mjs src/renderer/src/lib/sync/convSync.e2e.test.ts",
+    "test:e2e:voice-smoke": "node scripts/run-voice-smoke.mjs",
+    "voice:loop-check": "node scripts/run-voice-loop-check.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
     "test:e2e:bar": "node scripts/run-bar-e2e.mjs",
     "orb:sheet": "node scripts/orb/contact-sheet.mjs",
@@ -46,6 +48,8 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@google/genai": "^2.11.0",
+    "@openai/agents-realtime": "^0.13.1",
     "@ricky0123/vad-web": "^0.0.30",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

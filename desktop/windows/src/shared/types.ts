@@ -213,6 +213,17 @@ export type CaptureCommand =
   // `sourceId` is the user-picked capture source; the capture window falls back to
   // the primary screen when it's absent.
   | { type: 'screen-view'; active: boolean; sourceId?: string }
+  // Echo gate (Phase 6, layer 2): while Omi's voice is audibly playing (realtime
+  // session or TTS), the voice surface holds this ACTIVE and every continuous
+  // transcription lane in the capture window pauses its feed, so Omi never
+  // transcribes itself. The sender owns the timing (including the ~300ms
+  // release after the playback buffer drains); the capture window just obeys
+  // the final boolean. PTT and the realtime session's own mic are NEVER gated.
+  | { type: 'assistant-speaking'; active: boolean }
+  // Omi's spoken words, injected into the live record from SOURCE text (the
+  // provider's output transcript / the TTS input) instead of re-transcription.
+  // `utteranceId` is stable per utterance so re-delivery upserts, not duplicates.
+  | { type: 'assistant-utterance'; utteranceId: string; text: string }
   // The main window's auth transitioned (sign-in/out/account switch). `uid` is the
   // main window's current user id (null when signed out); the capture window
   // reloads itself if its own auth.currentUser disagrees, so its WS auth is always
@@ -409,6 +420,9 @@ export type OmiBridgeApi = {
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */
   allowVirtualMic: boolean
+  /** True when OMI_E2E=1 — renderer-side test hooks (e.g. window.__omiVoice)
+   *  attach only in harness runs, never in production. */
+  e2e: boolean
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */

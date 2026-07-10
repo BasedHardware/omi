@@ -11,6 +11,7 @@ import {
   type LoopbackMusicFilter
 } from '../lib/capture/loopbackMusicFilter'
 import { acquireMicStream } from '../lib/audio'
+import { assistantGate, wrapFeed } from './assistantGate'
 import type { ListenSource } from '../../../shared/types'
 
 // The capture window's continuous-audio engine. Serves audio-start / audio-stop
@@ -89,7 +90,13 @@ async function startAudioSession(
   }
   const gate = createVadGate({ onVoiced })
   session.gate = gate
-  session.pipeline = createPcmPipeline(stream, (pcm) => gate.push(pcm))
+  // Echo gate (Phase 6): while Omi's voice plays, drop frames BEFORE the VAD
+  // gate so Omi's speech never enters the pre-roll ring either. Applies to both
+  // lanes — mic (acoustic echo) and system audio (Omi's voice IS system output).
+  session.pipeline = createPcmPipeline(
+    stream,
+    wrapFeed((pcm) => gate.push(pcm))
+  )
 }
 
 /** Test-only (read via the OMI_E2E-gated capture hook): current music-gate
@@ -121,6 +128,11 @@ export function AudioSessionHost(): null {
         void startAudioSession(cmd.sessionId, cmd.source, ownerId)
       } else if (cmd.type === 'audio-stop') {
         stopAudioSession(cmd.sessionId)
+      } else if (cmd.type === 'assistant-speaking') {
+        // Echo gate: the voice surface owns the timing (incl. the release
+        // hangover); this window just enforces the final boolean on all
+        // continuous feeds via wrapFeed above.
+        assistantGate.setSpeaking(cmd.active)
       }
     })
   }, [])
