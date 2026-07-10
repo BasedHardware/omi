@@ -15,11 +15,11 @@ final class DebugSuspendControl: @unchecked Sendable {
   private let lock = NSLock()
   private var pid: pid_t?
   private var generation: UInt64 = 0
-  /// Injectable so the generation-guard logic is unit-testable without sending
-  /// real signals; defaults to SIGCONT in production.
-  private let sendContinue: (pid_t) -> Void
+  /// Sends SIGCONT and reports success. Injectable so the generation-guard logic
+  /// is unit-testable without real signals; defaults to `kill(pid, SIGCONT) == 0`.
+  private let sendContinue: (pid_t) -> Bool
 
-  init(sendContinue: @escaping (pid_t) -> Void = { kill($0, SIGCONT) }) {
+  init(sendContinue: @escaping (pid_t) -> Bool = { kill($0, SIGCONT) == 0 }) {
     self.sendContinue = sendContinue
   }
 
@@ -32,26 +32,39 @@ final class DebugSuspendControl: @unchecked Sendable {
     return generation
   }
 
-  /// Explicit resume: SIGCONT the armed pid and advance the generation (cancelling
-  /// the pending auto-resume). Returns the resumed pid, or nil if nothing was armed.
+  /// Explicit resume: SIGCONT the armed pid and, on success, advance the
+  /// generation (cancelling the pending auto-resume). Returns the resumed pid, or
+  /// nil if nothing was armed or the SIGCONT failed. On failure the state stays
+  /// armed so the safety auto-resume can still recover the process. The signal is
+  /// sent OUTSIDE the lock — never invoke the injectable closure while holding it.
   func resume() -> pid_t? {
     lock.lock()
+    let armed = pid
+    lock.unlock()
+    guard let armed, sendContinue(armed) else { return nil }
+    lock.lock()
     defer { lock.unlock() }
-    guard let pid else { return nil }
-    sendContinue(pid)
-    generation &+= 1
-    self.pid = nil
-    return pid
+    // A newer suspend/disarm may have moved on; only clear the pid we resumed.
+    if pid == armed {
+      pid = nil
+      generation &+= 1
+    }
+    return armed
   }
 
   /// Safety auto-resume: SIGCONT only if this generation is still the armed one.
+  /// Signal sent outside the lock; state cleared only on a successful send.
   func autoResume(generation: UInt64) -> pid_t? {
     lock.lock()
+    let armed = (generation == self.generation) ? pid : nil
+    lock.unlock()
+    guard let armed, sendContinue(armed) else { return nil }
+    lock.lock()
     defer { lock.unlock() }
-    guard generation == self.generation, let pid else { return nil }
-    sendContinue(pid)
-    self.pid = nil
-    return pid
+    if pid == armed, self.generation == generation {
+      pid = nil
+    }
+    return armed
   }
 
   /// Clear on process teardown so a later resume can't SIGCONT a reused pid.

@@ -19,49 +19,65 @@ final class ChatStallRecoveryTests: XCTestCase {
 
   // MARK: - DebugSuspendControl behavior (hermetic; signal injected)
 
-  private func makeControl() -> (DebugSuspendControl, () -> [pid_t]) {
+  private func makeControl() -> (DebugSuspendControl, SignalBox) {
     let box = SignalBox()
     let control = DebugSuspendControl(sendContinue: { box.record($0) })
-    return (control, { box.signalled })
+    return (control, box)
   }
 
   func testResumeSignalsArmedPidThenClears() {
-    let (control, signalled) = makeControl()
+    let (control, box) = makeControl()
     _ = control.arm(pid: 42)
     XCTAssertEqual(control.resume(), 42)
-    XCTAssertEqual(signalled(), [42], "resume must SIGCONT the armed pid")
+    XCTAssertEqual(box.signalled, [42], "resume must SIGCONT the armed pid")
     XCTAssertNil(control.resume(), "a second resume with nothing armed returns nil")
   }
 
   func testAutoResumeRespectsGeneration() {
-    let (control, signalled) = makeControl()
+    let (control, box) = makeControl()
     let gen = control.arm(pid: 7)
     XCTAssertEqual(control.autoResume(generation: gen), 7)
-    XCTAssertEqual(signalled(), [7])
+    XCTAssertEqual(box.signalled, [7])
   }
 
   func testStaleAutoResumeDoesNotSignal() {
-    let (control, signalled) = makeControl()
+    let (control, box) = makeControl()
     let old = control.arm(pid: 7)
     _ = control.arm(pid: 8)  // newer suspend advances the generation
     XCTAssertNil(control.autoResume(generation: old), "a stale auto-resume must no-op")
-    XCTAssertEqual(signalled(), [], "no SIGCONT for a superseded generation")
+    XCTAssertEqual(box.signalled, [], "no SIGCONT for a superseded generation")
   }
 
   func testExplicitResumeCancelsPendingAutoResume() {
-    let (control, signalled) = makeControl()
+    let (control, box) = makeControl()
     let gen = control.arm(pid: 5)
     XCTAssertEqual(control.resume(), 5)          // advances generation
     XCTAssertNil(control.autoResume(generation: gen), "auto-resume after explicit resume must no-op")
-    XCTAssertEqual(signalled(), [5], "only the explicit resume signals")
+    XCTAssertEqual(box.signalled, [5], "only the explicit resume signals")
   }
 
   func testDisarmPreventsResumeSignalingAReusedPid() {
-    let (control, signalled) = makeControl()
+    let (control, box) = makeControl()
     _ = control.arm(pid: 9)
     control.disarm()  // process torn down
     XCTAssertNil(control.resume())
-    XCTAssertEqual(signalled(), [], "a disarmed control must not SIGCONT a (possibly reused) pid")
+    XCTAssertEqual(box.signalled, [], "a disarmed control must not SIGCONT a (possibly reused) pid")
+  }
+
+  func testFailedSigcontLeavesStateArmedForAutoResume() {
+    // If the SIGCONT fails (e.g. pid raced to exit), resume must NOT report success
+    // and must NOT cancel the pending auto-resume — the process could still be
+    // frozen, and the safety auto-resume is its last recovery path.
+    let box = SignalBox()
+    box.succeed = false
+    let control = DebugSuspendControl(sendContinue: { box.record($0) })
+    let gen = control.arm(pid: 3)
+    XCTAssertNil(control.resume(), "a failed SIGCONT must not report a resume")
+    XCTAssertEqual(box.signalled, [3], "resume attempted the SIGCONT")
+    box.succeed = true
+    XCTAssertEqual(
+      control.autoResume(generation: gen), 3,
+      "the same-generation auto-resume must still fire after a failed explicit resume")
   }
 
   // MARK: - Source-invariant: the SIGCONT resume path is off the actor
@@ -104,9 +120,13 @@ final class ChatStallRecoveryTests: XCTestCase {
 private final class SignalBox: @unchecked Sendable {
   private let lock = NSLock()
   private var pids: [pid_t] = []
-  func record(_ pid: pid_t) {
+  /// Controls the SIGCONT success reported to DebugSuspendControl.
+  var succeed = true
+  /// Records the pid and returns whether the (simulated) SIGCONT succeeded.
+  func record(_ pid: pid_t) -> Bool {
     lock.lock(); defer { lock.unlock() }
     pids.append(pid)
+    return succeed
   }
   var signalled: [pid_t] {
     lock.lock(); defer { lock.unlock() }
