@@ -955,17 +955,12 @@ void sd_worker_thread(void)
              * before the POWER_ON prio request is seen. Mount first so buffered
              * audio lands on a valid ring, then process the write in order. */
             if (!is_mounted) {
-                /* CS was parked low on power-off; restore physical high before mount. */
+                /* CS was parked low on power-off; restore physical high before mount.
+                 * Mount directly rather than draining the prio queue looking for the
+                 * POWER_ON (that would discard unrelated sync/read prio requests).
+                 * The pending POWER_ON stays queued and is a no-op once mounted. */
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
-                sd_req_t p;
-                while (!is_mounted && k_msgq_get(&sd_prio_msgq, &p, K_NO_WAIT) == 0) {
-                    if (p.type == REQ_POWER_ON) {
-                        (void) sd_mount();
-                    }
-                }
-                if (!is_mounted) {
-                    (void) sd_mount();
-                }
+                (void) sd_mount();
             }
             process_write_data_req(&req);
             for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
@@ -1045,8 +1040,11 @@ void sd_worker_thread(void)
             break;
 
         case REQ_POWER_OFF:
-            /* Idle (mic asleep): flush, unmount and cut SD power to save current. */
+            /* Idle (mic asleep): flush, unmount and cut SD power to save current.
+             * Drain buffered writes first (like the shutdown path) so audio queued
+             * just before idle is not lost when we unmount. */
             if (is_mounted) {
+                drain_pending_write_queue_for_shutdown();
                 (void) sd_unmount();
                 /* Park the SD chip-select at physical 0 V. The SPI driver otherwise
                  * idles it HIGH, which forward-biases the unpowered card's input
@@ -1172,16 +1170,23 @@ void sd_write_pause(bool pause)
 void sd_request_power(bool on)
 {
     sd_req_t req = {0};
-    req.u.status.resp = NULL;
-    if (on) {
-        /* Optimistically mark SD available so the audio pusher keeps writing;
-         * the writes buffer in sd_msgq until the remount (prio request) completes. */
-        sd_enabled = true;
-        req.type = REQ_POWER_ON;
-    } else {
-        req.type = REQ_POWER_OFF;
+    req.type = on ? REQ_POWER_ON : REQ_POWER_OFF;
+
+    /* Queue with a timeout and check the result (like the other prio-queue
+     * callers). A silently dropped REQ_POWER_ON would leave sd_enabled=true with
+     * no remount -> subsequent writes lost. */
+    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    if (ret != 0) {
+        LOG_ERR("sd_request_power(%s) failed to queue: %d", on ? "on" : "off", ret);
+        return;
     }
-    (void) k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
+
+    if (on) {
+        /* Only after the POWER_ON is queued: mark SD available so the audio
+         * pusher keeps writing; the writes buffer in sd_msgq until the remount
+         * (prio request) completes. */
+        sd_enabled = true;
+    }
 }
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
