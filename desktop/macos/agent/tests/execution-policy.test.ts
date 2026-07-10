@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  executionRoleAllowsTool,
   providerBoundaryForAdapter,
   resolveAdapterWithinBoundary,
 } from "../src/runtime/execution-policy.js";
@@ -32,6 +33,18 @@ describe("agent execution policy", () => {
         defaultAdapterId: "pi-mono",
         requestedAdapterId: adapterId,
       })).toThrow();
+    }
+  });
+
+  it("denies every leaf-restricted control tool for leaf roles", () => {
+    for (const toolName of [
+      "send_agent_message",
+      "spawn_background_agent",
+      "spawn_agent",
+      "run_agent_and_wait",
+    ]) {
+      expect(executionRoleAllowsTool("leaf", toolName)).toBe(false);
+      expect(executionRoleAllowsTool("coordinator", toolName)).toBe(true);
     }
   });
 });

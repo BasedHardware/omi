@@ -188,16 +188,19 @@ Guard surface:
 
 Sessions persist `coordinator` or `leaf`. Background, delegated, and floating
 pill sessions are created as leaves. Leaf tool projections omit agent creation
-and continuation tools, while the control relay and kernel delegation path
-independently reject stale or forged calls. Surface-derived role exists only in
-the creation/legacy migration boundary; persisted kernel state is authoritative
-afterward.
+and continuation tools, while the control relay and kernel independently reject
+stale or forged calls for every leaf-restricted tool (including
+`send_agent_message`). The relay loads the caller's persisted policy by session
+id with an owner check and fails closed when that lookup cannot complete;
+surface-derived role exists only in the creation/legacy migration boundary.
+Persisted kernel state is authoritative afterward. `spawnBackgroundAgent`
+requires a coordinator caller session or an explicit trusted-user spawn.
 
 Guard surface:
 
 - `omi-tool-manifest.test.ts` verifies leaf capability projection.
-- `control-tools.test.ts` verifies server denial for every nested creation
-  entry point.
+- `control-tools.test.ts` verifies server denial for every nested creation and
+  continuation entry point, plus kernel spawn authority checks.
 - `sqlite-store.test.ts` verifies role and provider-boundary persistence.
 
 ### Required control failures cannot become successful runs

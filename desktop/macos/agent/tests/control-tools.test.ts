@@ -1861,24 +1861,84 @@ describe("agent control tools", () => {
       defaultAdapterId: "pi-mono",
       providerBoundary: "managed_cloud" as const,
       executionRole: "leaf" as const,
+      callerSessionId: parent.session.sessionId,
     };
     const calls = [
-      ["spawn_agent", { objective: "nested", visible: false }],
-      ["spawn_background_agent", { prompt: "nested" }],
-      ["run_agent_and_wait", { objective: "nested", parentRunId: parent.run.runId }],
+      ["spawn_agent", { objective: "nested", visible: false }, "Background agents are leaf workers and cannot start additional agents."],
+      ["spawn_background_agent", { prompt: "nested" }, "Background agents are leaf workers and cannot start additional agents."],
+      ["run_agent_and_wait", { objective: "nested", parentRunId: parent.run.runId }, "Background agents are leaf workers and cannot start additional agents."],
+      ["send_agent_message", { sessionId: parent.session.sessionId, prompt: "continue" }, "Leaf workers cannot continue agent sessions."],
     ] as const;
 
-    for (const [name, input] of calls) {
+    for (const [name, input, message] of calls) {
       const result = parseToolResult(await handleAgentControlToolCall(context, name, input));
       expect(result).toMatchObject({
         ok: false,
         error: {
           code: "control_tool_failed",
-          message: "Background agents are leaf workers and cannot start additional agents.",
+          message,
         },
       });
     }
     expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
+  });
+
+  it("rejects kernel background spawns from leaf callers without trusted authority", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const leaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    await expect(
+      kernel.spawnBackgroundAgent({
+        ownerId: "owner",
+        clientId: "client",
+        requestId: "leaf-bypass",
+        prompt: "should fail",
+        adapterId: "pi-mono",
+        defaultAdapterId: "pi-mono",
+        callerSessionId: leaf.sessionId,
+      }),
+    ).rejects.toThrow("Leaf workers cannot create background agents.");
+
+    await expect(
+      kernel.spawnBackgroundAgent({
+        ownerId: "owner",
+        clientId: "client",
+        requestId: "unscoped-bypass",
+        prompt: "should fail",
+        adapterId: "pi-mono",
+        defaultAdapterId: "pi-mono",
+      }),
+    ).rejects.toThrow("Background agent spawn requires a coordinator caller session.");
+
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("loads owned session execution policy by id instead of a bounded list", () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const leaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    expect(kernel.executionPolicyForOwnedSession(leaf.sessionId, "owner")).toEqual({
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+    expect(() => kernel.executionPolicyForOwnedSession(leaf.sessionId, "other-owner")).toThrow(
+      "Agent session is not visible to the active owner",
+    );
     store.close();
   });
 

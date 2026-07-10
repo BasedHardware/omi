@@ -15,6 +15,8 @@ import type {
   WorkstreamProductContext,
 } from "./workstream-continuity.js";
 import {
+  executionRoleAllowsTool,
+  LEAF_AGENT_CONTROL_TOOLS,
   providerBoundaryForAdapter,
   resolveAdapterWithinBoundary,
   type AgentExecutionRole,
@@ -430,6 +432,8 @@ export interface AgentControlToolContext {
   /** Kernel-owned provider and role policy for the active control caller. */
   providerBoundary?: ProviderBoundary;
   executionRole?: AgentExecutionRole;
+  /** Persisted caller session used for kernel-level spawn authority checks. */
+  callerSessionId?: string;
   /** @deprecated Compatibility for older direct callers; use executionRole. */
   canSpawnAgents?: boolean;
   trustedUserControl?: boolean;
@@ -472,6 +476,29 @@ function assertAgentSpawningAllowed(context: AgentControlToolContext): void {
   if (context.executionRole === "leaf" || context.canSpawnAgents === false) {
     throw new Error("Background agents are leaf workers and cannot start additional agents.");
   }
+}
+
+function assertLeafControlToolsAllowed(context: AgentControlToolContext, name: string): void {
+  if (!LEAF_AGENT_CONTROL_TOOLS.has(name)) return;
+  if (!executionRoleAllowsTool(context.executionRole ?? "coordinator", name)) {
+    throw new Error(
+      name === "send_agent_message"
+        ? "Leaf workers cannot continue agent sessions."
+        : "Background agents are leaf workers and cannot start additional agents.",
+    );
+  }
+}
+
+function backgroundSpawnAuthority(
+  context: AgentControlToolContext,
+): { callerSessionId?: string; trustedUserSpawn?: boolean } {
+  if (context.callerSessionId) {
+    return { callerSessionId: context.callerSessionId };
+  }
+  if (context.trustedUserControl === true || context.executionRole !== "leaf") {
+    return { trustedUserSpawn: true };
+  }
+  return {};
 }
 
 export interface ActiveControlToolOwnerInput {
@@ -600,6 +627,7 @@ export async function handleAgentControlToolCall(
   }
 
   try {
+    assertLeafControlToolsAllowed(context, name);
     switch (name) {
       case "list_agent_sessions": {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
@@ -786,6 +814,7 @@ export async function handleAgentControlToolCall(
         const result = await context.kernel.spawnBackgroundAgent({
           ...parsed,
           ...controlRunRecovery(context, adapterId),
+          ...backgroundSpawnAuthority(context),
           adapterId,
           defaultAdapterId: adapterId,
           ownerId,
@@ -872,6 +901,7 @@ export async function handleAgentControlToolCall(
         }
         const result = await context.kernel.spawnBackgroundAgent({
           ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
+          ...backgroundSpawnAuthority(context),
           ownerId,
           clientId: parsed.clientId,
           requestId,

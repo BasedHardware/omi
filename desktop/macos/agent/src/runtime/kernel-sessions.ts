@@ -153,6 +153,19 @@ export class KernelSessions extends KernelArtifacts {
     };
   }
 
+  executionPolicyForOwnedSession(
+    sessionId: string,
+    ownerId: string,
+  ): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
+    const session = this.readSession(sessionId);
+    this.assertSessionOwner(session, ownerId);
+    return {
+      executionRole: session.executionRole,
+      providerBoundary: session.providerBoundary,
+      defaultAdapterId: session.defaultAdapterId,
+    };
+  }
+
   listSessions(input: ListSessionsInput = {}): KernelSessionSummary[] {
     const where: string[] = [];
     const values: unknown[] = [];

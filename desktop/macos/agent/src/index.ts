@@ -293,21 +293,38 @@ function startOmiToolsRelay(): Promise<string> {
                     requestKey: controlRequestKey({ requestId, clientId }),
                     ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                   });
-                  const activeSession = controlSessionPolicy(resolvedCorrelation.sessionId, controlOwnerId);
-                  const controlToolContext = agentControlToolContext
-                    ? {
+                  let result: string;
+                  try {
+                    if (!agentControlToolContext) {
+                      throw new Error("Agent runtime kernel is not ready");
+                    }
+                    const activeSession = requireControlSessionPolicy(
+                      resolvedCorrelation.sessionId,
+                      controlOwnerId,
+                    );
+                    result = await handleAgentControlToolCall(
+                      {
                         ...agentControlToolContext,
-                        executionRole: activeSession?.executionRole ?? "coordinator",
-                        providerBoundary: activeSession?.providerBoundary,
+                        callerSessionId: resolvedCorrelation.sessionId,
+                        executionRole: activeSession.executionRole,
+                        providerBoundary: activeSession.providerBoundary,
+                        defaultAdapterId: activeSession.defaultAdapterId,
                         getOwnerId: () => controlOwnerId,
-                      }
-                    : undefined;
-                  const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
-                    : JSON.stringify({
-                        ok: false,
-                        error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-                      });
+                      },
+                      msg.name,
+                      msg.input ?? {},
+                    );
+                  } catch (error) {
+                    result = JSON.stringify({
+                      ok: false,
+                      error: {
+                        code: error instanceof Error && error.message === "Agent runtime kernel is not ready"
+                          ? "runtime_not_ready"
+                          : "control_tool_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                      },
+                    });
+                  }
                   try {
                     client.write(
                       JSON.stringify({
@@ -711,11 +728,11 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
 }
 
-function controlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
-  if (!sessionId || !ownerId || !agentControlToolContext) return undefined;
-  return agentControlToolContext.kernel
-    .listSessions({ ownerId, limit: 200 })
-    .find((candidate) => candidate.session.sessionId === sessionId)?.session;
+function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
+  if (!sessionId || !ownerId || !agentControlToolContext) {
+    throw new Error("missing active control session policy");
+  }
+  return agentControlToolContext.kernel.executionPolicyForOwnedSession(sessionId, ownerId);
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {

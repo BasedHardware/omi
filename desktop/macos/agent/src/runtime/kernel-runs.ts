@@ -162,6 +162,15 @@ export class KernelRuns extends KernelCore {
   }
 
   async spawnBackgroundAgent(input: SpawnBackgroundAgentInput): Promise<SpawnBackgroundAgentResult> {
+    if (input.callerSessionId) {
+      const callerSession = this.readSession(input.callerSessionId);
+      this.assertSessionOwner(callerSession, input.ownerId);
+      if (callerSession.executionRole === "leaf") {
+        throw new Error("Leaf workers cannot create background agents.");
+      }
+    } else if (!input.trustedUserSpawn) {
+      throw new Error("Background agent spawn requires a coordinator caller session.");
+    }
     const runInput: ExecuteAgentRunInput = {
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind ?? "floating_bar",
