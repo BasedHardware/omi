@@ -13,7 +13,14 @@ type RetryConfig = InternalAxiosRequestConfig & { __retryCount?: number; __noRet
 function makeClient(baseURL: string): AxiosInstance {
   // 12s is enough for normal Omi responses and short enough that a stuck
   // request doesn't lock the UI in a perpetual loading state.
-  const client = axios.create({ baseURL, timeout: 12_000 })
+  const client = axios.create({
+    baseURL,
+    timeout: 12_000,
+    // Platform tag on every request — same convention as the macOS/Flutter
+    // clients (their shared header builders), so the backend can give
+    // Windows-appropriate answers and attribute quota correctly.
+    headers: { 'X-App-Platform': 'windows' }
+  })
 
   client.interceptors.request.use(async (config) => {
     const user = auth.currentUser

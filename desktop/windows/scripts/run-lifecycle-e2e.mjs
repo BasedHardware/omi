@@ -6,9 +6,13 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const NO_BUILD = process.argv.includes('--no-build')
 
-// Build main + preload + renderer so out/main/index.js is current.
-execFileSync('npx', ['electron-vite', 'build'], { stdio: 'inherit', cwd: root, shell: true })
+// Build main + preload + renderer so out/main/index.js is current (skip with
+// --no-build to reuse an existing out/ from a prior build).
+if (!NO_BUILD) {
+  execFileSync('npx', ['electron-vite', 'build'], { stdio: 'inherit', cwd: root, shell: true })
+}
 
 // node:test runner. --test-timeout guards against a wedged launch.
 execFileSync('node', ['--test', '--test-timeout=60000', 'e2e/lifecycle.spec.mjs'], {

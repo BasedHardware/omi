@@ -72,7 +72,7 @@ export function Sidebar(): React.JSX.Element {
   }
 
   // Microphone = always-on listening. The toggle reflects the `continuousRecording`
-  // preference; flipping it starts/stops the background ContinuousRecordingHost
+  // preference; flipping it starts/stops the capture window's ContinuousSessionHost
   // (which streams the mic to /v4/listen). Viewing the live transcript is a SEPARATE
   // affordance (the "New" button in Conversations / opening a conversation row) —
   // this switch only turns listening on and off.

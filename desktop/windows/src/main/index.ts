@@ -4,7 +4,14 @@ import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
-import { registerOmiListenHandlers } from './ipc/omiListen'
+import {
+  registerOmiListenHandlers,
+  startTestListenSession,
+  stopTestListenSession
+} from './ipc/omiListen'
+import { registerCaptureBridge } from './ipc/captureBridge'
+import { registerSoak } from './soak'
+import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
@@ -235,7 +242,9 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      webSecurity: false, // Disabled to work around Omi API CORS preflight issues
+      // webSecurity stays ON. The Omi API CORS gap is handled by the header
+      // injection + OPTIONS-preflight forcing in the webRequest hooks below, so
+      // we no longer weaken the renderer's web security to work around it.
       // Keep renderer timers running at full rate when the window is minimized/
       // hidden, so Rewind's background screen capture keeps sampling instead of
       // being throttled to ~once/minute by Chromium's background policy.
@@ -358,11 +367,21 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Omi's API doesn't advertise http://localhost:5173 as a CORS-allowed origin.
-  // In Electron we control the network stack, so strip the Origin header on
-  // outgoing requests and inject permissive CORS response headers. Scoped to
-  // the specific upstreams — everything else flows normally.
-  const apiUrls = ['https://api.omi.me/*', 'https://desktop-backend-hhibjajaja-uc.a.run.app/*']
+  // Omi's API doesn't advertise the renderer's localhost origin as CORS-allowed.
+  // We used to work around this by disabling webSecurity on every window; that's
+  // now OFF (webSecurity is ON — see the window webPreferences), so instead we
+  // control the network stack: strip the Origin header on outgoing requests and
+  // inject permissive CORS response headers. Scoped to the specific upstreams —
+  // everything else flows normally.
+  const apiUrls = [
+    'https://api.omi.me/*',
+    'https://desktop-backend-hhibjajaja-uc.a.run.app/*',
+    // PostHog analytics ingestion. Added proactively for the webSecurity-on switch.
+    // Static analysis suggests it may not actually need CORS help (a same-shape
+    // JSON POST that PostHog answers with permissive CORS), but including it is
+    // harmless and avoids a surprise block if PostHog tightens its headers.
+    'https://us.i.posthog.com/*'
+  ]
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: apiUrls }, (details, cb) => {
     const headers = { ...details.requestHeaders }
     delete headers.Origin
@@ -370,14 +389,23 @@ app.whenReady().then(async () => {
     cb({ requestHeaders: headers })
   })
   session.defaultSession.webRequest.onHeadersReceived({ urls: apiUrls }, (details, cb) => {
-    cb({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'access-control-allow-origin': ['*'],
-        'access-control-allow-headers': ['*'],
-        'access-control-allow-methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS']
-      }
-    })
+    const responseHeaders = {
+      ...details.responseHeaders,
+      'access-control-allow-origin': ['*'],
+      // `*` does NOT cover Authorization even for non-credentialed requests, so
+      // list it (and content-type) explicitly alongside the wildcard.
+      'access-control-allow-headers': ['authorization, content-type, *'],
+      'access-control-allow-methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS']
+    }
+    // Preflight gotcha (surfaces only with webSecurity ON): a CORS preflight
+    // OPTIONS must get a 2xx carrying the allow-* headers or the browser blocks
+    // the real request. The Omi API may not answer OPTIONS with a success + these
+    // headers, so force a 200 for preflights on the allowlisted hosts.
+    if (details.method === 'OPTIONS') {
+      cb({ responseHeaders, statusLine: 'HTTP/1.1 200 OK' })
+      return
+    }
+    cb({ responseHeaders })
   })
 
   // System-audio (loopback) capture for the Screen recording mode (which mixes
@@ -425,6 +453,13 @@ app.whenReady().then(async () => {
     updateLocalConversationTitle(id, title)
   )
   registerOmiListenHandlers()
+  // Capture bridge: routes commands from UI windows to the hidden capture window
+  // and events back. Registered before the capture window is created so no early
+  // command/event is missed. Reads the capture wc live so a respawn is picked up.
+  registerCaptureBridge(getCaptureWc)
+  // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
+  // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
+  registerSoak()
   registerFileIndexHandlers()
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
@@ -494,7 +529,29 @@ app.whenReady().then(async () => {
       trayCreated: () => isTrayCreated(),
       // The harness must target the MAIN window — getAllWindows() also returns
       // the insight toast / overlay, which have different close semantics.
-      mainWindowId: mainWindow.id
+      mainWindowId: mainWindow.id,
+      // VAD-playback harness: start/stop a real capture session (mic -> pipeline
+      // -> VAD gate -> counted-and-dropped bytes) with zero auth or network.
+      startCaptureForTest: async ({ source }: { source: 'mic' | 'system' }) => {
+        if (!startTestListenSession('e2e-vad-playback', source)) return false
+        const wc = getCaptureWc()
+        if (!wc || wc.isDestroyed()) return false
+        wc.send('omi-capture:cmd', {
+          cmd: { type: 'audio-start', sessionId: 'e2e-vad-playback', source },
+          ownerId: wc.id
+        })
+        return true
+      },
+      stopCaptureForTest: () => {
+        const wc = getCaptureWc()
+        if (wc && !wc.isDestroyed()) {
+          wc.send('omi-capture:cmd', {
+            cmd: { type: 'audio-stop', sessionId: 'e2e-vad-playback' },
+            ownerId: wc.id
+          })
+        }
+        stopTestListenSession('e2e-vad-playback')
+      }
     }
   }
 
@@ -504,6 +561,15 @@ app.whenReady().then(async () => {
   // instead of delaying the window from appearing. None are needed before the UI
   // is up; their IPC handlers are already registered above.
   win.once('ready-to-show', () => {
+    // The hidden always-alive capture window: owns all audio + Rewind capture,
+    // independent of any UI window. Created after first paint (ready-to-show fires
+    // for --hidden tray-only login starts too, so continuous recording still works
+    // before the user opens the window) rather than alongside createWindow, so a
+    // second full renderer eval doesn't contend with the main window's first paint.
+    // Capture starts ~0.5-1s later as a result, which the 2s PTT pre-roll and the
+    // 30s silence finalizer tolerate. Skipped under the perf bench (OMI_BENCH),
+    // whose startup measurement must not include a second renderer.
+    if (process.env.OMI_BENCH !== '1') createCaptureWindow()
     // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
     startForegroundMonitor()
     // Track the last non-Omi foreground window so the automation planner snapshots
@@ -690,6 +756,8 @@ app.on('will-quit', () => {
   destroyTray()
   const overlay = getOverlayWindow()
   if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  const capture = getCaptureWindow()
+  if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()
   flushPerfMarks()
   automationBridge.dispose()

@@ -7,6 +7,8 @@ import type {
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  CaptureCommand,
+  CaptureEvent,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -46,6 +48,23 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  captureCommand: (cmd: CaptureCommand) => ipcRenderer.send('omi-capture:cmd', cmd),
+  onCaptureCommand: (cb: (cmd: CaptureCommand, ownerId: number) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { cmd: CaptureCommand; ownerId: number }
+    ): void => cb(payload.cmd, payload.ownerId)
+    ipcRenderer.on('omi-capture:cmd', listener)
+    return () => ipcRenderer.removeListener('omi-capture:cmd', listener)
+  },
+  captureEmit: (event: CaptureEvent, ownerId?: number) =>
+    ipcRenderer.send('omi-capture:event', { event, ownerId }),
+  onCaptureEvent: (cb: (e: CaptureEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, ev: CaptureEvent): void => cb(ev)
+    ipcRenderer.on('omi-capture:event', listener)
+    return () => ipcRenderer.removeListener('omi-capture:event', listener)
+  },
+  allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),

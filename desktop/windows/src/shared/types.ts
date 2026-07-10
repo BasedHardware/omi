@@ -110,6 +110,81 @@ export type ListenMessage =
   | { sessionId: string; kind: 'error'; message: string; fatal: boolean }
   | { sessionId: string; kind: 'closed'; code: number; reason: string }
 
+// ───────────────────────── Capture window IPC ─────────────────────────
+// The hidden always-alive capture window (renderer #/capture) owns ALL audio +
+// Rewind capture; UI windows are pure UI. Commands flow UI window → main →
+// capture window; events flow capture window → main → the owning UI window (or a
+// broadcast). The main process still owns every WebSocket (omi-listen:*), so
+// audio origin (capture window) and transcript destination (any UI window)
+// decouple — the listenFeed channel is already sender-agnostic, keyed by
+// sessionId. Channels: 'omi-capture:cmd' / 'omi-capture:event'.
+
+/** A command sent from a UI window (or main) to the capture window. */
+export type CaptureCommand =
+  // Continuous-conversation audio lane (mic or system). Always VAD-gated. sessionId
+  // is the same id the UI window opened its listen session under, so the capture
+  // window's feed and the UI window's transcript stream share it.
+  | { type: 'audio-start'; sessionId: string; source: ListenSource }
+  | { type: 'audio-stop'; sessionId: string }
+  // Finalize the current always-on live-mic conversation now ("Save now").
+  | { type: 'live-finalize' }
+  // A UI LiveConversation view mounted/unmounted: when continuousRecording is OFF
+  // this triggers a one-off live-mic session so "New" still captures.
+  | { type: 'live-view'; active: boolean }
+  // Push-to-talk lifecycle (warm mic, release, per-hold capture).
+  | { type: 'ptt-warm' }
+  | { type: 'ptt-release' }
+  | { type: 'ptt-start'; captureId: string; backfillMs: number }
+  | { type: 'ptt-drain'; captureId: string }
+  | { type: 'ptt-dispose'; captureId: string }
+  // A decorative desktop-video session (the screen-record mode's preview stream).
+  // `sourceId` is the user-picked capture source; the capture window falls back to
+  // the primary screen when it's absent.
+  | { type: 'screen-view'; active: boolean; sourceId?: string }
+  // The main window's auth transitioned (sign-in/out/account switch). `uid` is the
+  // main window's current user id (null when signed out); the capture window
+  // reloads itself if its own auth.currentUser disagrees, so its WS auth is always
+  // fresh even across an account switch.
+  | { type: 'auth-changed'; uid: string | null }
+
+/** A mutation to the shared live-conversation store, emitted by the capture
+ *  window as it owns the always-on mic session. UI windows apply these via
+ *  liveConversation.applyRemoteOp so the LiveConversation view mirrors the store. */
+export type LiveStoreOp =
+  | { op: 'reset' }
+  | { op: 'status'; status: 'idle' | 'connecting' | 'live' | 'error'; error?: string }
+  | { op: 'append'; line: TranscriptLine }
+  // The current conversation was finalized/saved; the UI window turns these
+  // segments into a pending (optimistically-titled) conversation row.
+  | { op: 'saved'; segments: TranscriptLine[] }
+
+/** An event sent from the capture window to a UI window (routed to the owning
+ *  window when it carries an owner, else broadcast to all non-capture windows). */
+export type CaptureEvent =
+  // Live-conversation store mirror (broadcast).
+  | { type: 'live'; op: LiveStoreOp }
+  // An audio lane's source (mic/system stream) failed (routed to the owner).
+  | { type: 'audio-source-error'; sessionId: string; name: string; message: string }
+  // Push-to-talk streamed data / lifecycle (routed to the owner).
+  | { type: 'ptt-chunk'; captureId: string; pcm: ArrayBuffer }
+  | { type: 'ptt-drained'; captureId: string; pcm: ArrayBuffer }
+  | { type: 'ptt-capped'; captureId: string }
+  | { type: 'ptt-error'; captureId: string; message: string }
+  // ~30fps 32-bin waveform snapshots for the PTT visualizer (routed to the owner).
+  | { type: 'ptt-levels'; captureId: string; bins: number[] }
+  // The capture window was recreated/reloaded — UI windows re-issue their
+  // standing commands (live-view, screen-view, an active PTT is abandoned).
+  | { type: 'capture-window-restarted' }
+
+/** The minimal surface the waveform visualizer needs from an amplitude source.
+ *  A live `AnalyserNode` satisfies it directly (in-window PTT), and the IPC-fed
+ *  PTT client provides an adapter that fills `dest` from the latest ptt-levels
+ *  frame — so the same Waveform component works whether the mic graph is local or
+ *  in the capture window. */
+export type WaveformSource = {
+  getByteFrequencyData: (dest: Uint8Array) => void
+}
+
 export type OmiOverlayApi = {
   /** Subscribe to summon events; callback fires each time the overlay is shown. Returns an unsubscribe fn. */
   onShown: (cb: () => void) => () => void
@@ -191,6 +266,26 @@ export type OmiBridgeApi = {
   listenFinalize: (sessionId: string) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  // --- Capture window bridge (Phase 2) ---
+  /** Send a capture command. From a UI window it's forwarded to the hidden
+   *  capture window; the capture window itself services them. Fire-and-forget. */
+  captureCommand: (cmd: CaptureCommand) => void
+  /** Capture window: receive commands forwarded by main. `ownerId` is the
+   *  webContents id of the UI window that issued the command (so owned events —
+   *  audio errors, PTT — can be routed back to it). Returns an unsubscribe fn. */
+  onCaptureCommand: (cb: (cmd: CaptureCommand, ownerId: number) => void) => () => void
+  /** Capture window → main: emit an event. Main accepts it ONLY from the capture
+   *  window (spoof guard) and routes it to `ownerId` (owned events) or broadcasts
+   *  it (live-store / restart). Exposed to all windows but a no-op
+   *  from any window other than the capture one. */
+  captureEmit: (event: CaptureEvent, ownerId?: number) => void
+  /** Subscribe to events from the capture window (audio errors, live-store ops,
+   *  PTT chunks/levels). Returns an unsubscribe fn. */
+  onCaptureEvent: (cb: (e: CaptureEvent) => void) => () => void
+  /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
+   *  the mic. When false, capture steers away from virtual/loopback default
+   *  inputs (see lib/audio acquireMicStream). */
+  allowVirtualMic: boolean
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */

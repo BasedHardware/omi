@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
 import { getPreferences, setPreferences } from '../../lib/preferences'
-import {
-  DEFAULT_OVERLAY_ACCELERATOR,
-  acceleratorToTokens,
-  eventToAccelerator,
-  validateCustomAccelerator
-} from '../../lib/overlayShortcut'
+import { DEFAULT_OVERLAY_ACCELERATOR, acceleratorToTokens } from '../../lib/overlayShortcut'
+import { useChordRecorder } from '../../hooks/useChordRecorder'
 
 type ShortcutSetupStepProps = {
   stepIndex: number
@@ -30,7 +26,6 @@ export function ShortcutSetupStep({
   const [accel, setAccel] = useState<string>(
     () => getPreferences().overlayShortcut ?? DEFAULT_OVERLAY_ACCELERATOR
   )
-  const [recording, setRecording] = useState(false)
   const [lit, setLit] = useState(false)
   const [worked, setWorked] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,51 +50,28 @@ export function ShortcutSetupStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // While recording, the global shortcut is suspended so every keydown reaches
-  // us. A complete combo (≥1 modifier + key) commits; Esc cancels.
-  useEffect(() => {
-    if (!recording) return
-    const onKeyDown = (e: KeyboardEvent): void => {
-      e.preventDefault()
-      e.stopPropagation()
-      if (e.key === 'Escape') {
-        void window.omiOverlay?.resumeShortcut()
-        setRecording(false)
-        return
-      }
-      const next = eventToAccelerator(e)
-      if (!next) return // still building the chord (modifier-only / no modifier yet)
-      // Reject combos that clash with the OS or are unstable BEFORE claiming them;
-      // stay in recording mode so the user can immediately try another.
-      const valid = validateCustomAccelerator(next)
-      if (!valid.ok) {
-        setError(valid.reason)
-        return
-      }
-      void (async () => {
-        const ok = await window.omiOverlay?.setAccelerator(next)
-        if (ok) {
-          setAccel(next)
-          setPreferences({ overlayShortcut: next })
-          setWorked(false)
-          setError(null)
-          setRecording(false)
-        } else {
-          // Another app already owns it (registration failed; main rolled back).
-          setError('That shortcut is already in use — try another.')
-          setRecording(false)
-        }
-      })()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [recording])
+  // While recording, the global summon shortcut is suspended so every keydown
+  // reaches us; a complete combo commits by claiming the new accelerator (main
+  // rolls back to the previous one if it's already owned). resume re-claims it on
+  // stop/unmount (idempotent — after a successful set it's already registered).
+  const recorder = useChordRecorder({
+    suspend: () => window.omiOverlay?.suspendShortcut(),
+    resume: () => void window.omiOverlay?.resumeShortcut(),
+    commit: async (next) => {
+      const ok = await window.omiOverlay?.setAccelerator(next)
+      return { ok: !!ok, registered: !!ok }
+    },
+    onCommitted: (next) => {
+      setAccel(next)
+      setPreferences({ overlayShortcut: next })
+      setWorked(false)
+    },
+    onError: setError
+  })
 
   const startCustom = (): void => {
-    setError(null)
     setWorked(false)
-    window.omiOverlay?.suspendShortcut()
-    setRecording(true)
+    recorder.start()
   }
 
   // Leaving the step — via Continue or Skip — always persists the current
@@ -128,7 +100,7 @@ export function ShortcutSetupStep({
     >
       {/* Keycap test box */}
       <div className="mt-2 flex w-full max-w-[420px] flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-6 py-8">
-        {recording ? (
+        {recorder.recording ? (
           <div className="flex h-[52px] items-center text-sm text-white/60">
             Recording… press your keys{' '}
             <span className="ml-2 text-white/35">(Esc to cancel)</span>
@@ -163,15 +135,15 @@ export function ShortcutSetupStep({
         <button
           type="button"
           onClick={startCustom}
-          disabled={recording}
+          disabled={recorder.recording}
           className={
             'rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium transition-colors ' +
-            (recording
+            (recorder.recording
               ? 'cursor-not-allowed bg-white/[0.04] text-white/40'
               : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]')
           }
         >
-          {recording ? 'Recording…' : 'Custom'}
+          {recorder.recording ? 'Recording…' : 'Custom'}
         </button>
       </div>
     </StepScaffold>

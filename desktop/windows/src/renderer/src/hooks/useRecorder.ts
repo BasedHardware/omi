@@ -42,8 +42,6 @@ export type UseRecorder = {
    * Always 'omi' once connected (the only transcription backend). */
   micBackend: 'omi' | null
   systemBackend: 'omi' | null
-  screenStream: MediaStream | null
-  videoRef: React.RefObject<HTMLVideoElement | null>
   /** Begin a recording session. Pass `system: true` to also transcribe loopback. */
   start: (opts?: { system?: boolean }) => Promise<void>
   pickScreen: (s: CaptureSource) => Promise<void>
@@ -65,22 +63,22 @@ export function useRecorder(): UseRecorder {
   const micRef = useRef<TranscriptionHandle | null>(null)
   const systemRef = useRef<TranscriptionHandle | null>(null)
 
-  const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  // The decorative desktop-video preview lives in the capture window now (it
+  // renders nothing here). We just track the picked source id so the capture
+  // window can re-open the preview if it restarts mid-session.
+  const activeScreenSourceRef = useRef<string | null>(null)
 
-  // Attach/detach the MediaStream when screenStream changes. We can't do this
-  // imperatively inside pickScreen() because the <video> element is
-  // conditionally rendered — videoRef.current is null until React re-renders.
   useEffect(() => {
-    const v = videoRef.current
-    if (!v) return
-    if (screenStream) {
-      v.srcObject = screenStream
-      v.play().catch((e) => console.error('Video play failed:', e))
-    } else {
-      v.srcObject = null
-    }
-  }, [screenStream])
+    return window.omi?.onCaptureEvent?.((ev) => {
+      if (ev.type === 'capture-window-restarted' && activeScreenSourceRef.current) {
+        window.omi?.captureCommand?.({
+          type: 'screen-view',
+          active: true,
+          sourceId: activeScreenSourceRef.current
+        })
+      }
+    })
+  }, [])
 
   const start = async (opts?: { system?: boolean }): Promise<void> => {
     const withSystem = opts?.system ?? false
@@ -131,39 +129,14 @@ export function useRecorder(): UseRecorder {
   }
 
   const pickScreen = async (s: CaptureSource): Promise<void> => {
-    try {
-      const stream = await (
-        navigator.mediaDevices as unknown as {
-          getUserMedia: (c: unknown) => Promise<MediaStream>
-        }
-      ).getUserMedia({
-        audio: false,
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: s.id,
-            minWidth: 640,
-            maxWidth: 1920,
-            minHeight: 360,
-            maxHeight: 1080
-          }
-        }
-      })
-      setScreenStream(stream)
-    } catch (e) {
-      const err = e as Error
-      const hint =
-        err.name === 'NotAllowedError'
-          ? '\n\nWindows blocked screen capture. Open Settings → Privacy & security and allow desktop apps to access screen recording.'
-          : ''
-      alert(`Screen capture failed: ${err.message}${hint}`)
-    }
+    // The preview stream is opened in the capture window; just hand it the source.
+    activeScreenSourceRef.current = s.id
+    window.omi?.captureCommand?.({ type: 'screen-view', active: true, sourceId: s.id })
   }
 
   const stopScreen = (): void => {
-    screenStream?.getTracks().forEach((t) => t.stop())
-    setScreenStream(null)
-    if (videoRef.current) videoRef.current.srcObject = null
+    activeScreenSourceRef.current = null
+    window.omi?.captureCommand?.({ type: 'screen-view', active: false })
   }
 
   const stop = async (): Promise<void> => {
@@ -171,9 +144,8 @@ export function useRecorder(): UseRecorder {
     micRef.current = null
     systemRef.current?.stop()
     systemRef.current = null
-    screenStream?.getTracks().forEach((t) => t.stop())
-    setScreenStream(null)
-    if (videoRef.current) videoRef.current.srcObject = null
+    activeScreenSourceRef.current = null
+    window.omi?.captureCommand?.({ type: 'screen-view', active: false })
 
     const session = stopSession()
     if (!session) return
@@ -226,8 +198,6 @@ export function useRecorder(): UseRecorder {
     systemInterim,
     micBackend,
     systemBackend,
-    screenStream,
-    videoRef,
     start,
     pickScreen,
     stopScreen,

@@ -3,11 +3,8 @@ import { MessagesSquare, Power, Keyboard, Download } from 'lucide-react'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
-import {
-  acceleratorToTokens,
-  eventToAccelerator,
-  validateCustomAccelerator
-} from '../../../lib/overlayShortcut'
+import { acceleratorToTokens } from '../../../lib/overlayShortcut'
+import { useChordRecorder } from '../../../hooks/useChordRecorder'
 
 export function GeneralTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
@@ -95,7 +92,6 @@ function LaunchAtLoginRow(): React.JSX.Element {
 function RecordHotkeyRow(): React.JSX.Element {
   const [accel, setAccel] = useState<string | null>(null)
   const [registered, setRegistered] = useState(true)
-  const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -106,46 +102,22 @@ function RecordHotkeyRow(): React.JSX.Element {
     })
   }, [])
 
-  // While recording, capture raw keydowns. A complete, valid combo commits via
-  // setRecordHotkey; Esc cancels. Global chords are suspended for the duration —
-  // otherwise pressing the CURRENT chord (Ctrl+Space / Shift+Space) fires the
-  // shortcut and navigates away instead of being captured.
-  useEffect(() => {
-    if (!recording) return
-    window.omi?.suspendShortcutCapture?.()
-    const onKeyDown = (e: KeyboardEvent): void => {
-      e.preventDefault()
-      e.stopPropagation()
-      if (e.key === 'Escape') {
-        setRecording(false)
-        return
-      }
-      const next = eventToAccelerator(e)
-      if (!next) return // still building the chord
-      const valid = validateCustomAccelerator(next)
-      if (!valid.ok) {
-        setError(valid.reason)
-        return
-      }
-      void (async () => {
-        const res = await window.omi?.setRecordHotkey?.(next)
-        if (res?.ok) {
-          setAccel(next)
-          setRegistered(res.registered)
-          setError(null)
-          setRecording(false)
-        } else {
-          setError('That shortcut is already in use — try another.')
-          setRecording(false)
-        }
-      })()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true)
-      window.omi?.resumeShortcutCapture?.()
-    }
-  }, [recording])
+  // suspend/resume release ALL global chords while recording — otherwise pressing
+  // the CURRENT chord (Ctrl+Space / Shift+Space) fires the shortcut and navigates
+  // away instead of being captured.
+  const recorder = useChordRecorder({
+    suspend: () => window.omi?.suspendShortcutCapture?.(),
+    resume: () => window.omi?.resumeShortcutCapture?.(),
+    commit: async (next) => {
+      const res = await window.omi?.setRecordHotkey?.(next)
+      return { ok: !!res?.ok, registered: !!res?.registered }
+    },
+    onCommitted: (next, result) => {
+      setAccel(next)
+      setRegistered(result.registered)
+    },
+    onError: setError
+  })
 
   const tokens = accel ? acceleratorToTokens(accel) : []
 
@@ -164,7 +136,7 @@ function RecordHotkeyRow(): React.JSX.Element {
       }
       control={
         <div className="flex items-center gap-2">
-          {recording ? (
+          {recorder.recording ? (
             <span className="text-xs text-white/50">Press keys… (Esc to cancel)</span>
           ) : (
             <div className="flex items-center gap-1">
@@ -184,14 +156,11 @@ function RecordHotkeyRow(): React.JSX.Element {
           )}
           <button
             type="button"
-            onClick={() => {
-              setError(null)
-              setRecording(true)
-            }}
-            disabled={recording}
+            onClick={() => recorder.start()}
+            disabled={recorder.recording}
             className="ml-1 rounded-md border border-white/15 px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/10 disabled:opacity-40"
           >
-            {recording ? 'Recording…' : 'Rebind'}
+            {recorder.recording ? 'Recording…' : 'Rebind'}
           </button>
         </div>
       }

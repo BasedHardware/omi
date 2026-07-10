@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { Loader2, Check } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { liveConversation, requestFinalize, type LiveStatus } from '../lib/liveConversation'
-import { startLiveMicSession } from '../lib/liveMicSession'
-import { getPreferences } from '../lib/preferences'
 import type { TranscriptLine } from '../../../shared/types'
 
 function statusLabel(status: LiveStatus): string {
@@ -18,10 +16,11 @@ function statusLabel(status: LiveStatus): string {
 // control segmentation — the backend decides when the conversation ends, at which
 // point it appears (titled) in the Conversations list and this view clears.
 //
-// Session ownership: when continuousRecording is ON, the background
-// ContinuousRecordingHost already owns the mic session and this view just reads
-// the shared store. When OFF, this view starts/stops its OWN one-off session so
-// "New" still captures.
+// Session ownership: the mic session runs in the capture window. This view just
+// reads the mirrored store (kept in sync by LiveMirrorHost). Opening it sends a
+// 'live-view' active command so the capture window's ContinuousSessionHost starts
+// a one-off session when continuousRecording is OFF (when it's ON, the always-on
+// session is already running and the refcount is a no-op).
 export function LiveConversation(): React.JSX.Element {
   const navigate = useNavigate()
   const [segments, setSegments] = useState<TranscriptLine[]>(liveConversation.getSegments())
@@ -40,14 +39,20 @@ export function LiveConversation(): React.JSX.Element {
     })
   }, [])
 
-  // Own a one-off session only when continuous mode is OFF (otherwise the
-  // always-on host owns the shared session and this view just reads the store).
-  // The session lifecycle (connect/retry, silence + "Save now" finalize, polling)
-  // lives in startLiveMicSession, shared with ContinuousRecordingHost.
+  // Tell the capture window a live view is open so it runs a session even when
+  // continuousRecording is off (refcounted there). Re-issue if the capture window
+  // restarts while we're mounted.
   useEffect(() => {
-    if (getPreferences().continuousRecording) return
-    const session = startLiveMicSession()
-    return () => session.stop()
+    window.omi?.captureCommand?.({ type: 'live-view', active: true })
+    const unsubRestart = window.omi?.onCaptureEvent?.((ev) => {
+      if (ev.type === 'capture-window-restarted') {
+        window.omi?.captureCommand?.({ type: 'live-view', active: true })
+      }
+    })
+    return () => {
+      unsubRestart?.()
+      window.omi?.captureCommand?.({ type: 'live-view', active: false })
+    }
   }, [])
 
   return (

@@ -2,17 +2,10 @@
 // lib/ptt/capture.ts and conversation recording in omiListenClient.ts), so
 // format subtleties and device policy exist exactly once.
 
-/** Convert a Web Audio Float32 buffer to 16-bit little-endian PCM. The
- *  asymmetric scaling (0x8000 negative / 0x7fff positive) matches the int16
- *  range exactly — keep it identical everywhere or lanes drift audibly. */
-export function floatTo16BitPCM(f32: Float32Array): Int16Array<ArrayBuffer> {
-  const i16 = new Int16Array(f32.length)
-  for (let i = 0; i < f32.length; i++) {
-    const s = Math.max(-1, Math.min(1, f32[i]))
-    i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-  }
-  return i16
-}
+// floatTo16BitPCM's single implementation lives in ./capture/pcmCore (the DOM-free,
+// node-testable home of the PCM primitives). Re-exported here so mic-capture
+// consumers keep importing it from this module and the two lanes can't drift.
+export { floatTo16BitPCM } from './capture/pcmCore'
 
 // Virtual/loopback input devices (VB-Audio Cable, VoiceMeeter, …) output pure
 // silence unless something routes audio into them. If Windows' DEFAULT capture
@@ -30,7 +23,11 @@ const BLUETOOTH_RE = /bluetooth|hands-free/i
 export async function acquireMicStream(): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
   const label = stream.getAudioTracks()[0]?.label ?? ''
-  if (!VIRTUAL_INPUT_RE.test(label)) return stream
+  // The VB-Cable test lane deliberately feeds a known WAV in through a virtual
+  // input; steering away from it would defeat the harness. window.omi.allowVirtualMic
+  // (main-process opt-in under OMI_ALLOW_VIRTUAL_MIC) skips the guard for that lane
+  // only — default behavior is unchanged.
+  if (window.omi?.allowVirtualMic === true || !VIRTUAL_INPUT_RE.test(label)) return stream
   const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(
     (d) =>
       d.kind === 'audioinput' &&
@@ -45,7 +42,9 @@ export async function acquireMicStream(): Promise<MediaStream> {
     const better = await navigator.mediaDevices.getUserMedia({
       audio: { deviceId: { exact: pick.deviceId } }
     })
-    console.warn(`[audio] default input "${label}" is a virtual device — capturing "${pick.label}" instead`)
+    console.warn(
+      `[audio] default input "${label}" is a virtual device — capturing "${pick.label}" instead`
+    )
     stream.getTracks().forEach((t) => t.stop())
     return better
   } catch {

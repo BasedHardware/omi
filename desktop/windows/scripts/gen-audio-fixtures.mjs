@@ -27,13 +27,18 @@ const BYTES_PER_SAMPLE = 2
 const VOICED_RMS_THRESHOLD = 300
 const VOICED_FRAME_SAMPLES = 320 // 20ms @ 16kHz
 
+// Each clip opens with "Omi test fixture" (test-data hygiene) so that if a fixture
+// is ever transcribed into a real account it is unmistakably identifiable as test
+// data. The live PTT E2E only asserts the "hello"/"world" tokens, which remain.
 const SPEECH_TEXTS = {
-  'speech-hello': 'Hello world. Testing one two three.',
-  'speech-long': Array(12)
-    .fill(
-      'The quick brown fox jumps over the lazy dog while the transcription service listens carefully to every word.'
-    )
-    .join(' ')
+  'speech-hello': 'Omi test fixture. Hello world. Testing one two three.',
+  'speech-long':
+    'Omi test fixture. ' +
+    Array(12)
+      .fill(
+        'The quick brown fox jumps over the lazy dog while the transcription service listens carefully to every word.'
+      )
+      .join(' ')
 }
 
 function log(msg) {

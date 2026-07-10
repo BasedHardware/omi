@@ -1,0 +1,100 @@
+import { useEffect } from 'react'
+import {
+  createPcmPipeline,
+  createVadGate,
+  type PcmPipeline,
+  type VadGate
+} from '../lib/capture/captureEngine'
+import { getSystemAudioStream } from '../lib/capture/systemAudio'
+import { acquireMicStream } from '../lib/audio'
+import type { ListenSource } from '../../../shared/types'
+
+// The capture window's continuous-audio engine. Serves audio-start / audio-stop
+// commands (from the capture window's own continuous-mic lane and from UI screen
+// sessions): acquires the source stream, runs it through the PCM pipeline and the
+// VAD gate, and forwards gated PCM to the main-process WebSocket via
+// window.omi.listenFeed(sessionId, chunk). The main process routes transcript
+// messages back to whichever window opened the listen session (its ownerId), so
+// audio origin (here) and transcript destination decouple.
+//
+// Module-singleton session map keyed by sessionId so the command server is
+// idempotent under React StrictMode double-mount / duplicate commands; the
+// component only owns the command subscription.
+
+type AudioSession = {
+  ownerId: number
+  pipeline: PcmPipeline | null
+  gate: VadGate | null
+  // Set if audio-stop lands while the source stream is still being acquired, so
+  // the resolved stream is torn down instead of leaking.
+  stopped: boolean
+}
+
+const sessions = new Map<string, AudioSession>()
+
+async function startAudioSession(
+  sessionId: string,
+  source: ListenSource,
+  ownerId: number
+): Promise<void> {
+  if (sessions.has(sessionId)) return // idempotent — duplicate/StrictMode command
+  const session: AudioSession = {
+    ownerId,
+    pipeline: null,
+    gate: null,
+    stopped: false
+  }
+  sessions.set(sessionId, session)
+
+  let stream: MediaStream
+  try {
+    stream = source === 'mic' ? await acquireMicStream() : await getSystemAudioStream()
+  } catch (e) {
+    sessions.delete(sessionId)
+    const err = e as Error
+    // Route the source failure back to the window that opened the session so it
+    // can surface a mic/loopback error (same shape omiListenClient expects).
+    window.omi?.captureEmit(
+      { type: 'audio-source-error', sessionId, name: err.name, message: err.message },
+      ownerId
+    )
+    return
+  }
+
+  // audio-stop arrived while acquiring — drop the just-opened stream.
+  if (session.stopped) {
+    stream.getTracks().forEach((t) => t.stop())
+    sessions.delete(sessionId)
+    return
+  }
+
+  const feed = (pcm: Int16Array): void =>
+    window.omi?.listenFeed(sessionId, pcm.buffer as ArrayBuffer)
+  const gate = createVadGate({ onVoiced: feed })
+  session.gate = gate
+  session.pipeline = createPcmPipeline(stream, (pcm) => gate.push(pcm))
+}
+
+function stopAudioSession(sessionId: string): void {
+  const s = sessions.get(sessionId)
+  if (!s) return
+  s.stopped = true
+  s.pipeline?.stop() // tears down the graph and stops the stream tracks
+  s.gate?.stop()
+  sessions.delete(sessionId)
+}
+
+/** Mounted once in CaptureApp. Only owns the command subscription; all session
+ *  state lives in the module singleton above. */
+export function AudioSessionHost(): null {
+  useEffect(() => {
+    return window.omi?.onCaptureCommand?.((cmd, ownerId) => {
+      if (cmd.type === 'audio-start') {
+        void startAudioSession(cmd.sessionId, cmd.source, ownerId)
+      } else if (cmd.type === 'audio-stop') {
+        stopAudioSession(cmd.sessionId)
+      }
+    })
+  }, [])
+  return null
+}

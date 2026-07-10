@@ -64,6 +64,61 @@ type Session = {
 
 const sessions = new Map<string, Session>()
 
+// Verification counters — monotonic bytes/chunks the renderer has fed per
+// `${mode}:${source}`, read by the soak + VAD-playback harnesses via
+// getListenStats(). Post-gate audio only (the renderer's VAD gate drops silence
+// before feeding), so a flat byte delta across a silent interval proves gating.
+// Never reset within a process.
+const listenStats = new Map<string, { bytes: number; chunks: number }>()
+
+function recordFed(mode: ListenMode, source: 'mic' | 'system', bytes: number): void {
+  const key = `${mode}:${source}`
+  const cur = listenStats.get(key) ?? { bytes: 0, chunks: 0 }
+  cur.bytes += bytes
+  cur.chunks += 1
+  listenStats.set(key, cur)
+}
+
+/** OMI_E2E only: register a socketless counting session so the VAD-playback
+ * harness can assert post-gate byte flow with zero auth/network. feedSession
+ * counts via recordFed then drops the bytes (stub is never OPEN/CONNECTING). */
+export function startTestListenSession(sessionId: string, source: 'mic' | 'system'): boolean {
+  if (process.env.OMI_E2E !== '1') return false
+  const stub = {
+    readyState: 3, // CLOSED — feedSession counts, then neither sends nor buffers
+    close(): void {
+      /* no socket */
+    },
+    send(): void {
+      /* no socket */
+    }
+  } as unknown as WebSocket
+  sessions.set(sessionId, {
+    ws: stub,
+    ownerId: -1,
+    source,
+    mode: 'conversation',
+    closed: false,
+    pending: [],
+    pendingBytes: 0
+  })
+  return true
+}
+
+export function stopTestListenSession(sessionId: string): void {
+  const s = sessions.get(sessionId)
+  if (!s) return
+  s.closed = true
+  sessions.delete(sessionId)
+}
+
+/** Snapshot of bytes/chunks fed per mode:source since process start. */
+export function getListenStats(): Record<string, { bytes: number; chunks: number }> {
+  const out: Record<string, { bytes: number; chunks: number }> = {}
+  for (const [k, v] of listenStats) out[k] = { bytes: v.bytes, chunks: v.chunks }
+  return out
+}
+
 function emit(ownerId: number, msg: ListenMessage): void {
   const wc = webContents.fromId(ownerId)
   if (wc && !wc.isDestroyed()) {
@@ -228,6 +283,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
   if (!s) return
+  recordFed(s.mode, s.source, pcm.byteLength)
   if (s.ws.readyState === WebSocket.OPEN) {
     s.ws.send(pcm)
     return
@@ -269,7 +325,22 @@ function stopSession(sessionId: string): void {
   if (s) killSession(sessionId, s, 'stop')
 }
 
+/** Close every session owned by a webContents that no longer exists — a crashed
+ * capture window leaves its sessions' WebSockets lingering until server timeout
+ * otherwise. Called by captureWindow on respawn. */
+export function killSessionsForOwner(ownerId: number): void {
+  for (const [id, s] of sessions) {
+    if (s.ownerId === ownerId) killSession(id, s, `owner ${ownerId} gone`)
+  }
+}
+
 export function registerOmiListenHandlers(): void {
+  // Expose the byte counters to the E2E harnesses (VAD-playback / soak) so a
+  // Playwright electronApp.evaluate can read them from the main process. Gated on
+  // OMI_E2E — inert in production.
+  if (process.env.OMI_E2E === '1') {
+    ;(globalThis as Record<string, unknown>).__omiGetListenStats = getListenStats
+  }
   ipcMain.handle('omi-listen:start', (e, args: ListenStartArgs) => {
     startSession(args, e.sender)
   })

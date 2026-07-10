@@ -33,6 +33,21 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [react()]
+    plugins: [
+      react(),
+      {
+        // onnxruntime-web's wasm binary is self-hosted under public/vad/ (see
+        // scripts/copy-vad-assets.mjs) and loaded at runtime via
+        // ort.env.wasm.wasmPaths — but vite ALSO emits a 13MB duplicate copy
+        // into assets/ (referenced via new URL inside the ort loader, which we
+        // never take). Drop the dead-weight asset from the bundle.
+        name: 'drop-duplicate-ort-wasm',
+        generateBundle(_options, bundle): void {
+          for (const key of Object.keys(bundle)) {
+            if (/ort-wasm.*\.wasm$/.test(key)) delete bundle[key]
+          }
+        }
+      }
+    ]
   }
 })
