@@ -19,6 +19,20 @@ import {
   type ProviderSessionHandle
 } from './providerSession'
 
+/**
+ * Map a raw realtime server event (data channel) to an echo-gate speaking
+ * edge. WebRTC-only playout-buffer lifecycle events are the ONLY reliable
+ * audible-speech signal on this transport — the session-level 'audio_start'
+ * never fires over WebRTC (it derives from WS-transport audio chunk events),
+ * which shipped as a dead echo gate until the live loop-check caught it.
+ * Pure + exported for the regression test.
+ */
+export function speakingEdgeForTransportEvent(type: string): 'start' | 'end' | null {
+  if (type === 'output_audio_buffer.started') return 'start'
+  if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') return 'end'
+  return null
+}
+
 /** Text of a completed assistant message item (source text — audio transcript
  *  or output text), or null while still in progress / empty. */
 export function completedAssistantText(item: RealtimeItem): string | null {
@@ -72,9 +86,17 @@ export async function startOpenAiSession(args: {
     }
   })
 
-  // Dedupe speaking edges: the SDK can emit BOTH audio_interrupted and
-  // audio_stopped for one turn. The echo gate refcounts start/end pairs, so an
-  // unpaired extra end would release another source's (e.g. TTS) hold early.
+  // Speaking edges — WebRTC-specific wiring (found live by the loop-check):
+  // the session-level 'audio_start' event NEVER fires on the WebRTC transport
+  // (it derives from transport 'audio' CHUNK events, which only the WebSocket
+  // transport emits — audio flows via RTP here), and 'audio_stopped' fires on
+  // response.output_audio.done, i.e. GENERATION done, seconds before playout
+  // ends on a long reply. The data channel instead delivers the WebRTC-only
+  // playout-buffer lifecycle events, which are exactly what the echo gate
+  // needs: output_audio_buffer.started / .stopped (playout actually began /
+  // fully drained) and .cleared (barge-in drop). Edges are deduped via
+  // `audible` — the gate refcounts start/end pairs, so an unpaired extra end
+  // would release another source's (e.g. TTS) hold early.
   let audible = false
   const speakingStart = (): void => {
     if (stopped || audible) return
@@ -86,8 +108,12 @@ export async function startOpenAiSession(args: {
     audible = false
     cb.onSpeakingEnd()
   }
-  session.on('audio_start', speakingStart)
-  session.on('audio_stopped', speakingEnd)
+  session.on('transport_event', (event: { type: string }) => {
+    const edge = speakingEdgeForTransportEvent(event.type)
+    if (edge === 'start') speakingStart()
+    else if (edge === 'end') speakingEnd()
+  })
+  // Defensive extra end edge (deduped): the SDK's interruption signal.
   session.on('audio_interrupted', speakingEnd)
   session.on('history_updated', (history: RealtimeItem[]) => {
     if (stopped) return

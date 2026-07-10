@@ -335,17 +335,27 @@ async function main() {
       )
 
     // ── Start the realtime session ───────────────────────────────────────────
-    log(`starting realtime session (${PROVIDER})…`)
-    await page.evaluate((p) => void globalThis.__omiVoice.start(p), PROVIDER)
-    const state = await waitFor(
-      page,
-      () => {
-        const s = globalThis.__omiVoice.getState()
-        return s.status === 'live' || s.status === 'error' ? s : false
-      },
-      45_000,
-      'voice session live/error'
-    )
+    // One retry on a retryable failure: the provider's SDP exchange can hiccup
+    // transiently (the SDK surfaces any non-SDP error body as a parse failure —
+    // observed live). The product offers the user "Try again" for exactly this;
+    // the harness takes that same retry once.
+    let state = null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      log(`starting realtime session (${PROVIDER})… (attempt ${attempt})`)
+      await page.evaluate((p) => void globalThis.__omiVoice.start(p), PROVIDER)
+      state = await waitFor(
+        page,
+        () => {
+          const s = globalThis.__omiVoice.getState()
+          return s.status === 'live' || s.status === 'error' ? s : false
+        },
+        45_000,
+        'voice session live/error'
+      )
+      if (state.status === 'live' || !state.retryable) break
+      log(`retryable connect failure: ${state.message}`)
+      await new Promise((r) => setTimeout(r, 2000))
+    }
     if (state.status !== 'live') {
       check('realtime session connects', false, state.message)
       exitCode = 1

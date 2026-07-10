@@ -310,14 +310,9 @@ export function getVoiceOutputDevice(): string {
   return sinkId
 }
 
-/**
- * Speak a non-realtime reply via backend TTS, through the SAME gated output
- * path: gate on while audible, source text injected into the record, gate
- * releases after the element finishes. Works with or without a live session.
- */
-let ttsSeq = 0
-export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
-  const blob = await synthesizeTts(text, voiceId)
+/** Play a backend-TTS mp3 blob through an <audio> element on the selected
+ *  sink. Resolves when playback ends (or teardown silences it). */
+async function playTtsBlob(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob)
   const el = new Audio()
   el.src = url
@@ -326,15 +321,6 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
       /* unknown device — default */
     })
   }
-  record('tts-start', text.slice(0, 80))
-  window.omi?.captureCommand({
-    type: 'assistant-utterance',
-    utteranceId: `tts-${ttsSeq++}`,
-    text
-  })
-  watchdogReported = false
-  gate.playbackStarted(Date.now())
-  syncGate()
   try {
     let finish: () => void = () => {}
     const done = new Promise<void>((resolve) => {
@@ -343,7 +329,7 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
     el.onended = () => finish()
     el.onerror = () => finish()
     // teardown() silences an in-flight TTS: pause the element AND resolve the
-    // waiter so the finally below drains the gate immediately.
+    // waiter so the caller's finally drains the gate immediately.
     stopCurrentTts = () => {
       try {
         el.pause()
@@ -356,12 +342,79 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
     await done
   } finally {
     stopCurrentTts = null
-    record('tts-end')
-    gate.playbackDrained(Date.now())
-    syncGate()
     el.onended = null
     el.onerror = null
     el.src = ''
     URL.revokeObjectURL(url)
+  }
+}
+
+/** System-voice fallback (Web Speech API → SAPI). Always plays on the system
+ *  DEFAULT output (speechSynthesis has no sink routing) — fine for a fallback;
+ *  the echo gate still engages around it. */
+async function playSystemVoice(text: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const u = new SpeechSynthesisUtterance(text)
+    u.onend = () => resolve()
+    u.onerror = (e) =>
+      e.error === 'interrupted' || e.error === 'canceled'
+        ? resolve()
+        : reject(new Error(`system voice failed: ${e.error}`))
+    stopCurrentTts = () => {
+      try {
+        window.speechSynthesis.cancel()
+      } catch {
+        /* ignore */
+      }
+      resolve()
+    }
+    window.speechSynthesis.speak(u)
+  }).finally(() => {
+    stopCurrentTts = null
+  })
+}
+
+/**
+ * Speak a non-realtime reply through the SAME gated output path: gate on while
+ * audible, source text injected into the record, gate releases after playback
+ * drains. Works with or without a live session. Prefers backend TTS
+ * (/v1/tts/synthesize); when that fails (e.g. the backend's server-key TTS is
+ * unavailable) it falls back to the system voice — the same contract as the
+ * macOS client — so a spoken reply still happens.
+ */
+let ttsSeq = 0
+export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
+  // Resolve the audio source FIRST — if neither lane can speak, throw without
+  // ever engaging the gate or injecting a line for words never said.
+  let play: () => Promise<void>
+  try {
+    const blob = await synthesizeTts(text, voiceId)
+    play = () => playTtsBlob(blob)
+  } catch (e) {
+    record('tts-fallback', (e as Error)?.message)
+    trackEvent('fallback_triggered', {
+      component: 'voice_tts',
+      from: 'openai_tts',
+      to: 'system_voice',
+      reason: 'provider_unavailable',
+      outcome: 'degraded'
+    })
+    play = () => playSystemVoice(text)
+  }
+  record('tts-start', text.slice(0, 80))
+  window.omi?.captureCommand({
+    type: 'assistant-utterance',
+    utteranceId: `tts-${ttsSeq++}`,
+    text
+  })
+  watchdogReported = false
+  gate.playbackStarted(Date.now())
+  syncGate()
+  try {
+    await play()
+  } finally {
+    record('tts-end')
+    gate.playbackDrained(Date.now())
+    syncGate()
   }
 }
