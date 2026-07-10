@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'セッションの有効期限が切れました。もう一度サインインしてください。';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -8318,7 +8321,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -9042,7 +9050,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 件の録音を同期できます');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
     return '$_temp0';
   }
 
@@ -9054,7 +9066,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '確認が必要な録音が$count件');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
     return '$_temp0';
   }
 
@@ -9174,7 +9190,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
@@ -9202,16 +9218,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get memoryThisDevice => 'このデバイス';
+
   @override
   String get memoryThisIphone => 'このiPhone';
+
   @override
   String get memoryThisPhone => 'この電話';
+
   @override
   String get memoryProvenanceMac => 'Mac';
+
   @override
   String get memoryProvenanceIphone => 'iPhone';
+
   @override
   String get memoryProvenanceAndroid => 'Android';
+
+  @override
   String get deviceTutorial => 'Omi の使い方';
 
   @override
@@ -9312,4 +9335,85 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get latest => '最新';
+
+  @override
+  String get flashFirmware => 'ファームウェアを書き込む';
+
+  @override
+  String get pendantRecordingTitle => 'ペンダントで録音中';
+
+  @override
+  String get pendantRecordingNote => 'ペンダントが自動的に録音しています。アプリを開いている間に録音がスマートフォンに同期されます。';
+
+  @override
+  String get pendantSyncingRecordings => 'ペンダントから録音を同期しています…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分保存済み';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta を接続';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta グラスを、会話や視覚的なコンテキストのための Omi のキャプチャデバイスとして使用します。Omi が Meta AI アプリを開いてグラスをリンクします。';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI 経由で接続';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI アプリで接続を完了してから、ここに戻ってください。';
+
+  @override
+  String get raybanMetaCheckAgain => '再確認';
+
+  @override
+  String get raybanMetaAllowCamera => 'グラスのカメラを許可';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi はグラスのカメラを使って会話に写真を追加します。これをスキップして音声のみを使用することもできます。';
+
+  @override
+  String get raybanMetaSkipForNow => '今はスキップ';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 音声のみモード';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'このバージョンの Omi は Bluetooth 経由でグラスのマイクを使用できます。写真の撮影には Omi の Meta 開発者ビルドが必要です。';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'グラスのマイクの使用中は、スマートフォンの音楽が一時停止します。';
+
+  @override
+  String get raybanMetaContinue => '続ける';
+
+  @override
+  String get raybanMetaCapturePhoto => '写真を撮影';
+
+  @override
+  String get raybanMetaPhotoRequested => '写真をリクエストしました — 会話に表示されます。';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'マイクの準備完了';
+
+  @override
+  String get raybanMetaImageCaptureReady => '画像キャプチャの準備完了';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '音声のみモードでは利用できません';
+
+  @override
+  String get raybanMetaCamera => 'カメラ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta への接続エラー: $error';
+  }
 }

@@ -1,5 +1,6 @@
 {
     "@@locale": "hi",
+    "sessionExpiredSignInAgain": "सत्र की समय-सीमा समाप्त हो गई — फिर से साइन इन करें।",
     "appTitle": "ओमी",
     "conversationTab": "बातचीत",
     "transcriptTab": "प्रतिलेख",
@@ -3055,7 +3056,7 @@
     "syncCustomSttWarningMessage": "आप अपना स्वयं का ट्रांसक्रिप्शन प्रदाता उपयोग करते हैं। इन रिकॉर्डिंग को सिंक करने पर ये Omi के सर्वर पर ट्रांसक्राइब होंगी और आपकी योजना की ट्रांसक्रिप्शन सीमा में गिनी जाएंगी।",
     "transcribeLaterTitle": "बाद में ट्रांसक्राइब करें",
     "transcribeLaterDescription": "अभी ऑडियो रिकॉर्ड करें और लाइव के बजाय बाद में अपनी ज़रूरत के अनुसार उसे ट्रांसक्राइब करें। रिकॉर्डिंग आपके फ़ोन में सेव होती हैं, फिर आप उन्हें अपलोड करके बातचीत बना सकते हैं।",
-    "transcribeLaterNote": "फ़िलहाल यह Omi डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।",
+    "transcribeLaterNote": "फ़िलहाल यह Omi और Limitless डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।",
     "transcribeLaterStorageFull": "आपके फ़ोन में स्टोरेज कम है, इसलिए रिकॉर्डिंग रोक दी गई है। कुछ जगह खाली करें या अपनी रिकॉर्डिंग अपलोड करें, फिर यह अपने आप दोबारा शुरू हो जाएगी।",
     "unmute": "अनम्यूट",
     "newRecording": "नई रिकॉर्डिंग",
@@ -3104,5 +3105,44 @@
     "deviceOnboardingIntroSubtitle": "आपका Omi जो कुछ भी कर सकता है, उसका एक त्वरित और व्यावहारिक दौरा।",
     "deviceOnboardingIntroDuration": "लगभग 1 मिनट",
     "jumpToLatestMessage": "नवीनतम संदेश पर जाएं",
-    "latest": "नवीनतम"
+    "latest": "नवीनतम",
+    "flashFirmware": "फ़र्मवेयर फ़्लैश करें",
+    "pendantRecordingTitle": "पेंडेंट पर रिकॉर्डिंग",
+    "pendantRecordingNote": "आपका पेंडेंट अपने आप रिकॉर्ड कर रहा है। ऐप खुला रहने पर रिकॉर्डिंग आपके फ़ोन में सिंक होती हैं।",
+    "pendantSyncingRecordings": "आपके पेंडेंट से रिकॉर्डिंग सिंक हो रही हैं…",
+    "pendantMinutesStored": "~{minutes} मिनट संग्रहीत",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "पेंडेंट का स्टोरेज लगभग भर गया है — सिंक करने के लिए ऐप खुला रखें।",
+    "connectRayBanMeta": "Ray-Ban Meta कनेक्ट करें",
+    "raybanMetaSetupDescription": "अपने Ray-Ban Meta ग्लासेस को बातचीत और विज़ुअल संदर्भ के लिए अपने Omi कैप्चर डिवाइस के रूप में उपयोग करें। Omi आपके ग्लासेस को लिंक करने के लिए Meta AI ऐप खोलेगा।",
+    "raybanMetaOpenMetaAI": "Meta AI के माध्यम से कनेक्ट करें",
+    "raybanMetaWaitingForMetaAI": "Meta AI ऐप में कनेक्ट करना पूरा करें, फिर यहाँ वापस आएँ।",
+    "raybanMetaCheckAgain": "फिर से जाँचें",
+    "raybanMetaAllowCamera": "ग्लासेस पर कैमरे की अनुमति दें",
+    "raybanMetaCameraExplanation": "Omi आपकी बातचीत में फ़ोटो जोड़ने के लिए आपके ग्लासेस के कैमरे का उपयोग करता है। आप इसे छोड़ सकते हैं और केवल ऑडियो का उपयोग कर सकते हैं।",
+    "raybanMetaSkipForNow": "अभी के लिए छोड़ें",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta केवल-ऑडियो मोड",
+    "raybanMetaAudioOnlyExplanation": "Omi का यह संस्करण Bluetooth के माध्यम से आपके ग्लासेस के माइक्रोफ़ोन का उपयोग कर सकता है। फ़ोटो कैप्चर के लिए Omi का Meta डेवलपर बिल्ड आवश्यक है।",
+    "raybanMetaMusicPauseNote": "जब ग्लासेस का माइक्रोफ़ोन उपयोग में होता है, तब आपके फ़ोन पर संगीत रुक जाता है।",
+    "raybanMetaContinue": "जारी रखें",
+    "raybanMetaCapturePhoto": "फ़ोटो कैप्चर करें",
+    "raybanMetaPhotoRequested": "फ़ोटो का अनुरोध किया गया — यह आपकी बातचीत में दिखाई देगी।",
+    "raybanMetaMicrophoneReady": "माइक्रोफ़ोन तैयार",
+    "raybanMetaImageCaptureReady": "इमेज कैप्चर तैयार",
+    "raybanMetaImageCaptureUnavailable": "केवल-ऑडियो मोड में अनुपलब्ध",
+    "raybanMetaCamera": "कैमरा",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta से कनेक्ट करने में त्रुटि: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

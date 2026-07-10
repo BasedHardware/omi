@@ -401,6 +401,66 @@ actor GeminiClient {
     return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorTimedOut
   }
 
+  /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
+  private static func bucketGeminiModel(_ model: String) -> String {
+    let lower = model.lowercased()
+    if lower.contains("pro") { return "pro" }
+    if lower.contains("flash") { return "flash" }
+    return "other"
+  }
+
+  /// Map transient failures to shared fallback reason buckets.
+  private static func fallbackReason(for error: Error) -> String {
+    if let geminiError = error as? GeminiClientError {
+      switch geminiError {
+      case .networkError(let underlying):
+        let nsError = underlying as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+          return "timeout"
+        }
+        return "other"
+      case .apiError(let message):
+        let lower = message.lowercased()
+        if lower.contains("upstream_timeout")
+          || lower.contains("timed out")
+          || lower.contains("timeout")
+          || lower.contains("deadline")
+          || lower.contains("http 504")
+          || lower.contains(" 504")
+          || lower.contains("http 408")
+          || lower.contains(" 408")
+        {
+          return "timeout"
+        }
+        if lower.contains("429")
+          || lower.contains("rate limit")
+          || lower.contains("too many requests")
+        {
+          return "provider_429"
+        }
+        if lower.contains("quota")
+          || lower.contains("resource exhausted")
+        {
+          return "quota"
+        }
+        if lower.contains("503")
+          || lower.contains("502")
+          || lower.contains("500")
+          || lower.contains("service unavailable")
+          || lower.contains("internal error")
+          || lower.contains("overloaded")
+          || lower.contains("high demand")
+        {
+          return "provider_5xx"
+        }
+        return "other"
+      case .invalidResponse, .missingAPIKey:
+        return "other"
+      }
+    }
+    return "other"
+  }
+
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
   private func retryBackoff(attempt: Int, error: Error) async {
     let delaySec = [2, 8][min(attempt, 1)]
@@ -957,6 +1017,13 @@ extension GeminiClient {
           // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
           // if the failure is transient and a fallback model remains.
           if modelIndex < models.count - 1 && isTransientError(error) {
+            DesktopDiagnosticsManager.shared.recordFallback(
+              area: "gemini_model",
+              from: Self.bucketGeminiModel(activeModel),
+              to: Self.bucketGeminiModel(models[modelIndex + 1]),
+              reason: Self.fallbackReason(for: error),
+              outcome: .degraded,
+              extra: ["user_visible": false])
             log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
             break
           }

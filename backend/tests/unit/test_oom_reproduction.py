@@ -16,32 +16,68 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
 os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
 os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules.setdefault("torch", _torch)
+_PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
+if _PARAKEET_DIR not in sys.path:
+    sys.path.insert(0, _PARAKEET_DIR)
 
-for _mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
-    sys.modules.setdefault(_mod, MagicMock())
-for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
-    sys.modules.setdefault(_mod, MagicMock())
+from testing.import_isolation import load_module_fresh, stub_modules
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
+_BATCH_ENGINE_PATH = os.path.join(_PARAKEET_DIR, "batch_engine.py")
 
-from batch_engine import BatchEngine
+
+@pytest.fixture(scope="module", autouse=True)
+def _batch_engine_module():
+    """Load batch_engine fresh against stubbed torch/nemo/pyannote chains.
+
+    torch/nemo/pyannote are not installed in the test environment, so fake modules
+    must be active in ``sys.modules`` before ``batch_engine`` (which imports
+    ``gpu_worker``, which imports ``torch``) is exec'd. ``stub_modules`` keeps the
+    fakes active for the whole module and evicts them (and the freshly-loaded
+    ``batch_engine``/``gpu_worker``) on teardown, so nothing leaks to later test files.
+    """
+    _torch = MagicMock()
+    _torch.cuda.is_available.return_value = False
+    _torch.cuda.memory_allocated.return_value = 0
+    _torch_props = MagicMock()
+    _torch_props.total_memory = 16 * 1024**3
+    _torch.cuda.get_device_properties.return_value = _torch_props
+    _torch.cuda.empty_cache = MagicMock()
+    _torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.compile = lambda m: m
+    _torch.backends.cudnn = MagicMock()
+
+    _nemo_asr = MagicMock()
+    _nemo = MagicMock()
+    _nemo.collections.asr = _nemo_asr
+
+    _pyannote = MagicMock()
+    _pyannote_audio = MagicMock()
+    _pyannote_audio_core = MagicMock()
+    _pyannote_audio_core_model = MagicMock()
+
+    fakes = {
+        "torch": _torch,
+        "nemo": _nemo,
+        "nemo.collections": _nemo.collections,
+        "nemo.collections.asr": _nemo_asr,
+        "pyannote": _pyannote,
+        "pyannote.audio": _pyannote_audio,
+        "pyannote.audio.core": _pyannote_audio_core,
+        "pyannote.audio.core.model": _pyannote_audio_core_model,
+    }
+    with stub_modules(fakes):
+        be = load_module_fresh("batch_engine", _BATCH_ENGINE_PATH)
+        globals()["BatchEngine"] = be.BatchEngine
+        yield be
+
 
 L4_TOTAL_MB = 22563
 L4_BASELINE_MB = 5709
@@ -123,7 +159,7 @@ class TestOOMReproduction(unittest.TestCase):
       12 files processed across 2 batches, all succeed
     """
 
-    @patch.object(BatchEngine, '_get_audio_duration', return_value=FILE_DURATION_SEC)
+    @patch('batch_engine.BatchEngine._get_audio_duration', return_value=FILE_DURATION_SEC)
     def test_without_fix_all_oom(self, _mock_dur):
         """Without VRAM cap, 12 x 290s in one batch -> OOM."""
         gpu, engine = _make_engine(vram_safety_factor=0, batch_wait=0.1)
@@ -156,7 +192,7 @@ class TestOOMReproduction(unittest.TestCase):
         self.assertEqual(metrics["total_files"], FILE_COUNT)
         self.assertEqual(metrics["vram_limited_batches"], 0, "No VRAM limiting when disabled")
 
-    @patch.object(BatchEngine, '_get_audio_duration', return_value=FILE_DURATION_SEC)
+    @patch('batch_engine.BatchEngine._get_audio_duration', return_value=FILE_DURATION_SEC)
     def test_with_fix_all_succeed(self, _mock_dur):
         """With VRAM cap at 0.8, 12 x 290s split into safe batches -> all succeed."""
         gpu, engine = _make_engine(vram_safety_factor=0.8, batch_wait=0.01)
@@ -225,7 +261,7 @@ class TestOOMReproduction(unittest.TestCase):
             f"12 x {per_file:.0f} = {FILE_COUNT * per_file:.0f} > {available:.0f} available",
         )
 
-    @patch.object(BatchEngine, '_get_audio_duration', return_value=FILE_DURATION_SEC)
+    @patch('batch_engine.BatchEngine._get_audio_duration', return_value=FILE_DURATION_SEC)
     def test_oom_error_signature_matches_prod(self, _mock_dur):
         """Verify OOM error string matches prod signature."""
         _, engine = _make_engine(vram_safety_factor=0, batch_wait=0.1)

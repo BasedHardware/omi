@@ -1,0 +1,3 @@
+{
+  "change": "Expose calendar meetings as an MCP read source in the generated Omi API client."
+}

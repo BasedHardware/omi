@@ -98,13 +98,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         return OnboardingStepScaffold(
           title: context.l10n.deviceOnboardingAskQuestionTitle,
           subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
-          content: Column(
-            children: [
-              const Spacer(flex: 1),
-              _buildContent(provider),
-              const Spacer(flex: 2),
-            ],
-          ),
+          content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
       },
@@ -117,10 +111,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -150,10 +141,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     if (provider.questionSent) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
         child: Column(
           children: [
             AnimatedBuilder(
@@ -162,11 +150,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                 return ShaderMask(
                   shaderCallback: (bounds) {
                     return LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0.3),
-                        Colors.white,
-                        Colors.white.withValues(alpha: 0.3),
-                      ],
+                      colors: [Colors.white.withValues(alpha: 0.3), Colors.white, Colors.white.withValues(alpha: 0.3)],
                       stops: [
                         (_animController.value - 0.3).clamp(0.0, 1.0),
                         _animController.value,
@@ -228,8 +212,10 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                       ),
                     ),
                     const SizedBox(width: 14),
-                    Text(context.l10n.deviceOnboardingListening,
-                        style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
+                    Text(
+                      context.l10n.deviceOnboardingListening,
+                      style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
                   ],
                 ),
               );

@@ -1,37 +1,44 @@
 import asyncio
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
 
-BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
-
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-cloud_tasks_module = types.ModuleType('utils.cloud_tasks')
-cloud_tasks_module.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
-storage_module = types.ModuleType('utils.other.storage')
-for name in (
-    'download_audio_chunks_and_merge',
-    'download_legacy_merged_wav',
-    'download_playback_artifact',
-    'enqueue_conversation_audio_merge',
-    'get_merged_audio_signed_url',
-    'get_or_create_merged_audio',
-    'get_playback_artifact_signed_url',
-    'is_playback_unavailable',
-):
-    setattr(storage_module, name, MagicMock())
-storage_module._PRECACHE_FILE_SEM = MagicMock()
-sys.modules.setdefault('utils.cloud_tasks', cloud_tasks_module)
-sys.modules.setdefault('utils.other.storage', storage_module)
+from testing.import_isolation import load_module_fresh, stub_modules
 
-from utils.sync import playback
+BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _load_playback(request):
+    cloud_tasks_module = ModuleType("utils.cloud_tasks")
+    cloud_tasks_module.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    storage_module = ModuleType("utils.other.storage")
+    for name in (
+        "compute_audio_files_fingerprint",
+        "download_audio_chunks_and_merge",
+        "download_legacy_merged_wav",
+        "download_playback_artifact",
+        "enqueue_conversation_artifact_build",
+        "enqueue_conversation_audio_merge",
+        "get_conversation_playback_signed_url",
+        "get_conversation_playback_unavailable_fingerprint",
+        "get_merged_audio_signed_url",
+        "get_or_create_merged_audio",
+        "get_playback_artifact_signed_url",
+        "is_playback_unavailable",
+    ):
+        setattr(storage_module, name, MagicMock())
+    storage_module._PRECACHE_FILE_SEM = MagicMock()
+    with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
+        module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
+        request.module.playback = module
+        yield
 
 
 class FakeRequest:
@@ -93,6 +100,16 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
         'enqueue_conversation_audio_merge',
         lambda uid, conversation_id, audio_files, caller: enqueues.append((uid, conversation_id, audio_files, caller)),
     )
+    conversation_enqueues = []
+    monkeypatch.setattr(playback, 'compute_audio_files_fingerprint', lambda audio_files: 'fp1')
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda uid, cid: None)
+    monkeypatch.setattr(
+        playback,
+        'enqueue_conversation_artifact_build',
+        lambda uid, conversation_id, fingerprint, caller: conversation_enqueues.append(
+            (uid, conversation_id, fingerprint, caller)
+        ),
+    )
 
     result = playback.get_audio_signed_urls(
         'u',
@@ -124,9 +141,11 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
             {"id": "gone", "status": "unavailable", "signed_url": None, "duration": 3},
             {"id": "pending", "status": "pending", "signed_url": None, "duration": 4},
         ],
+        "conversation_audio": {"status": "pending", "signed_url": None, "spans": []},
         "poll_after_ms": playback.AUDIO_URLS_POLL_AFTER_MS,
     }
     assert enqueues == [('u', 'c', [{'id': 'pending', 'duration': 4}], 'sync_urls')]
+    assert conversation_enqueues == [('u', 'c', 'fp1', 'sync_urls')]
 
 
 def test_inline_urls_first_sync_remaining_background_and_no_content_type(monkeypatch):

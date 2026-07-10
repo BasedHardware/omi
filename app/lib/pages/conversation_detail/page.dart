@@ -468,6 +468,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
+  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
+  // throws a PlatformException without it.
+  Rect _shareSheetOrigin() {
+    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
     if (!mounted) return;
 
@@ -541,7 +551,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)]);
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: mimeType)],
+          sharePositionOrigin: _shareSheetOrigin(),
+        );
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -704,7 +717,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     Navigator.pop(context);
                   }
                 },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
             title: Align(
@@ -830,17 +843,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      final RenderBox? box =
-                                          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                      final shareOrigin = box != null
-                                          ? Rect.fromLTWH(
-                                              box.localToGlobal(Offset.zero).dx,
-                                              box.localToGlobal(Offset.zero).dy,
-                                              box.size.width,
-                                              box.size.height,
-                                            )
-                                          : null;
-                                      shareConversationLink(provider.conversation, sharePositionOrigin: shareOrigin);
+                                      shareConversationLink(provider.conversation,
+                                          sharePositionOrigin: _shareSheetOrigin());
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {
@@ -861,7 +865,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                                : FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
                         // Search button (second) - only show on transcript and summary tabs
@@ -894,7 +898,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 });
                                 HapticFeedback.mediumImpact();
                               },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                              icon: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                             ),
                           ),
                         // Developer Tools button (third) - iOS style pull-down menu
@@ -922,7 +926,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
-                                  iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                  iconWidget: FaIcon(FontAwesomeIcons.share, size: 16),
                                   onTap: _isDownloadingAudio
                                       ? null
                                       : () => _handleMenuSelection(context, 'download_audio', provider),
@@ -978,7 +982,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   color: Colors.grey.withValues(alpha: 0.3),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                                 ),
                               ),

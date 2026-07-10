@@ -44,3 +44,13 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
         "COLLECTION",
         (("status", "ASCENDING"), ("available_at", "ASCENDING"), ("__name__", "ASCENDING")),
     ) in signatures
+    assert (
+        "memory_outbox",
+        "COLLECTION",
+        (
+            ("event_type", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("lease_expires_at", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures

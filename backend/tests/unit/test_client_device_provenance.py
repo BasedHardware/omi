@@ -1,10 +1,15 @@
 """Unit tests for client device identity contract and registry."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from models.memories import Evidence
-from utils.client_device import build_client_device_id, resolve_client_device
+from utils.client_device import (
+    build_client_device_id,
+    resolve_client_device,
+    resolve_client_device_from_websocket_auth_message,
+)
 
 
 def test_build_client_device_id_matches_fcm_shape():
@@ -23,6 +28,15 @@ def test_resolve_client_device_from_headers():
     assert ctx.client_device_id == "macos_a1b2c3d4"
     assert ctx.platform == "macos"
     assert ctx.app_version == "1.2.3"
+
+
+def test_resolve_client_device_from_websocket_auth_message_uses_web_platform():
+    context = resolve_client_device_from_websocket_auth_message(
+        {"text": '{"type":"auth","token":"firebase","device_id_hash":"a1b2c3d4"}'}
+    )
+
+    assert context.client_device_id == "web_a1b2c3d4"
+    assert context.platform == "web"
 
 
 @patch("database.redis_db.try_acquire_client_device_write_lock", return_value=True)
@@ -67,6 +81,7 @@ def test_record_client_device_upserts_and_throttles(mock_lock):
     assert payload["platform"] == "macos"
     assert payload["device_class"] == "desktop"
     assert "first_seen_at" in payload
+    assert users_db._normalize_platform("windows") == ("desktop", "windows")
 
 
 def test_evidence_id_unchanged_when_client_device_absent():
@@ -138,3 +153,20 @@ def test_ordered_capture_devices_uses_earliest_evidence_not_alphabetical():
     device_ids, primary = _ordered_capture_devices_from_evidence(raw_evidence)
     assert device_ids == ["macos_aaaaaaaa", "ios_zzzzzzzz"]
     assert primary == "macos_aaaaaaaa"
+
+
+def test_listen_conversation_stamps_websocket_device_provenance():
+    source = (Path(__file__).resolve().parents[2] / "routers" / "transcribe.py").read_text(encoding="utf-8")
+    stream_handler = source.split("async def _stream_handler(", 1)[1].split("\n\nasync def _listen(", 1)[0]
+    stub_conversation = stream_handler.split("stub_conversation = Conversation(", 1)[1].split("\n        )", 1)[0]
+
+    assert "resolve_client_device_from_headers(websocket.headers)" in stream_handler
+    assert "client_device_id=client_device_context.client_device_id" in stub_conversation
+    assert "client_platform=client_device_context.platform" in stub_conversation
+
+
+def test_web_listen_forwards_first_message_device_provenance():
+    source = (Path(__file__).resolve().parents[2] / "routers" / "transcribe.py").read_text(encoding="utf-8")
+
+    assert "resolve_client_device_from_websocket_auth_message(first_message)" in source
+    assert "client_device_context=client_device_context" in source

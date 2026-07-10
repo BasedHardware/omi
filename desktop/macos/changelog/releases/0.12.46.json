@@ -1,0 +1,7 @@
+{
+  "version": "0.12.46",
+  "date": "2026-07-08",
+  "changes": [
+    "Questions asked from the floating bar no longer mix into the main chat transcript during a session (restored history from before the app relaunches still shows in the main chat)"
+  ]
+}

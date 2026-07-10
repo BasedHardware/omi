@@ -6,19 +6,22 @@ remains an importable alias. Registers ``/memory/admin/*`` paths.
 
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
+from models.memory_admin import MemoryReadRolloutObservabilityReport, ShortTermLifecycleRunResponse
+
 from database._client import db
 from jobs.short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
-from utils.memory.non_active_route_audit import fetch_non_active_route_audit_report
+from utils.memory.non_active_route_audit import NonActiveRouteAuditReport, fetch_non_active_route_audit_report
 from utils.memory.default_read_rollout import (
     build_default_read_rollout_observability_report,
     read_default_read_rollout_decisions,
 )
 
 router = APIRouter()
+Payload = Dict[str, Any]
 
 
 def _parse_expected_source_ids(expected_source_ids: Optional[str]) -> Optional[List[str]]:
@@ -54,7 +57,7 @@ def _validate_lifecycle_run_inputs(run_id: str, limit: int) -> None:
 
 def _short_term_lifecycle_response(
     *, uid: str, run_id: str, evaluated_at: datetime, report: ShortTermLifecycleWorkerReport
-) -> dict:
+) -> Payload:
     transition_count = report.created_count + report.existing_count
     return {
         'uid': uid,
@@ -71,7 +74,11 @@ def _short_term_lifecycle_response(
     }
 
 
-@router.get('/memory/admin/users/{uid}/read-rollout-decision', tags=['admin', 'memory'])
+@router.get(
+    '/memory/admin/users/{uid}/read-rollout-decision',
+    tags=['admin', 'memory'],
+    response_model=MemoryReadRolloutObservabilityReport,
+)
 def get_memory_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     """Inspect the server-owned memory default read rollout decision for one user.
 
@@ -85,7 +92,11 @@ def get_memory_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     return build_default_read_rollout_observability_report(decisions)
 
 
-@router.get('/memory/admin/users/{uid}/non-active-route-report', tags=['admin', 'memory'])
+@router.get(
+    '/memory/admin/users/{uid}/non-active-route-report',
+    tags=['admin', 'memory'],
+    response_model=NonActiveRouteAuditReport,
+)
 def get_non_active_route_report(
     uid: str,
     run_id: Optional[str] = Query(None),
@@ -108,14 +119,18 @@ def get_non_active_route_report(
     return report.model_dump(mode='json')
 
 
-@router.post('/memory/admin/users/{uid}/short-term-lifecycle/run', tags=['admin', 'memory'])
+@router.post(
+    '/memory/admin/users/{uid}/short-term-lifecycle/run',
+    tags=['admin', 'memory'],
+    response_model=ShortTermLifecycleRunResponse,
+)
 def post_short_term_lifecycle_run(
     uid: str,
     run_id: str = Query(...),
     evaluated_at: Optional[str] = Query(None),
     limit: int = Query(500),
     secret_key: str = Header(...),
-):
+) -> Payload:
     """Run the memory Short-term lifecycle worker for one user.
 
     The endpoint is an explicit admin/job entrypoint around the concrete

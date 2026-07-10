@@ -1,4 +1,6 @@
 import SwiftUI
+import OmiTheme
+import OmiWAL
 
 // MARK: - Storage Sync View
 
@@ -477,9 +479,11 @@ struct StorageSyncIndicator: View {
 
 // MARK: - Preview
 
+#if canImport(PreviewsMacros)
 #Preview("Storage Sync View") {
     StorageSyncView()
         .frame(width: 360)
         .padding()
         .background(OmiColors.backgroundPrimary)
 }
+#endif

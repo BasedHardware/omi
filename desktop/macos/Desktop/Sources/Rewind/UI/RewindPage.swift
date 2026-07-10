@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -354,11 +355,7 @@ struct RewindPage: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Open Settings FIRST, then request permissions after a delay
-            ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                ScreenCaptureService.requestAllScreenCapturePermissions()
-            }
+            ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             return
         }
 
@@ -1027,11 +1024,7 @@ struct RewindPage: View {
                     // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
                     screenAnalysisEnabled = true
                     AssistantSettings.shared.screenAnalysisEnabled = true
-                    // Open Settings FIRST, then request permissions after a delay
-                    ScreenCaptureService.openScreenRecordingPreferences()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                    }
+                    ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 } label: {
                     Text("Grant Permission")
                         .scaledFont(size: 13, weight: .semibold)
@@ -1890,7 +1883,9 @@ extension View {
 }
 
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindPage()
         .frame(width: 1000, height: 700)
 }
+#endif

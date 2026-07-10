@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Enhanced timeline scrubber view with app icons, time markers, and scroll support
 struct RewindTimelineView: View {

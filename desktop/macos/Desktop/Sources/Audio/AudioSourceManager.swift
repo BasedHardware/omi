@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import os.log
+import OmiWAL
 
 // MARK: - Audio Source Types
 
@@ -253,16 +254,31 @@ final class AudioSourceManager: ObservableObject {
 
         // Start system audio capture if available
         if #available(macOS 14.4, *), let systemCapture = systemAudioCaptureService as? SystemAudioCaptureService {
-            try await systemCapture.startCapture(
-                onAudioChunk: { [weak self] audioData in
-                    self?.audioMixer?.setSystemAudio(audioData)
-                },
-                onAudioLevel: { level in
-                    Task { @MainActor in
-                        AudioLevelMonitor.shared.updateSystemLevel(level)
+            do {
+                try await systemCapture.startCapture(
+                    onAudioChunk: { [weak self] audioData in
+                        self?.audioMixer?.setSystemAudio(audioData)
+                    },
+                    onAudioLevel: { level in
+                        Task { @MainActor in
+                            AudioLevelMonitor.shared.updateSystemLevel(level)
+                        }
                     }
+                )
+                await MainActor.run {
+                    AppState.current?.recordSystemAudioCaptureOutcome(.granted)
                 }
-            )
+            } catch {
+                // System audio is optional/best-effort: the mic and mixer are
+                // already running, so a tap failure must not abort the stream
+                // (rethrowing here leaked a live mic/mixer with isStreaming
+                // never set). Record the honest outcome and continue mic-only.
+                await MainActor.run {
+                    AppState.current?.recordSystemAudioCaptureOutcome(
+                        SystemAudioPermissionStatus.classify(captureError: error))
+                }
+                logger.error("System audio capture failed, continuing mic-only: \(error)")
+            }
         }
 
         conversationSource = .desktop
@@ -448,4 +464,3 @@ enum AudioSourceError: LocalizedError {
         }
     }
 }
-

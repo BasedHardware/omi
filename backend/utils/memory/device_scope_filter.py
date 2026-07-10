@@ -51,6 +51,7 @@ def filter_items_by_device_scope(
         return items
     # Scoped filtering without a resolvable device id must not fall through to "all".
     # Return empty in-process; HTTP handlers should raise 400 via device_scope_validation_error().
-    if not (client_device_id or "").strip():
+    scoped_device_id = (client_device_id or "").strip()
+    if not scoped_device_id:
         return []
-    return [item for item in items if memory_matches_device(item, client_device_id)]
+    return [item for item in items if memory_matches_device(item, scoped_device_id)]

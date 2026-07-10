@@ -1,4 +1,5 @@
 import os
+from typing import Any, Dict, Optional, cast
 from urllib.parse import urljoin
 
 import pycountry
@@ -37,15 +38,19 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
 
 
 def create_subscription_checkout_session(
-    uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None, promotion_code_id: str = None
+    uid: str,
+    price_id: str,
+    idempotency_key: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    promotion_code_id: Optional[str] = None,
 ):
     """Create a Stripe Checkout session for a subscription."""
     try:
-        success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
-        cancel_url = urljoin(base_url, 'v1/payments/cancel')
+        success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
 
         # session creation parameters
-        session_params = {
+        session_params: Dict[str, Any] = {
             'client_reference_id': uid,
             'payment_method_types': ['card'],
             'line_items': [
@@ -83,7 +88,7 @@ def create_subscription_checkout_session(
 
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
-    except stripe.error.InvalidRequestError:
+    except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
         raise
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
@@ -102,14 +107,16 @@ def cancel_subscription(subscription_id: str):
         return None
 
 
-def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str, status_filter: str = 'all'):
+def find_app_subscription_by_customer_id(
+    customer_id: str, app_id: str, uid: str, status_filter: str = 'all'
+) -> Optional[Dict[str, Any]]:
     """Find app subscription using customer ID (fast path)."""
     try:
-        subscriptions = stripe.Subscription.list(customer=customer_id, status=status_filter, limit=5)
+        subscriptions = stripe.Subscription.list(customer=customer_id, status=cast(Any, status_filter), limit=5)
         latest_subscription = None
 
         for sub in subscriptions.data:
-            sub_dict = sub.to_dict()
+            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict
             if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
                 if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
@@ -120,14 +127,14 @@ def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str
         return None
 
 
-def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str = 'all'):
+def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str = 'all') -> Optional[Dict[str, Any]]:
     """Find app subscription by searching metadata (slow path)."""
     try:
-        subscriptions = stripe.Subscription.list(limit=100, status=status_filter)
+        subscriptions = stripe.Subscription.list(limit=100, status=cast(Any, status_filter))
         latest_subscription = None
 
         for sub in subscriptions.data:
-            sub_dict = sub.to_dict()
+            sub_dict = sub.to_dict()  # type: ignore[reportDeprecated, reportUnknownVariableType]  # legacy stripe to_dict
             if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
                 if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
@@ -138,7 +145,7 @@ def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str 
         return None
 
 
-def modify_subscription(subscription_id: str, **kwargs):
+def modify_subscription(subscription_id: str, **kwargs: Any) -> Any:
     """Modify a Stripe subscription with given parameters."""
     try:
         return stripe.Subscription.modify(subscription_id, **kwargs)
@@ -165,14 +172,14 @@ def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):
     return payment_link
 
 
-def parse_event(payload, sig_header):
+def parse_event(payload: Any, sig_header: Any) -> Any:
     """Parse the Stripe event."""
-    return stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+    return stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)  # type: ignore[reportUnknownMemberType]  # stripe Webhook.construct_event partially typed
 
 
-def parse_connect_event(payload, sig_header):
+def parse_connect_event(payload: Any, sig_header: Any) -> Any:
     """Parse the Stripe Connect event."""
-    return stripe.Webhook.construct_event(payload, sig_header, connect_secret)
+    return stripe.Webhook.construct_event(payload, sig_header, connect_secret)  # type: ignore[reportUnknownMemberType]  # stripe Webhook.construct_event partially typed
 
 
 def create_connect_account(uid: str, country: str):
@@ -200,8 +207,8 @@ def create_connect_account(uid: str, country: str):
     # Generate the onboarding URL with dynamic return and refresh URLs
     account_links = stripe.AccountLink.create(
         account=account.id,
-        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),
-        return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),
+        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
         type="account_onboarding",
     )
 
@@ -211,15 +218,15 @@ def create_connect_account(uid: str, country: str):
 def refresh_connect_account_link(account_id: str):
     account_link = stripe.AccountLink.create(
         account=account_id,
-        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account_id}"),
-        return_url=urljoin(base_url, f"/v1/stripe/return/{account_id}"),
+        refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
+        return_url=urljoin(base_url, f"/v1/stripe/return/{account_id}"),  # type: ignore[reportArgumentType]  # base_url validated at runtime
         type="account_onboarding",
     )
     return {"account_id": account_id, "url": account_link.url}
 
 
 def is_onboarding_complete(account_id: str):
-    account = stripe.Account.retrieve(account_id)
+    account = stripe.Account.retrieve(account_id)  # type: ignore[reportUnknownMemberType]  # stripe Account.retrieve partially typed
     return account.charges_enabled and account.payouts_enabled and account.details_submitted
 
 
@@ -230,7 +237,7 @@ def get_supported_countries():
     country_codes: list[str] = []
     starting_after: str | None = None
     while True:
-        kwargs = {"limit": 100}
+        kwargs: Dict[str, Any] = {"limit": 100}
         if starting_after:
             kwargs["starting_after"] = starting_after
         page = stripe.CountrySpec.list(**kwargs)
@@ -244,9 +251,9 @@ def get_supported_countries():
         country_codes.append("US")
     country_codes = sorted(set(country_codes))
     countries = [
-        {"id": code, "name": pycountry.countries.get(alpha_2=code).name}
+        {"id": code, "name": country.name}
         for code in country_codes
-        if pycountry.countries.get(alpha_2=code)
+        if (country := pycountry.countries.get(alpha_2=code)) is not None
     ]
     # cache in redis for 7 days since it does not change that often. Maybe cache it for 30 days?
     redis_db.set_generic_cache('stripe_supported_countries', countries, 604800)

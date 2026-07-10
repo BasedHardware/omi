@@ -76,15 +76,14 @@ const formatDate = (dateString: string): string => {
     .replace(',', ' at');
 };
 
-const fetchTwitterTimeline = async (screenname: string) => {
+const fetchTwitterTimeline = async (screenname: string, idToken: string) => {
   try {
     const response = await fetch(
-      `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/timeline.php?screenname=${screenname}`,
+      `/api/social-profile?provider=twitter-timeline&username=${encodeURIComponent(
+        screenname,
+      )}`,
       {
-        headers: {
-          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
-        },
+        headers: { Authorization: `Bearer ${idToken}` },
       },
     );
 
@@ -619,19 +618,25 @@ export default function HomePage() {
     setIsCreating(true);
     try {
       const profileExists = await checkExistingProfile(cleanHandle, 'twitter');
+      const uid = await getUid();
+      if (!uid || !auth.currentUser) {
+        // getUid already shows a toast on failure
+        return false;
+      }
+
+      const idToken = await auth.currentUser.getIdToken();
       const profileResponse = await fetch(
-        `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`,
+        `/api/social-profile?provider=twitter-profile&username=${encodeURIComponent(
+          cleanHandle,
+        )}`,
         {
-          headers: {
-            'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-            'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
-          },
+          headers: { Authorization: `Bearer ${idToken}` },
         },
       );
       if (!profileResponse.ok) return false;
       const profileData: TwitterProfile = await profileResponse.json();
       if (!profileData || !profileData.name) return false;
-      const recentTweets = await fetchTwitterTimeline(cleanHandle);
+      const recentTweets = await fetchTwitterTimeline(cleanHandle, idToken);
       const formattedAvatarUrl = formatTwitterAvatarUrl(profileData.avatar);
       const enhancedDesc = `${
         profileData.desc || 'No description available'
@@ -654,12 +659,6 @@ ${extraPromptRules}
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
 
       const persona_id = ulid();
-      const uid = await getUid();
-      if (!uid) {
-        // getUid already shows a toast on failure
-        return false; // Cannot proceed without UID
-      }
-
       const docData = {
         id: persona_id,
         name: profileData.name,
@@ -727,14 +726,18 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
     setIsCreating(true);
     try {
       const profileExists = await checkExistingProfile(cleanHandle, 'linkedin');
+      const uid = await getUid();
+      if (!uid || !auth.currentUser) {
+        // getUid already shows a toast on failure
+        return false;
+      }
+
+      const idToken = await auth.currentUser.getIdToken();
       const encodedHandle = encodeURIComponent(cleanHandle);
       const profileResponse = await fetch(
-        `https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`,
+        `/api/social-profile?provider=linkedin-profile&username=${encodedHandle}`,
         {
-          headers: {
-            'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
-            'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
-          },
+          headers: { Authorization: `Bearer ${idToken}` },
         },
       );
       if (!profileResponse.ok) return false;

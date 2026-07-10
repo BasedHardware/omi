@@ -6,12 +6,12 @@ import json
 import hashlib
 import time
 import jwt
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 from urllib.parse import quote, urlparse
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
@@ -185,11 +185,11 @@ def _verify_pkce_code_verifier(
         raise HTTPException(status_code=400, detail="code_challenge_method must be S256")
 
     actual_code_challenge = _code_challenge_for_verifier(code_verifier)
-    if not hmac.compare_digest(actual_code_challenge, expected_code_challenge):
+    if not hmac.compare_digest(actual_code_challenge, cast(str, expected_code_challenge)):
         raise HTTPException(status_code=400, detail="invalid code_verifier")
 
 
-def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, session_data: dict) -> str:
+def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, session_data: Dict[str, Any]) -> str:
     code_challenge = session_data.get('code_challenge')
     code_challenge_method = session_data.get('code_challenge_method')
     _validate_pkce_challenge(code_challenge, code_challenge_method)
@@ -338,7 +338,8 @@ async def auth_authorize(
     # Redirect to provider OAuth
     if provider == 'google':
         response = await _google_auth_redirect(session_id)
-    elif provider == 'apple':
+    else:
+        # provider == 'apple' — only 'google'/'apple' reach here (validated above).
         response = await _apple_auth_redirect(session_id)
     _log_auth_event(
         provider=provider,
@@ -391,7 +392,7 @@ async def auth_callback_google(
     )
 
     # Exchange code for OAuth credentials
-    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', code, session_data)
+    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', cast(str, code), session_data)
 
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
@@ -753,7 +754,7 @@ async def _apple_auth_redirect(session_id: str):
     return RedirectResponse(url=apple_auth_url)
 
 
-async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: dict) -> str:
+async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange provider-specific code for OAuth credentials
     """
@@ -765,7 +766,7 @@ async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
 
-async def _exchange_google_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_google_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Google authorization code for Google OAuth tokens
     """
@@ -843,7 +844,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     return json.dumps(oauth_credentials)
 
 
-async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Apple authorization code for Apple OAuth tokens
     """
@@ -870,7 +871,9 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
             )
 
         # Generate client secret JWT
-        client_secret = _generate_apple_client_secret(client_id, team_id, key_id, private_key_content)
+        client_secret = _generate_apple_client_secret(
+            cast(str, client_id), cast(str, team_id), cast(str, key_id), cast(str, private_key_content)
+        )
 
         # Exchange authorization code for Apple tokens
         api_base_url = os.getenv('BASE_API_URL')
@@ -956,7 +959,7 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
-async def _generate_custom_token(provider: str, id_token: str, access_token: str = None) -> str:
+async def _generate_custom_token(provider: str, id_token: str, access_token: Optional[str] = None) -> str:
     """
     Generate Firebase custom token by signing in with OAuth credentials
     This ensures we get the same Firebase UID that client-side auth would create
@@ -1007,9 +1010,9 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
 
         # Create custom token for this UID
-        custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
+        custom_token: object = firebase_admin.auth.create_custom_token(firebase_uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
-        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else cast(str, custom_token)
 
     except Exception as e:
         logger.error(f"Error in _generate_custom_token: {sanitize(str(e))}")
@@ -1045,7 +1048,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         }
 
         # Generate the client secret
-        client_secret = jwt.encode(payload, private_key, algorithm='ES256', headers=headers)
+        client_secret = jwt.encode(payload, cast(Any, private_key), algorithm='ES256', headers=headers)
 
         return client_secret
 
@@ -1054,7 +1057,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         raise HTTPException(status_code=500, detail="Failed to generate Apple client secret")
 
 
-async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
+async def _verify_apple_id_token(id_token: str, client_id: str) -> Dict[str, Any]:  # type: ignore[reportUnusedFunction]  # public verification helper, reserved for Apple ID token validation
     """
     Verify Apple ID token and extract user information
     """
@@ -1075,7 +1078,7 @@ async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
             raise Exception("No key ID found in token header")
 
         # Find the matching public key
-        public_key = None
+        public_key: Any = None
         for key in apple_keys['keys']:
             if key['kid'] == key_id:
                 public_key = RSAAlgorithm.from_jwk(key)

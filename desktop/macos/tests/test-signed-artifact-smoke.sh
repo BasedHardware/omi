@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SMOKE="$MACOS_DIR/scripts/smoke-signed-desktop-artifact.sh"
+
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+TMP_ROOTS=()
+cleanup() {
+  for path in "${TMP_ROOTS[@]}"; do
+    [[ -n "$path" ]] && rm -rf "$path"
+  done
+}
+trap cleanup EXIT
+
+[[ -x "$SMOKE" ]] || fail "signed artifact smoke script must be executable"
+
+if ! "$SMOKE" --help >/tmp/omi-smoke-help.out; then
+  fail "--help should succeed"
+fi
+
+for required in \
+  "Launch + identity" \
+  "Auth persistence" \
+  "Signed Keychain canary" \
+  "Backend routing" \
+  "Sparkle/update metadata" \
+  "Native helper/runtime bundle integrity" \
+  "Minimal chat path" \
+  "Recording permission surface sanity" \
+  "Local storage/database"; do
+  grep -q "$required" /tmp/omi-smoke-help.out || fail "help is missing smoke path: $required"
+done
+
+if "$SMOKE" --tag "bad-tag" >/tmp/omi-smoke-invalid.out 2>/tmp/omi-smoke-invalid.err; then
+  fail "missing app should fail"
+fi
+grep -q -- "--app or --zip is required" /tmp/omi-smoke-invalid.err || fail "missing app failure should be explicit"
+
+if "$SMOKE" --app --zip file.zip >/tmp/omi-smoke-missing-value.out 2>/tmp/omi-smoke-missing-value.err; then
+  fail "missing option value should fail"
+fi
+grep -q -- "--app requires a value" /tmp/omi-smoke-missing-value.err || fail "missing value failure should be explicit"
+
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/omi-smoke-test.XXXXXX")"
+TMP_ROOTS+=("$tmp_root")
+tmp_app="$tmp_root/omi.app"
+mkdir -p "$tmp_app/Contents/MacOS" "$tmp_app/Contents/Resources" "$tmp_app/Contents/Frameworks"
+cat > "$tmp_app/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Omi Computer</string>
+  <key>CFBundleIdentifier</key><string>com.omi.computer-macos</string>
+  <key>CFBundleShortVersionString</key><string>0.12.34</string>
+  <key>CFBundleVersion</key><string>12034</string>
+  <key>CFBundleURLTypes</key>
+  <array><dict><key>CFBundleURLSchemes</key><array><string>omi-computer</string></array></dict></array>
+  <key>SUFeedURL</key><string>https://api.omi.me/v2/desktop/appcast.xml</string>
+</dict>
+</plist>
+PLIST
+touch "$tmp_app/Contents/MacOS/Omi Computer"
+chmod +x "$tmp_app/Contents/MacOS/Omi Computer"
+
+if "$SMOKE" --app "$tmp_app" --tag "bad-tag" >/tmp/omi-smoke-badtag.out 2>/tmp/omi-smoke-badtag.err; then
+  fail "bad release tag should fail before signing checks"
+fi
+grep -q "invalid release tag" /tmp/omi-smoke-badtag.err || fail "bad tag failure should be explicit"
+
+echo "signed artifact smoke tests passed"

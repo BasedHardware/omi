@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
+import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -19,12 +21,15 @@ Future<Map<String, dynamic>?> verifyPhoneNumber(String phoneNumber) async {
   if (response == null) return null;
   Logger.debug('verifyPhoneNumber: ${response.body}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    final generated = wire.GeneratedVerifyPhoneNumberResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return generated.toJson();
   }
   try {
-    var body = jsonDecode(response.body);
-    if (body['detail'] != null) {
-      return {'error': body['detail']};
+    final body = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (body.detail != null) {
+      return {'error': body.detail};
     }
   } catch (_) {}
   return null;
@@ -40,7 +45,10 @@ Future<Map<String, dynamic>?> checkPhoneVerification(String phoneNumber) async {
   if (response == null) return null;
   Logger.debug('checkPhoneVerification: ${response.body}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    final generated = wire.GeneratedCheckVerificationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return generated.toJson();
   }
   return null;
 }
@@ -49,9 +57,8 @@ Future<List<VerifiedPhoneNumber>> getVerifiedPhoneNumbers() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/numbers', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
-    var body = jsonDecode(response.body);
-    var numbers = body['numbers'] as List<dynamic>;
-    return numbers.map((n) => VerifiedPhoneNumber.fromJson(n)).toList();
+    final generated = wire.GeneratedPhoneNumbersResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return generated.numbers.toList();
   }
   return [];
 }
@@ -75,7 +82,8 @@ Future<PhoneCallToken?> getPhoneCallToken() async {
   if (response == null) return null;
   Logger.debug('getPhoneCallToken: ${response.body}');
   if (response.statusCode == 200) {
-    return PhoneCallToken.fromJson(jsonDecode(response.body));
+    final generated = wire.GeneratedTokenResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return PhoneCallToken.fromGenerated(generated);
   }
   return null;
 }

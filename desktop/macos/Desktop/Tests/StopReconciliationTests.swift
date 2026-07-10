@@ -112,6 +112,38 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertTrue(matches, "9.99s offset should match")
     }
 
+    func testTimestampReconciliationQueriesInProgressProcessingAndCompleted() {
+        XCTAssertEqual(
+            DesktopConversationMatchPolicy.cloudReconciliationStatuses,
+            [.inProgress, .processing, .completed]
+        )
+    }
+
+    func testTimestampMatchedInProgressConversationUsesSpecificFinalizeBeforeCompletion() {
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .inProgress)
+        )
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+                status: .inProgress,
+                source: .desktop
+            ),
+            "Timestamp matches must not complete locally until exact-id finalize returns a non-in-progress status"
+        )
+    }
+
+    func testTimestampMatchedProcessingConversationCanCompleteWithoutFinalize() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .processing)
+        )
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+                status: .processing,
+                source: .desktop
+            )
+        )
+    }
+
     func testNegativeTimeOffset() {
         let sessionStartTime = Date()
         // Backend conversation started 3s BEFORE local session start (clock skew)
@@ -307,6 +339,48 @@ final class StopReconciliationTests: XCTestCase {
             incomingBackendId: "active-conversation",
             activeBackendId: "active-conversation",
             ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionRejectsStaleConversationBinding() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "stale-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionAcceptsExactConversationBinding() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "recording-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testLifecycleEventRejectsStaleRecordingIdentity() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "stale-conversation",
+            recordingSessionId: "stale-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsExactRecordingIdentity() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: "recording-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsLegacyEventWhenConversationIdStillMatches() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: nil,
+            expectedBackendId: "recording-conversation"
         ))
     }
 

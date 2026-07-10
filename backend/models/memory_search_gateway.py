@@ -61,7 +61,7 @@ class HydratedSearchResult(BaseModel):
 class SearchGatewayResult(BaseModel):
     results: List[HydratedSearchResult] = Field(default_factory=list)
     decisions: Dict[str, SearchDecision] = Field(default_factory=dict)
-    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
 
 
 def hydrate_and_filter_vector_hits(
@@ -122,7 +122,19 @@ def hydrate_and_filter_vector_hits(
                 )
             )
             continue
-        if hit.source_commit_id is None or hit.content_hash is None:
+        if item.source_commit_id is not None and hit.source_commit_id is None:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            repair_purge_candidates.append(
+                _repair_purge_candidate(
+                    hit=hit,
+                    reason=VectorRepairPurgeReason.missing_vector_freshness_metadata,
+                    required_projection_commit_id=required_projection_commit_id,
+                    required_account_generation=required_account_generation,
+                    authoritative_item=item,
+                )
+            )
+            continue
+        if item.content_hash is not None and hit.content_hash is None:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             repair_purge_candidates.append(
                 _repair_purge_candidate(

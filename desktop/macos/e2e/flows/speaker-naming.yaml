@@ -1,0 +1,86 @@
+version: 2
+name: speaker-naming
+tier: 2
+description: Hermetic multi-speaker capture, detail open, and speaker assignment
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S2
+    name: Start capture session
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: start
+    expect:
+      result.detail.started: "true"
+
+  - id: S3
+    name: Inject multi-speaker transcript
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: inject_multi
+        segments: '[{"text":"[[MARKER:speaker-naming]] hello from speaker zero","speaker":"SPEAKER_00","speaker_id":0,"is_user":true},{"text":"reply from speaker one","speaker":"SPEAKER_01","speaker_id":1}]'
+    expect:
+      result.detail.injected_count: "2"
+      result.detail.unique_speakers: "SPEAKER_00,SPEAKER_01"
+
+  - id: S4
+    name: Stop capture session
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: stop
+    expect:
+      result.detail.stopped: "true"
+
+  - id: S5
+    name: Open latest conversation with transcript drawer
+    bridge.action:
+      name: open_latest_conversation
+      params:
+        showTranscript: "true"
+        settleMs: "500"
+    expect:
+      ok: true
+
+  - id: S6
+    name: Assign speaker name to second segment
+    bridge.action:
+      name: assign_speaker_fixture
+      params:
+        conversationId: latest
+        segmentIndex: "1"
+        personName: "[[MARKER:speaker-naming]] Harness Guest"
+    expect:
+      result.detail.assigned: "true"
+      result.detail.person_name: "[[MARKER:speaker-naming]] Harness Guest"
+
+  - id: S7
+    name: Conversation detail snapshot
+    bridge.action:
+      name: conversation_detail_snapshot
+      params:
+        conversationId: latest
+    expect:
+      result.detail.detail_open: "true"
+      result.detail.segment_count: "2"
+
+  - id: S8
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

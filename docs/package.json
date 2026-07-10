@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "build": "mkdir -p build && cp -R api-reference assets doc epics images logo memory onboarding operational rollout runbooks superpowers docs.json favicon.ico getstartedwithomi.mdx quickstart.mdx IMG_5299.JPG omi-devkit-without-rope.png omi-glass.png omi-without-rope.png build/"
+  },
   "dependencies": {
     "@mintlify/scraping": "^4.0.164"
   }

@@ -1,5 +1,6 @@
 {
     "@@locale": "vi",
+    "sessionExpiredSignInAgain": "Phiên đã hết hạn — hãy đăng nhập lại.",
     "appTitle": "Omi",
     "conversationTab": "Cuộc trò chuyện",
     "transcriptTab": "Bản ghi",
@@ -3059,7 +3060,7 @@
     "syncCustomSttWarningMessage": "Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.",
     "transcribeLaterTitle": "Phiên âm sau",
     "transcribeLaterDescription": "Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.",
-    "transcribeLaterNote": "Hiện chỉ hoạt động với thiết bị Omi. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
+    "transcribeLaterNote": "Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
     "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.",
     "unmute": "Bật tiếng",
     "newRecording": "Ghi âm mới",
@@ -3108,5 +3109,44 @@
     "deviceOnboardingIntroSubtitle": "Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.",
     "deviceOnboardingIntroDuration": "Khoảng 1 phút",
     "jumpToLatestMessage": "Đi đến tin nhắn mới nhất",
-    "latest": "Mới nhất"
+    "latest": "Mới nhất",
+    "flashFirmware": "Nạp firmware",
+    "pendantRecordingTitle": "Đang ghi âm trên mặt dây chuyền",
+    "pendantRecordingNote": "Mặt dây chuyền của bạn đang tự ghi âm. Các bản ghi được đồng bộ về điện thoại khi ứng dụng đang mở.",
+    "pendantSyncingRecordings": "Đang đồng bộ các bản ghi từ mặt dây chuyền của bạn…",
+    "pendantMinutesStored": "~{minutes} phút đã lưu",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ.",
+    "connectRayBanMeta": "Kết nối Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Sử dụng kính Ray-Ban Meta của bạn làm thiết bị ghi của Omi cho các cuộc trò chuyện và ngữ cảnh hình ảnh. Omi sẽ mở ứng dụng Meta AI để liên kết kính của bạn.",
+    "raybanMetaOpenMetaAI": "Kết nối qua Meta AI",
+    "raybanMetaWaitingForMetaAI": "Hoàn tất kết nối trong ứng dụng Meta AI, sau đó quay lại đây.",
+    "raybanMetaCheckAgain": "Kiểm tra lại",
+    "raybanMetaAllowCamera": "Cho phép camera trên kính",
+    "raybanMetaCameraExplanation": "Omi sử dụng camera của kính để thêm ảnh vào các cuộc trò chuyện của bạn. Bạn có thể bỏ qua bước này và chỉ sử dụng âm thanh.",
+    "raybanMetaSkipForNow": "Bỏ qua ngay bây giờ",
+    "raybanMetaAudioOnlyTitle": "Chế độ chỉ âm thanh của Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Phiên bản Omi này có thể sử dụng micrô của kính qua Bluetooth. Chụp ảnh cần bản dựng dành cho nhà phát triển Meta của Omi.",
+    "raybanMetaMusicPauseNote": "Nhạc trên điện thoại của bạn sẽ tạm dừng khi micrô của kính đang được sử dụng.",
+    "raybanMetaContinue": "Tiếp tục",
+    "raybanMetaCapturePhoto": "Chụp ảnh",
+    "raybanMetaPhotoRequested": "Đã yêu cầu ảnh — ảnh sẽ xuất hiện trong cuộc trò chuyện của bạn.",
+    "raybanMetaMicrophoneReady": "Micrô đã sẵn sàng",
+    "raybanMetaImageCaptureReady": "Đã sẵn sàng chụp ảnh",
+    "raybanMetaImageCaptureUnavailable": "Không khả dụng ở chế độ chỉ âm thanh",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Lỗi khi kết nối với Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

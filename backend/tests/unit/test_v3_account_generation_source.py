@@ -1,16 +1,6 @@
-import os
-import sys
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-sys.modules["database._client"] = MagicMock()
 
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
 from utils.memory.v3_account_generation_source import (

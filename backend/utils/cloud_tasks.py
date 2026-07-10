@@ -12,8 +12,10 @@ accept task traffic.
 
 import json
 import logging
+import hashlib
 import os
-from typing import Optional
+import uuid
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists
@@ -71,7 +73,15 @@ def is_audio_merge_dispatch_enabled() -> bool:
     return os.getenv('AUDIO_MERGE_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
-def _enqueue_named_task(queue: str, url: str, task_id: str, payload: dict) -> None:
+def is_account_deletion_dispatch_enabled() -> bool:
+    return os.getenv('ACCOUNT_DELETION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
+
+
+def get_account_deletion_tasks_max_attempts() -> int:
+    return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
+
+
+def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, Any]) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
@@ -94,33 +104,53 @@ def _enqueue_named_task(queue: str, url: str, task_id: str, payload: dict) -> No
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
     )
     try:
-        client.create_task(parent=parent, task=task)
+        client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
-def enqueue_sync_job(payload: dict) -> None:
+def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     """Enqueue one named HTTP task (task id = job_id) for a sync job.
 
     The caller falls back to the inline pipeline on failure.
     """
-    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), payload['job_id'], payload)
+    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 
-def enqueue_audio_merge_job(payload: dict) -> None:
+def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     """Enqueue one named merge task per (conversation, audio_file).
 
     Task name am-{conversation_id}-{audio_file_id} dedupes concurrent enqueues
     from /urls polling; the handler's artifact-exists check covers the rest.
     Tokens are minted with the same audience as sync tasks so a single
     verify_cloud_tasks_oidc dependency covers both handlers.
+
+    schema_version 2 = conversation-level artifact build: the name embeds the
+    audio_files fingerprint so a rebuild after late chunks gets a fresh name
+    and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
+    per-part names (audio_file ids are UUIDv4).
     """
-    task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+    if payload.get('schema_version') == 2:
+        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
+    else:
+        task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     _enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         os.getenv('AUDIO_MERGE_HANDLER_URL', ''),
         task_id,
         payload,
+    )
+
+
+def enqueue_account_deletion_wipe(uid: str) -> None:
+    """Enqueue one durable account-deletion wipe task for a Firebase uid."""
+    uid_hash = hashlib.sha256(uid.encode('utf-8')).hexdigest()[:32]
+    task_id = f"account-delete-{uid_hash}-{uuid.uuid4().hex}"
+    _enqueue_named_task(
+        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
+        os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
+        task_id,
+        {'uid': uid},
     )
 
 
@@ -142,7 +172,7 @@ def verify_cloud_tasks_oidc(request: Request) -> int:
         raise HTTPException(status_code=403, detail='Missing bearer token')
 
     try:
-        claims = id_token.verify_oauth2_token(auth_header[len('Bearer ') :], _get_auth_request(), audience=audience)
+        claims: Any = id_token.verify_oauth2_token(auth_header[len('Bearer ') :], _get_auth_request(), audience=audience)  # type: ignore[reportUnknownMemberType]  # google.oauth2.id_token partially untyped
     except Exception as e:
         # Distinguishes bad tokens from transient JWKS-fetch failures in logs
         logger.warning('OIDC token verification failed: %s', e)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from utils.executors import db_executor, postprocess_executor
 
@@ -78,6 +78,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class McpStatusResponse(BaseModel):
+    status: str
+
+
+class McpOauthGrantsResponse(BaseModel):
+    grants: List[Dict[str, Any]] = []
+
+
+class McpScreenActivityRow(BaseModel):
+    id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    app_name: Optional[str] = None
+    window_title: Optional[str] = None
+    ocr_text: Optional[str] = None
+
+
+class McpScreenActivityAppSummary(BaseModel):
+    count: int = 0
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    window_titles: List[str] = []
+
+
+class McpScreenActivitySummaryResponse(BaseModel):
+    apps: Dict[str, McpScreenActivityAppSummary] = {}
+    total_screenshots: int = 0
+
+
 @router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
 def get_keys(uid: str = Depends(get_current_user_id)):
     return mcp_api_key_db.get_mcp_keys_for_user(uid)
@@ -98,7 +126,7 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     return
 
 
-@router.get("/v1/mcp/oauth/grants", tags=["mcp"])
+@router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
 def get_oauth_grants(uid: str = Depends(get_current_user_id)):
     return {"grants": mcp_oauth_db.list_user_grants(uid)}
 
@@ -146,7 +174,7 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
     return fetch_memory_dict(uid, memory_id, db_client=db)
 
 
-@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
+@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
@@ -173,7 +201,7 @@ def delete_memory(
     return {"status": "ok"}
 
 
-@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
+@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
 def edit_memory(
     memory_id: str,
     value: str,
@@ -540,7 +568,10 @@ def search_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_conversation_by_id(
+    conversation_id: str,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
@@ -613,7 +644,11 @@ def _action_item_write_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/v1/mcp/action-items/search", response_model=List[SimpleActionItem], tags=["mcp"])
-def search_action_items(query: str, limit: int = 10, uid: str = Depends(get_uid_from_mcp_api_key)):
+def search_action_items(
+    query: str,
+    limit: int = 10,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"search_action_items {uid} limit={limit}")
     try:
         return mcp_action_items.search_action_items(uid, query, limit=limit)
@@ -636,7 +671,11 @@ def create_action_item(
 
 
 @router.post("/v1/mcp/action-items/{action_item_id}/complete", response_model=SimpleActionItem, tags=["mcp"])
-def complete_action_item(action_item_id: str, completed: bool = True, uid: str = Depends(get_uid_from_mcp_api_key)):
+def complete_action_item(
+    action_item_id: str,
+    completed: bool = True,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
     try:
         return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
@@ -645,7 +684,11 @@ def complete_action_item(action_item_id: str, completed: bool = True, uid: str =
 
 
 @router.patch("/v1/mcp/action-items/{action_item_id}", response_model=SimpleActionItem, tags=["mcp"])
-def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str = Depends(get_uid_from_mcp_api_key)):
+def update_action_item(
+    action_item_id: str,
+    body: McpUpdateActionItem,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"update_action_item {uid} id={action_item_id}")
     try:
         return mcp_action_items.update_action_item(
@@ -657,8 +700,11 @@ def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str 
         raise _action_item_write_error(e)
 
 
-@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
-def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"], response_model=McpStatusResponse)
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"delete_action_item {uid} id={action_item_id}")
     try:
         mcp_action_items.delete_action_item(uid, action_item_id)
@@ -672,8 +718,11 @@ def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/goals", tags=["mcp"])
-def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_from_mcp_api_key)):
+@router.get("/v1/mcp/goals", tags=["mcp"], response_model=List[Dict[str, Any]])
+def get_goals(
+    include_inactive: bool = False,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     return goals_db.get_all_goals(uid, include_inactive=include_inactive)
 
@@ -692,7 +741,11 @@ class SimpleChatMessage(BaseModel):
 
 
 @router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
-def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_chat_messages(
+    limit: int = 50,
+    offset: int = 0,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -750,7 +803,11 @@ def get_calendar_meeting_by_id(meeting_id: str, uid: str = Depends(get_uid_from_
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/screen-activity", tags=["mcp"])
+@router.get(
+    "/v1/mcp/screen-activity",
+    tags=["mcp"],
+    response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
+)
 def get_screen_activity(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -762,7 +819,7 @@ def get_screen_activity(
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     if summary:
         return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 200))
     rows = screen_activity_db.get_screen_activity(
         uid, start_date=start_date, end_date=end_date, app_filter=app, limit=limit
     )
@@ -774,7 +831,7 @@ def get_screen_activity(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/daily-summaries", tags=["mcp"])
+@router.get("/v1/mcp/daily-summaries", tags=["mcp"], response_model=List[Dict[str, Any]])
 def get_daily_summaries(
     limit: int = 30,
     offset: int = 0,
