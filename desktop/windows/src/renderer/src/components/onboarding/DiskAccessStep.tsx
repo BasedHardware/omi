@@ -25,7 +25,7 @@ export function DiskAccessStep({
     if (api.indexFilesScan) {
       try {
         await api.indexFilesScan()
-        // Reveal purple "thing" nodes for the apps the user has, with clean
+        // Reveal pink "thing" nodes for the apps the user has, with clean
         // names — the macOS onboarding moment. Best-effort; never blocks.
         try {
           const apps = await window.omi.indexFilesApps(200)

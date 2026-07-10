@@ -35,6 +35,55 @@
 
 @layer base {
   :root {
+    /* ── Design tokens (ported from the macOS app's OmiColors/OmiChrome
+       structure — same ramp, neutral hues, NO purple family). ─────────── */
+
+    /* Background ramp (macOS: #0F0F0F → #252525). */
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #252525;
+    --bg-quaternary: #343438;
+    --bg-raised: #1f1f22;
+
+    /* Hairlines. macOS draws #3A3940 at ~0.28 over dark panels; over this
+       ramp the equivalent finished strokes are: */
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+
+    /* Text hierarchy (4 tiers, macOS values). */
+    --text-primary: #ffffff;
+    --text-secondary: #e5e5e5;
+    --text-tertiary: #b0b0b0;
+    --text-quaternary: #888888;
+
+    /* Accent: white/neutral system (INV-UI-1 — never purple). Filled accent
+       surfaces (toggles-on, send button, lit keycaps) pair the white fill
+       with --accent-contrast content. */
+    --accent: #ffffff;
+    --accent-contrast: #0f0f0f;
+
+    /* Status (macOS values — hue-true, used sparingly). */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --info: #3b82f6;
+
+    /* Radius scale (macOS OmiChrome: window/card/section/control/chip). */
+    --radius-window: 26px;
+    --radius-card: 24px;
+    --radius-section: 20px;
+    --radius-control: 16px;
+    --radius-chip: 14px;
+
+    /* Motion (ported feel: fast, well-damped; window-morphs ease-out). */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-morph: cubic-bezier(0.3, 0.8, 0.3, 1);
+    --dur-fast: 120ms;
+    --dur-med: 180ms;
+    --dur-slow: 320ms;
+
+    /* Glass — reserved for floating surfaces (bar, toasts); content panels
+       are solid. */
     --glass-bg: rgba(0, 0, 0, 0.42);
     --glass-bg-subtle: rgba(0, 0, 0, 0.30);
     --glass-bg-strong: rgba(0, 0, 0, 0.52);
@@ -43,15 +92,12 @@
     --glass-highlight: rgba(255, 255, 255, 0.07);
     --glass-blur: 24px;
     --glass-blur-strong: 36px;
-    /* Accent color for the active nav item's icon. Change this one value to
-       re-theme the sidebar highlight. */
-    --accent: #5b02e0;
-    /* Neutral grey used for the selected/hovered sidebar row + the tab
-       background gradient's top-left corner (no accent tint). */
-    --nav-sel: #141414;
-    /* Surface tone for content panels (chat box, widgets) — darker than the
-       nav grey but not pure black. */
-    --surface: #0c0c0c;
+
+    /* Selected/hovered nav row fill (kept as a named token for the sidebar
+       and settings rail). */
+    --nav-sel: rgba(255, 255, 255, 0.07);
+    /* Surface tone for content panels (chat composer, widgets). */
+    --surface: var(--bg-secondary);
   }
 
   html,
@@ -59,7 +105,7 @@
   #root {
     height: 100%;
     margin: 0;
-    background: #000000;
+    background: var(--bg-primary);
     background-attachment: fixed;
     color: rgba(255, 255, 255, 0.92);
     font-family:
@@ -72,6 +118,16 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Mica (Win11 22H2+): main sets data-mica on the root when the window has
+     a system background material; the canvas goes translucent so the desktop
+     tint reads through — subtly. Secondary windows (bar/toast) already force
+     their own transparent backgrounds and are unaffected. */
+  html[data-mica='true'],
+  html[data-mica='true'] body,
+  html[data-mica='true'] #root {
+    background: rgba(15, 15, 15, 0.82);
   }
 
   ::selection {
@@ -92,9 +148,14 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    /* Full-screen gradient (same as the tabs) so there's no black gap behind the
-       sidebar while it slides in. */
-    background: linear-gradient(135deg, var(--nav-sel) 0%, #000000 70%);
+    /* Flat canvas (macOS backgroundPrimary) so there's no gap behind the
+       sidebar while it slides in. Under mica this stays transparent so the
+       material shows through. */
+    background: var(--bg-primary);
+  }
+
+  html[data-mica='true'] .app-canvas::before {
+    background: transparent;
   }
 
   @keyframes auraDrift {
@@ -245,17 +306,19 @@
     color: #fff !important;
   }
 
-  /* Dashboard widget surface (Home): black, slightly transparent so the tab
-     gradient shows through. Fixed height so cards never grow with their content
-     — sized to fit the header + 2 preview rows + a "+N more" line; shorter
-     content just leaves empty space at the bottom. */
+  /* Dashboard widget surface (Home): solid raised panel on the flat canvas.
+     Fixed height so cards never grow with their content — sized to fit the
+     header + 2 preview rows + a "+N more" line; shorter content just leaves
+     empty space at the bottom. */
   .widget-card {
-    @apply flex h-40 flex-col rounded-2xl border border-white/10 p-4 transition-colors duration-200;
+    @apply flex h-40 flex-col rounded-section border p-4 transition-colors duration-200;
     background: var(--surface);
+    border-color: var(--border);
   }
 
   .widget-card:hover {
-    background: var(--nav-sel);
+    background: var(--bg-raised);
+    border-color: var(--border-strong);
   }
 
   /* Sidebar entrance — slides in from the left. This is the first thing to

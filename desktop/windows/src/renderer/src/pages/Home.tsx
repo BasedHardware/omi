@@ -415,7 +415,7 @@ export function Home(): React.JSX.Element {
                         className={cn(
                           'bubble-in w-fit max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug',
                           isUser
-                            ? 'rounded-br-md bg-[color:var(--accent)] text-right text-white'
+                            ? 'rounded-br-md bg-[color:var(--accent)] text-right text-[color:var(--accent-contrast)]'
                             : 'rounded-bl-md bg-white/[0.06] text-left text-white/80'
                         )}
                       >

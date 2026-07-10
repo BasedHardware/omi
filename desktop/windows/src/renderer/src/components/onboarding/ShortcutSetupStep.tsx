@@ -113,7 +113,7 @@ export function ShortcutSetupStep({
                 className={
                   'flex h-[52px] min-w-[52px] items-center justify-center rounded-xl px-3 text-sm font-semibold transition-all duration-150 ' +
                   (lit
-                    ? 'bg-[color:var(--accent)] text-white shadow-[0_0_24px_4px_rgba(91,2,224,0.55)]'
+                    ? 'bg-[color:var(--accent)] text-[color:var(--accent-contrast)] shadow-[0_0_24px_4px_rgba(255,255,255,0.22)]'
                     : 'bg-white/[0.08] text-white/85')
                 }
               >

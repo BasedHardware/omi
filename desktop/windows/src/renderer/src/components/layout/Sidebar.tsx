@@ -133,8 +133,8 @@ export function Sidebar(): React.JSX.Element {
         >
           <span
             className={cn(
-              'absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all duration-200',
-              on ? 'left-3.5' : 'left-0.5'
+              'absolute top-0.5 h-3 w-3 rounded-full transition-all duration-200',
+              on ? 'left-3.5 bg-[color:var(--accent-contrast)]' : 'left-0.5 bg-white'
             )}
           />
         </span>
