@@ -956,6 +956,9 @@ async def sync_local_files_v2(
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
         ):
+            if backfill_slot_acquired:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                backfill_slot_acquired = False
             return JSONResponse(
                 status_code=422,
                 content={
@@ -1175,6 +1178,11 @@ async def sync_local_files_v2(
             },
         )
     except HTTPException:
+        if backfill_slot_acquired:
+            try:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+            except Exception:
+                pass
         raise
     except Exception as e:
         logger.error(f'sync_v2 fast-path failed uid={uid}: {e}')
