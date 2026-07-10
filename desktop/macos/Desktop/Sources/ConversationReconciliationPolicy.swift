@@ -13,28 +13,59 @@ struct ConversationPendingMutation: Equatable {
   var starred: Bool?
   var titleRecordedAt: Date?
   var starredRecordedAt: Date?
+  private(set) var titleMutationId: UUID?
+  private(set) var starredMutationId: UUID?
   private(set) var folderId: String?
   private(set) var hasFolderIdMutation: Bool = false
   private(set) var folderIdRecordedAt: Date?
+  private(set) var folderIdMutationId: UUID?
 
   var isEmpty: Bool {
     title == nil && starred == nil && !hasFolderIdMutation
   }
 
-  mutating func setTitle(_ title: String?) {
+  mutating func setTitle(_ title: String?, mutationId: UUID = UUID()) {
     self.title = title
     titleRecordedAt = Date()
+    titleMutationId = mutationId
   }
 
-  mutating func setStarred(_ starred: Bool) {
+  mutating func setStarred(_ starred: Bool, mutationId: UUID = UUID()) {
     self.starred = starred
     starredRecordedAt = Date()
+    starredMutationId = mutationId
   }
 
-  mutating func setFolderId(_ folderId: String?) {
+  mutating func setFolderId(_ folderId: String?, mutationId: UUID = UUID()) {
     self.folderId = folderId
     hasFolderIdMutation = true
     folderIdRecordedAt = Date()
+    folderIdMutationId = mutationId
+  }
+
+  mutating func clearTitle(mutationId: UUID) -> Bool {
+    guard titleMutationId == mutationId else { return false }
+    self.title = nil
+    titleRecordedAt = nil
+    titleMutationId = nil
+    return true
+  }
+
+  mutating func clearStarred(mutationId: UUID) -> Bool {
+    guard starredMutationId == mutationId else { return false }
+    self.starred = nil
+    starredRecordedAt = nil
+    starredMutationId = nil
+    return true
+  }
+
+  mutating func clearFolderId(mutationId: UUID) -> Bool {
+    guard hasFolderIdMutation, folderIdMutationId == mutationId else { return false }
+    self.folderId = nil
+    hasFolderIdMutation = false
+    folderIdRecordedAt = nil
+    folderIdMutationId = nil
+    return true
   }
 
   /// Expire individual fields whose TTL has elapsed. The whole mutation is
@@ -44,35 +75,23 @@ struct ConversationPendingMutation: Equatable {
        now.timeIntervalSince(recorded) > ttl {
       title = nil
       titleRecordedAt = nil
+      titleMutationId = nil
     }
     if starred != nil, let recorded = starredRecordedAt,
        now.timeIntervalSince(recorded) > ttl {
       starred = nil
       starredRecordedAt = nil
+      starredMutationId = nil
     }
     if hasFolderIdMutation, let recorded = folderIdRecordedAt,
        now.timeIntervalSince(recorded) > ttl {
       folderId = nil
       hasFolderIdMutation = false
       folderIdRecordedAt = nil
+      folderIdMutationId = nil
     }
   }
 
-  mutating func clearResolvedFields(matching server: ServerConversation) {
-    if title == server.structured.title {
-      title = nil
-      titleRecordedAt = nil
-    }
-    if starred == server.starred {
-      starred = nil
-      starredRecordedAt = nil
-    }
-    if hasFolderIdMutation && folderId == server.folderId {
-      folderId = nil
-      hasFolderIdMutation = false
-      folderIdRecordedAt = nil
-    }
-  }
 }
 
 struct ConversationReconciliationResult: Equatable {
@@ -104,15 +123,7 @@ enum ConversationReconciliationPolicy {
     }
 
     var merged = server.map { serverConversation in
-      var mutation = nextPending[serverConversation.id]
-      let mergedConversation = apply(mutation: mutation, to: serverConversation)
-      mutation?.clearResolvedFields(matching: serverConversation)
-      if let mutation, !mutation.isEmpty {
-        nextPending[serverConversation.id] = mutation
-      } else {
-        nextPending.removeValue(forKey: serverConversation.id)
-      }
-      return mergedConversation
+      apply(mutation: nextPending[serverConversation.id], to: serverConversation)
     }
 
     // Preserve genuinely local in-progress rows that have not reached the
