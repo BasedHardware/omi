@@ -3,16 +3,25 @@
 // setBackgroundMaterial('acrylic'→'mica'→none) — same DWM-backdrop approach as
 // the overlay. Anchored bottom-right, shown WITHOUT stealing focus, auto-dismissed
 // after a timeout (paused while hovered).
+//
+// The MEETING toast (Phase 5) reuses this same window + renderer route rather
+// than spawning a second toast surface: one acrylic notification window, two
+// payload channels ('insight:payload' / 'meeting:toast'), last-writer-wins on
+// visibility. Meeting toasts are rare and insights fire at most every 15 min,
+// so a clobber is a non-issue and we avoid ~100 lines of duplicated window
+// lifecycle + a second always-alive BrowserWindow.
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import type { InsightPayload } from '../../shared/types'
+import type { InsightPayload, MeetingToastPayload } from '../../shared/types'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
 const MARGIN = 16
 const AUTO_DISMISS_MS = 8000
+// The ask-toast is a decision prompt — give it longer before it slips away.
+const MEETING_ASK_DISMISS_MS = 30_000
 
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
@@ -96,6 +105,30 @@ export function showInsightToast(payload: InsightPayload): void {
   else send()
   if (dismissTimer) clearTimeout(dismissTimer)
   dismissTimer = setTimeout(hideInsightToast, AUTO_DISMISS_MS)
+}
+
+/** Show (or update) the meeting toast in the shared toast window. Ask-toasts
+ *  linger longer (a decision prompt); capture notices use the standard timeout.
+ *  Never silent capture: every auto-start goes through here. */
+export function showMeetingToast(payload: MeetingToastPayload): void {
+  const win = ensureWindow()
+  position(win)
+  win.showInactive()
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('meeting:toast', payload)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+  if (dismissTimer) clearTimeout(dismissTimer)
+  dismissTimer = setTimeout(
+    hideInsightToast,
+    payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS
+  )
+}
+
+/** Hide the shared toast window (same surface as the insight toast). */
+export function hideMeetingToast(): void {
+  hideInsightToast()
 }
 
 export function hideInsightToast(): void {

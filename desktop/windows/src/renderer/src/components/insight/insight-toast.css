@@ -21,3 +21,19 @@ body.insight-toast-body { background: transparent !important; overflow: hidden; 
 .insight-headline { font-weight: 600; font-size: 14px; }
 .insight-advice { font-size: 13px; color: #e2e2e2; overflow: hidden; }
 .insight-foot { margin-top: auto; font-size: 11px; color: #9a9a9a; }
+
+/* Meeting toast (shares the card shell). Neutral/white accents only. */
+.meeting-actions { margin-top: auto; display: flex; gap: 8px; }
+.meeting-btn {
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  color: #e2e2e2;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  -webkit-app-region: no-drag;
+}
+.meeting-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.meeting-btn-primary { color: #111; background: #f5f5f5; border-color: #f5f5f5; }
+.meeting-btn-primary:hover { background: #ffffff; }

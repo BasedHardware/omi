@@ -4,6 +4,7 @@ import { ContinuousSessionHost } from './ContinuousSessionHost'
 import { AudioSessionHost } from './AudioSessionHost'
 import { PttCaptureHost } from './PttCaptureHost'
 import { ScreenSessionHost } from './ScreenSessionHost'
+import { MeetingSessionHost } from './MeetingSessionHost'
 import { auth } from '../lib/firebase'
 
 // Root of the hidden capture window (renderer #/capture). No visible UI — it only
@@ -49,6 +50,7 @@ export function CaptureApp(): React.JSX.Element {
       <AudioSessionHost />
       <PttCaptureHost />
       <ScreenSessionHost />
+      <MeetingSessionHost />
     </>
   )
 }

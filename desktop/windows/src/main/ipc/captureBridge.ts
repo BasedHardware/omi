@@ -29,6 +29,16 @@ export function isOwnedCaptureEvent(event: CaptureEvent): boolean {
   return OWNED_EVENT_TYPES.has(event.type)
 }
 
+// Main-process taps on capture events (post spoof-guard): lets main services
+// (e.g. the meeting monitor watching 'meeting-capture-status') observe events
+// without a BrowserWindow. Listeners must never throw.
+const mainEventListeners = new Set<(event: CaptureEvent) => void>()
+
+export function onCaptureEventInMain(cb: (event: CaptureEvent) => void): () => void {
+  mainEventListeners.add(cb)
+  return () => mainEventListeners.delete(cb)
+}
+
 /**
  * Pure routing decision: given an event, the ownerId the capture window tagged it
  * with (if any), and the ids of the candidate (non-capture) windows, return the
@@ -83,6 +93,13 @@ export function registerCaptureBridge(getCaptureWc: () => WebContents | null): v
     // inject capture events (it would let a hostile/XSS'd UI window forge PTT
     // audio or live-store ops into other windows).
     if (!wc || wc.isDestroyed() || e.sender.id !== wc.id) return
+    for (const cb of mainEventListeners) {
+      try {
+        cb(payload.event)
+      } catch (err) {
+        console.warn('[capture] main event listener threw:', err)
+      }
+    }
     const targets = BrowserWindow.getAllWindows().filter(
       (w) => !w.isDestroyed() && w.webContents.id !== wc.id
     )

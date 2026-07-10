@@ -17,6 +17,7 @@ import type {
   UsageSettings,
   RewindSettings,
   InsightPayload,
+  MeetingToastPayload,
   AutomationPlan,
   StepResult
 } from '../shared/types'
@@ -141,6 +142,14 @@ const omi: OmiBridgeApi = {
     const listener = (_e: Electron.IpcRendererEvent, p: InsightPayload): void => cb(p)
     ipcRenderer.on('insight:payload', listener)
     return () => ipcRenderer.removeListener('insight:payload', listener)
+  },
+  meetingGetSettings: () => ipcRenderer.invoke('meeting:getSettings'),
+  meetingSetSettings: (patch) => ipcRenderer.invoke('meeting:setSettings', patch),
+  meetingAction: (meetingId, action) => ipcRenderer.send('meeting:action', meetingId, action),
+  onMeetingToast: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: MeetingToastPayload): void => cb(p)
+    ipcRenderer.on('meeting:toast', listener)
+    return () => ipcRenderer.removeListener('meeting:toast', listener)
   },
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),

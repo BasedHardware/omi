@@ -35,6 +35,8 @@ import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
 import { createInsightToastWindow } from './insight/toastWindow'
+import { registerMeetingHandlers } from './ipc/meeting'
+import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { automationBridge } from './automation/bridge'
 import {
@@ -480,6 +482,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerMeetingHandlers()
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -551,7 +554,10 @@ app.whenReady().then(async () => {
           })
         }
         stopTestListenSession('e2e-vad-playback')
-      }
+      },
+      // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
+      // phase, so the toast + capture wiring is drivable without real Zoom.
+      meeting: meetingDebug()
     }
   }
 
@@ -586,6 +592,10 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
+    // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
+    // the machine latched silent.
+    startMeetingMonitor({ getCaptureWc })
   })
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
@@ -753,6 +763,7 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  stopMeetingMonitor()
   destroyTray()
   const overlay = getOverlayWindow()
   if (overlay && !overlay.isDestroyed()) overlay.destroy()

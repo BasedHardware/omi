@@ -55,7 +55,8 @@ describe('appSettings', () => {
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
-      recordHotkey: 'Ctrl+Space'
+      recordHotkey: 'Ctrl+Space',
+      meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false }
     })
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
     expect(sanitizeAppSettings({ recordHotkey: 42 } as never).recordHotkey).toBe('Ctrl+Space')
@@ -63,5 +64,46 @@ describe('appSettings', () => {
       sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown
     ).toBe(false)
     expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+  })
+
+  it('meeting settings default to ask/2min and sanitize bad values', () => {
+    const d = sanitizeAppSettings(null).meeting
+    expect(d).toEqual({ mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false })
+
+    const m = sanitizeAppSettings({
+      meeting: {
+        mode: 'auto',
+        endGraceMinutes: 999,
+        perApp: { zoom: 'off', bogus: 'sideways' as never },
+        firstRunToastShown: true
+      }
+    } as never).meeting
+    expect(m.mode).toBe('auto')
+    expect(m.endGraceMinutes).toBe(30) // clamped
+    expect(m.perApp).toEqual({ zoom: 'off' }) // invalid override dropped
+    expect(m.firstRunToastShown).toBe(true)
+
+    expect(sanitizeAppSettings({ meeting: { mode: 'loud' } } as never).meeting.mode).toBe('ask')
+    expect(
+      sanitizeAppSettings({ meeting: { endGraceMinutes: 0 } } as never).meeting.endGraceMinutes
+    ).toBe(1)
+  })
+
+  it('round-trips meeting settings', () => {
+    setAppSettings({
+      meeting: {
+        mode: 'auto',
+        endGraceMinutes: 5,
+        perApp: { discord: 'off' },
+        firstRunToastShown: true
+      }
+    })
+    _resetForTests()
+    expect(getAppSettings().meeting).toEqual({
+      mode: 'auto',
+      endGraceMinutes: 5,
+      perApp: { discord: 'off' },
+      firstRunToastShown: true
+    })
   })
 })

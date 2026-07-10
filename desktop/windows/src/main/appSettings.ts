@@ -6,12 +6,37 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { DEFAULT_RECORD_HOTKEY } from './shortcuts'
+import type { MeetingMode, MeetingSettings } from '../shared/types'
 
 export type AppSettings = {
   /** Whether the one-time "Omi keeps running in the tray" notice has been shown. */
   closeToTrayNoticeShown: boolean
   /** Electron accelerator that toggles mic recording. */
   recordHotkey: string
+  /** Meeting-detection behavior (Phase 5). */
+  meeting: MeetingSettings
+}
+
+const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
+
+// Default 'ask': detection runs but never auto-starts capture silently — the
+// first detected meeting asks via toast, and the toast carries a one-time
+// first-run hint pointing at Settings.
+function sanitizeMeeting(raw: Partial<MeetingSettings> | null | undefined): MeetingSettings {
+  const r = raw ?? {}
+  const mode = MEETING_MODES.includes(r.mode as MeetingMode) ? (r.mode as MeetingMode) : 'ask'
+  const grace =
+    typeof r.endGraceMinutes === 'number' && Number.isFinite(r.endGraceMinutes)
+      ? Math.min(30, Math.max(1, Math.round(r.endGraceMinutes)))
+      : 2
+  const perApp: Record<string, MeetingMode> = {}
+  if (r.perApp && typeof r.perApp === 'object') {
+    for (const [k, v] of Object.entries(r.perApp)) {
+      if (typeof k === 'string' && MEETING_MODES.includes(v as MeetingMode))
+        perApp[k] = v as MeetingMode
+    }
+  }
+  return { mode, endGraceMinutes: grace, perApp, firstRunToastShown: r.firstRunToastShown === true }
 }
 
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
@@ -24,7 +49,8 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
       : DEFAULT_RECORD_HOTKEY
   return {
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
-    recordHotkey: hotkey
+    recordHotkey: hotkey,
+    meeting: sanitizeMeeting(r.meeting)
   }
 }
 
