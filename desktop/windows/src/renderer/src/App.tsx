@@ -24,7 +24,7 @@ import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
-import { runAnimBench } from './lib/animBench'
+import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
@@ -64,9 +64,9 @@ function AppShellInner(): React.JSX.Element {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.omi?.perfMark('renderer:app-ready'))
     })
-    // Start the animation-jank probe (no-op unless OMI_ANIM_BENCH). Runs as the
-    // entrance animations (sidebar slide, content fade) play.
-    runAnimBench()
+    // Start the animation-jank probe (dev-only; no-op unless OMI_ANIM_BENCH).
+    // Runs as the entrance animations (sidebar slide, content fade) play.
+    if (import.meta.env.DEV) runAnimBench()
   }, [])
 
   // The overlay is a separate window with its own conversations cache, so when it
@@ -128,11 +128,12 @@ function AppShell(): React.JSX.Element {
 function App(): React.JSX.Element {
   const { user, loading } = useAuth()
   useMicaChrome()
-  // Under the perf bench, treat the user as already onboarded so the authed
+  // Under the dev perf bench, treat the user as already onboarded so the authed
   // shell mounts (a returning user always is). The onboarding flag lives in
   // origin-scoped localStorage, which the file:// bench profile can't inherit
   // from the dev session, so without this the bench would stall on the wizard.
-  const onboarded = useOnboardingComplete() || !!window.omi?.isBench
+  // DEV-gated so the bypass tree-shakes out of packaged renderer builds.
+  const onboarded = useOnboardingComplete() || (import.meta.env.DEV && !!window.omi?.isBench)
 
   // Tell main whether the summon shortcut may open the overlay. Enabled once
   // onboarding is complete; during onboarding the shortcut-setup step enables it

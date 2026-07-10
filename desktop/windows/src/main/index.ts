@@ -66,6 +66,9 @@ import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
+// Dev-only benchmarking / sandbox machinery. Every call below is behind
+// `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
+import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
 import { isQuitting, quitApp } from './lifecycle'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
@@ -103,12 +106,10 @@ function surfaceMainWindow(): void {
 // don't show it (the user opens it from the tray). See setLoginItemSettings.
 const startHidden = process.argv.includes('--hidden')
 
-// Default the perf log to the user data dir so marks double as lightweight prod
-// telemetry. The bench runner overrides OMI_PERF_LOG to point at .bench/.
-// app.getPath('userData') is valid before app.whenReady().
-if (!process.env.OMI_PERF_LOG) {
-  process.env.OMI_PERF_LOG = join(app.getPath('userData'), 'perf.jsonl')
-}
+// In dev, default the perf log to userData so marks capture to disk (the bench
+// runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
+// var is explicitly set — no silent prod telemetry file. Runs before app:start.
+if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
 perfMark('app:start')
 
 // --- Global crash observability --------------------------------------------
@@ -171,41 +172,16 @@ app.on('child-process-gone', (_e, details) =>
   logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
 )
 
-// Opt-in sandbox isolation. By default Electron derives userData from the
-// product name ("omi-windows"), which is the real user's data + signed-in
-// Firebase session. Set OMI_SANDBOX to pin a throwaway userData dir instead,
-// so a sandbox build can't share (and clobber) the production omi.db /
-// local_kg schema. Must run before any DB open (db.ts resolves userData lazily
-// on first IPC). NOTE: default = production data, so normal runs load memories.
-// In bench mode (OMI_BENCH=1) we NEVER pin, so the runner's isolated
-// --user-data-dir is honored (pinning here would override it and collide caches).
-//
-// The VALUE names the profile, so concurrent worktrees each get their OWN
-// userData dir and never contend for the shared Chromium GPU/disk/quota caches
-// (that contention crashes the WebGL brain map — the only GPU-backed surface —
-// while the plain-DOM UI survives). Use a distinct OMI_SANDBOX=<name> per
-// worktree to run several at once. OMI_SANDBOX=1 keeps the original shared
-// "…-sandbox-chat-kg" profile for backward compatibility (no re-login).
-//
-// This is intentionally OPT-IN, NOT auto-derived from the worktree folder: the
-// user's real data + Firebase session + onboarding floor live in the DEFAULT
-// profile, and Chromium can't safely share one profile across two live
-// instances anyway. So the MAIN worktree must stay on the default (real data),
-// and only the SECONDARY worktree(s) you run alongside it should set
-// OMI_SANDBOX=<name> to isolate. (An earlier auto-derive moved this worktree off
-// the default profile and blanked the brain map's onboarding floor — never do
-// that.)
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
 // OMI_AUTOMATION='0' as a kill-switch to disable it. Gates both the IPC
 // registration and the foreground-target tracker; the renderer reads the same
 // flag (window.omi.automationEnabled) to skip its action-planner pre-step.
 const AUTOMATION_ENABLED = process.env.OMI_AUTOMATION !== '0'
 
-const sandbox = process.env.OMI_SANDBOX
-if (sandbox && process.env.OMI_BENCH !== '1') {
-  const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
-  app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
-}
+// OMI_SANDBOX pins a throwaway userData dir for parallel dev worktrees so they
+// don't clobber the real profile (dev-only; see dev/bench). Runs before the
+// single-instance lock and any DB open.
+if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
 
 // Single-instance lock: only ONE Omi runs per userData profile. A second launch
 // hands off to the first (see the 'second-instance' handler) and exits. Acquired
@@ -459,8 +435,8 @@ app.whenReady().then(async () => {
   // Generic renderer-side startup mark (e.g. 'renderer:eval' once the bundle has
   // finished evaluating), recorded on the main clock to bisect startup phases.
   ipcMain.on('perf:mark', (_e, name: string) => perfMark(String(name)))
-  // Trivial round-trip used to measure raw IPC overhead in bench mode.
-  ipcMain.handle('bench:echo', async (_e, x: number) => x)
+  // Dev-only bench IPC (bench:echo round-trip). Tree-shaken from packaged main.
+  if (import.meta.env.DEV) devBench.registerBenchIpc()
   ipcMain.handle('db:remapConversationId', async (_e, fromId: string, toId: string) =>
     remapConversationId(fromId, toId)
   )
@@ -639,9 +615,9 @@ app.whenReady().then(async () => {
     // before the user opens the window) rather than alongside createWindow, so a
     // second full renderer eval doesn't contend with the main window's first paint.
     // Capture starts ~0.5-1s later as a result, which the 2s PTT pre-roll and the
-    // 30s silence finalizer tolerate. Skipped under the perf bench (OMI_BENCH),
-    // whose startup measurement must not include a second renderer.
-    if (process.env.OMI_BENCH !== '1') createCaptureWindow()
+    // 30s silence finalizer tolerate. Skipped under the dev perf bench, whose
+    // startup measurement must not include a second renderer.
+    if (!(import.meta.env.DEV && devBench.isBenchMode())) createCaptureWindow()
     // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
     startForegroundMonitor()
     // Track the last non-Omi foreground window so the automation planner snapshots
@@ -743,72 +719,9 @@ app.whenReady().then(async () => {
   // Renderer → quit for real (menu/button in the UI).
   ipcMain.on('app:quit', () => quitApp())
 
-  // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
-  // flush marks, and quit. Guarded entirely behind OMI_BENCH so prod is unaffected.
-  if (process.env.OMI_BENCH === '1') {
-    // Resolve when the renderer reports its first painted frame, so we can be
-    // sure the renderer:first-paint mark is recorded before we quit (the
-    // workload may otherwise finish first once seeding is fast).
-    const firstPaint = new Promise<void>((resolve) => {
-      ipcMain.once('perf:firstPaint', () => resolve())
-    })
-    // Resolve when the AUTHENTICATED shell reports it has mounted+painted
-    // (renderer:app-ready). Only fires when signed in + onboarded; on the
-    // Login/unauthenticated path it never arrives, so callers must keep a
-    // fallback. The perf:mark handler above already records the mark on disk.
-    const appReady = new Promise<void>((resolve) => {
-      const onMark = (_e: unknown, name: string): void => {
-        if (String(name) === 'renderer:app-ready') {
-          ipcMain.off('perf:mark', onMark)
-          resolve()
-        }
-      }
-      ipcMain.on('perf:mark', onMark)
-    })
-    win.webContents.once('did-finish-load', async () => {
-      // Animation bench: just wait for the renderer probe's jank summary, record
-      // it, and quit. We deliberately DON'T run the DB/IPC workload here — its
-      // main-thread + IPC traffic would land during the recording window and
-      // pollute the frame-timing measurement.
-      if (process.env.OMI_ANIM_BENCH === '1') {
-        await new Promise<void>((resolve) => {
-          ipcMain.once('perf:animResult', (_e, stats) => {
-            perfMark('anim:startup', stats as Record<string, unknown>)
-            resolve()
-          })
-          setTimeout(resolve, 15000)
-        })
-        flushPerfMarks()
-        app.quit()
-        return
-      }
-      try {
-        // Wait for the authed shell to be ready BEFORE running the workload, so
-        // the bench measures the real authed-startup path. Fall back to
-        // first-paint (unauthenticated Login run) and a hard 30s cap so the
-        // bench always completes. The workload runs synchronously in main and
-        // would otherwise block main from processing these IPCs, back-dating the
-        // marks by the workload's duration (a measurement artifact).
-        // app-ready is preferred. On an authed run the spinner first-paints
-        // almost immediately while auth+onboarding+mount take a few more
-        // seconds, so the first-paint fallback gets an 8s grace to let app-ready
-        // win; only a genuinely unauthenticated run falls through to it.
-        await Promise.race([
-          appReady,
-          firstPaint.then(() => new Promise((r) => setTimeout(r, 8000))),
-          new Promise((r) => setTimeout(r, 30000))
-        ])
-        // The DB/IPC workload (src/main/bench/workload.ts) was removed for the
-        // public release (commit dd1904d). Bench mode now only records the
-        // startup-timing marks captured above, then flushes and quits.
-      } catch (e) {
-        console.error('[bench] workload failed:', e)
-      } finally {
-        flushPerfMarks()
-        app.quit()
-      }
-    })
-  }
+  // Dev perf bench: after the renderer loads, record the startup-timing marks and
+  // quit. Entirely dev-only — tree-shaken from packaged main (see dev/bench).
+  if (import.meta.env.DEV) devBench.runBenchDriver(win)
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

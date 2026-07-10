@@ -40,8 +40,6 @@
     "vad:playback": "node scripts/run-vad-playback.mjs",
     "soak": "node scripts/run-soak.mjs",
     "soak:verify": "node scripts/soak-verify.mjs",
-    "bench": "node scripts/bench/run.mjs",
-    "bench:anim": "node scripts/bench/anim.mjs",
     "test:e2e:meeting": "node scripts/run-meeting-e2e.mjs",
     "test:e2e:meeting-live": "node scripts/run-meeting-live.mjs"
   },
