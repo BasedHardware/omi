@@ -103,7 +103,12 @@
       "id": "sync_cloud_tasks",
       "risk": "high",
       "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
-      "tests": ["tests/unit/test_sync_v2.py", "tests/unit/test_sync_cloud_tasks.py", "tests/unit/test_audio_merge_tasks.py"],
+      "tests": [
+        "tests/unit/test_sync_v2.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_audio_merge_tasks.py",
+        "tests/unit/test_sync_fair_use_gate.py"
+      ],
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",

@@ -433,14 +433,21 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
-/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// Server-provided classification for a sync upload HTTP 429.
+///
+/// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
+/// 429 is backend capacity unless the response carries Omi's explicit reason.
+enum SyncRateLimitKind { fairUse, backendCapacity }
+
+/// Thrown when a sync upload is rate-limited (HTTP 429).
 /// [retryAfterSeconds] is the server's Retry-After when provided.
 class SyncRateLimitedException implements Exception {
+  final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
-  SyncRateLimitedException([this.retryAfterSeconds]);
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds});
 
   @override
-  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
 }
 
 /// Parse a Retry-After header expressed in delta-seconds. Returns null for an
@@ -449,6 +456,17 @@ int? _parseRetryAfterSeconds(http.Response response) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   return int.tryParse(raw.trim());
+}
+
+/// Classifies a sync 429 without relying on human-readable error text.
+///
+/// The application-generated restriction response carries this bounded header.
+/// Everything else remains a generic backend-capacity limit.
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  if (response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use') {
+    return SyncRateLimitKind.fairUse;
+  }
+  return SyncRateLimitKind.backendCapacity;
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -490,9 +508,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (response.statusCode == 413) {
     throw Exception('Audio file is too large to upload');
   } else if (response.statusCode == 429) {
-    // Fair-use throttle, not a content failure. Surface it typed so callers
-    // can back off (honoring Retry-After) instead of burning the retry budget.
-    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+    throw SyncRateLimitedException(
+      kind: syncRateLimitKindForResponse(response),
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }

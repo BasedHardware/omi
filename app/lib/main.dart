@@ -263,6 +263,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // Resume the upload reconciler at fast cadence and check immediately.
       SyncReconciler.instance.onForeground();
+      SyncUploadGate.instance.reconcileFairUseStatus();
     } else if (state == AppLifecycleState.paused) {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
