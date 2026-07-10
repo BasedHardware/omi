@@ -89,6 +89,7 @@ const omi: OmiBridgeApi = {
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
+  signInWithGoogle: () => ipcRenderer.invoke('auth:google:signIn'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
   googleStatus: () => ipcRenderer.invoke('integrations:google:status'),

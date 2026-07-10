@@ -6,6 +6,7 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import iconPath from '../../../resources/icon.png?asset'
 import type { InsightPayload } from '../../shared/types'
 import { rendererBaseUrl } from '../rendererServer'
 
@@ -48,6 +49,9 @@ function ensureWindow(): BrowserWindow {
     focusable: true,
     hasShadow: true,
     backgroundColor: '#000000',
+    // Frameless + skipTaskbar, but still set the app icon so Alt-Tab/system
+    // listings never show the default Electron icon for this window.
+    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
