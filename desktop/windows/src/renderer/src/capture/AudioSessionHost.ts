@@ -92,6 +92,16 @@ async function startAudioSession(
   session.pipeline = createPcmPipeline(stream, (pcm) => gate.push(pcm))
 }
 
+/** Test-only (read via the OMI_E2E-gated capture hook): current music-gate
+ *  verdict of each active loopback session. Empty when no loopback lane runs. */
+export function _loopbackVerdictsForTest(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [id, s] of sessions) {
+    if (s.musicFilter) out[id] = s.musicFilter.verdict()
+  }
+  return out
+}
+
 function stopAudioSession(sessionId: string): void {
   const s = sessions.get(sessionId)
   if (!s) return

@@ -3,6 +3,7 @@
 // run REAL YAMNet inference on fixture PCM without audio devices: the harness
 // base64-encodes raw 16kHz s16le PCM and gets the classifier verdict back.
 import { createYamnetClassifier } from '../lib/capture/yamnetClassifier'
+import { _loopbackVerdictsForTest } from './AudioSessionHost'
 
 export function installCaptureE2EHooks(): void {
   if (!window.omi?.isE2E) return
@@ -15,6 +16,8 @@ export function installCaptureE2EHooks(): void {
       const pcm = new Int16Array(bytes.buffer, 0, Math.floor(bytes.length / 2))
       const classifier = await createYamnetClassifier()
       return classifier.classify(pcm)
-    }
+    },
+    /** Live music-gate verdict per active loopback session (run-meeting-live). */
+    loopbackVerdicts: (): Record<string, string> => _loopbackVerdictsForTest()
   }
 }

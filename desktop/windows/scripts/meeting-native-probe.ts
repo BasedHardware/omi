@@ -17,6 +17,10 @@ import { execFileSync } from 'node:child_process'
 import { listProcessNames } from '../src/main/meeting/processSnapshot'
 import { readMicCaptureEntries, watchMicConsentStore } from '../src/main/meeting/micConsentStore'
 import { bundledPatterns, matchTier1, pickAgreedMatch } from '../src/main/meeting/patterns'
+import {
+  getForegroundExePath,
+  getForegroundWindowTitle
+} from '../src/main/usage/nativeForeground'
 
 const MIC_KEY =
   'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone'
@@ -37,8 +41,12 @@ function oneShot(): void {
   }
 
   const patterns = bundledPatterns()
-  const matches = matchTier1(procs, { exePath: null, title: null }, patterns)
-  console.log(`[tier1] conferencing processes running now:`, matches)
+  // Use the REAL foreground window so browser meeting-title matches are
+  // exercised too (run-meeting-live section B relies on this).
+  const foreground = { exePath: getForegroundExePath(), title: getForegroundWindowTitle() }
+  console.log(`[foreground] exe=${foreground.exePath} title=${JSON.stringify(foreground.title)}`)
+  const matches = matchTier1(procs, foreground, patterns)
+  console.log(`[tier1] conferencing apps present now:`, matches)
 
   const t1 = Date.now()
   const active = readMicCaptureEntries()

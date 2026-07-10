@@ -3,7 +3,7 @@
 // classifier) and hot-swaps YAMNet in once it loads; a load failure records the
 // bounded fallback event (same shape as the VAD gate's) and stays passthrough —
 // audio must never be lost to a classifier problem.
-import { passThroughClassifier } from './loopbackClassifier'
+import { passThroughClassifier, type SpeechMusicVerdict } from './loopbackClassifier'
 import { createMusicGate } from './musicGate'
 import { createYamnetClassifier } from './yamnetClassifier'
 import { trackEvent } from '../analytics'
@@ -11,6 +11,8 @@ import { trackEvent } from '../analytics'
 export type LoopbackMusicFilter = {
   push: (pcm: Int16Array) => void
   stop: () => void
+  /** Current gate verdict (test/telemetry observability). */
+  verdict: () => SpeechMusicVerdict
 }
 
 export function createLoopbackMusicFilter(
@@ -42,6 +44,7 @@ export function createLoopbackMusicFilter(
     },
     stop: (): void => {
       stopped = true
-    }
+    },
+    verdict: () => gate.verdict()
   }
 }
