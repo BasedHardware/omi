@@ -25,7 +25,7 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertEqual(projection?.attemptId, "attempt-1")
     XCTAssertEqual(projection?.adapterSessionId, "native-1")
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertEqual(store.knownSessionId(for: surface), "ses-1")
+    XCTAssertEqual(store.projection(for: surface)?.sessionId, "ses-1")
   }
 
   func testPresentationStartDoesNotFabricateTerminalSuccess() {
@@ -113,7 +113,7 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertEqual(projection?.statusText, "Working on follow-up...")
     XCTAssertNil(projection?.completedAt)
     XCTAssertNil(projection?.runId)
-    XCTAssertEqual(store.knownSessionId(for: surface), "ses-terminal")
+    XCTAssertEqual(projection?.sessionId, "ses-terminal")
   }
 
   func testTerminalResultPreservesResultStatusText() {
@@ -209,6 +209,6 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     store.ingest(message: message, surface: firstOpen)
 
     XCTAssertEqual(firstOpen, reopened)
-    XCTAssertEqual(store.knownSessionId(for: reopened), "ses-main")
+    XCTAssertEqual(store.projection(for: reopened)?.sessionId, "ses-main")
   }
 }

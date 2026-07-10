@@ -1,6 +1,8 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import Foundation
+import OmiSupport
 import Sentry
 
 /// File storage manager for Rewind screenshots
@@ -14,7 +16,7 @@ actor RewindStorage {
     // Frame extraction cache
     private var frameCache = NSCache<NSString, NSImage>()
 
-    // Track corrupted video chunks to avoid repeated FFmpeg calls
+    // Track corrupted video chunks to avoid repeated frame extraction attempts
     private var corruptedChunks = Set<String>()
 
     // MARK: - Initialization
@@ -141,7 +143,7 @@ actor RewindStorage {
 
     // MARK: - Video Frame Loading
 
-    /// Load a frame from a video chunk using ffmpeg (works with fragmented MP4)
+    /// Load a frame from a video chunk.
     func loadVideoFrame(videoPath: String, frameOffset: Int) async throws -> NSImage {
         guard let videosDirectory = videosDirectory else {
             throw RewindError.storageError("Videos directory not initialized")
@@ -164,9 +166,8 @@ actor RewindStorage {
             throw RewindError.screenshotNotFound
         }
 
-        // Use ffmpeg to extract frame (works with fragmented MP4)
         do {
-            let image = try await extractFrameWithFFmpeg(from: fullPath.path, frameOffset: frameOffset)
+            let image = try await extractFrame(from: fullPath.path, frameOffset: frameOffset)
 
             // Cache for reuse (estimate ~4MB per frame for cost)
             frameCache.setObject(image, forKey: cacheKey, cost: 4 * 1024 * 1024)
@@ -179,7 +180,7 @@ actor RewindStorage {
             }
             // Check error message for corruption indicators
             if case .storageError(let message) = error,
-               message.contains("moov atom not found") || message.contains("Invalid data found") {
+               isUnreadableVideoChunkError(message) {
                 // Don't mark the active chunk as corrupted — it's still being written
                 let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
                 if videoPath == activeChunk {
@@ -192,6 +193,117 @@ actor RewindStorage {
             }
             throw error
         }
+    }
+
+    private func extractFrame(from fullPath: String, frameOffset: Int) async throws -> NSImage {
+        do {
+            return try await extractFrameWithAVFoundation(from: fullPath, frameOffset: frameOffset)
+        } catch let nativeError as RewindError {
+            if case .screenshotNotFound = nativeError {
+                throw nativeError
+            }
+
+            do {
+                return try await extractFrameWithFFmpeg(from: fullPath, frameOffset: frameOffset)
+            } catch {
+                if isFFmpegUnavailable(error) {
+                    throw nativeError
+                }
+                throw error
+            }
+        } catch {
+            let nativeError = error
+            do {
+                return try await extractFrameWithFFmpeg(from: fullPath, frameOffset: frameOffset)
+            } catch {
+                if isFFmpegUnavailable(error) {
+                    throw RewindError.storageError("AVFoundation failed: \(nativeError.localizedDescription)")
+                }
+                throw error
+            }
+        }
+    }
+
+    /// Extract a frame from finalized AVAssetWriter MP4 chunks using the system decoder.
+    private func extractFrameWithAVFoundation(from videoPath: String, frameOffset: Int) async throws -> NSImage {
+        guard frameOffset >= 0 else {
+            throw RewindError.screenshotNotFound
+        }
+
+        let asset = AVURLAsset(url: URL(fileURLWithPath: videoPath))
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        guard let track = tracks.first else {
+            throw RewindError.storageError("AVFoundation found no video track")
+        }
+
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(
+            track: track,
+            outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+        )
+        output.alwaysCopiesSampleData = false
+
+        guard reader.canAdd(output) else {
+            throw RewindError.storageError("AVFoundation cannot add video track output")
+        }
+        reader.add(output)
+
+        guard reader.startReading() else {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation reader failed to start: \(message)")
+        }
+
+        var sampleIndex = 0
+        while let sampleBuffer = output.copyNextSampleBuffer() {
+            defer { CMSampleBufferInvalidate(sampleBuffer) }
+
+            guard sampleIndex == frameOffset else {
+                sampleIndex += 1
+                continue
+            }
+
+            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                reader.cancelReading()
+                throw RewindError.storageError("AVFoundation sample had no image buffer")
+            }
+
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let context = CIContext(options: [.useSoftwareRenderer: false])
+            let rect = CGRect(
+                x: 0,
+                y: 0,
+                width: CVPixelBufferGetWidth(pixelBuffer),
+                height: CVPixelBufferGetHeight(pixelBuffer)
+            )
+            guard let cgImage = context.createCGImage(ciImage, from: rect) else {
+                reader.cancelReading()
+                throw RewindError.storageError("AVFoundation failed to render decoded frame")
+            }
+
+            let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+
+            let breadcrumb = Breadcrumb(level: .info, category: "frame_extraction")
+            breadcrumb.message = "Extracted frame from video"
+            breadcrumb.data = [
+                "video_path": videoPath,
+                "frame_offset": frameOffset,
+                "image_width": cgImage.width,
+                "image_height": cgImage.height,
+                "decoder": "AVAssetReader"
+            ]
+            SentrySDK.addBreadcrumb(breadcrumb)
+
+            return image
+        }
+
+        if reader.status == .failed {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation reader failed: \(message)")
+        }
+
+        throw RewindError.screenshotNotFound
     }
 
     /// Extract a frame from video using ffmpeg
@@ -274,16 +386,45 @@ actor RewindStorage {
         return image
     }
 
+    private func isFFmpegUnavailable(_ error: Error) -> Bool {
+        guard case RewindError.storageError(let message) = error else {
+            return false
+        }
+
+        return message.contains("Failed to run ffmpeg")
+    }
+
+    private func isUnreadableVideoChunkError(_ message: String) -> Bool {
+        message.contains("moov atom not found")
+            || message.contains("Invalid data found")
+            || message.contains("AVFoundation failed")
+            || message.contains("Cannot Open")
+            || message.contains("media may be damaged")
+    }
+
     /// Find ffmpeg executable path
     private func findFFmpegPath() -> String {
         // Bundled ffmpeg first for users without Homebrew
-        // Use Bundle.resourceBundle for SPM resources (they're in a nested bundle, not main bundle)
+        // SwiftPM resources are in a nested bundle, but avoid Bundle.resourceBundle
+        // here because that accessor fatal-errors in test contexts with no app bundle.
+        let bundleName = "Omi Computer_Omi Computer.bundle"
+        let resourceBundlePath = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources")
+            .appendingPathComponent(bundleName)
+            .appendingPathComponent("ffmpeg")
+            .path
+        let developmentBundlePath = Bundle.main.bundleURL
+            .appendingPathComponent(bundleName)
+            .appendingPathComponent("ffmpeg")
+            .path
+
         let possiblePaths = [
-            Bundle.resourceBundle.path(forResource: "ffmpeg", ofType: nil),
+            resourceBundlePath,
+            developmentBundlePath,
             "/opt/homebrew/bin/ffmpeg",
             "/usr/local/bin/ffmpeg",
             "/usr/bin/ffmpeg",
-        ].compactMap { $0 }
+        ]
 
         for path in possiblePaths {
             if FileManager.default.fileExists(atPath: path) {

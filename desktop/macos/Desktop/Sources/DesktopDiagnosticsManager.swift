@@ -3,14 +3,26 @@ import Sentry
 import Darwin
 
 enum DesktopHealthEventName: String {
+  case authTokenStorageFallback = "auth_token_storage_fallback"
+  case authSessionCleared = "auth_session_cleared"
+  case transcriptionWsReconnectExhausted = "transcription_ws_reconnect_exhausted"
+
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
+  case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case fallbackTriggered = "fallback_triggered"
+}
+
+enum DesktopFallbackOutcome: String {
+  case recovered
+  case degraded
+  case exhausted
 }
 
 struct DesktopHealthSnapshot {
@@ -34,6 +46,12 @@ private extension ISO8601DateFormatter {
   }()
 }
 
+/// Desktop health telemetry matrix (RealtimeHub pattern — copy for new surfaces):
+/// - **Local log** (`log`): always, with `failure_class` / `recovery_action` / `recovery_result`.
+/// - **Ring buffer** (`record*` → `writeDiagnosticsAttachment`): always via this manager.
+/// - **PostHog** (`desktopHealthEvent`): prod/beta when `trackRemotely` is true (default).
+/// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
+/// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
   static let shared = DesktopDiagnosticsManager()
 
@@ -47,6 +65,203 @@ final class DesktopDiagnosticsManager {
   private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
+
+  func recordAuthTokenStorageFallback(reason: String, updateChannel: String) {
+    record(
+      .authTokenStorageFallback,
+      properties: [
+        "storage": "user_defaults",
+        "reason": reason,
+        "update_channel": updateChannel,
+      ])
+  }
+
+  func recordAuthSessionCleared(
+    reason: String,
+    httpStatusCode: Int?,
+    failureClass: String = "definitive_auth_failure"
+  ) {
+    var properties: [String: Any] = [
+      "reason": reason,
+      "failure_class": failureClass,
+      "recovery_action": "clear_session",
+      "recovery_result": "cleared",
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
+    record(.authSessionCleared, properties: properties)
+  }
+
+  func recordTranscriptionWsReconnectExhausted(
+    reconnectAttempts: Int,
+    streamingMode: String
+  ) {
+    record(
+      .transcriptionWsReconnectExhausted,
+      properties: [
+        "reconnect_attempts": reconnectAttempts,
+        "streaming_mode": streamingMode,
+        "failure_class": "ws_reconnect_exhausted",
+        "recovery_action": "surface_error",
+        "recovery_result": "exhausted",
+      ])
+  }
+
+  func recordWalPersistenceDegraded(reason: String, recoveryAction: String, recoveryResult: String) {
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: reason,
+      outcome: .degraded,
+      extra: [
+        "failure_class": "wal_persistence_degraded",
+        "recovery_action": recoveryAction,
+        "recovery_result": recoveryResult,
+      ])
+  }
+
+  func recordWalWriteFailed(walId: String, reason: String) {
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: "wal_write_failed",
+      outcome: .degraded,
+      extra: [
+        "wal_id": walId,
+        "detail_reason": reason,
+        "failure_class": "wal_write_failed",
+        "recovery_action": "retain_frames",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordWalUploadFailed(walId: String, reason: String) {
+    recordFallback(
+      area: "wal_upload",
+      from: "disk",
+      to: "pending",
+      reason: "upload_failed",
+      outcome: .degraded,
+      extra: [
+        "wal_id": walId,
+        "detail_reason": reason,
+        "failure_class": "wal_upload_failed",
+        "recovery_action": "leave_pending",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeStaleAliveCheck() {
+    recordFallback(
+      area: "agent_runtime",
+      from: "alive_latch",
+      to: "termination_cleanup",
+      reason: "stale_alive_latch",
+      outcome: .degraded,
+      extra: [
+        "failure_class": "stale_alive_latch",
+        "recovery_action": "route_to_termination",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAgentRuntimeUnexpectedExit(exitCode: Int32, oom: Bool) {
+    recordFallback(
+      area: "agent_runtime",
+      from: "running",
+      to: "stopped",
+      reason: oom ? "out_of_memory" : "process_exited",
+      outcome: .degraded,
+      extra: [
+        "exit_code": Int(exitCode),
+        "oom": oom,
+        "failure_class": oom ? "out_of_memory" : "process_exited",
+        "recovery_action": "restart_on_next_send",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordApiAuthRetry(endpoint: String, outcome: String) {
+    let fallbackOutcome: DesktopFallbackOutcome = outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
+    recordFallback(
+      area: "api_auth",
+      from: "expired_token",
+      to: outcome == "succeeded" ? "refreshed_token" : "reauth",
+      reason: "http_401",
+      outcome: fallbackOutcome,
+      extra: [
+        "endpoint": endpoint,
+        "retry_outcome": outcome,
+        "failure_class": "auth_retry",
+        "recovery_action": "refresh_token",
+        "recovery_result": fallbackOutcome.rawValue,
+      ])
+  }
+
+  func recordDbLockContention(source: String) {
+    recordFallback(
+      area: "db_lock",
+      from: "query",
+      to: "backoff",
+      reason: "db_lock_contention",
+      outcome: .degraded,
+      extra: [
+        "source": source,
+        "failure_class": "db_lock_contention",
+        "recovery_action": "backoff",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordChatBridgeModeSwitchTimeout(waitSeconds: Int) {
+    recordFallback(
+      area: "chat_bridge",
+      from: "mode_switch",
+      to: "continue_waiting",
+      reason: "mode_switch_timeout",
+      outcome: .degraded,
+      extra: [
+        "wait_seconds": waitSeconds,
+        "failure_class": "mode_switch_timeout",
+        "recovery_action": "clear_waiters",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordBleDecodeDegraded(codec: String, failures: Int) {
+    recordFallback(
+      area: "ble_audio",
+      from: "decode",
+      to: "raw_capture",
+      reason: "ble_decode_failed",
+      outcome: .degraded,
+      extra: [
+        "codec": codec,
+        "consecutive_failures": failures,
+        "failure_class": "ble_decode_degraded",
+        "recovery_action": "continue_raw_capture",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAutomationBridgeBindFailed(port: Int, reason: String) {
+    recordFallback(
+      area: "automation_bridge",
+      from: "unbound",
+      to: "bind_failed",
+      reason: "bind_failed",
+      outcome: .exhausted,
+      extra: [
+        "port": port,
+        "detail_reason": reason,
+        "failure_class": "bind_failed",
+        "recovery_action": "retry_exhausted",
+        "recovery_result": "exhausted",
+      ])
+  }
 
   func recordPTTStarted(mode: String, hubActive: Bool, micPermissionGranted: Bool) {
     record(
@@ -68,7 +283,9 @@ final class DesktopDiagnosticsManager {
     rms: Int,
     deviceDescription: String?,
     micPermissionGranted: Bool,
-    hubActive: Bool
+    hubActive: Bool,
+    recoveryAction: String = "none",
+    recoveryResult: String = "not_attempted"
   ) {
     let nearZero = peak <= 5 && rms <= 5
     let watchdogEligible = audioSeconds >= pttWatchdogMinimumAudioSeconds
@@ -90,8 +307,8 @@ final class DesktopDiagnosticsManager {
       "consecutive_silent_turns": consecutiveNearZeroPTTTurns,
       "tcc_microphone_granted": micPermissionGranted,
       "input_device_class": classifyInputDevice(deviceDescription),
-      "recovery_action": "none",
-      "recovery_result": "not_attempted",
+      "recovery_action": recoveryAction,
+      "recovery_result": recoveryResult,
     ]
     if let voicedSeconds {
       properties["voiced_audio_seconds"] = rounded(voicedSeconds)
@@ -115,6 +332,34 @@ final class DesktopDiagnosticsManager {
       trackRemotely: false)
   }
 
+  func recordVoiceTurnTerminal(
+    reason: String,
+    route: String,
+    staleEventCount: Int,
+    invalidTransitionCount: Int
+  ) {
+    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
+    breadcrumb.message = "Voice turn reached terminal state"
+    breadcrumb.data = [
+      "terminal_reason": reason,
+      "route": route,
+      "stale_event_count": staleEventCount,
+      "invalid_transition_count": invalidTransitionCount,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
+  func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
+    let breadcrumb = Breadcrumb(level: .warning, category: "voice.turn.anomaly")
+    breadcrumb.message = "Voice turn rejected an anomalous event"
+    breadcrumb.data = [
+      "kind": kind,
+      "phase": phase,
+      "route": route,
+    ]
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
+
   func recordPTTDeviceRouteChanged(recoveryAction: String, recoveryResult: String) {
     record(
       .pttAudioCaptureDeviceRouteChanged,
@@ -124,28 +369,108 @@ final class DesktopDiagnosticsManager {
       ])
   }
 
-  func recordRealtimeTokenMintFailed(provider: String, reason: String, phase: String) {
-    record(
-      .realtimeTokenMintFailed,
-      properties: [
-        "provider": safeProvider(provider),
-        "reason": reason,
-        "phase": phase,
-      ])
+  /// Shared fallback / resilience telemetry. Prefer this over inventing new
+  /// `DesktopHealthEventName` cases for provider/mode switches.
+  ///
+  /// - Parameters match the backend `record_fallback` contract.
+  /// - `outcome`: recovered (full UX restored), degraded (continues with hit),
+  ///   exhausted (no acceptable path left).
+  /// - Always tracks remotely on prod/beta so ops can see silent UX heals.
+  func recordFallback(
+    area: String,
+    from: String,
+    to: String,
+    reason: String,
+    outcome: DesktopFallbackOutcome,
+    extra: [String: Any] = [:]
+  ) {
+    var properties: [String: Any] = [
+      "area": bucketFallbackArea(area),
+      "from": safeFallbackLabel(from, default: "none"),
+      "to": safeFallbackLabel(to, default: "none"),
+      "reason": bucketFallbackReason(reason),
+      "outcome": outcome.rawValue,
+    ]
+    for (key, value) in sanitized(extra) {
+      if properties[key] == nil {
+        properties[key] = value
+      }
+    }
+    record(.fallbackTriggered, properties: properties, trackRemotely: true)
   }
 
-  func recordRealtimeProviderClose(provider: String, category: String?, aliveFor: TimeInterval, activeTurn: Bool) {
-    let event: DesktopHealthEventName = category == RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue
-      ? .realtimeProviderPolicyClose
-      : .realtimeProviderSessionError
+  func recordRealtimeTokenMintFailed(
+    provider: String,
+    reason: String,
+    phase: String,
+    httpStatusCode: Int? = nil,
+    backendRoute: String? = nil,
+    upstreamStatusCode: Int? = nil,
+    providerCode: String? = nil,
+    retryable: Bool? = nil
+  ) {
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "reason": reason,
+      "phase": phase,
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
+    if let backendRoute {
+      properties["backend_route"] = backendRoute
+    }
+    if let upstreamStatusCode {
+      properties["upstream_status_code"] = upstreamStatusCode
+    }
+    if let providerCode {
+      properties["provider_code"] = providerCode
+    }
+    if let retryable {
+      properties["retryable"] = retryable
+    }
+    record(
+      .realtimeTokenMintFailed,
+      properties: properties)
+  }
+
+  func recordRealtimeProviderClose(
+    provider: String,
+    category: String?,
+    aliveFor: TimeInterval,
+    activeTurn: Bool,
+    authMode: CredentialAuthMode?,
+    failureClass: CredentialFailureClass?
+  ) {
+    let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
+    let event: DesktopHealthEventName
+    switch normalizedCategory {
+    case RealtimeHubCloseCategory.expectedIdleTeardown.rawValue:
+      event = .realtimeProviderExpectedIdleTeardown
+    case RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue,
+      CredentialFailureClass.providerPolicyClose(provider: .openai).logValue:
+      event = .realtimeProviderPolicyClose
+    default:
+      event = .realtimeProviderSessionError
+    }
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "category": normalizedCategory,
+      "alive_for_seconds": Int(aliveFor),
+      "active_turn": activeTurn,
+    ]
+    if let authMode {
+      properties["auth_mode"] = authMode.rawValue
+    }
+    if let failureClass {
+      properties["failure_class"] = failureClass.logValue
+      if let httpStatusCode = failureClass.httpStatusCode {
+        properties["http_status_code"] = httpStatusCode
+      }
+    }
     record(
       event,
-      properties: [
-        "provider": safeProvider(provider),
-        "category": category ?? "unclassified",
-        "alive_for_seconds": Int(aliveFor),
-        "active_turn": activeTurn,
-      ])
+      properties: properties)
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
@@ -173,6 +498,123 @@ final class DesktopDiagnosticsManager {
       log("DesktopDiagnostics: failed to write diagnostics attachment")
       return nil
     }
+  }
+
+  // MARK: - Local (offline) diagnostics export
+
+  /// Build a redacted, offline diagnostics bundle and write it to `url`.
+  ///
+  /// Unlike the Sentry path, this works with no network and without a crash
+  /// reporter — it backs the local "Save Diagnostics…" export so users can share
+  /// a report manually (BL-023 / SET-03). The bundle carries app/version/OS
+  /// metadata, the already-sanitized health snapshots, and a redacted tail of the
+  /// local log. Returns `true` on success.
+  @discardableResult
+  func writeLocalDiagnosticsBundle(
+    to url: URL,
+    logPath: String = omiLogFilePath(),
+    maxLogLines: Int = 500
+  ) -> Bool {
+    let text = buildLocalDiagnosticsText(logPath: logPath, maxLogLines: maxLogLines)
+    guard let data = text.data(using: .utf8) else { return false }
+    do {
+      try data.write(to: url, options: .atomic)
+      return true
+    } catch {
+      log("DesktopDiagnostics: failed to write local diagnostics bundle")
+      return false
+    }
+  }
+
+  /// Render the redacted diagnostics bundle as plain text (metadata header,
+  /// sanitized health snapshots, redacted recent log tail). Exposed for testing
+  /// the redaction guarantee without disk I/O.
+  func buildLocalDiagnosticsText(logPath: String, maxLogLines: Int = 500) -> String {
+    var sections: [String] = []
+
+    let meta = commonProperties()
+    var header = ["# Omi Desktop Diagnostics"]
+    header.append("generated_at: \(ISO8601DateFormatter.desktopDiagnostics.string(from: Date()))")
+    header.append("privacy: redacted_local_export")
+    for key in ["build", "build_number", "os_version", "device_model", "system_audio_mode"] {
+      if let value = meta[key] {
+        header.append("\(key): \(value)")
+      }
+    }
+    sections.append(header.joined(separator: "\n"))
+
+    let snapshots = currentSnapshotsForSentry()
+    if JSONSerialization.isValidJSONObject(snapshots),
+      let data = try? JSONSerialization.data(withJSONObject: snapshots, options: [.prettyPrinted]),
+      let json = String(data: data, encoding: .utf8)
+    {
+      sections.append("## Health snapshots\n\(json)")
+    }
+
+    let tail = redactedLogTail(logPath: logPath, maxLines: maxLogLines)
+    sections.append("## Recent log (redacted, last \(maxLogLines) lines)\n\(tail)")
+
+    return sections.joined(separator: "\n\n") + "\n"
+  }
+
+  /// Read up to `maxLines` from the end of the log file, redacting anything that
+  /// looks like a secret (tokens, JWTs, credential kv pairs) line by line.
+  private func redactedLogTail(logPath: String, maxLines: Int) -> String {
+    guard let handle = FileHandle(forReadingAtPath: logPath) else {
+      return "(no readable log file at \(logPath))"
+    }
+    defer { handle.closeFile() }
+    // Read only a bounded tail from the end rather than loading the whole log
+    // into memory, so export latency and memory stay predictable on large logs.
+    // 512 KB comfortably covers maxLines (default 500) of log text.
+    let maxTailBytes: UInt64 = 512 * 1024
+    let fileSize = handle.seekToEndOfFile()
+    let start = fileSize > maxTailBytes ? fileSize - maxTailBytes : 0
+    handle.seek(toFileOffset: start)
+    let data = handle.readDataToEndOfFile()
+    // Lenient decode: a byte-offset seek can split a multibyte character, so
+    // substitute rather than fail; the possibly-partial first line is dropped.
+    var content = String(decoding: data, as: UTF8.self)
+    if start > 0, let newline = content.firstIndex(of: "\n") {
+      content = String(content[content.index(after: newline)...])
+    }
+    let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+    let tail = lines.suffix(max(0, maxLines))
+    return tail.map { redactSensitive(String($0)) }.joined(separator: "\n")
+  }
+
+  /// Defensive best-effort redaction. The desktop log is not expected to contain
+  /// raw credentials, but a manually-shared export must never leak one, so we
+  /// mask common token shapes before including any log text.
+  private static let redactionPatterns: [(NSRegularExpression, String)] = {
+    let specs: [(String, String)] = [
+      // JWT: three base64url segments starting with a typical header.
+      ("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+", "[redacted-jwt]"),
+      // Authorization: Bearer <token>
+      ("(?i)(bearer)\\s+[A-Za-z0-9._~+/=-]{8,}", "$1 [redacted]"),
+      // Authorization: Basic <base64 credentials>. Anchored to the header prefix
+      // so benign phrases like "basic settings" aren't over-redacted.
+      ("(?i)(authorization:\\s*basic)\\s+[A-Za-z0-9+/=]{8,}", "$1 [redacted]"),
+      // Bare OpenAI-style API keys.
+      ("sk-[A-Za-z0-9_-]{20,}", "sk-[redacted]"),
+      // key=..., token: ..., password="..." in query strings, JSON, or kv logs.
+      (
+        "(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|client[_-]?secret|authorization)([\"']?\\s*[=:]\\s*[\"']?)[A-Za-z0-9._~+/=-]{6,}",
+        "$1$2[redacted]"
+      ),
+    ]
+    return specs.compactMap { pattern, template in
+      (try? NSRegularExpression(pattern: pattern)).map { ($0, template) }
+    }
+  }()
+
+  private func redactSensitive(_ line: String) -> String {
+    var result = line
+    for (regex, template) in DesktopDiagnosticsManager.redactionPatterns {
+      let range = NSRange(result.startIndex..., in: result)
+      result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: template)
+    }
+    return result
   }
 
   #if DEBUG
@@ -283,6 +725,82 @@ final class DesktopDiagnosticsManager {
     case "openai", "gemini": return provider.lowercased()
     default: return "unknown"
     }
+  }
+
+  private static let allowedFallbackAreas: Set<String> = [
+    "sync_dispatch",
+    "pusher",
+    "stt_selection",
+    "vad",
+    "audio_merge",
+    "webhook",
+    "realtime_hub",
+    "ptt_cascade",
+    "gemini_model",
+    "gemini_proxy",
+    "gemini_stream_proxy",
+    "redis_ratelimit",
+    "silent_mic",
+    "wal_persistence",
+    "wal_upload",
+    "agent_runtime",
+    "api_auth",
+    "db_lock",
+    "chat_bridge",
+    "ble_audio",
+    "automation_bridge",
+    "transcription_retry",
+    "other",
+  ]
+
+  private static let allowedFallbackReasons: Set<String> = [
+    "timeout",
+    "provider_5xx",
+    "provider_429",
+    "enqueue_failed",
+    "config_incomplete",
+    "circuit_open",
+    "capability_mismatch",
+    "auth",
+    "quota",
+    "local_heal",
+    "policy",
+    "dispatch_disabled",
+    "byok",
+    "other",
+    "none",
+    "wal_directory_unavailable",
+    "wal_write_failed",
+    "upload_failed",
+    "stale_alive_latch",
+    "out_of_memory",
+    "process_exited",
+    "http_401",
+    "db_lock_contention",
+    "mode_switch_timeout",
+    "ble_decode_failed",
+    "bind_failed",
+    "db_backoff",
+  ]
+
+  private func bucketFallbackArea(_ area: String) -> String {
+    let label = safeFallbackLabel(area, default: "other")
+    return Self.allowedFallbackAreas.contains(label) ? label : "other"
+  }
+
+  private func bucketFallbackReason(_ reason: String) -> String {
+    let label = safeFallbackLabel(reason, default: "other")
+    return Self.allowedFallbackReasons.contains(label) ? label : "other"
+  }
+
+  private func safeFallbackLabel(_ value: String, default defaultValue: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let source = trimmed.isEmpty ? defaultValue : trimmed
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._:-"))
+    let normalized = String(
+      source.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" })
+    let clipped = String(normalized.prefix(64))
+    return clipped.isEmpty ? defaultValue : clipped
   }
 
   private func osVersionString() -> String {

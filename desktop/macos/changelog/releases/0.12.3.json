@@ -1,0 +1,7 @@
+{
+  "version": "0.12.3",
+  "date": "2026-07-03",
+  "changes": [
+    "Voice answers powered by Gemini now always use the same voice (Charon) instead of a provider default that could vary"
+  ]
+}

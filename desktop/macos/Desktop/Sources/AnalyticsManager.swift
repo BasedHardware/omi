@@ -161,6 +161,30 @@ class AnalyticsManager {
     )
   }
 
+  func conversationReconciliationFailed(
+    error: String,
+    reason: String,
+    source: String?,
+    stage: String?,
+    retryCount: Int,
+    hasBackendId: Bool,
+    hasClientConversationId: Bool,
+    segmentCount: Int?,
+    diagnostics: ReconciliationFailureDiagnostics? = nil
+  ) {
+    PostHogManager.shared.conversationReconciliationFailed(
+      error: error,
+      reason: reason,
+      source: source,
+      stage: stage,
+      retryCount: retryCount,
+      hasBackendId: hasBackendId,
+      hasClientConversationId: hasClientConversationId,
+      segmentCount: segmentCount,
+      diagnostics: diagnostics
+    )
+  }
+
   // MARK: - Permission Events
 
   func permissionRequested(permission: String, extraProperties: [String: Any] = [:]) {
@@ -418,9 +442,9 @@ class AnalyticsManager {
 
   // MARK: - Chat Events
 
-  func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+  func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
     PostHogManager.shared.chatMessageSent(
-      messageLength: messageLength, hasContext: hasContext, source: source)
+      messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
   }
 
   // MARK: - Search Events
@@ -516,7 +540,11 @@ class AnalyticsManager {
     toolCallCount: Int,
     toolNames: [String],
     costUsd: Double,
-    messageLength: Int
+    messageLength: Int,
+    screenToolRequested: Bool = false,
+    screenToolSucceeded: Bool = false,
+    screenToolApprovalRequired: Bool = false,
+    screenToolFailureCodes: [String] = []
   ) {
     let props: [String: Any] = [
       "duration_ms": durationMs,
@@ -524,8 +552,70 @@ class AnalyticsManager {
       "tool_names": toolNames.joined(separator: ","),
       "cost_usd": costUsd,
       "response_length": messageLength,
+      "screen_tool_requested": screenToolRequested,
+      "screen_tool_succeeded": screenToolSucceeded,
+      "screen_tool_approval_required": screenToolApprovalRequired,
+      "screen_tool_failure_codes": screenToolFailureCodes.joined(separator: ","),
     ]
     PostHogManager.shared.track("chat_agent_query_completed", properties: props)
+  }
+
+  func screenContextToolResult(
+    toolName: String,
+    context: ScreenContextTelemetryContext,
+    ok: Bool,
+    failureCode: String?,
+    screenNowAvailable: Bool?,
+    timelineCount: Int?,
+    latestCaptureAgeSeconds: Int?,
+    hasOCRPreview: Bool?,
+    imageBytesBucket: String?,
+    permissionTCCGranted: Bool?,
+    sckAvailable: Bool?
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props: [String: Any] = [
+      "tool_name": toolName,
+      "surface": boundedAnalyticsIdentifier(context.surface),
+      "ok": ok,
+    ]
+    addScreenContextProperties(context, to: &props)
+    if let failureCode { props["failure_code"] = failureCode }
+    if let screenNowAvailable { props["screen_now_available"] = screenNowAvailable }
+    if let timelineCount { props["timeline_count"] = timelineCount }
+    if let latestCaptureAgeSeconds { props["latest_capture_age_seconds"] = latestCaptureAgeSeconds }
+    if let hasOCRPreview { props["has_ocr_preview"] = hasOCRPreview }
+    if let imageBytesBucket { props["image_bytes_bucket"] = imageBytesBucket }
+    if let permissionTCCGranted { props["permission_tcc_granted"] = permissionTCCGranted }
+    if let sckAvailable { props["sck_available"] = sckAvailable }
+    PostHogManager.shared.track("desktop_screen_context_result", properties: props)
+  }
+
+  func screenContextInvariant(
+    name: String,
+    context: ScreenContextTelemetryContext,
+    toolName: String?,
+    properties: [String: Any] = [:]
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props = properties
+    props["invariant"] = name
+    props["surface"] = boundedAnalyticsIdentifier(context.surface)
+    if let toolName { props["tool_name"] = toolName }
+    addScreenContextProperties(context, to: &props)
+    PostHogManager.shared.track("desktop_screen_context_invariant", properties: props)
+  }
+
+  private func addScreenContextProperties(_ context: ScreenContextTelemetryContext, to props: inout [String: Any]) {
+    if let surfaceKind = context.surfaceKind { props["surface_kind"] = boundedAnalyticsIdentifier(surfaceKind) }
+    if let externalRefKind = context.externalRefKind { props["external_ref_kind"] = boundedAnalyticsIdentifier(externalRefKind) }
+    if let externalRefId = context.externalRefId { props["external_ref_id"] = boundedAnalyticsIdentifier(externalRefId) }
+    if let runId = context.runId { props["run_id"] = boundedAnalyticsIdentifier(runId) }
+    if let pillId = context.pillId { props["pill_id"] = boundedAnalyticsIdentifier(pillId) }
+  }
+
+  private func boundedAnalyticsIdentifier(_ value: String) -> String {
+    String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(128))
   }
 
   /// Track individual tool calls made by the Claude agent
@@ -663,12 +753,40 @@ class AnalyticsManager {
 
   // MARK: - Update Events
 
-  func updateAvailable(version: String) {
-    PostHogManager.shared.updateAvailable(version: version)
+  func updateAvailable(
+    version: String,
+    context: UpdateAnalyticsContext,
+    item: UpdateItemAnalytics
+  ) {
+    PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
   }
 
-  func updateInstalled(version: String) {
-    PostHogManager.shared.updateInstalled(version: version)
+  func updateInstallStarted(attempt: UpdateInstallAttempt) {
+    PostHogManager.shared.updateInstallStarted(attempt: attempt)
+  }
+
+  func updateInstalled(
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
+  ) {
+    PostHogManager.shared.updateInstalled(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
+  }
+
+  func updateInstallVerificationFailed(
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
+  ) {
+    PostHogManager.shared.updateInstallVerificationFailed(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

@@ -1,4 +1,6 @@
 import SwiftUI
+import OmiSupport
+import OmiTheme
 
 /// Rewind-only view for when the app is launched with --mode=rewind
 /// Shows just the Rewind page without the sidebar, with a settings button overlay
@@ -22,6 +24,11 @@ struct RewindOnlyView: View {
                         .tint(.white.opacity(0.6))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if authState.sessionPhase == .recoveryRequired {
+                SessionRecoveryView()
+                    .onAppear {
+                        log("RewindOnlyView: Showing recoverable auth state")
+                    }
             } else if !authState.isSignedIn {
                 // Not signed in - show sign in view
                 SignInView(authState: authState)
@@ -308,7 +315,7 @@ struct RewindSettingsView: View {
                 .foregroundColor(.white.opacity(0.8))
 
             Button {
-                ScreenCaptureService.openScreenRecordingPreferences()
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             } label: {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")
@@ -340,7 +347,9 @@ struct RewindSettingsView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindOnlyView()
         .frame(width: 1000, height: 700)
 }
+#endif

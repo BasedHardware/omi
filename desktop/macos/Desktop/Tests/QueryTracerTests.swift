@@ -61,18 +61,20 @@ final class QueryTracerTests: XCTestCase {
 
     // MARK: - 4. TTFT marking
 
-    func testTTFTMarking() {
+    func testTTFTMarking() throws {
         let tracer = QueryTracer(query: "ttft", inputMode: .text)
         Thread.sleep(forTimeInterval: 0.01)
         tracer.markTTFT()
-        // Second call should be ignored
+        let firstTrace = tracer.buildTrace(tokenCount: 10, model: "gpt-4")
+        let firstTTFT = try XCTUnwrap(firstTrace.ttft_ms)
+
+        // Second call should be ignored.
         Thread.sleep(forTimeInterval: 0.05)
         tracer.markTTFT()
 
         let trace = tracer.buildTrace(tokenCount: 10, model: "gpt-4")
-        XCTAssertNotNil(trace.ttft_ms)
-        // First mark was ~10ms after origin, so ttft should be < 50ms (not second mark)
-        XCTAssertLessThan(trace.ttft_ms!, 50)
+        XCTAssertEqual(trace.ttft_ms, firstTTFT)
+        XCTAssertGreaterThan(trace.total_ms, firstTTFT)
     }
 
     // MARK: - 5. Metadata passthrough
@@ -138,7 +140,27 @@ final class QueryTracerTests: XCTestCase {
         XCTAssertNotNil(json?["spans"])
     }
 
-    // MARK: - 9. Summary line format
+    // MARK: - 9. Tool execution capture
+
+    func testToolExecutionCapture() {
+        let tracer = QueryTracer(query: "tools", inputMode: .text)
+        tracer.captureToolExecution(
+            toolUseId: "call-1",
+            name: "spawn_agent",
+            input: #"{"objective":"GAUNTLET-TEST-SPAWN"}"#,
+            output: #"{"ok":true}"#,
+            durationMs: 42
+        )
+
+        let trace = tracer.buildTrace(tokenCount: 0, model: nil)
+        XCTAssertEqual(trace.tool_executions?.count, 1)
+        XCTAssertEqual(trace.tool_executions?[0].name, "spawn_agent")
+        XCTAssertEqual(trace.tool_executions?[0].tool_use_id, "call-1")
+        XCTAssertTrue(trace.tool_executions?[0].input.contains("GAUNTLET-TEST-SPAWN") ?? false)
+        XCTAssertEqual(trace.tool_executions?[0].dur_ms, 42)
+    }
+
+    // MARK: - 10. Summary line format
 
     func testSummaryLineFormat() {
         let tracer = QueryTracer(query: "summary", inputMode: .voicePTTLive)

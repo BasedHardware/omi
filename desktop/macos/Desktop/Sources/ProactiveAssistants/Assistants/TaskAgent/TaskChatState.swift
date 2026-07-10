@@ -1,10 +1,8 @@
 import SwiftUI
 import Combine
 
-/// Per-task chat state with its own bridge process and message history.
-/// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Uses canonical Omi sessions for continuity and preserves legacy ACP IDs only
-/// for transitional adapter-native resume compatibility.
+/// Per-task chat UI state. Execution uses the shared `TaskChatRuntime` bridge and
+/// kernel-owned `task_chat` sessions — no per-task bridge or session identity.
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -12,50 +10,30 @@ class TaskChatState: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isSending = false
     @Published var isStopping = false
-    @Published var draftText = ""
+    @Published var draftText: String {
+        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(taskId)) }
+    }
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
     /// Monotonic token that increments each time the local user sends a message
     /// in this task chat. ChatMessagesView observes this for turn anchoring.
     @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
-    /// Own bridge process — completely independent from sidebar chat
-    private var agentBridge: AgentBridge?
-    private var bridgeStarted = false
-
-    /// Harness mode of the currently active bridge, set when the bridge starts.
-    /// Used to decide whether adapter-native IDs are valid for legacy resume.
-    private var currentHarness: String?
-
     /// Workspace path for file-system tools
     let workspacePath: String
-
-    /// Adapter-native ACP session used only for legacy resume/adoption.
-    /// Canonical Omi runtime sessions are tracked separately in currentOmiSessionId.
-    @Published var legacyAcpSessionId: String?
-    @Published var currentOmiSessionId: String?
-
-    /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
 
     /// Auth callbacks for ACP mode
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
     var onAuthSuccess: AgentBridge.AuthSuccessHandler?
 
-    /// Follow-up chaining
-    private var pendingFollowUpText: String?
-
     private var runtimeProjectionCancellable: AnyCancellable?
     private var surfacedFailureKeys: Set<String> = []
     private var activeAssistantMessageId: String?
 
-    // MARK: - Streaming Buffers (mirrored from ChatProvider)
+    // MARK: - Streaming Buffer
 
-    private var streamingTextBuffer: String = ""
-    private var streamingThinkingBuffer: String = ""
-    private var streamingBufferMessageId: String?
-    private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.1
+    private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.1)
 
     /// Whether persisted messages have been loaded from GRDB
     private var hasLoadedFromStorage = false
@@ -63,6 +41,7 @@ class TaskChatState: ObservableObject {
     init(taskId: String, workspacePath: String) {
         self.taskId = taskId
         self.workspacePath = workspacePath
+        self.draftText = ChatDraftStore.shared.text(for: .taskChat(taskId))
     }
 
     // MARK: - Persistence
@@ -82,10 +61,6 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                self.legacyAcpSessionId = legacyAcpSessionId
-            }
-
             surfaceCurrentRuntimeFailureIfNeeded()
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
         } catch {
@@ -96,10 +71,9 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let legacyAcpSessionId = self.legacyAcpSessionId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: legacyAcpSessionId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId)
             } catch {
                 logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
             }
@@ -130,68 +104,13 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    deinit {
-        if let bridge = agentBridge {
-            Task { await bridge.stop() }
-        }
-    }
-
-    // MARK: - Bridge Lifecycle
-
-    private func ensureBridgeStarted() async -> Bool {
-        if bridgeStarted {
-            let alive = await agentBridge?.isAlive ?? false
-            if !alive {
-                log("TaskChatState[\(taskId)]: Bridge process died, will restart")
-                bridgeStarted = false
-            }
-        }
-        guard !bridgeStarted else { return true }
-        do {
-            let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
-            let bridge = AgentBridge(harnessMode: harness)
-            try await bridge.start()
-            agentBridge = bridge
-            bridgeStarted = true
-            currentHarness = harness
-
-            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
-            // created them. Hermes and OpenClaw advertise native resume but would
-            // adopt a foreign session ID, causing session/resume on the wrong
-            // backend before falling back or failing. Clear it on adapter switch.
-            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
-            if !supportsLegacyResume, legacyAcpSessionId != nil {
-                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
-                legacyAcpSessionId = nil
-            }
-
-            log("TaskChatState[\(taskId)]: agent bridge started")
-            return true
-        } catch {
-            logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
-            errorMessage = "AI not available: \(error.localizedDescription)"
-            TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: errorMessage ?? error.localizedDescription)
-            return false
-        }
-    }
-
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
+    func sendMessage(_ text: String, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
             log("TaskChatState[\(taskId)]: sendMessage called while already sending, ignoring")
-            return
-        }
-
-        guard await ensureBridgeStarted() else { return }
-
-        // Re-check isSending after the async bridge start — another sendMessage call
-        // could have slipped through the initial guard while the bridge was starting.
-        guard !isSending else {
-            log("TaskChatState[\(taskId)]: sendMessage racing after bridge start, ignoring")
             return
         }
 
@@ -202,15 +121,15 @@ class TaskChatState: ObservableObject {
         localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
-        // Skip for follow-ups — sendFollowUp() already added and persisted it
-        if !isFollowUp {
-            let userMessage = ChatMessage(
-                id: UUID().uuidString,
-                text: trimmedText,
-                sender: .user
-            )
-            messages.append(userMessage)
-            persistMessage(userMessage)
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+        persistMessage(userMessage)
+        if draftText == text {
+            draftText = ""
         }
 
         // Create placeholder AI message
@@ -244,7 +163,7 @@ class TaskChatState: ObservableObject {
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
-                        status: status == "started" ? .running : .completed,
+                        status: ToolCallStatus.fromBridgeStatus(status),
                         toolUseId: toolUseId,
                         input: input
                     )
@@ -261,30 +180,13 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            guard let bridge = agentBridge else {
-                throw BridgeError.notRunning
-            }
-            // If task context is provided (first message), prepend it to the prompt
-            // so the AI gets full task details. The user's displayed message stays clean.
-            let fullPrompt: String
-            if let ctx = taskContext {
-                fullPrompt = "# Task Context\n\n\(ctx)\n\n---\n\n# User Message\n\n\(trimmedText)"
-            } else {
-                fullPrompt = trimmedText
-            }
-
-            let queryResult = try await bridge.query(
-                prompt: fullPrompt,
+            let queryResult = try await TaskChatRuntime.query(
+                prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: taskId,
-                omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId)),
-                surfaceKind: "task_chat",
-                externalRefKind: "task",
-                externalRefId: taskId,
-                legacyClientScope: "task-chat",
-                cwd: workspacePath.isEmpty ? nil : workspacePath,
+                taskId: taskId,
+                workspacePath: workspacePath,
                 mode: chatMode.rawValue,
-                resume: legacyAcpSessionId,
+                surfaceContextJson: taskContext,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -294,27 +196,8 @@ class TaskChatState: ObservableObject {
                 onAuthSuccess: onAuthSuccess ?? { }
             )
 
-            // Store canonical and adapter-native IDs separately. The persisted
-            // acpSessionId column remains a legacy adapter binding only.
-            currentOmiSessionId = queryResult.omiSessionId
-            if let adapterSessionId = queryResult.adapterSessionId {
-                // Only persist adapter-native IDs for adapters that support the
-                // legacy resume protocol (ACP/pi-mono). Hermes/OpenClaw native IDs
-                // are not interchangeable — storing them would pollute the resume
-                // field and cause a different backend to attempt resuming the
-                // wrong session after an adapter switch.
-                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
-                if supportsLegacyResume {
-                    legacyAcpSessionId = adapterSessionId
-                } else if legacyAcpSessionId != nil {
-                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
-                    legacyAcpSessionId = nil
-                }
-            }
-
             // Flush remaining streaming buffers
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Finalize AI message
@@ -328,9 +211,11 @@ class TaskChatState: ObservableObject {
                             && (
                                 !messages[currentIndex].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 || !messages[currentIndex].contentBlocks.isEmpty
+                                || !queryResult.artifacts.isEmpty
                             )
                         messages[currentIndex].isStreaming = false
-                        completeRemainingToolCalls(messageId: aiMessageId)
+                        messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
+                        completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
                         if shouldPersistPartial {
                             persistMessage(messages[currentIndex])
                         }
@@ -339,6 +224,7 @@ class TaskChatState: ObservableObject {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                     messages[index].text = messageText
                     messages[index].isStreaming = false
+                    messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
@@ -357,8 +243,7 @@ class TaskChatState: ObservableObject {
                 TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
             }
         } catch {
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             let failedByUserStop: Bool
@@ -372,9 +257,14 @@ class TaskChatState: ObservableObject {
                 if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages.remove(at: index)
                 } else {
-                    Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    if !failedByUserStop {
+                        Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    }
                     messages[index].isStreaming = false
-                    completeRemainingToolCalls(messageId: aiMessageId)
+                    completeRemainingToolCalls(
+                        messageId: aiMessageId,
+                        terminalStatus: failedByUserStop ? .completed : .failed
+                    )
                     persistMessage(messages[index])
                 }
             }
@@ -391,19 +281,54 @@ class TaskChatState: ObservableObject {
         activeAssistantMessageId = nil
         isSending = false
         isStopping = false
+    }
 
-        // Chain follow-up if queued
-        if let followUp = pendingFollowUpText {
-            pendingFollowUpText = nil
-            await sendMessage(followUp, isFollowUp: true)
+    // MARK: - Failure Formatting
+
+    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
+        let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        let existingText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingText.isEmpty {
+            message.text = failureText
+        } else if !existingText.contains(failureText) {
+            message.text += "\n\n\(failureText)"
+        }
+
+        guard !message.contentBlocks.isEmpty else { return }
+
+        if !existingText.isEmpty && !Self.contentBlocks(message.contentBlocks, containText: existingText) {
+            message.contentBlocks.insert(.text(id: UUID().uuidString, text: existingText), at: 0)
+        }
+
+        let hasFailureTextBlock = message.contentBlocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.trimmingCharacters(in: .whitespacesAndNewlines) == failureText
+            }
+            return false
+        }
+        if !hasFailureTextBlock {
+            message.contentBlocks.append(.text(id: UUID().uuidString, text: failureText))
         }
     }
 
-    // MARK: - Follow-Up
+    private static func contentBlocks(_ blocks: [ChatContentBlock], containText needle: String) -> Bool {
+        let combinedText = blocks.compactMap { block in
+            if case .text(_, let text) = block {
+                return text
+            }
+            return nil
+        }
+        .joined()
 
-    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
-        if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            message.text = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        if combinedText.contains(needle) {
+            return true
+        }
+
+        return blocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.contains(needle)
+            }
+            return false
         }
     }
 
@@ -459,7 +384,7 @@ class TaskChatState: ObservableObject {
            messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: activeAssistantMessageId)
+            completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)
             if persist {
                 persistMessage(messages[index])
             }
@@ -473,7 +398,7 @@ class TaskChatState: ObservableObject {
         }) {
             Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
             messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: messages[index].id)
+            completeRemainingToolCalls(messageId: messages[index].id, terminalStatus: .failed)
             if persist {
                 persistMessage(messages[index])
             }
@@ -487,171 +412,62 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    func sendFollowUp(_ text: String) async {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, isSending else { return }
-
-        // Add user message locally and persist
-        let userMessage = ChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-        persistMessage(userMessage)
-
-        // Queue follow-up and interrupt current query
-        pendingFollowUpText = trimmedText
-        await agentBridge?.interrupt()
-        log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
-    }
-
     // MARK: - Stop
 
     func stopAgent() {
         guard isSending else { return }
         isStopping = true
         Task {
-            await agentBridge?.interrupt()
+            await TaskChatRuntime.interrupt(taskId: taskId)
         }
     }
 
-    // MARK: - Streaming Helpers (mirrored from ChatProvider)
+    // MARK: - Streaming Helpers
 
     private func appendToMessage(id: String, text: String) {
-        streamingBufferMessageId = id
-        streamingTextBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
     private func flushStreamingBuffer() {
-        streamingFlushWorkItem = nil
-
-        guard let id = streamingBufferMessageId,
-              let index = messages.firstIndex(where: { $0.id == id }) else {
-            streamingTextBuffer = ""
-            streamingThinkingBuffer = ""
-            return
-        }
-
-        if !streamingTextBuffer.isEmpty {
-            let buffered = streamingTextBuffer
-            streamingTextBuffer = ""
-
-            messages[index].text += buffered
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
-            }
-        }
-
-        if !streamingThinkingBuffer.isEmpty {
-            let buffered = streamingThinkingBuffer
-            streamingThinkingBuffer = ""
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
-            }
-        }
+        streamingBuffer.flush(messages: &messages)
     }
 
-    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
-    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
-
-        if status == .running {
-            if let toolUseId = toolUseId, toolInput != nil {
-                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: st,
-                            toolUseId: toolUseId, input: toolInput, output: output
-                        )
-                        return
-                    }
-                }
-            }
-            messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
-                          toolUseId: toolUseId, input: toolInput)
-            )
-        } else {
-            for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
-                   st.isInFlight {
-                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
-                    if matches {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: .completed,
-                            toolUseId: toolUseId ?? existingTuid,
-                            input: toolInput ?? existingInput,
-                            output: output
-                        )
-                        break
-                    }
-                }
-            }
-        }
+        streamingBuffer.applyToolActivity(
+            messageId: messageId,
+            toolName: toolName,
+            status: status,
+            toolUseId: toolUseId,
+            input: input,
+            messages: &messages
+        )
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let blockName, let status, let tuid, let input, _) = messages[index].contentBlocks[i],
-               (tuid == toolUseId || (tuid == nil && blockName == name)) {
-                messages[index].contentBlocks[i] = .toolCall(
-                    id: id, name: blockName, status: status,
-                    toolUseId: toolUseId, input: input, output: output
-                )
-                return
-            }
-        }
+        streamingBuffer.applyToolResult(
+            messageId: messageId,
+            toolUseId: toolUseId,
+            name: name,
+            output: output,
+            messages: &messages
+        )
     }
 
     private func appendThinking(messageId: String, text: String) {
-        streamingBufferMessageId = messageId
-        streamingThinkingBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
-    /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
-    /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
-    /// promoted blocks resolve when the turn ends.
-    private func completeRemainingToolCalls(messageId: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
-               status.isInFlight {
-                messages[index].contentBlocks[i] = .toolCall(
-                    id: id, name: name, status: .completed,
-                    toolUseId: toolUseId, input: input, output: output
-                )
-            }
-        }
+    /// Matches any in-flight state (`.running`, `.slow`, `.stalled`) so
+    /// detector-promoted blocks resolve when the turn ends.
+    private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
+        streamingBuffer.completeRemainingToolCalls(
+            messageId: messageId,
+            terminalStatus: terminalStatus,
+            messages: &messages
+        )
     }
 }

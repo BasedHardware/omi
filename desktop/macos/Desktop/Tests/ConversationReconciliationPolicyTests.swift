@@ -34,7 +34,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertEqual(result.conversations[0].structured.title, "Server fresh")
   }
 
-  func testPendingTitleMutationTemporarilyWinsUntilServerMatches() {
+  func testPendingTitleMutationRemainsOwnedByItsOperationWhenServerMatches() {
     let local = makeConversation(id: "c1", title: "Optimistic local")
     let serverLagging = makeConversation(id: "c1", title: "Server old")
     var mutation = ConversationPendingMutation()
@@ -57,7 +57,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     )
 
     XCTAssertEqual(caughtUp.conversations[0].structured.title, "Optimistic local")
-    XCTAssertNil(caughtUp.pendingMutations["c1"])
+    XCTAssertEqual(caughtUp.pendingMutations["c1"]?.title, "Optimistic local")
   }
 
   func testExpiredPendingMutationDoesNotMaskNewerServerValue() {
@@ -99,7 +99,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertTrue(result.pendingMutations.isEmpty)
   }
 
-  func testPendingStarAndFolderMutationsTemporarilyWinAndThenClear() {
+  func testPendingStarAndFolderMutationsRemainOwnedByTheirOperationsWhenServerMatches() {
     let local = makeConversation(id: "c1", starred: true, folderId: "local-folder")
     let serverLagging = makeConversation(id: "c1", starred: false, folderId: "server-folder")
     var mutation = ConversationPendingMutation()
@@ -125,7 +125,8 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
 
     XCTAssertTrue(caughtUp.conversations[0].starred)
     XCTAssertEqual(caughtUp.conversations[0].folderId, "local-folder")
-    XCTAssertNil(caughtUp.pendingMutations["c1"])
+    XCTAssertEqual(caughtUp.pendingMutations["c1"]?.starred, true)
+    XCTAssertEqual(caughtUp.pendingMutations["c1"]?.folderId, "local-folder")
   }
 
   // MARK: - Per-field TTL independence (review feedback)

@@ -2,6 +2,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+import OmiTheme
 
 extension SettingsContentView {
   var floatingBarSection: some View {
@@ -90,6 +91,23 @@ extension SettingsContentView {
           Toggle("", isOn: floatingBarTypedVoiceAnswersBinding)
             .toggleStyle(.switch)
             .tint(OmiColors.purplePrimary)
+        }
+      }
+
+      settingsCard(settingId: "floatingbar.screenshare") {
+        HStack(spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Screen Sharing in Chat")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Let Ask Omi capture your screen when you ask about what's on it.")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: $chatScreenshotSharingEnabled)
+            .toggleStyle(.switch)
+            .labelsHidden()
         }
       }
 

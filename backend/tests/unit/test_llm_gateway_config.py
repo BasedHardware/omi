@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
+from utils.llm.model_config import get_all_configured_features
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -15,12 +16,20 @@ LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 def test_loads_default_gateway_config():
     config = load_gateway_config(prod_mode=True)
 
-    assert set(config.lanes) == {LANE_ID}
+    assert LANE_ID in config.lanes
+    assert len(config.lanes) >= len(get_all_configured_features())
     lane = config.lanes[LANE_ID]
     assert lane.active_route == ACTIVE_ROUTE
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
+
+
+def test_chat_structured_routes_have_background_shadow_timeout_budget():
+    config = load_gateway_config(prod_mode=True)
+
+    assert config.route_artifacts[ACTIVE_ROUTE].timeouts.request_ms >= 30000
+    assert config.route_artifacts[LKG_ROUTE].timeouts.request_ms >= 30000
 
 
 def test_missing_active_route_fails(tmp_path):

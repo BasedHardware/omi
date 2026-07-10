@@ -9,7 +9,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Iterable, Optional, Set
+from typing import Iterable, Optional, Set, cast
 
 MEMORY_MODE_ENV = "MEMORY_MODE"
 MEMORY_ENABLED_USERS_ENV = "MEMORY_ENABLED_USERS"
@@ -62,7 +62,7 @@ class MemoryRolloutState:
     persistent_memory_writes_started: bool = False
     decommission_reconciled: bool = False
     writes_blocked: bool = False
-    stage_gates: dict[MemoryRolloutStageGate, str] = field(default_factory=dict)
+    stage_gates: dict[MemoryRolloutStageGate, str] = field(default_factory=dict[MemoryRolloutStageGate, str])
 
     def __post_init__(self):
         if self.mode_epoch < 0:
@@ -71,9 +71,10 @@ class MemoryRolloutState:
             raise ValueError("cutover_epoch must be nonnegative")
         if self.account_generation < 0:
             raise ValueError("account_generation must be nonnegative")
+        raw_stage_gates = cast(Mapping[MemoryRolloutStageGate | str, str], self.stage_gates)
         self.stage_gates = {
             key if isinstance(key, MemoryRolloutStageGate) else MemoryRolloutStageGate(key): value
-            for key, value in self.stage_gates.items()
+            for key, value in raw_stage_gates.items()
         }
 
     def gate_passed(self, gate: MemoryRolloutStageGate) -> bool:
@@ -111,7 +112,7 @@ MemoryRolloutState = MemoryRolloutState
 
 @dataclass
 class MemoryRolloutConfig:
-    enabled_users: Set[str] = field(default_factory=set)
+    enabled_users: Set[str] = field(default_factory=set[str])
     mode: MemoryRolloutMode = MemoryRolloutMode.off
 
     @classmethod

@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import OmiSupport
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
@@ -55,6 +56,13 @@ actor RewindDatabase {
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
         guard dbQueue != nil else { return }  // DB already closed, nothing to do
+        if isBusyDatabaseError(error) {
+            log(
+                "RewindDatabase: SQLITE_BUSY contention "
+                    + "(failure_class=db_lock_contention recovery_action=backoff recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordDbLockContention(source: "rewind_database")
+            return
+        }
         guard isRecoverableDatabaseError(error) else { return }
 
         consecutiveQueryIOErrors += 1
@@ -69,9 +77,15 @@ actor RewindDatabase {
     /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
     private func isRecoverableDatabaseError(_ error: Error) -> Bool {
         guard let dbError = error as? DatabaseError else { return false }
+        if isBusyDatabaseError(error) { return false }
         let code = dbError.resultCode
         let extendedCode = dbError.extendedResultCode.rawValue
         return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    private func isBusyDatabaseError(_ error: Error) -> Bool {
+        guard let dbError = error as? DatabaseError else { return false }
+        return dbError.resultCode == .SQLITE_BUSY
     }
 
     /// Handle corruption/I/O failures from cleanup and other maintenance operations.
@@ -2311,6 +2325,17 @@ actor RewindDatabase {
             try db.alter(table: "memories") { t in
                 t.add(column: "primaryCaptureDevice", .text)
                 t.add(column: "captureDeviceIdsJson", .text)
+            }
+        }
+
+        migrator.registerMigration("addTaskChatMessageResources") { db in
+            try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
+        }
+
+        migrator.registerMigration("addConversationCacheAuthority") { db in
+            try db.alter(table: "transcription_sessions") { t in
+                t.add(column: "serverUpdatedAt", .datetime)
+                t.add(column: "cacheCompleteness", .text).notNull().defaults(to: "list")
             }
         }
 

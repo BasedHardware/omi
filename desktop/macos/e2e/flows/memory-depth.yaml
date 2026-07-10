@@ -1,0 +1,72 @@
+version: 2
+name: memory-depth
+tier: 2
+description: Memory search, tag filter, and visibility toggle after create
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S2
+    name: Create hermetic test memory
+    bridge.action:
+      name: create_test_memory
+      params:
+        content: "[[MARKER:memory-depth]] hermetic searchable memory"
+        source: harness
+    expect:
+      result.detail.created: "true"
+
+  - id: S3
+    name: Search for harness memory
+    bridge.action:
+      name: memories_search
+      params:
+        query: "[[MARKER:memory-depth]]"
+    expect:
+      result.detail.search_active: "true"
+      result.detail.result_count: { min: 1 }
+
+  - id: S4
+    name: Apply manual tag filter
+    bridge.action:
+      name: memories_set_tag_filter
+      params:
+        tags: manual
+    expect:
+      result.detail.tag_filter_active: "true"
+
+  - id: S5
+    name: Toggle memory visibility
+    bridge.action:
+      name: toggle_memory_visibility
+      params:
+        marker: "[[MARKER:memory-depth]]"
+    expect:
+      result.detail.toggled: "true"
+
+  - id: S6
+    name: Delete harness memory
+    bridge.action:
+      name: delete_test_memory
+      params:
+        marker: "[[MARKER:memory-depth]]"
+    expect:
+      ok: true
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

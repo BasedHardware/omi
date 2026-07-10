@@ -1,0 +1,53 @@
+# Deprecated legacy allowlist for import-time side effects in backend production code.
+#
+# Transitional bridge only (see .coordination/test-isolation/PLAN.md Tier 1, P4).
+# Permitted change: SHRINK only. Growing is blocked by the pre-push hook and CI.
+# Each entry should eventually be either fixed (defer construction into a lazy
+# getter) or justified with a `# noqa: import-side-effect: <reason>` pragma and an
+# ADR entry, then removed from this list.
+#
+# Terminal state: this file is deleted (PLAN.md §4, condition #2).
+#
+# Total: 33 entries.
+#
+# The 4 entries marked "surfaced by P2" below were discovered by the alias-
+# resolution hardening of scan_import_time_side_effects.py: the old checker
+# never matched side-effecting constructors invoked via from-imports (e.g.
+# `from openai import AsyncOpenAI; AsyncOpenAI()`), so these pre-existing
+# import-time constructions went undetected. Defer each into a lazy getter and
+# remove from this list.
+backend/agent-proxy/main.py
+backend/database/redis_db.py
+backend/main.py
+backend/migration/remove_soft_deleted_documents.py
+backend/migrations/001_enhanced_protection_default.py
+backend/migrations/002_populate_historical_usage.py
+backend/migrations/003_report_top_transcription_users.py
+backend/migrations/004_migrate_action_items_to_collection.py
+backend/migrations/005_backfill_memory_vectors.py
+backend/migrations/006_auto_set_transcription_mode.py
+backend/migrations/007_backfill_action_item_vectors.py
+backend/modal/job.py
+backend/pusher/main.py
+backend/scripts/chat/stream_test.py
+backend/scripts/rag/_shared.py
+backend/scripts/rag/memories.py
+backend/scripts/stt/c_generate_models.py
+backend/scripts/stt/d_test_models.py
+backend/scripts/stt/h_brainstorming.py
+backend/scripts/stt/j_apply_vad_to_speech_profiles.py
+backend/scripts/stt/k_compare_transcripts_performance.py
+backend/scripts/users/apps_count.py
+backend/scripts/users/memories_fixes.py
+backend/scripts/users/retrieval.py
+backend/scripts/vad_multilang_dg_test.py
+backend/scripts/vad_offline_replay.py
+backend/utils/conversations/search.py
+backend/utils/llm/clients.py
+backend/utils/other/storage.py
+
+# surfaced by P2 (from-import alias blind spot)
+backend/database/vector_db.py
+backend/utils/other/chat_file.py
+backend/utils/stt/pre_recorded.py
+backend/utils/stt/streaming.py

@@ -4,59 +4,26 @@ Tests for issue #4929: Edge ID sanitization in knowledge graph.
 Firestore document IDs cannot contain '/'. When the LLM generates edge labels
 like 'works/with', the '/' in the constructed edge_id breaks the Firestore path.
 Fix: replace '/' with '_' in edge_id before using as document ID.
+
+The module under test (``database.knowledge_graph``) binds ``db`` at import via
+``from database._client import db``, but ``database._client.db`` is a lazy proxy
+that defers client construction to first use, so the import is pure and no
+``sys.modules`` stubbing is required.
 """
 
 import os
 import sys
-import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
-_database_pkg = sys.modules.setdefault("database", types.ModuleType("database"))
-_database_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 
+from database.knowledge_graph import upsert_knowledge_edge
 
-def _install_google_firestore_stubs():
-    google_mod = sys.modules.setdefault("google", types.ModuleType("google"))
-    cloud_mod = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-    firestore_mod = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
-    firestore_v1_mod = sys.modules.setdefault(
-        "google.cloud.firestore_v1", types.ModuleType("google.cloud.firestore_v1")
-    )
-    google_mod.cloud = cloud_mod
-    cloud_mod.firestore = firestore_mod
-    cloud_mod.firestore_v1 = firestore_v1_mod
-    firestore_mod.Client = getattr(firestore_mod, "Client", MagicMock)
-    firestore_v1_mod.FieldFilter = getattr(firestore_v1_mod, "FieldFilter", MagicMock)
-
-
-def _clear_database_module_imports():
-    for module_name in ("database.knowledge_graph", "database._client"):
-        sys.modules.pop(module_name, None)
-    for attr_name in ("knowledge_graph", "_client"):
-        if hasattr(_database_pkg, attr_name):
-            delattr(_database_pkg, attr_name)
-
-
-_install_google_firestore_stubs()
-_clear_database_module_imports()
-
-# Patch the Firestore Client before importing any database module
-with patch("google.cloud.firestore.Client") as mock_client_cls:
-    mock_db = MagicMock()
-    mock_client_cls.return_value = mock_db
-    from database.knowledge_graph import upsert_knowledge_edge
-
-_clear_database_module_imports()
+mock_db = MagicMock()
 
 
 class TestEdgeIdSanitization:

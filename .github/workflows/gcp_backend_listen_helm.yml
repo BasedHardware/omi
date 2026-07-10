@@ -99,25 +99,13 @@ jobs:
       - name: Upgrade backend-secrets Helm chart
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
         run: |
-          if [[ -n "${BACKEND_SECRETS_GSA}" ]]; then
-            gsa_name="${BACKEND_SECRETS_GSA}"
-          else
-            gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-          fi
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
-            ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
-            --set gke.projectID=${{ vars.GCP_PROJECT_ID }} \
-            --set gke.clusterLocation=${{ env.REGION }} \
-            --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
-            --set gsa.name="${gsa_name}"
-          # Trigger an immediate sync so newly-listed keys are pulled before the
-          # listen deployment restarts (otherwise its env refs resolve empty).
-          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
-            ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="$(date +%s)" --overwrite
-          sleep 10
+          python3 -m pip install -q pyyaml
+          backend/scripts/deploy-backend-secrets.sh
 
       - name: Upgrade backend-listen Helm chart
         run: |
@@ -131,7 +119,11 @@ jobs:
 
       - name: Verify rollout
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Show pod status
         if: always()

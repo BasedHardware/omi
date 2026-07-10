@@ -95,7 +95,7 @@ export function failureFromProcessExit(input: {
 function classifyAdapterProcessFailure(
   adapterId: ProductionAdapterId,
   diagnostic: string
-): Partial<RuntimeFailure> | undefined {
+): (Pick<RuntimeFailure, "code" | "userMessage"> & Partial<RuntimeFailure>) | undefined {
   if (adapterId === "openclaw" && isOpenClawInvalidConfig(diagnostic)) {
     return {
       code: "adapter_config_invalid",
@@ -107,6 +107,8 @@ function classifyAdapterProcessFailure(
   return undefined;
 }
 
+// Adapter stderr is unstructured; this is the sanctioned adapter-boundary sniffing site
+// (Phase 6 item 7 exception). Prefer typed RuntimeFailure codes when the adapter can classify.
 function isOpenClawInvalidConfig(diagnostic: string): boolean {
   const lower = diagnostic.toLowerCase();
   return (

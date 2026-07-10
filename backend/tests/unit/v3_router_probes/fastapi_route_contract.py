@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import types
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -24,14 +23,6 @@ from fastapi.testclient import TestClient
 BACKEND_ROOT = __import__('pathlib').Path(__file__).resolve().parents[3]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-
-# `models.memories.MemoryDB` imports `database._client.document_id_from_seed` for
-# factory helpers; the real database module constructs a Firestore client at
-# import time. This proof only needs the production Pydantic model, so it stubs
-# that narrow helper before importing the model and never imports Firestore.
-_database_client_stub = types.ModuleType('database._client')
-_database_client_stub.document_id_from_seed = lambda seed: f"stub-{abs(hash(seed))}"
-sys.modules.setdefault('database._client', _database_client_stub)
 
 from models.memories import MemoryDB
 

@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
   invalidationPatterns,
@@ -21,6 +22,18 @@ import type {
   MessageFile,
   AudioFileUrlInfo,
 } from '@/types/conversation';
+// Generated REST response envelopes (backend OpenAPI authority).
+import type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+  FairUseStatusResponse,
+} from './omiApi.generated';
+export type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+};
 import type {
   App,
   AppCategory,
@@ -57,16 +70,21 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers = new Headers({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  });
+  new Headers(options.headers).forEach((value, name) => headers.set(name, value));
+  headers.set('X-App-Platform', 'web');
+  if (deviceIdHash) {
+    headers.set('X-Device-Id-Hash', deviceIdHash);
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-App-Platform': 'web',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -211,13 +229,6 @@ export async function deleteConversation(id: string): Promise<void> {
  * @param reprocess - Whether to reprocess the merged conversation (default: true)
  * @returns Response with status and merged conversation IDs
  */
-export interface MergeConversationsResponse {
-  status: string;
-  message: string;
-  warning?: string;
-  conversation_ids: string[];
-}
-
 export async function mergeConversations(
   conversationIds: string[],
   reprocess: boolean = true,
@@ -229,14 +240,6 @@ export async function mergeConversations(
       reprocess,
     }),
   });
-}
-
-/**
- * Response from processing an in-progress conversation
- */
-export interface CreateConversationResponse {
-  conversation: Conversation;
-  messages: ServerMessage[];
 }
 
 /**
@@ -274,11 +277,6 @@ export interface GetActionItemsParams {
   limit?: number;
   offset?: number;
   completed?: boolean;
-}
-
-interface ActionItemsResponse {
-  action_items: ActionItem[];
-  has_more: boolean;
 }
 
 export async function getActionItems(
@@ -1257,10 +1255,7 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
 
 // Webhook type enum matching backend API
 type WebhookType =
-  | 'memory_created'
-  | 'realtime_transcript'
-  | 'audio_bytes'
-  | 'day_summary';
+  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
 
 /**
  * Get developer webhook URL
@@ -2139,32 +2134,6 @@ export async function bulkMoveConversationsToFolder(
 // FCM Token Registration API
 // ============================================================================
 
-const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
-
-/**
- * Get or generate a unique device ID for this browser
- * This is used to identify the device when registering FCM tokens
- */
-function getWebDeviceIdHash(): string {
-  if (typeof window === 'undefined') return 'server';
-
-  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
-  if (!deviceId) {
-    // Generate a unique ID for this browser
-    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
-  }
-
-  // Create a simple hash of the device ID
-  let hash = 0;
-  for (let i = 0; i < deviceId.length; i++) {
-    const char = deviceId.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString(16);
-}
-
 /**
  * Register FCM token for push notifications
  * This is the same endpoint used by the mobile app
@@ -2172,7 +2141,8 @@ function getWebDeviceIdHash(): string {
  */
 export async function registerFCMToken(fcmToken: string): Promise<void> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const deviceIdHash = getWebDeviceIdHash();
+  const deviceIdHash = await getWebDeviceIdHash();
+  if (!deviceIdHash) return;
 
   await fetchWithAuth('/v1/users/fcm-token', {
     method: 'POST',
@@ -2193,7 +2163,8 @@ export async function registerFCMToken(fcmToken: string): Promise<void> {
  */
 export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   try {
-    const deviceIdHash = getWebDeviceIdHash();
+    const deviceIdHash = await getWebDeviceIdHash();
+    if (!deviceIdHash) return;
 
     await fetchWithAuth('/v1/users/fcm-token', {
       method: 'DELETE',
@@ -2215,31 +2186,14 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
 // Fair Use Status
 // ============================================================================
 
-export interface FairUseStatus {
+/**
+ * Client-narrowed view of the generated `FairUseStatusResponse` (backend
+ * OpenAPI authority for `/v1/fair-use/status`). The backend types `stage` as a
+ * plain string; this adapter narrows it to the union the UI renders.
+ */
+export type FairUseStatus = Omit<FairUseStatusResponse, 'stage'> & {
   stage: 'none' | 'warning' | 'throttle' | 'restrict';
-  case_ref: string;
-  speech_hours_today: number;
-  speech_hours_3day: number;
-  speech_hours_weekly: number;
-  limits: {
-    daily_hours: number;
-    three_day_hours: number;
-    weekly_hours: number;
-  };
-  usage_pct: {
-    daily: number;
-    three_day: number;
-    weekly: number;
-  };
-  message: string;
-  dg_budget?: {
-    daily_limit_ms: number;
-    used_ms: number;
-    remaining_ms: number;
-    exhausted: boolean;
-    resets_at: string;
-  };
-}
+};
 
 export async function getFairUseStatus(): Promise<FairUseStatus | null> {
   try {

@@ -125,6 +125,8 @@ if not hasattr(_endpoints, 'with_rate_limit'):
     _endpoints.with_rate_limit = lambda dependency, _policy: dependency
 if not hasattr(_endpoints, 'with_rate_limit_context'):
     setattr(_endpoints, 'with_rate_limit_context', lambda dependency, _policy: dependency)
+if not hasattr(_endpoints, 'check_api_key_rate_limit'):
+    _endpoints.check_api_key_rate_limit = MagicMock()
 if not hasattr(_endpoints, 'get_user'):
     _endpoints.get_user = MagicMock()
 

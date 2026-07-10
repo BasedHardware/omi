@@ -4,6 +4,7 @@ from typing import Optional, Tuple, List, Dict
 from fastapi import APIRouter, HTTPException
 from enum import Enum
 import ast
+from pydantic import BaseModel, Field
 
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 import logging
@@ -20,6 +21,19 @@ class DeviceModel(int, Enum):
 
 
 router = APIRouter()
+
+
+class FirmwareVersionResponse(BaseModel):
+    version: str | None = None
+    min_version: str | None = None
+    min_app_version: str | None = None
+    min_app_version_code: str | None = None
+    zip_url: str | None = None
+    draft: bool = False
+    ota_update_steps: List[str] = Field(default_factory=list)
+    is_legacy_secure_dfu: bool = True
+    changelog: str | List[str] = ''
+
 
 # Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.
 FIRMWARE_TAG_PATTERN = re.compile(
@@ -152,6 +166,25 @@ def _find_candidate_releases(
     return candidates
 
 
+def _find_release_by_version(
+    releases: List[Dict], release_prefix: str, target_firmware_tuple: Tuple[int, ...]
+) -> Optional[Dict]:
+    """Return the release whose release_firmware_version equals the target, or None.
+
+    Reuses _find_candidate_releases (current=None) for the device-prefix / draft / prerelease / tag
+    filtering, sorts newest-published first (matching get_stable/get_latest) so the result is
+    deterministic if two releases ever advertise the same version, then matches the exact target. An
+    unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
+    """
+    candidates = _find_candidate_releases(releases, release_prefix)
+    candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    for release in candidates:
+        kv = extract_key_value_pairs(release.get("body"))
+        if _parse_firmware_version(kv.get("release_firmware_version")) == target_firmware_tuple:
+            return release
+    return None
+
+
 def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
     """Extract firmware details and download asset from a GitHub release."""
     kv = extract_key_value_pairs(release.get("body"))
@@ -198,7 +231,7 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
     }
 
 
-@router.get("/v2/firmware/latest")
+@router.get("/v2/firmware/latest", response_model=FirmwareVersionResponse)
 async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
     device = _get_device_by_model_number(device_model)
     if not device:
@@ -229,7 +262,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     return _extract_firmware_response(device, candidates[0])
 
 
-@router.get("/v2/firmware/stable")
+@router.get("/v2/firmware/stable", response_model=FirmwareVersionResponse)
 async def get_stable_version(device_model: str):
     """Return the latest stable firmware for a device, regardless of current version.
 
@@ -251,3 +284,29 @@ async def get_stable_version(device_model: str):
 
     candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     return _extract_firmware_response(device, candidates[0])
+
+
+@router.get("/v2/firmware/version", response_model=FirmwareVersionResponse)
+async def get_firmware_version(device_model: str, version: str):
+    """Return the OTA metadata for a specific published firmware version of a device.
+
+    Complements /v2/firmware/stable by making any individual published build addressable, e.g. to pin
+    or roll a device back to a known-good earlier version, or for QA/support to flash a named build.
+    """
+    device = _get_device_by_model_number(device_model)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    target = _parse_firmware_version(version)
+    if target is None:
+        raise HTTPException(status_code=400, detail="Could not parse requested firmware version")
+
+    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    if not releases:
+        raise HTTPException(status_code=404, detail="No releases found for the repository")
+
+    match = _find_release_by_version(releases, _get_release_prefix(device), target)
+    if not match:
+        raise HTTPException(status_code=404, detail="Requested firmware version not found for your device.")
+
+    return _extract_firmware_response(device, match)

@@ -1,5 +1,6 @@
 version: 1
 name: desktop-responsiveness-benchmark
+tier: 3
 description: Fast cursor-free timing for common desktop navigation interactions.
 app: non-prod
 preconditions:

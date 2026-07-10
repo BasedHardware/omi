@@ -1,6 +1,6 @@
 route_artifacts:
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:c4c393fc3e915b2ecc41d4ef4cce5abd30c6439076814f55e29578eab6232e31
+    artifact_digest: sha256:271229622698025cd7f496f3d0cb3cb505306c2e7b5d6ce32a35d059b1908094
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
@@ -10,7 +10,7 @@ route_artifacts:
       - provider: openai
         model: gpt-4.1-mini
     timeouts:
-      request_ms: 8000
+      request_ms: 30000
     retry:
       max_attempts: 1
     capabilities:
@@ -56,7 +56,7 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:1d46ec82568f2d523da23e1df4b0956cfe876cc6ece9d05dbfb7e0edc7eda74b
+    artifact_digest: sha256:70492be577ce8833273a58f04802aafa251d7981c0ad4c7a818a895fb5d1d9fc
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
@@ -68,7 +68,7 @@ route_artifacts:
       model: gpt-4.1-mini
     fallbacks: []
     timeouts:
-      request_ms: 9000
+      request_ms: 30000
     retry:
       max_attempts: 1
     capabilities:

@@ -17,6 +17,13 @@ class TranscriptionService {
         /// PTT live transcription via `/v2/voice-message/transcribe-stream` — transcription only,
         /// no conversation lifecycle. Supports "finalize" text message for flush.
         case ptt
+
+        var telemetryLabel: String {
+            switch self {
+            case .conversation: return "conversation"
+            case .ptt: return "ptt"
+            }
+        }
     }
 
     /// Translation from backend (lang code + translated text)
@@ -80,6 +87,7 @@ class TranscriptionService {
     private let apiKey: String
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
+    private var webSocketDelegate: WebSocketConnectionDelegate?
     // Internal for @testable import access in unit tests
     var isConnected = false
     var shouldReconnect = false
@@ -321,7 +329,7 @@ class TranscriptionService {
             guard let self = self else { return }
             do {
                 let authService = await MainActor.run { AuthService.shared }
-                let authHeader = try await authService.getAuthHeader()
+                let authHeader = try await authService.getAuthHeader(forceRefresh: self.reconnectAttempts > 0)
                 self.connectToBackend(authHeader: authHeader)
             } catch {
                 logError("TranscriptionService: Failed to get auth token", error: error)
@@ -390,6 +398,15 @@ class TranscriptionService {
         // Create URL request with authorization header
         var request = URLRequest(url: url)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Keep capture provenance on the WebSocket upgrade as well as regular
+        // API requests. The backend stamps this onto the conversation, which
+        // flows through evidence into canonical memory device filtering.
+        request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+        request.setValue(ClientDeviceService.shared.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
+        request.setValue(
+          Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+          forHTTPHeaderField: "X-App-Version"
+        )
 
         // BYOK: attach user keys so the transcription backend can use the user's
         // Deepgram token for this session (and any downstream LLM calls).
@@ -401,39 +418,63 @@ class TranscriptionService {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 0  // No resource timeout for long-lived WebSocket
-        urlSession = URLSession(configuration: configuration)
-        webSocketTask = urlSession?.webSocketTask(with: request)
+        let delegate = WebSocketConnectionDelegate()
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        let task = session.webSocketTask(with: request)
+        webSocketDelegate = delegate
+        urlSession = session
+        webSocketTask = task
+
+        delegate.onOpen = { [weak self, weak task] in
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+            else { return }
+            DispatchQueue.main.async { [weak self, weak task] in
+                guard let self,
+                      WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+                else { return }
+                self.handleWebSocketOpen()
+            }
+        }
+        delegate.onClose = { [weak self, weak task] closeCode in
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+            else { return }
+            log("TranscriptionService: WebSocket closed with code \(closeCode.rawValue)")
+            if self.isConnected {
+                self.handleDisconnection()
+            } else if self.shouldReconnect {
+                self.cleanupAndReconnect()
+            }
+        }
 
         // Start the connection
-        webSocketTask?.resume()
+        task.resume()
 
         // Start receiving messages
         receiveMessage()
 
-        // Mark as connected after a brief delay to allow WebSocket handshake.
-        // Also set a connect timeout — if the handshake hasn't completed in 10s, trigger reconnect.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self else { return }
-            guard self.webSocketTask?.state == .running else {
-                log("TranscriptionService: WebSocket not running after handshake — triggering reconnect")
-                self.cleanupAndReconnect()
-                return
-            }
-            self.isConnected = true
-            self.reconnectAttempts = 0
-            self.lastDataReceivedAt = Date()
-            log("TranscriptionService: Connected to Python backend")
-            self.startWatchdog()
-            self.onConnected?()
-        }
-
         // Connect timeout: if still not connected after 10s, force reconnect
-        Task { [weak self] in
+        Task { [weak self, weak task] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self = self, !self.isConnected, self.shouldReconnect else { return }
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask),
+                  !self.isConnected,
+                  self.shouldReconnect
+            else { return }
             log("TranscriptionService: Connect timeout (10s) — forcing reconnect")
             self.cleanupAndReconnect()
         }
+    }
+
+    private func handleWebSocketOpen() {
+        guard !isConnected else { return }
+        isConnected = true
+        reconnectAttempts = 0
+        lastDataReceivedAt = Date()
+        log("TranscriptionService: WebSocket opened (handshake complete)")
+        startWatchdog()
+        onConnected?()
     }
 
     /// Start watchdog to detect stale connections (WebSocket dies silently)
@@ -461,6 +502,7 @@ class TranscriptionService {
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
+        webSocketDelegate = nil
         log("TranscriptionService: Disconnected")
         onDisconnected?()
     }
@@ -474,6 +516,7 @@ class TranscriptionService {
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
+        webSocketDelegate = nil
         onDisconnected?()
 
         // Attempt reconnection if enabled
@@ -488,7 +531,13 @@ class TranscriptionService {
                 self.connect()
             }
         } else if reconnectAttempts >= maxReconnectAttempts {
-            log("TranscriptionService: Max reconnect attempts reached")
+            log(
+                "TranscriptionService: Max reconnect attempts reached "
+                    + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
+            DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
+                reconnectAttempts: reconnectAttempts,
+                streamingMode: streamingMode.telemetryLabel
+            )
             onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
         }
     }
@@ -496,14 +545,22 @@ class TranscriptionService {
     /// Cleanup a failed/pending connection and schedule reconnect.
     /// Unlike handleDisconnection(), this works even when isConnected is false (pre-handshake failures).
     func cleanupAndReconnect() {
+        isConnected = false
         webSocketTask?.cancel(with: .abnormalClosure, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
+        webSocketDelegate = nil
 
         guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
             if reconnectAttempts >= maxReconnectAttempts {
-                log("TranscriptionService: Max reconnect attempts reached (pre-connect)")
+                log(
+                    "TranscriptionService: Max reconnect attempts reached (pre-connect) "
+                        + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
+                DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
+                    reconnectAttempts: reconnectAttempts,
+                    streamingMode: streamingMode.telemetryLabel
+                )
                 onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
             }
             return
@@ -586,6 +643,35 @@ class TranscriptionService {
         } catch {
             logError("TranscriptionService: Parse error", error: error)
         }
+    }
+}
+
+final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate {
+    var onOpen: (() -> Void)?
+    var onClose: ((URLSessionWebSocketTask.CloseCode) -> Void)?
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        onOpen?()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        onClose?(closeCode)
+    }
+}
+
+enum WebSocketConnectionAttempt {
+    static func matches(_ candidate: URLSessionWebSocketTask?, current: URLSessionWebSocketTask?) -> Bool {
+        guard let candidate, let current else { return false }
+        return candidate === current
     }
 }
 

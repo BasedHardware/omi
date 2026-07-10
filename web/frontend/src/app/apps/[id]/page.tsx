@@ -156,8 +156,8 @@ function getPlatformLink(userAgent: string) {
   return isAndroid
     ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
     : isIOS
-      ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-      : 'https://omi.me';
+    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+    : 'https://omi.me';
 }
 
 // Helper function to format date
@@ -213,7 +213,7 @@ export default async function PluginDetailView(props: {
             <div className="lg:col-span-2">
               <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
                 <Image
-                  src={plugin.image}
+                  src={plugin.image || '/logo.webp'}
                   alt={plugin.name}
                   className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                   width={500}
@@ -346,7 +346,7 @@ export default async function PluginDetailView(props: {
                   <div className="text-sm font-medium text-gray-400">Capabilities</div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 pl-7">
-                  {Array.from(plugin.capabilities).map((cap) => (
+                  {Array.from(plugin.capabilities ?? []).map((cap) => (
                     <span
                       key={cap}
                       className="rounded-full bg-[#1A1F2E] px-3 py-1 text-sm text-white"

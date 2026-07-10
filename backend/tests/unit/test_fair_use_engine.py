@@ -1,45 +1,37 @@
-"""Tests for the fair-use engine (utils/fair_use.py)."""
+"""Tests for the fair-use engine (utils/fair_use.py).
 
-import sys
-import types
+``utils.fair_use`` imports cleanly (its dependencies defer client construction),
+so we patch the module-level ``redis_client`` and ``fair_use_db`` attributes via
+an autouse ``monkeypatch`` fixture instead of mutating ``sys.modules`` at module
+scope. See ``backend/docs/test_isolation.md`` (Tier-2 sanctioned seams).
+"""
+
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Stub heavy dependencies before importing the module under test
-# ---------------------------------------------------------------------------
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
+import utils.fair_use as fair_use_mod
+from models.fair_use import SoftCapTrigger
 
-_redis_mod = types.ModuleType('database.redis_db')
-_mock_redis = MagicMock()
-_redis_mod.r = _mock_redis
-sys.modules.setdefault('database.redis_db', _redis_mod)
-
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-
-# Stub database.fair_use
-_fair_use_db = types.ModuleType('database.fair_use')
+# Module-level fakes patched onto the module under test by the autouse fixture
+# below. Tests mutate these directly (e.g. ``_mock_redis.zrangebyscore...``);
+# because the fixture points the production attributes at these very objects,
+# those mutations are visible to the code under test for the duration of each
+# test and reverted automatically on teardown.
+_mock_redis = MagicMock(name='redis_client')
+_fair_use_db = MagicMock(name='fair_use_db')
 _fair_use_db.get_fair_use_state = MagicMock(return_value={})
 _fair_use_db.update_fair_use_state = MagicMock()
 _fair_use_db.create_fair_use_event = MagicMock(return_value='evt-123')
 _fair_use_db.get_fair_use_events = MagicMock(return_value=[{'case_ref': 'FU-TEST01'}])
 _fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d': 0, 'violation_count_30d': 0})
-sys.modules.setdefault('database.fair_use', _fair_use_db)
 
-# Stub database.users
-sys.modules.setdefault('database.users', MagicMock())
 
-# Stub notifications
-sys.modules.setdefault('utils.notifications', MagicMock())
-
-# Now import the module under test
-import utils.fair_use as fair_use_mod
-from models.fair_use import SoftCapTrigger
+@pytest.fixture(autouse=True)
+def _patch_fair_use_deps(monkeypatch):
+    monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
 
 
 class TestRecordSpeechMs:

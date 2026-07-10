@@ -131,7 +131,7 @@ String? _getIntegrationLogoPath(String thinkingText) {
 }
 
 /// Get the fallback icon for thinking text (used when no integration logo)
-IconData _getThinkingIcon(String thinkingText) {
+FaIconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
     return FontAwesomeIcons.brain;
@@ -880,7 +880,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                        : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),
@@ -1240,7 +1240,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required VoidCallback onTap, bool isSelected = false}) {
+  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,

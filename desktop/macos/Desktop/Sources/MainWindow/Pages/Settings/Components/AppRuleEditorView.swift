@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 struct ExcludedAppRow: View {
   let appName: String
@@ -248,6 +249,7 @@ struct RunningAppChip: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   SettingsPage(
     appState: AppState(),
@@ -255,3 +257,4 @@ struct RunningAppChip: View {
     highlightedSettingId: .constant(nil)
   )
 }
+#endif

@@ -1,13 +1,16 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import database.calendar_meetings as calendar_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.other import endpoints as auth
 from utils.request_validation import CalendarMeetingsLimit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -59,7 +62,7 @@ def store_calendar_meeting(
         calendar_source=request.calendar_source,
     )
 
-    meeting_dict = meeting_context.dict()
+    meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = request.end_time
 
     # Check if meeting already exists (by calendar_event_id + calendar_source)
@@ -89,7 +92,20 @@ def get_calendar_meeting(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    return CalendarMeetingContext(**meeting)
+    try:
+        return CalendarMeetingContext(**meeting)
+    except ValidationError as exc:
+        # A malformed/legacy stored meeting cannot be rendered; treat it as unavailable
+        # (the list endpoint already skips such records) rather than 500 the request. Log a
+        # safe id plus the exception type only: a ValidationError's str() renders sensitive
+        # field input like the meeting title, participant emails, link, or notes.
+        logger.warning(
+            'Malformed calendar meeting for uid=%s event_id=%s: %s',
+            uid,
+            meeting.get('calendar_event_id'),
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=404, detail="Meeting not found")
 
 
 @router.get('/v1/calendar/meetings', response_model=List[CalendarMeetingContext], tags=['calendar'])
@@ -101,4 +117,16 @@ def list_calendar_meetings(
 ):
     """List calendar meetings within a date range"""
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
-    return [CalendarMeetingContext(**m) for m in meetings]
+    # Skip any malformed stored meeting rather than 500 the whole list, so one bad
+    # record cannot hide every other meeting the user has. Log a safe identifier plus
+    # the exception class only: a ValidationError's str() renders the field input_value,
+    # which for a meeting can be sensitive (title, participant emails, link, notes).
+    return CalendarMeetingContext.from_records(
+        meetings,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed calendar meeting for uid=%s event_id=%s: %s',
+            uid,
+            record.get('calendar_event_id'),
+            type(exc).__name__,
+        ),
+    )

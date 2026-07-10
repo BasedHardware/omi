@@ -1,5 +1,6 @@
 {
     "@@locale": "tl",
+    "sessionExpiredSignInAgain": "Nag-expire ang session — mag-sign in ulit.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
     "transcribeLaterTitle": "I-transcribe Mamaya",
     "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
-    "transcribeLaterNote": "Gumagana muna sa mga Omi device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
+    "transcribeLaterNote": "Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
     "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
     "unmute": "I-unmute",
     "newRecording": "Bagong recording",
@@ -10681,5 +10682,44 @@
     "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
     "deviceOnboardingIntroDuration": "Mga 1 minuto",
     "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
-    "latest": "Pinakabago"
+    "latest": "Pinakabago",
+    "flashFirmware": "I-flash ang Firmware",
+    "pendantRecordingTitle": "Nagre-record sa pendant",
+    "pendantRecordingNote": "Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.",
+    "pendantSyncingRecordings": "Sini-sync ang mga recording mula sa iyong pendant…",
+    "pendantMinutesStored": "~{minutes} min ang nakaimbak",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync.",
+    "connectRayBanMeta": "Ikonekta ang Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Gamitin ang iyong Ray-Ban Meta glasses bilang iyong Omi capture device para sa mga conversation at visual na konteksto. Bubuksan ng Omi ang Meta AI app upang i-link ang iyong glasses.",
+    "raybanMetaOpenMetaAI": "Kumonekta sa pamamagitan ng Meta AI",
+    "raybanMetaWaitingForMetaAI": "Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik dito.",
+    "raybanMetaCheckAgain": "Tingnan Muli",
+    "raybanMetaAllowCamera": "Payagan ang Camera sa Glasses",
+    "raybanMetaCameraExplanation": "Ginagamit ng Omi ang camera ng iyong glasses upang magdagdag ng mga larawan sa iyong mga conversation. Maaari mong laktawan ito at gumamit ng audio lamang.",
+    "raybanMetaSkipForNow": "Laktawan Muna",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta audio-only mode",
+    "raybanMetaAudioOnlyExplanation": "Magagamit ng bersyong ito ng Omi ang mikropono ng iyong glasses sa pamamagitan ng Bluetooth. Kailangan ng Meta developer build ng Omi para sa photo capture.",
+    "raybanMetaMusicPauseNote": "Na-pause ang musika sa iyong telepono habang ginagamit ang mikropono ng glasses.",
+    "raybanMetaContinue": "Magpatuloy",
+    "raybanMetaCapturePhoto": "Kumuha ng Photo",
+    "raybanMetaPhotoRequested": "Hiniling ang photo — lalabas ito sa iyong conversation.",
+    "raybanMetaMicrophoneReady": "Handa na ang mikropono",
+    "raybanMetaImageCaptureReady": "Handa na ang image capture",
+    "raybanMetaImageCaptureUnavailable": "Hindi available sa audio-only mode",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Error sa pagkonekta sa Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

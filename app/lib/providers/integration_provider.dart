@@ -9,17 +9,20 @@ class IntegrationProvider extends ChangeNotifier {
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+  int _sessionGeneration = 0;
 
   Map<String, bool> get integrations => _integrations;
   bool get isLoading => _isLoading;
   bool get hasLoaded => _hasLoaded;
 
   Future<void> loadFromBackend() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
 
     try {
       final responses = await Future.wait([getIntegration('google_calendar')]);
+      if (generation != _sessionGeneration) return;
 
       _integrations['google_calendar'] = responses[0]?.connected ?? false;
       _integrations['gmail'] = false;
@@ -31,16 +34,21 @@ class IntegrationProvider extends ChangeNotifier {
 
       _hasLoaded = true;
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.debug('Error loading integrations from backend: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _sessionGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<bool> saveConnection(String appKey, Map<String, dynamic> details) async {
+    final generation = _sessionGeneration;
     try {
       final success = await saveIntegration(appKey, details);
+      if (generation != _sessionGeneration) return false;
       if (success) {
         _integrations[appKey] = true;
         notifyListeners();
@@ -53,8 +61,10 @@ class IntegrationProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteConnection(String appKey) async {
+    final generation = _sessionGeneration;
     try {
       final success = await deleteIntegration(appKey);
+      if (generation != _sessionGeneration) return false;
       if (success) {
         _integrations[appKey] = false;
         notifyListeners();
@@ -75,5 +85,15 @@ class IntegrationProvider extends ChangeNotifier {
       case IntegrationApp.gmail:
         return _integrations['gmail'] ?? false;
     }
+  }
+
+  void clearUserData() {
+    _sessionGeneration++;
+    _integrations.clear();
+    _isLoading = false;
+    _hasLoaded = false;
+    SharedPreferencesUtil().saveBool('google_calendar_connected', false);
+    SharedPreferencesUtil().saveBool('gmail_connected', false);
+    notifyListeners();
   }
 }

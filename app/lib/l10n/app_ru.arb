@@ -1,5 +1,6 @@
 {
     "@@locale": "ru",
+    "sessionExpiredSignInAgain": "Сеанс истёк — войдите снова.",
     "appTitle": "Omi",
     "conversationTab": "Разговор",
     "transcriptTab": "Расшифровка",
@@ -3089,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Вы используете собственный сервис транскрипции. Синхронизация этих записей расшифрует их на серверах Omi, и они будут засчитаны в лимит транскрипции вашего тарифа.",
     "transcribeLaterTitle": "Расшифровать позже",
     "transcribeLaterDescription": "Записывайте звук сейчас и расшифровывайте его по запросу, а не в реальном времени. Записи сохраняются на вашем телефоне, после чего вы загружаете их, чтобы создать беседы.",
-    "transcribeLaterNote": "Пока работает с устройствами Omi. Звук остаётся на вашем телефоне, пока вы сами не решите его загрузить.",
+    "transcribeLaterNote": "Пока работает с устройствами Omi и Limitless. Звук остаётся на вашем телефоне, пока вы сами не решите его загрузить.",
     "transcribeLaterStorageFull": "На телефоне заканчивается память, поэтому запись приостановлена. Освободите место или загрузите записи — и она возобновится автоматически.",
     "unmute": "Включить звук",
     "newRecording": "Новая запись",
@@ -3138,5 +3139,44 @@
     "deviceOnboardingIntroSubtitle": "Быстрый практический обзор всего, что умеет ваш Omi.",
     "deviceOnboardingIntroDuration": "Около 1 минуты",
     "jumpToLatestMessage": "Перейти к последнему сообщению",
-    "latest": "Последнее"
+    "latest": "Последнее",
+    "flashFirmware": "Установить прошивку",
+    "pendantRecordingTitle": "Запись на кулоне",
+    "pendantRecordingNote": "Ваш кулон записывает самостоятельно. Записи синхронизируются с телефоном, пока приложение открыто.",
+    "pendantSyncingRecordings": "Синхронизация записей с вашего кулона…",
+    "pendantMinutesStored": "~{minutes} мин сохранено",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Память кулона почти заполнена — держите приложение открытым для синхронизации.",
+    "connectRayBanMeta": "Подключить Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Используйте очки Ray-Ban Meta в качестве устройства записи Omi для разговоров и визуального контекста. Omi откроет приложение Meta AI, чтобы связать ваши очки.",
+    "raybanMetaOpenMetaAI": "Подключить через Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завершите подключение в приложении Meta AI, а затем вернитесь сюда.",
+    "raybanMetaCheckAgain": "Проверить снова",
+    "raybanMetaAllowCamera": "Разрешить камеру на очках",
+    "raybanMetaCameraExplanation": "Omi использует камеру ваших очков, чтобы добавлять фотографии в ваши разговоры. Вы можете пропустить этот шаг и использовать только аудио.",
+    "raybanMetaSkipForNow": "Пропустить пока",
+    "raybanMetaAudioOnlyTitle": "Режим Ray-Ban Meta только со звуком",
+    "raybanMetaAudioOnlyExplanation": "Эта версия Omi может использовать микрофон ваших очков через Bluetooth. Для съёмки фотографий требуется версия Omi для разработчиков Meta.",
+    "raybanMetaMusicPauseNote": "Музыка на вашем телефоне ставится на паузу, пока используется микрофон очков.",
+    "raybanMetaContinue": "Продолжить",
+    "raybanMetaCapturePhoto": "Сделать фото",
+    "raybanMetaPhotoRequested": "Фото запрошено — оно появится в вашем разговоре.",
+    "raybanMetaMicrophoneReady": "Микрофон готов",
+    "raybanMetaImageCaptureReady": "Съёмка изображений готова",
+    "raybanMetaImageCaptureUnavailable": "Недоступно в режиме только со звуком",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Ошибка подключения к Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

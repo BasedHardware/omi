@@ -12,45 +12,79 @@ GREEN after removing line 273.
 
 import asyncio
 import os
-import sys
-import unittest
+from pathlib import Path
+from unittest import TestCase
 from unittest.mock import MagicMock
 
-os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-os.environ.setdefault("PARAKEET_DEVICE", "cpu")
-os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
-os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
+import pytest
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules.setdefault("torch", _torch)
+from testing.import_isolation import load_module_fresh, stub_modules
 
-for _mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
-    sys.modules.setdefault(_mod, MagicMock())
-for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
-    sys.modules.setdefault(_mod, MagicMock())
+pytestmark = pytest.mark.slow
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
-
-from batch_engine import BatchEngine
-from gpu_worker import GPUWorker, WorkItem, WorkType
+_PARAKEET_DIR = Path(__file__).resolve().parents[2] / "parakeet"
 
 GPU_DELAY_SEC = 0.3
 REQUEST_INTERVAL_SEC = 0.02
 NUM_REQUESTS = 12
 MAX_BATCH_SIZE = 32
 
+# Populated by the ``_load_parakeet`` autouse fixture below. Defined as module
+# globals so the unittest.TestCase body can reference them exactly as before.
+BatchEngine = None
+GPUWorker = None
+WorkItem = None
+WorkType = None
 
-class TestFlushPendingBatch1Regression(unittest.TestCase):
+
+def _make_torch_fake() -> MagicMock:
+    torch = MagicMock()
+    torch.cuda.is_available.return_value = False
+    torch.cuda.memory_allocated.return_value = 0
+    props = MagicMock()
+    props.total_memory = 16 * 1024**3
+    torch.cuda.get_device_properties.return_value = props
+    torch.cuda.empty_cache = MagicMock()
+    torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+    torch.inference_mode = lambda: (lambda fn: fn)
+    torch.compile = lambda m: m
+    torch.backends.cudnn = MagicMock()
+    return torch
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _load_parakeet():
+    """Load batch_engine + gpu_worker fresh against stubbed torch/nemo/pyannote.
+
+    gpu_worker.py does ``import torch`` at module top level, and torch is not
+    installed in CI, so the fake must be active before the module is exec'd.
+    This is the sanctioned Tier-2 "fake must precede import" case: see
+    backend/docs/test_isolation.md and testing.import_isolation.load_module_fresh.
+    """
+    global BatchEngine, GPUWorker, WorkItem, WorkType
+
+    os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+    os.environ.setdefault("PARAKEET_DEVICE", "cpu")
+    os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
+    os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
+
+    fakes = {"torch": _make_torch_fake()}
+    for mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
+        fakes[mod] = MagicMock()
+    for mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
+        fakes[mod] = MagicMock()
+
+    with stub_modules(fakes):
+        gpu_worker = load_module_fresh("gpu_worker", str(_PARAKEET_DIR / "gpu_worker.py"))
+        batch_engine = load_module_fresh("batch_engine", str(_PARAKEET_DIR / "batch_engine.py"))
+        BatchEngine = batch_engine.BatchEngine
+        GPUWorker = gpu_worker.GPUWorker
+        WorkItem = gpu_worker.WorkItem
+        WorkType = gpu_worker.WorkType
+        yield
+
+
+class TestFlushPendingBatch1Regression(TestCase):
     """
     Simulates production traffic: requests arrive every 20ms, GPU takes 300ms
     per batch. With a 2ms flush timer and the early _flush_pending reset,
@@ -131,4 +165,6 @@ class TestFlushPendingBatch1Regression(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    import unittest
+
     unittest.main()

@@ -26,6 +26,7 @@ import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -33,7 +34,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 
 class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key});
+  const OnboardingWrapper({super.key, this.forceAuthPage = false});
+
+  final bool forceAuthPage;
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -55,7 +58,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kCompletePage = 11; // "You're all set" completion screen
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  static const List<int> kHiddenHeaderPages = [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+  ];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -67,7 +84,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _speechProfileProvider = SpeechProfileProvider();
+    if (!widget.forceAuthPage) {
+      _speechProfileProvider = SpeechProfileProvider();
+    }
     _controller = TabController(
       length: 12,
       vsync: this,
@@ -80,18 +99,25 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError(
+          (_) {},
+        );
       }
     });
 
     // Initialize animation controllers
-    _backgroundAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _backgroundAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
 
     // Initialize animations
-    _backgroundFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
+    _backgroundFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _backgroundAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     // Start initial animations
     _backgroundAnimationController.forward();
@@ -101,7 +127,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       //   context.read<OnboardingProvider>().updatePermissions();
       // }
 
-      if (AuthService.instance.isSignedIn()) {
+      if (!widget.forceAuthPage && AuthService.instance.isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -137,7 +163,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       final granted = await arePermissionsGranted();
       if (!granted) {
         if (context.mounted) {
-          routeToPage(context, const PermissionsInterstitialPage(), replace: true);
+          routeToPage(
+            context,
+            const PermissionsInterstitialPage(),
+            replace: true,
+          );
         }
         return;
       }
@@ -271,7 +301,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (!mounted) return;
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
+          // Refresh subscription on sign-in: AppShell only fetches it on mount,
+          // so an in-session re-login would otherwise leave it null until the
+          // Plan & Usage page is opened (missing Pro badge).
+          context.read<UsageProvider>().fetchSubscription();
+          IntercomManager.instance.loginIdentifiedUser(
+            SharedPreferencesUtil().uid,
+          );
           // Consent is checked first regardless of server-side onboarding
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
@@ -288,7 +324,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onAgree: () async {
           if (!mounted) return;
           SharedPreferencesUtil().aiConsentGiven = true;
-          PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'AI Consent',
+          );
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
           // session and we don't want to re-run it.
@@ -313,47 +351,63 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       PrimaryLanguageWidget(
         goNext: () {
           _goNext(); // Go to Found Omi page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Primary Language',
+          );
         },
       ),
       FoundOmiWidget(
         goNext: () {
           _goNext(); // Go to Permissions page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Acquisition Source');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Acquisition Source',
+          );
         },
       ),
       PermissionsWidget(
         goNext: () {
           _goNext(); // Go to User Review page
-          PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Permissions',
+          );
         },
       ),
       UserReviewPage(
         goNext: () {
           // Go directly to Speech Profile (skip device steps - we use phone mic now)
           _controller!.animateTo(kSpeechProfilePage);
-          PlatformManager.instance.analytics.onboardingStepCompleted('User Review');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'User Review',
+          );
         },
       ),
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      ChangeNotifierProvider.value(
-        value: _speechProfileProvider!,
-        child: SpeechProfileWidget(
-          goNext: () {
-            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
-            _controller!.animateTo(kKnowledgeGraphPage);
-          },
-          onSkip: () {
-            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
-            _controller!.animateTo(kKnowledgeGraphPage);
-          },
-        ),
-      ),
+      widget.forceAuthPage
+          ? const SizedBox.shrink()
+          : ChangeNotifierProvider.value(
+              value: _speechProfileProvider!,
+              child: SpeechProfileWidget(
+                goNext: () {
+                  PlatformManager.instance.analytics.onboardingStepCompleted(
+                    'Speech Profile',
+                  );
+                  _controller!.animateTo(kKnowledgeGraphPage);
+                },
+                onSkip: () {
+                  PlatformManager.instance.analytics.onboardingStepCompleted(
+                    'Speech Profile Skipped',
+                  );
+                  _controller!.animateTo(kKnowledgeGraphPage);
+                },
+              ),
+            ),
       OnboardingKnowledgeGraphStep(
         onContinue: () {
-          PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
+          PlatformManager.instance.analytics.onboardingStepCompleted(
+            'Knowledge Graph',
+          );
           _controller!.animateTo(kCompletePage);
         },
       ),
@@ -421,9 +475,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               image: DecorationImage(
                                 image: ResizeImage(
                                   AssetImage(_currentBackgroundImage),
-                                  width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
+                                  width: (MediaQuery.of(context).size.width *
+                                          MediaQuery.of(
+                                            context,
+                                          ).devicePixelRatio)
                                       .round(),
-                                  height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
+                                  height: (MediaQuery.of(context).size.height *
+                                          MediaQuery.of(
+                                            context,
+                                          ).devicePixelRatio)
                                       .round(),
                                 ),
                                 fit: BoxFit.cover,
@@ -465,8 +525,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               width: 36,
                               height: 36,
                               margin: const EdgeInsets.all(8),
-                              decoration:
-                                  BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.3),
+                                shape: BoxShape.circle,
+                              ),
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
@@ -477,7 +539,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                     _controller!.animateTo(_controller!.index - 1);
                                   }
                                 },
-                                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                                icon: FaIcon(
+                                  FontAwesomeIcons.arrowLeft,
+                                  size: 16.0,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -506,10 +572,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               kHiddenHeaderPages.contains(_controller?.index)
                                   ? const SizedBox.shrink()
                                   : Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
                                       child: Text(
                                         context.l10n.personalGrowthJourney,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade300,
+                                          fontSize: 24,
+                                        ),
                                         textAlign: TextAlign.center,
                                       ),
                                     ),
@@ -518,14 +589,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                     (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
                                         ? max(
                                             MediaQuery.of(context).size.height - 500 - 10,
-                                            maxHeightWithTextScale(context, _controller!.index),
+                                            maxHeightWithTextScale(
+                                              context,
+                                              _controller!.index,
+                                            ),
                                           )
                                         : max(
                                             MediaQuery.of(context).size.height - 500 - 30,
-                                            maxHeightWithTextScale(context, _controller!.index),
+                                            maxHeightWithTextScale(
+                                              context,
+                                              _controller!.index,
+                                            ),
                                           ),
                                 child: Padding(
-                                  padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
+                                  padding: EdgeInsets.only(
+                                    bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64,
+                                  ),
                                   child: TabBarView(
                                     controller: _controller,
                                     physics: const NeverScrollableScrollPhysics(),
@@ -556,10 +635,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                       _speechProfileProvider?.close();
                                       _controller!.animateTo(kUserReviewPage);
                                     } else if (_controller!.index > kNamePage) {
-                                      _controller!.animateTo(_controller!.index - 1);
+                                      _controller!.animateTo(
+                                        _controller!.index - 1,
+                                      );
                                     }
                                   },
-                                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                                  icon: FaIcon(
+                                    FontAwesomeIcons.arrowLeft,
+                                    size: 16.0,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -572,7 +657,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               children: List.generate(7, (index) {
                                 int pageIndex = index + 2; // Name=2, Lang=3, ..., Speech=8
                                 return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 4.0,
+                                  ),
                                   width: pageIndex == _controller!.index ? 12.0 : 8.0,
                                   height: pageIndex == _controller!.index ? 12.0 : 8.0,
                                   decoration: BoxDecoration(

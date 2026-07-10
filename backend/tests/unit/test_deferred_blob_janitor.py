@@ -14,6 +14,8 @@ import os
 import threading
 import time
 
+import pytest
+
 from utils.other.deferred_delete import DeferredDeleter
 
 
@@ -88,6 +90,7 @@ class TestDeferredDeleterBehavior:
         assert d._thread is first_thread
         assert _wait_for(lambda: d.pending_count() == 0)
 
+    @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
     def test_janitor_restarts_if_killed_by_base_exception(self):
         """SystemExit/MemoryError bypass the except-Exception catch and kill the
         thread; the next schedule() must notice and start a fresh janitor."""
@@ -121,7 +124,8 @@ class TestSleepPatternRemoved:
             assert 'time.sleep(480)' not in _read_source(rel), f'{rel} still parks threads as deletion timers'
 
     def test_sync_uses_scheduler(self):
-        assert 'schedule_syncing_temporal_file_deletion(path)' in _read_source('routers/sync.py')
+        pipeline_src = _read_source('utils/sync/pipeline.py')
+        assert 'schedule_syncing_temporal_file_deletion(path)' in pipeline_src
 
     def test_chat_uses_scheduler_at_all_three_sites(self):
         assert _read_source('utils/chat.py').count('schedule_syncing_temporal_file_deletion(path)') == 3

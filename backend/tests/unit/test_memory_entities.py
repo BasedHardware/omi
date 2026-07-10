@@ -1,28 +1,8 @@
-import sys
-import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
-google_stub = sys.modules.setdefault('google', types.ModuleType('google'))
-cloud_stub = sys.modules.setdefault('google.cloud', types.ModuleType('google.cloud'))
-firestore_stub = sys.modules.setdefault('google.cloud.firestore', types.ModuleType('google.cloud.firestore'))
-firestore_v1_stub = sys.modules.setdefault('google.cloud.firestore_v1', types.ModuleType('google.cloud.firestore_v1'))
-firestore_v1_stub.FieldFilter = MagicMock
-firestore_v1_stub.transactional = lambda func: func
-cloud_stub.firestore = firestore_stub
-google_stub.cloud = cloud_stub
-
-if 'database._client' not in sys.modules:
-    client_stub = types.ModuleType('database._client')
-    client_stub.db = MagicMock()
-    client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
-    sys.modules['database._client'] = client_stub
-else:
-    sys.modules['database._client'].db = getattr(sys.modules['database._client'], 'db', MagicMock())
-
-from database import entities, memory_ledger  # noqa: E402
-from models.memories import SubjectAttribution  # noqa: E402
-from utils.conversations.subjects import infer_subject_from_segments  # noqa: E402
+from database import entities, memory_ledger
+from models.memories import SubjectAttribution
+from utils.conversations.subjects import infer_subject_from_segments
 
 
 def test_infer_subject_from_user_only_segments():

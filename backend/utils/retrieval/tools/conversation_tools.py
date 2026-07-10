@@ -2,24 +2,21 @@
 Tools for accessing user conversations.
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
-from zoneinfo import ZoneInfo
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
-from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
 from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
-from utils.llm.clients import embeddings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,6 +29,14 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
 # A wide date range ("analyze my last 30 days") can match hundreds of conversations. Feeding all of
 # them to the chat model floods its context, so it freezes or refuses with "that's quite a bit of
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
@@ -39,7 +44,7 @@ MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
 
 
-def _cap_conversations_for_llm(conversations: list):
+def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
     """Keep at most ``MAX_CONVERSATIONS_FOR_LLM`` conversations for the chat model.
 
     The DB returns conversations newest-first, so this keeps the most recent ones. Returns
@@ -80,7 +85,7 @@ def get_conversations_tool(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve user conversations with complete details including transcripts, summaries, and metadata.
@@ -101,33 +106,20 @@ def get_conversations_tool(
     - By default (max_transcript_segments=0), no transcript segments are included
     - Only increase max_transcript_segments when user explicitly needs transcript content
     - Use reasonable limits (10-50 segments) for most queries - this usually covers key parts
-    - Set max_transcript_segments=100 only when user needs extensive transcript details
-    - AVOID max_transcript_segments=-1 (full transcript) unless absolutely critical:
-      * User explicitly asks for "full transcript" or "complete unabridged transcript"
-      * User needs to analyze the entire conversation word-by-word
-      * WARNING: -1 can return thousands of segments and flood context
-    - Prefer using conversation summaries/overviews when possible instead of full transcripts
-    - Maximum allowed is 1000 segments to prevent context overflow
-
-    To include transcripts efficiently:
-    - Start with max_transcript_segments=20 for basic transcript needs
-    - Use max_transcript_segments=50 for detailed questions
-    - Only use max_transcript_segments=-1 as last resort when complete transcript is explicitly required
 
     Args:
         start_date: Filter conversations after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
         end_date: Filter conversations before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
-        limit: Number of conversations to retrieve (default: 20, max: 100)
-        offset: Pagination offset (default: 0)
-        include_discarded: Include deleted conversations (default: False)
-        statuses: Filter by status, comma-separated (default: all)
-        max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, avoid -1 except when critical, max: 1000)
+        limit: Number of conversations to retrieve (default: 20, max: 5000)
+        offset: Pagination offset for retrieving additional conversations beyond the limit (default: 0)
+        include_discarded: Include discarded conversations (default: False)
+        statuses: Filter by processing status (default: "processing,completed")
+        max_transcript_segments: Limit transcript segments per conversation (default: 0=none, suggest 10-50, max: 1000, -1=full transcript)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
 
     Returns:
-        Formatted string with conversation details including title, overview, transcript, photos,
-        action items, events, and attendees.
+        Formatted string with conversations including transcripts, summaries, action items, events, and attendees.
     """
     logger.info(f"🔧 get_conversations_tool called with params:")
     logger.info(f"   start_date: {start_date}")
@@ -142,22 +134,20 @@ def get_conversations_tool(
     # print(f"   config: {config}")
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                logger.info(f"🔧 get_conversations_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ get_conversations_tool - config not found in context variable")
-            config = None
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info(f"🔧 get_conversations_tool - got config from context variable")
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ get_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -165,9 +155,6 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
-
-    # Get safety guard from config if available
-    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -202,12 +189,12 @@ def get_conversations_tool(
     limit = min(limit, 5000)
 
     # Parse statuses if provided
-    status_list = []
+    status_list: List[str] = []
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
     # Get conversations
-    conversations_data = conversations_db.get_conversations(
+    conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations(
         uid,
         limit=limit,
         offset=offset,
@@ -245,10 +232,10 @@ def get_conversations_tool(
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
-        people = []
+        people: List[Person] = []
         if include_transcript:
             # Get all person IDs from all conversations
-            all_person_ids = set()
+            all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -264,7 +251,7 @@ def get_conversations_tool(
             logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
-        conversations = []
+        conversations: List[Any] = []
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -285,9 +272,9 @@ def get_conversations_tool(
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Store conversations in config for citation tracking (as lightweight dicts)
-        conversations_collected = config['configurable'].get('conversations_collected', [])
+        conversations_collected = configurable.get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.dict()
+            conv_dict = conv.model_dump()
             # Remove heavy fields to reduce memory usage
             conv_dict.pop('transcript_segments', None)
             conv_dict.pop('photos', None)
@@ -303,7 +290,7 @@ def get_conversations_tool(
             use_transcript=include_transcript,
             include_timestamps=include_timestamps,
             people=people,
-            tz=notification_db.get_user_time_zone(uid),
+            tz=notification_db.get_user_time_zone(uid) or 'UTC',
         )
         result = _bounded_result(result, total_found, results_truncated)
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
@@ -327,7 +314,7 @@ def search_conversations_tool(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Search conversations using hybrid keyword + semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
@@ -380,22 +367,20 @@ def search_conversations_tool(
     logger.info(f"🔧 search_conversations_tool called with query: {query}")
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                logger.info(f"🔧 search_conversations_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ search_conversations_tool - config not found in context variable")
-            config = None
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info(f"🔧 search_conversations_tool - got config from context variable")
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -403,9 +388,6 @@ def search_conversations_tool(
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
-
-    # Get safety guard from config if available
-    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -467,7 +449,7 @@ def search_conversations_tool(
             return msg
 
         # Get full conversation data
-        conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+        conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations_by_id(uid, conversation_ids)
 
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
@@ -481,10 +463,10 @@ def search_conversations_tool(
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
         # Only load people if transcripts will be included
-        people = []
+        people: List[Person] = []
         if include_transcript:
             # Get all person IDs
-            all_person_ids = set()
+            all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -500,7 +482,7 @@ def search_conversations_tool(
             logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
-        conversations = []
+        conversations: List[Any] = []
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -521,9 +503,9 @@ def search_conversations_tool(
         logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Store conversations in config for citation tracking (as lightweight dicts)
-        conversations_collected = config['configurable'].get('conversations_collected', [])
+        conversations_collected = configurable.get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.dict()
+            conv_dict = conv.model_dump()
             # Remove heavy fields to reduce memory usage
             conv_dict.pop('transcript_segments', None)
             conv_dict.pop('photos', None)
@@ -540,7 +522,7 @@ def search_conversations_tool(
             use_transcript=include_transcript,
             include_timestamps=include_timestamps,
             people=people,
-            tz=notification_db.get_user_time_zone(uid),
+            tz=notification_db.get_user_time_zone(uid) or 'UTC',
         )
 
         logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")

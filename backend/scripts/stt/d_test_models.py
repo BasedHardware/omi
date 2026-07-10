@@ -1,29 +1,35 @@
 import os
+from typing import Any, List, cast
 
-import torch
+import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 from dotenv import load_dotenv
 
-from scripts.c_generate_models import get_speaker_embedding
+from scripts.c_generate_models import get_speaker_embedding  # type: ignore[reportMissingImports, reportUnknownVariableType]  # stale import path
+
+# torch ships without type stubs; alias as Any to avoid cascading unknown-member warnings.
+_torch: Any = cast(Any, torch)
+# `get_speaker_embedding` comes from a module without resolvable type info.
+_get_speaker_embedding: Any = cast(Any, get_speaker_embedding)
 
 load_dotenv('../.env')
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../' + (os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or '')
 
 
-def cosine_similarity(embedding1, embedding2):
-    return torch.nn.functional.cosine_similarity(embedding1, embedding2, dim=0).item()
+def cosine_similarity(embedding1: Any, embedding2: Any) -> Any:
+    return _torch.nn.functional.cosine_similarity(embedding1, embedding2, dim=0).item()
 
 
-def verify_speaker(audio_path, reference_embedding_path='reference_embedding.pt'):
+def verify_speaker(audio_path: str, reference_embedding_path: str = 'reference_embedding.pt') -> Any:
     if '.wav' not in audio_path:
         return 0
-    reference_embedding = torch.load(reference_embedding_path)
-    audio_embedding = get_speaker_embedding(audio_path)
+    reference_embedding = _torch.load(reference_embedding_path)
+    audio_embedding = _get_speaker_embedding(audio_path)
     return cosine_similarity(audio_embedding, reference_embedding)
 
 
-def test_results(model_path: str = 'reference_embedding.pt'):
-    result = []
-    scores = []
+def test_results(model_path: str = 'reference_embedding.pt') -> List[Any]:
+    result: List[Any] = []
+    scores: List[Any] = []
     samples_path = 'data/training/cleaned/'
     for file in os.listdir(samples_path):
         score = verify_speaker(samples_path + file, reference_embedding_path=model_path)

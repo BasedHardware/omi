@@ -1,17 +1,4 @@
-import os
-import sys
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-from tests.unit.memory_import_isolation import ensure_non_active_routes_firestore_transactional_stub
-
-sys.modules["database._client"] = MagicMock()
-ensure_non_active_routes_firestore_transactional_stub()
 
 from database.memory_non_active_routes import (
     NonActiveRoute,

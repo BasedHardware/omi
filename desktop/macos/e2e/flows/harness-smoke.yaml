@@ -1,7 +1,26 @@
 version: 1
 name: harness-smoke
+tier: 1
 description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
+  - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
+  - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
+  - desktop/macos/Desktop/Sources/ClientDeviceService.swift
+  - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceDemoView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceShortcutStepView.swift
+  - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
+  - desktop/macos/Desktop/Sources/ViewExporter.swift
+  - desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
 preconditions:
   - automation_bridge_ready
 
