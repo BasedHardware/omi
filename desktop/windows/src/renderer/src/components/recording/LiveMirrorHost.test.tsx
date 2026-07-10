@@ -52,7 +52,7 @@ describe('LiveMirrorHost', () => {
 
   it('ignores non-live capture events', () => {
     render(<LiveMirrorHost />)
-    emit({ type: 'vad-status', mode: 'gated' })
+    emit({ type: 'capture-window-restarted' })
     expect(liveConversation.applyRemoteOp).not.toHaveBeenCalled()
   })
 })

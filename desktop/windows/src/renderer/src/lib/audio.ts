@@ -2,17 +2,10 @@
 // lib/ptt/capture.ts and conversation recording in omiListenClient.ts), so
 // format subtleties and device policy exist exactly once.
 
-/** Convert a Web Audio Float32 buffer to 16-bit little-endian PCM. The
- *  asymmetric scaling (0x8000 negative / 0x7fff positive) matches the int16
- *  range exactly — keep it identical everywhere or lanes drift audibly. */
-export function floatTo16BitPCM(f32: Float32Array): Int16Array<ArrayBuffer> {
-  const i16 = new Int16Array(f32.length)
-  for (let i = 0; i < f32.length; i++) {
-    const s = Math.max(-1, Math.min(1, f32[i]))
-    i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-  }
-  return i16
-}
+// floatTo16BitPCM's single implementation lives in ./capture/pcmCore (the DOM-free,
+// node-testable home of the PCM primitives). Re-exported here so mic-capture
+// consumers keep importing it from this module and the two lanes can't drift.
+export { floatTo16BitPCM } from './capture/pcmCore'
 
 // Virtual/loopback input devices (VB-Audio Cable, VoiceMeeter, …) output pure
 // silence unless something routes audio into them. If Windows' DEFAULT capture

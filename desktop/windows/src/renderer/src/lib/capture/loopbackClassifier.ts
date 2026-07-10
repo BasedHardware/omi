@@ -6,13 +6,14 @@
 // so filtering out music/media there is low-value. This module is the seam that
 // keeps that decision reversible.
 //
-// PHASE 5 UPGRADE PATH (ambient auto-capture): when the app starts auto-capturing
-// system audio without an explicit session, we DO need to skip music/video/media so
-// we don't transcribe a movie. Swap `passThroughClassifier` for a MediaPipe Audio
-// Classifier (YAMNet) implementation of `SpeechMusicClassifier` — load the .tflite
-// as a /vad/-style staged asset, run it on the same 16kHz windows, and map its
-// AudioSet labels to speech/music/unknown. The gate already understands the verdict
-// via `verdictIsCapturable`, so only this file changes.
+// NOT YET WIRED: nothing calls classify() today — this file only defines the seam.
+// PHASE 5 (meeting detection / ambient loopback, landing this run) wires classify()
+// on ~1s windows while the VAD gate is open: swap `passThroughClassifier` for a
+// MediaPipe Audio Classifier (YAMNet) implementation of `SpeechMusicClassifier` —
+// load the self-hosted yamnet.tflite as a /vad/-style staged asset, run it on the
+// same 16kHz windows, map its AudioSet labels to speech/music/unknown, and skip a
+// confident `music` verdict via `verdictIsCapturable` so ambient auto-capture never
+// transcribes a movie.
 
 export type SpeechMusicVerdict = 'speech' | 'music' | 'unknown'
 

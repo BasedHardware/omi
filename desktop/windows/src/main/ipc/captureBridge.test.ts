@@ -17,7 +17,6 @@ const owned: CaptureEvent[] = [
 
 const broadcast: CaptureEvent[] = [
   { type: 'live', op: { op: 'reset' } },
-  { type: 'vad-status', mode: 'fallback', reason: 'x' },
   { type: 'capture-window-restarted' }
 ]
 

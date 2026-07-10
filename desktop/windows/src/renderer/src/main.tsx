@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/electron/renderer'
 import App from './App'
 import { SandboxBadge } from './components/SandboxBadge'
 import { scrubEventPii } from '../../shared/sentryScrub'
+import { isSecondaryWindow } from './lib/windowRole'
 
 // Renderer-side crash reporting. Only initializes when a DSN is configured, so
 // dev builds (and any build without the env var) stay entirely offline. Emails
@@ -22,10 +23,7 @@ if (SENTRY_DSN) {
 // insight-toast, hidden capture) share this bundle and would otherwise fire the
 // same marks and race the bench — the capture window in particular first-paints
 // almost immediately. Gate every perf mark on being the primary window.
-const IS_PRIMARY_WINDOW =
-  !window.location.hash.startsWith('#/overlay') &&
-  !window.location.hash.startsWith('#/insight-toast') &&
-  !window.location.hash.startsWith('#/capture')
+const IS_PRIMARY_WINDOW = !isSecondaryWindow()
 
 // Startup-phase mark: all module imports above are now evaluated (including the
 // App graph, which dynamically — not statically — pulls in @huggingface/

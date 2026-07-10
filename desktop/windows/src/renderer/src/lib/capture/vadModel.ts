@@ -8,7 +8,7 @@
 // NEVER released — onnxruntime-web leaks native memory when a session is recreated,
 // so a per-session create/destroy would grow RSS unbounded. Per-capture-session
 // state (the model's recurrent [2,1,128] tensor) is external and cheap; each
-// detector owns its own and resets it at a session boundary. Per-run input/output/
+// detector owns its own, created fresh (zeroed) per session. Per-run input/output/
 // old-state tensors ARE disposed so wasm-heap use stays flat across a long soak.
 //
 // VENDORED: the run/state shape (inputs input|state|sr → outputs output|stateN,
@@ -65,8 +65,6 @@ function zeroState(): ort.Tensor {
 export type SileroDetector = {
   /** Run one 512-sample frame → P(speech) in [0,1]. Rejects if the model errors. */
   process: (frame: Float32Array) => Promise<number>
-  /** Reset the recurrent state at a session boundary. */
-  reset: () => void
 }
 
 /** Create a detector bound to the shared (once-per-process) session. Awaits the
@@ -77,11 +75,6 @@ export async function createSileroDetector(): Promise<SileroDetector> {
   const sr = new ort.Tensor('int64', [16000n])
 
   return {
-    reset: (): void => {
-      const prev = state
-      state = zeroState()
-      dispose(prev)
-    },
     process: (frame: Float32Array): Promise<number> => {
       // The whole read-run-write is one critical section on the global lock, so a
       // detector's state can't be read by another run mid-update.

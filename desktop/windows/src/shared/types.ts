@@ -119,16 +119,12 @@ export type ListenMessage =
 // decouple — the listenFeed channel is already sender-agnostic, keyed by
 // sessionId. Channels: 'omi-capture:cmd' / 'omi-capture:event'.
 
-/** Whether an audio lane runs its PCM through the VAD gate ('vad') or streams
- *  every frame ('none'). Mic + system conversation lanes gate; realtime/PTT do not. */
-export type CaptureGating = 'vad' | 'none'
-
 /** A command sent from a UI window (or main) to the capture window. */
 export type CaptureCommand =
-  // Continuous-conversation audio lane (mic or system), gated or not. sessionId
+  // Continuous-conversation audio lane (mic or system). Always VAD-gated. sessionId
   // is the same id the UI window opened its listen session under, so the capture
   // window's feed and the UI window's transcript stream share it.
-  | { type: 'audio-start'; sessionId: string; source: ListenSource; gating: CaptureGating }
+  | { type: 'audio-start'; sessionId: string; source: ListenSource }
   | { type: 'audio-stop'; sessionId: string }
   // Finalize the current always-on live-mic conversation now ("Save now").
   | { type: 'live-finalize' }
@@ -145,10 +141,11 @@ export type CaptureCommand =
   // `sourceId` is the user-picked capture source; the capture window falls back to
   // the primary screen when it's absent.
   | { type: 'screen-view'; active: boolean; sourceId?: string }
-  // The main window's auth transitioned (sign-in/out). `signedIn` is the main
-  // window's current state; the capture window reloads itself if its own
-  // auth.currentUser disagrees, so its WS auth is always fresh.
-  | { type: 'auth-changed'; signedIn: boolean }
+  // The main window's auth transitioned (sign-in/out/account switch). `uid` is the
+  // main window's current user id (null when signed out); the capture window
+  // reloads itself if its own auth.currentUser disagrees, so its WS auth is always
+  // fresh even across an account switch.
+  | { type: 'auth-changed'; uid: string | null }
 
 /** A mutation to the shared live-conversation store, emitted by the capture
  *  window as it owns the always-on mic session. UI windows apply these via
@@ -175,8 +172,6 @@ export type CaptureEvent =
   | { type: 'ptt-error'; captureId: string; message: string }
   // ~30fps 32-bin waveform snapshots for the PTT visualizer (routed to the owner).
   | { type: 'ptt-levels'; captureId: string; bins: number[] }
-  // VAD gate mode telemetry (broadcast).
-  | { type: 'vad-status'; mode: 'gated' | 'fallback'; reason?: string }
   // The capture window was recreated/reloaded — UI windows re-issue their
   // standing commands (live-view, screen-view, an active PTT is abandoned).
   | { type: 'capture-window-restarted' }
@@ -281,11 +276,11 @@ export type OmiBridgeApi = {
   onCaptureCommand: (cb: (cmd: CaptureCommand, ownerId: number) => void) => () => void
   /** Capture window → main: emit an event. Main accepts it ONLY from the capture
    *  window (spoof guard) and routes it to `ownerId` (owned events) or broadcasts
-   *  it (live-store / vad-status / restart). Exposed to all windows but a no-op
+   *  it (live-store / restart). Exposed to all windows but a no-op
    *  from any window other than the capture one. */
   captureEmit: (event: CaptureEvent, ownerId?: number) => void
   /** Subscribe to events from the capture window (audio errors, live-store ops,
-   *  PTT chunks/levels, VAD status). Returns an unsubscribe fn. */
+   *  PTT chunks/levels). Returns an unsubscribe fn. */
   onCaptureEvent: (cb: (e: CaptureEvent) => void) => () => void
   /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
    *  the mic. When false, capture steers away from virtual/loopback default

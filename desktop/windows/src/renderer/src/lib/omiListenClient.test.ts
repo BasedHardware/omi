@@ -88,7 +88,6 @@ describe('startOmiListen', () => {
     expect(audioStart).toMatchObject({
       type: 'audio-start',
       source: 'mic',
-      gating: 'vad',
       sessionId: startArgs.sessionId
     })
   })

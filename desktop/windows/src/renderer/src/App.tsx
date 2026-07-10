@@ -28,15 +28,13 @@ import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
+import { isSecondaryWindow } from './lib/windowRole'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
 // must run only in the main window, so gate on the initial hash — set by main at
 // load time, before routing.
-const IS_SECONDARY_WINDOW =
-  window.location.hash.startsWith('#/overlay') ||
-  window.location.hash.startsWith('#/insight-toast') ||
-  window.location.hash.startsWith('#/capture')
+const IS_SECONDARY_WINDOW = isSecondaryWindow()
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -142,7 +140,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     const send = (): void =>
-      window.omi?.captureCommand?.({ type: 'auth-changed', signedIn: !!auth.currentUser })
+      window.omi?.captureCommand?.({ type: 'auth-changed', uid: auth.currentUser?.uid ?? null })
     const unsubAuth = onAuthStateChanged(auth, send)
     const unsubRestart = window.omi?.onCaptureEvent?.((ev) => {
       if (ev.type === 'capture-window-restarted') send()

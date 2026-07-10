@@ -1,10 +1,10 @@
 // Pure PCM primitives shared by the AudioWorklet capture path and its unit tests.
 // No Web Audio / DOM globals here so the logic is node-testable in isolation.
 
-/** Convert a Web Audio Float32 buffer to 16-bit little-endian PCM. BYTE-IDENTICAL
- *  to lib/audio.ts floatTo16BitPCM — the asymmetric scaling (0x8000 negative /
- *  0x7fff positive) matches the int16 range exactly. Keep the two in lockstep or
- *  the worklet lane drifts audibly from the ScriptProcessor lane. */
+/** Convert a Web Audio Float32 buffer to 16-bit little-endian PCM. THE single
+ *  implementation — lib/audio.ts re-exports this one, so the ScriptProcessor and
+ *  AudioWorklet lanes can never drift. The asymmetric scaling (0x8000 negative /
+ *  0x7fff positive) matches the int16 range exactly. */
 export function floatTo16BitPCM(f32: Float32Array): Int16Array {
   const i16 = new Int16Array(f32.length)
   for (let i = 0; i < f32.length; i++) {

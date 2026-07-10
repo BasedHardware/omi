@@ -54,13 +54,6 @@ export type PttCaptureOptions = {
   backfillMs?: number
 }
 
-/** Acquire the mic. Test harnesses (OMI_ALLOW_VIRTUAL_MIC=1) feed a VB-Cable as
- *  the input, so skip the virtual-device steering acquireMicStream applies. */
-async function acquireMic(): Promise<MediaStream> {
-  if (window.omi?.allowVirtualMic) return navigator.mediaDevices.getUserMedia({ audio: true })
-  return acquireMicStream()
-}
-
 /** One live mic graph: stream → source → { analyser, processor }. The processor
  *  converts to Int16 once and fans out to the pre-roll ring + attached captures. */
 type MicGraph = {
@@ -77,7 +70,7 @@ type MicGraph = {
 /** `trackRing: false` for ephemeral (cold) graphs — nothing ever reads their
  *  pre-roll, so skip the per-chunk ring bookkeeping. */
 async function createGraph(trackRing: boolean): Promise<MicGraph> {
-  const stream = await acquireMic()
+  const stream = await acquireMicStream()
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
   const source = ctx.createMediaStreamSource(stream)
 

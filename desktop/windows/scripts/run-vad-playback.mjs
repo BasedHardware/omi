@@ -28,6 +28,12 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURES = path.join(root, 'test', 'fixtures', 'audio')
 const SAMPLE_RATE = 16000
+const NO_BUILD = process.argv.includes('--no-build')
+
+// The default playback+recording device indices captured before we switch to the
+// virtual cable, so the run restores them on exit. Null when nothing needs undoing
+// (e.g. this machine's defaults are already the cable — snapshot === target).
+let savedAudioDefaults = null
 
 function log(m) {
   console.log(`[vad-playback] ${m}`)
@@ -59,7 +65,21 @@ function ps(script) {
   })
 }
 
+/** The current default playback+recording device indices, or null if unreadable. */
+function snapshotDefaults() {
+  const out = ps(`
+    Import-Module AudioDeviceCmdlets
+    $p = Get-AudioDevice -Playback
+    $r = Get-AudioDevice -Recording
+    "$($p.Index),$($r.Index)"
+  `)
+  const line = ((out.stdout || '').trim().split(/\r?\n/).pop() || '').trim()
+  const m = line.match(/^(\d+),(\d+)$/)
+  return m ? { playIndex: Number(m[1]), recIndex: Number(m[2]) } : null
+}
+
 /** Route the virtual cable as default playback+capture via AudioDeviceCmdlets.
+ *  Snapshots the prior defaults first so the run can restore them on exit.
  *  Returns true on success; false (with printed manual steps) if unavailable. */
 function setupVirtualCable() {
   const probe = ps(
@@ -70,6 +90,8 @@ function setupVirtualCable() {
     printManual()
     return false
   }
+  // Capture the current defaults BEFORE switching, so the finally can put them back.
+  savedAudioDefaults = snapshotDefaults()
   const setup = ps(`
     Import-Module AudioDeviceCmdlets
     $play = Get-AudioDevice -List | Where-Object { $_.Type -eq 'Playback' -and $_.Name -match 'CABLE Input' } | Select-Object -First 1
@@ -77,15 +99,41 @@ function setupVirtualCable() {
     if (-not $play -or -not $rec) { 'missing'; exit }
     Set-AudioDevice -Index $play.Index | Out-Null
     Set-AudioDevice -Index $rec.Index  | Out-Null
-    'ok'
+    "ok $($play.Index) $($rec.Index)"
   `)
-  if ((setup.stdout || '').trim().split(/\r?\n/).pop() !== 'ok') {
+  const last = ((setup.stdout || '').trim().split(/\r?\n/).pop() || '').trim()
+  const m = last.match(/^ok (\d+) (\d+)$/)
+  if (!m) {
+    savedAudioDefaults = null
     log('VB-Audio Virtual Cable devices not found (CABLE Input / CABLE Output).')
     printManual()
     return false
   }
+  // If the machine was already defaulted to the cable (snapshot === target), there
+  // is nothing to undo — drop the snapshot so restore is skipped.
+  const target = { playIndex: Number(m[1]), recIndex: Number(m[2]) }
+  if (
+    savedAudioDefaults &&
+    savedAudioDefaults.playIndex === target.playIndex &&
+    savedAudioDefaults.recIndex === target.recIndex
+  ) {
+    savedAudioDefaults = null
+  }
   log('routed default playback→CABLE Input, default capture→CABLE Output')
   return true
+}
+
+/** Restore the default playback+recording devices captured before the switch.
+ *  No-op when nothing was changed (or the snapshot was unreadable). */
+function restoreAudioDefaults() {
+  if (!savedAudioDefaults) return
+  const { playIndex, recIndex } = savedAudioDefaults
+  ps(`
+    Import-Module AudioDeviceCmdlets
+    Set-AudioDevice -Index ${playIndex} | Out-Null
+    Set-AudioDevice -Index ${recIndex}  | Out-Null
+  `)
+  log(`restored default playback→#${playIndex}, capture→#${recIndex}`)
 }
 
 function printManual() {
@@ -132,9 +180,15 @@ async function main() {
   pcmToWav(silencePcm, silenceWav)
   pcmToWav(speechPcm, speechWav)
 
-  log('building app…')
-  execFileSync('npx', ['electron-vite', 'build'], { stdio: 'inherit', cwd: root, shell: true })
+  if (!NO_BUILD) {
+    log('building app…')
+    execFileSync('npx', ['electron-vite', 'build'], { stdio: 'inherit', cwd: root, shell: true })
+  }
   const mainEntry = path.join(root, 'out', 'main', 'index.js')
+  if (!fs.existsSync(mainEntry)) {
+    log(`built main not found (${mainEntry}) — run without --no-build`)
+    process.exit(2)
+  }
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omi-vadplay-ud-'))
   const app = await electron.launch({
@@ -222,6 +276,7 @@ async function main() {
     } catch {
       /* already closed */
     }
+    restoreAudioDefaults()
     fs.rmSync(userDataDir, { recursive: true, force: true })
     fs.rmSync(tmp, { recursive: true, force: true })
   }

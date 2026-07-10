@@ -1,10 +1,13 @@
-// Fixed-capacity rolling Int16 buffer — the pre-roll ring, generalized out of
-// lib/ptt/capture.ts (createGraph's `ring`/`ringSamples` + backfillFromRing) so
-// PTT and the VAD pre-speech pad can share one implementation.
+// Fixed-capacity rolling Int16 buffer used by the VAD pre-speech pad (vadGate.ts).
+// Its eviction/backfill logic was generalized out of PTT's inline ring in
+// pttGraph.ts, but PTT still keeps its OWN ring: PTT needs a non-destructive
+// backfill (read the pre-roll without emptying it), and PcmRing.drain() empties on
+// read. Adopting PcmRing there would need a peek() variant — deferred, so the
+// migration stays behavior-preserving.
 //
-// Eviction matches the PTT ring exactly: a whole leading chunk is dropped only
-// when doing so still leaves at least `capacity` samples retained, so the ring
-// holds between `capacity` and `capacity + oldest-chunk` samples.
+// Eviction matches PTT's ring exactly: a whole leading chunk is dropped only when
+// doing so still leaves at least `capacity` samples retained, so the ring holds
+// between `capacity` and `capacity + oldest-chunk` samples.
 
 export class PcmRing {
   private chunks: Int16Array[] = []

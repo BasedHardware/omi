@@ -23,7 +23,11 @@ export function CaptureApp(): React.JSX.Element {
   useEffect(() => {
     return window.omi?.onCaptureCommand?.((cmd) => {
       if (cmd.type !== 'auth-changed') return
-      if (!!auth.currentUser === cmd.signedIn) {
+      // Compare the actual uid, not just signed-in-ness: an account SWITCH
+      // (user A → user B) leaves both sides "signed in" but must still reload so
+      // this window's listen-WS auth points at the new user.
+      const localUid = auth.currentUser?.uid ?? null
+      if (localUid === cmd.uid) {
         if (reloadTimer.current) {
           clearTimeout(reloadTimer.current)
           reloadTimer.current = null
@@ -33,7 +37,7 @@ export function CaptureApp(): React.JSX.Element {
       if (reloadTimer.current) return
       reloadTimer.current = setTimeout(() => {
         reloadTimer.current = null
-        if (!!auth.currentUser !== cmd.signedIn) window.location.reload()
+        if ((auth.currentUser?.uid ?? null) !== cmd.uid) window.location.reload()
       }, 1000)
     })
   }, [])

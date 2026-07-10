@@ -102,7 +102,7 @@ export async function startOmiListen(
 
   // Ask the capture window to acquire this source and stream it (VAD-gated) into
   // the session we just opened.
-  window.omi.captureCommand({ type: 'audio-start', sessionId, source, gating: 'vad' })
+  window.omi.captureCommand({ type: 'audio-start', sessionId, source })
 
   return {
     stop: (): void => {

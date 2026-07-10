@@ -1,7 +1,5 @@
-// The real capture engine behind capture/engine.ts. Exposes the EXACT contract the
-// capture hosts (AudioSessionHost) already call — a synchronous createPcmPipeline
-// and a functional createVadGate({onVoiced,onStatus}) — implemented over Agent B's
-// modules, so no host changes are needed at integration.
+// The capture window's audio engine, called directly by AudioSessionHost: a
+// synchronous createPcmPipeline and a functional createVadGate({onVoiced}).
 //
 // Design (see vadModel.ts): ONE audio graph. The pipeline's own 16kHz Int16 frames
 // feed BOTH the WebSocket AND the Silero detector — no second getUserMedia, no
@@ -15,14 +13,12 @@ import { SpeechHysteresis, Float32Reblocker } from './speechTicker'
 import { classifyVadFailure } from './vadFallback'
 import { trackEvent } from '../analytics'
 
-// ── Contract shared with the capture hosts (mirrors the retired enginesShim) ──────
+// ── Contract shared with the capture hosts ────────────────────────────────────────
 export type PcmPipeline = { stop: () => void }
 export type VadMode = 'gated' | 'fallback'
 export type VadGateConfig = {
   /** Audio that passed the gate (or ALL audio while falling open) — forward to WS. */
   onVoiced: (pcm: Int16Array) => void
-  /** Whether the gate is actually gating or failing open, for telemetry/UI. */
-  onStatus?: (mode: VadMode, reason?: string) => void
 }
 export type VadGate = { push: (pcm: Int16Array) => void; stop: () => void }
 
@@ -82,7 +78,6 @@ export function createVadGate(config: VadGateConfig): VadGate {
   const failOpen = (reason: string): void => {
     if (failedOpen || stopped) return
     failedOpen = true
-    config.onStatus?.('fallback', reason)
     trackEvent('fallback_triggered', {
       component: 'vad_gate',
       from: 'gated',
@@ -98,7 +93,6 @@ export function createVadGate(config: VadGateConfig): VadGate {
     .then((d) => {
       if (stopped || failedOpen) return
       detector = d
-      config.onStatus?.('gated')
     })
     .catch((e) => failOpen(classifyVadFailure((e as Error)?.message || '')))
 
@@ -128,9 +122,11 @@ export function createVadGate(config: VadGateConfig): VadGate {
       config.onVoiced(pcm)
       return
     }
-    // ORDER MATTERS: copy samples for the detector BEFORE the gate can emit this
-    // frame — a gated emit hands pcm.buffer to listenFeed, which TRANSFERS (detaches)
-    // it. Reblock reads the samples first, so the detector never sees a detached buffer.
+    // ORDER: reblock (which copies samples for the detector) runs BEFORE the gate
+    // can emit this frame. Today listenFeed's pcm.buffer crosses ipcRenderer.send,
+    // which structured-CLONES it — nothing detaches, so this is ordering hygiene, not
+    // a live hazard. Keep the order anyway: if a consumer ever moves to a transferable
+    // postMessage, the detector must never observe a detached buffer.
     for (const frame of reblock.push(pcm)) void runFrame(frame)
     emit(gate.push({ type: 'frame', pcm }))
   }

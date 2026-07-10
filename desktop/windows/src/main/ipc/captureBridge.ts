@@ -48,11 +48,6 @@ export function routeCaptureEvent(
 }
 
 /**
- * Wire the capture bridge. `getCaptureWc` returns the capture window's
- * webContents (or null before it exists / after teardown) — it's read live on
- * every message so a recreated capture window is picked up automatically.
- */
-/**
  * Emit a capture event that ORIGINATES in main (e.g. capture-window-restarted)
  * to every UI window, skipping the capture window itself. Used for events the
  * capture window can't send about itself (its own recreation).
@@ -64,6 +59,11 @@ export function emitCaptureEventFromMain(event: CaptureEvent, captureWcId: numbe
   }
 }
 
+/**
+ * Wire the capture bridge. `getCaptureWc` returns the capture window's
+ * webContents (or null before it exists / after teardown) — it's read live on
+ * every message so a recreated capture window is picked up automatically.
+ */
 export function registerCaptureBridge(getCaptureWc: () => WebContents | null): void {
   ipcMain.on('omi-capture:cmd', (e, cmd: CaptureCommand) => {
     const wc = getCaptureWc()

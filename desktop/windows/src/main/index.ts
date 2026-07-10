@@ -499,13 +499,6 @@ app.whenReady().then(async () => {
   // bench); long-lived consumers read the module-level `mainWindow` instead.
   const win = (mainWindow = createWindow())
 
-  // The hidden always-alive capture window: owns all audio + Rewind capture,
-  // independent of any UI window. Created for every real launch — INCLUDING a
-  // --hidden tray-only login start, so continuous recording works before the user
-  // ever opens the window. Skipped only under the perf bench (OMI_BENCH), whose
-  // startup measurement must not include a second renderer.
-  if (process.env.OMI_BENCH !== '1') createCaptureWindow()
-
   // System tray: the app's anchor while windows are hidden. Reflects listening
   // state (renderer reports via tray:state), toggles the window, and owns Quit.
   // Every dep reads through the module-level ref (never a captured instance) so
@@ -544,7 +537,7 @@ app.whenReady().then(async () => {
         const wc = getCaptureWc()
         if (!wc || wc.isDestroyed()) return false
         wc.send('omi-capture:cmd', {
-          cmd: { type: 'audio-start', sessionId: 'e2e-vad-playback', source, gating: 'vad' },
+          cmd: { type: 'audio-start', sessionId: 'e2e-vad-playback', source },
           ownerId: wc.id
         })
         return true
@@ -568,6 +561,15 @@ app.whenReady().then(async () => {
   // instead of delaying the window from appearing. None are needed before the UI
   // is up; their IPC handlers are already registered above.
   win.once('ready-to-show', () => {
+    // The hidden always-alive capture window: owns all audio + Rewind capture,
+    // independent of any UI window. Created after first paint (ready-to-show fires
+    // for --hidden tray-only login starts too, so continuous recording still works
+    // before the user opens the window) rather than alongside createWindow, so a
+    // second full renderer eval doesn't contend with the main window's first paint.
+    // Capture starts ~0.5-1s later as a result, which the 2s PTT pre-roll and the
+    // 30s silence finalizer tolerate. Skipped under the perf bench (OMI_BENCH),
+    // whose startup measurement must not include a second renderer.
+    if (process.env.OMI_BENCH !== '1') createCaptureWindow()
     // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
     startForegroundMonitor()
     // Track the last non-Omi foreground window so the automation planner snapshots
