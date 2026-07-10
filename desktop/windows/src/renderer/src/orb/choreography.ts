@@ -68,13 +68,13 @@ export const DEFAULT_ORB_PARAMS: OrbParams = {
   stepDegrees: 45,
   mergePeriod: 22,
   mergeDuration: 5.2,
-  noiseAmp: 0.05,
-  noiseFreq: 2.6,
+  noiseAmp: 0.09,
+  noiseFreq: 3.4,
   sminK: 0.34,
   listenSizeGain: 0.3,
   listenOrbitGain: 0.07,
-  pillHalfLen: 0.3,
-  pillRowPitch: 0.34,
+  pillHalfLen: 0.22,
+  pillRowPitch: 0.3,
   springZeta: 0.68,
   springOmega: 14
 }
@@ -118,6 +118,11 @@ export type OrbFrame = {
   dots: OrbDot[]
   /** 0 = separate dots, 1 = fully merged blob (drives smin k + wobble). */
   merge: number
+  /** Center pool-blob radius (disc units). Fills the middle while the ring of
+   *  dots converges — without it the smin union leaves a punched hole at the
+   *  center mid-merge (found by the skeptical review). Pulses gently while
+   *  merged so the held blob oscillates instead of sitting as a static ball. */
+  centerR: number
   /** Disc → rounded-rect morph, 0..1. */
   morph: number
   /** Genesis scale, 0..~1 (can overshoot slightly). */
@@ -246,38 +251,59 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // Ring pose (idle / listening / thinking share the orbit; thinking pulls it in).
   const angle = orbitAngle(t, p)
   const breathe = state === 'listening' ? 1 + p.listenOrbitGain * amplitude : 1
-  const orbitR = p.orbitRadius * breathe * (1 - merge)
   const sizeGain = state === 'listening' ? 1 + p.listenSizeGain * amplitude : 1
-  // Dots grow as they merge so the pooled blob reads substantial.
-  const dotR = p.dotRadius * sizeGain * (1 + merge * 1.35)
 
-  // Agents pose: dots pair into 4 horizontal pills, stacked and centered.
+  // Merge travel is STAGGERED per dot (a rotational sweep: dots pool into the
+  // puddle one after another and split back out the same way). A simultaneous
+  // ring collapse left a punched hole at the center mid-merge (the smin union
+  // of a ring is an annulus — skeptical-review Critical); staggering means
+  // mass accumulates from the first arrivals, so the blob is solid throughout.
+  const STAGGER = 0.5
+  const dotMerge = (i: number): number =>
+    Math.min(1, Math.max(0, merge * (1 + STAGGER) - STAGGER * (i / DOT_COUNT)))
+
+  // Agents pose: dot PAIRS converge onto the same center and stretch into one
+  // capsule per row — identical superimposed primitives, so each pill is a
+  // single clean bar (offset endpoints made lumpy dumbbells; review finding).
   const agents = state === 'agents' ? easeInOut(stateTime / 0.7) : 0
+  // Stretch late: dots glide as dots first, then lengthen into bars, which
+  // keeps the transition legible instead of thrashing.
+  const stretch = Math.pow(agents, 1.6)
 
   const dots: OrbDot[] = []
   for (let i = 0; i < DOT_COUNT; i++) {
     const a = angle + (i * 2 * Math.PI) / DOT_COUNT
-    let x = Math.cos(a) * orbitR
-    let y = Math.sin(a) * orbitR
-    let r = dotR
+    const mi = dotMerge(i)
+    const orbitRi = p.orbitRadius * breathe * (1 - mi)
+    let x = Math.cos(a) * orbitRi
+    let y = Math.sin(a) * orbitRi
+    // Dots grow modestly as they pool (a puddle, not a giant ball — review
+    // finding), with a gentle per-dot pulse so the held blob oscillates
+    // organically instead of sitting as a static disc.
+    let r = p.dotRadius * sizeGain * (1 + mi * 1.0) * (1 + 0.07 * mi * Math.sin(t * 2.3 + i * 1.7))
     let halfLen = 0
     if (agents > 0) {
-      // Pair (0,1)→row0, (2,3)→row1… endpoints at ±pillHalfLen. Rows centered.
       const row = Math.floor(i / 2)
-      const end = i % 2 === 0 ? -1 : 1
       const py = (row - 1.5) * p.pillRowPitch
-      const px = end * p.pillHalfLen
-      x = x * (1 - agents) + px * agents
+      x = x * (1 - agents)
       y = y * (1 - agents) + py * agents
-      r = r * (1 - agents) + p.dotRadius * 0.75 * agents
-      halfLen = p.pillHalfLen * agents
+      r = r * (1 - agents) + p.dotRadius * 0.72 * agents
+      halfLen = p.pillHalfLen * stretch
     }
     dots.push({ x, y, r, halfLen })
   }
 
+  // Center pool: grows as the first dots arrive and breathes slowly so the
+  // held blob feels liquid. Gated below merge≈0.1 — a sub-pixel pool at the
+  // very start of a merge reads as a stray white speck at the ring's center.
+  const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.1) / 0.25)))
+  const centerR =
+    merge > 0 ? poolGate * p.orbitRadius * 0.42 * (1 + 0.09 * Math.sin(t * 1.7)) : 0
+
   return {
     dots,
     merge,
+    centerR,
     morph: Math.min(1, Math.max(0, input.morph ?? 0)),
     genesis: genesisTime === Infinity ? 1 : genesisScale(genesisTime, p),
     noiseTime: t,

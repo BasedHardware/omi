@@ -78,7 +78,8 @@ export class OrbRenderer {
       'u_noiseTime',
       'u_noiseAmp',
       'u_noiseFreq',
-      'u_sminK'
+      'u_sminK',
+      'u_centerR'
     ]) {
       this.u[name] = gl.getUniformLocation(program, name)
     }
@@ -115,6 +116,7 @@ export class OrbRenderer {
     gl.uniform1f(this.u.u_noiseAmp, frame.params.noiseAmp)
     gl.uniform1f(this.u.u_noiseFreq, frame.params.noiseFreq)
     gl.uniform1f(this.u.u_sminK, frame.params.sminK)
+    gl.uniform1f(this.u.u_centerR, frame.centerR)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }

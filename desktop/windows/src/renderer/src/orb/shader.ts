@@ -29,6 +29,7 @@ uniform float u_noiseTime;   // seconds
 uniform float u_noiseAmp;    // wobble amplitude at full merge (disc units)
 uniform float u_noiseFreq;   // wobble spatial frequency
 uniform float u_sminK;       // smin blend distance at full merge (disc units)
+uniform float u_centerR;     // center pool-blob radius (disc units, 0 = none)
 
 out vec4 outColor;
 
@@ -88,6 +89,11 @@ void main() {
     vec4 d = u_dots[i];
     float di = sdCapsule(q, d.xy * u_disc, d.w * u_disc, d.z * u_disc);
     dDots = smin(dDots, di, k);
+  }
+  // Center pool blob: fills the middle of the converging ring (no punched
+  // hole mid-merge) and carries the held blob's slow breathing.
+  if (u_centerR > 0.0) {
+    dDots = smin(dDots, sdCircle(q, u_centerR * u_disc), k);
   }
 
   // Low-frequency wobble on the blob contour, scaled by merge so the resting

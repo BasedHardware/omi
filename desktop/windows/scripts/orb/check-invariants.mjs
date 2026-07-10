@@ -6,21 +6,32 @@
 //      (8 separated dots / 1 thinking blob / 4 agent pills / 0 at genesis-zero)
 // Run: node scripts/orb/check-invariants.mjs  (exit 1 on any violation)
 import { openHarness, renderPixels } from './lib/harness.mjs'
-import { findPurple, checkTransparentEdges, components, whiteMask } from './lib/pixels.mjs'
+import {
+  findPurple,
+  checkTransparentEdges,
+  components,
+  whiteMask,
+  countHolePixels,
+  contourWaviness
+} from './lib/pixels.mjs'
 
 const CASES = [
   // Idle, dots separated (outside the merge excursion window).
   { name: 'idle-separated-a', spec: { t: 12, state: 'idle' }, blobs: 8 },
   { name: 'idle-separated-b', spec: { t: 14.7, state: 'idle' }, blobs: 8 },
-  // Idle, fully merged (inside the excursion hold).
-  { name: 'idle-merged', spec: { t: 2.6, state: 'idle' }, blobs: 1 },
-  // Idle, mid-transition — anything between one puddle and eight dots is legal.
-  { name: 'idle-merging', spec: { t: 0.9, state: 'idle' }, blobsBetween: [1, 8] },
-  { name: 'idle-splitting', spec: { t: 4.4, state: 'idle' }, blobsBetween: [1, 8] },
+  // Idle, fully merged (inside the excursion hold). Wavy but hole-free.
+  { name: 'idle-merged', spec: { t: 2.6, state: 'idle' }, blobs: 1, noHoles: true, wavy: true },
+  // Idle, mid-transition — anything between one puddle and eight dots is legal,
+  // but never a punched hole (regression: smin ring artifact).
+  { name: 'idle-merging', spec: { t: 0.9, state: 'idle' }, blobsBetween: [1, 8], noHoles: true },
+  { name: 'idle-splitting', spec: { t: 4.4, state: 'idle' }, blobsBetween: [1, 8], noHoles: true },
   // Listening at high amplitude.
   { name: 'listening-loud', spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.9 }, blobs: 8 },
-  // Thinking: the held blob.
-  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1 },
+  // Thinking: the held blob — one piece, hole-free at every merge stage, and a
+  // genuinely wavy (but tasteful) contour once held.
+  { name: 'thinking-early', spec: { t: 30.35, state: 'thinking', stateTime: 0.35 }, noHoles: true },
+  { name: 'thinking-mid', spec: { t: 30.6, state: 'thinking', stateTime: 0.6 }, noHoles: true },
+  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1, noHoles: true, wavy: true },
   // Agents: four status pills.
   { name: 'agents', spec: { t: 40, state: 'agents', stateTime: 3 }, blobs: 4 },
   // Genesis: scale zero renders NOTHING; early spring frames stay in bounds.
@@ -69,6 +80,15 @@ async function main() {
           if (comps.length < lo || comps.length > hi) {
             failures.push(`${tag}: expected ${lo}..${hi} blob(s), found ${comps.length}`)
           }
+        }
+        if (c.noHoles) {
+          const holes = countHolePixels(img)
+          if (holes > 3) failures.push(`${tag}: ${holes} hole pixel(s) punched inside the blob`)
+        }
+        if (c.wavy) {
+          const { cv } = contourWaviness(img)
+          if (cv < 0.015) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — blob reads as a plain ball`)
+          if (cv > 0.2) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — wobble past tasteful`)
         }
       }
     }

@@ -111,6 +111,72 @@ export function components({ mask, width, height }, { minSize = 4 } = {}) {
   return comps.filter((c) => c.size >= minSize).sort((a, b) => b.size - a.size)
 }
 
+/**
+ * Count enclosed holes in the white mask: flood-fill non-white from the image
+ * border; any unreached non-white pixel is enclosed by white (a punched hole).
+ * Returns the number of hole PIXELS (0 = solid shapes).
+ */
+export function countHolePixels(img, opts = {}) {
+  const { mask, width, height } = whiteMask(img, opts)
+  const visited = new Uint8Array(width * height)
+  const stack = []
+  const push = (x, y) => {
+    const i = y * width + x
+    if (!visited[i] && !mask[i]) {
+      visited[i] = 1
+      stack.push(i)
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    push(x, 0)
+    push(x, height - 1)
+  }
+  for (let y = 0; y < height; y++) {
+    push(0, y)
+    push(width - 1, y)
+  }
+  while (stack.length) {
+    const i = stack.pop()
+    const x = i % width
+    const y = (i / width) | 0
+    if (x > 0) push(x - 1, y)
+    if (x < width - 1) push(x + 1, y)
+    if (y > 0) push(x, y - 1)
+    if (y < height - 1) push(x, y + 1)
+  }
+  let holes = 0
+  for (let i = 0; i < mask.length; i++) if (!mask[i] && !visited[i]) holes++
+  return holes
+}
+
+/**
+ * Radial contour profile of the largest white blob: max white radius per angle
+ * bin around the blob centroid. Returns { mean, cv } — the coefficient of
+ * variation quantifies the "wavy edge" (0 = perfect circle).
+ */
+export function contourWaviness(img, { bins = 72 } = {}) {
+  const wm = whiteMask(img)
+  const comps = components(wm)
+  if (!comps.length) return { mean: 0, cv: 0 }
+  const { cx, cy } = comps[0]
+  const radii = new Array(bins).fill(0)
+  const { mask, width, height } = wm
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!mask[y * width + x]) continue
+      const dx = x - cx
+      const dy = y - cy
+      const bin = Math.floor(((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI)) * bins) % bins
+      const r = Math.hypot(dx, dy)
+      if (r > radii[bin]) radii[bin] = r
+    }
+  }
+  const used = radii.filter((r) => r > 0)
+  const mean = used.reduce((a, b) => a + b, 0) / used.length
+  const variance = used.reduce((a, b) => a + (b - mean) ** 2, 0) / used.length
+  return { mean, cv: Math.sqrt(variance) / mean }
+}
+
 /** Bounding box of all non-transparent pixels (null if none). */
 export function opaqueBounds(img) {
   let minX = Infinity

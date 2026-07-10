@@ -166,15 +166,32 @@ describe('computeOrbFrame', () => {
     }
   })
 
-  it('agents settles dots into four two-endpoint pill rows', () => {
+  it('agents settles dot pairs onto identical centered capsules (four clean pills)', () => {
     const f = computeOrbFrame({ t: 100, state: 'agents', stateTime: 3 })
     const ys = new Set(f.dots.map((d) => d.y.toFixed(4)))
     expect(ys.size).toBe(4) // four rows
-    for (const d of f.dots) expect(d.halfLen).toBeCloseTo(P.pillHalfLen, 6)
-    // Paired endpoints mirror around x=0.
-    for (let row = 0; row < 4; row++) {
-      expect(f.dots[row * 2].x).toBeCloseTo(-f.dots[row * 2 + 1].x, 6)
+    for (const d of f.dots) {
+      expect(d.halfLen).toBeCloseTo(P.pillHalfLen, 6)
+      expect(d.x).toBeCloseTo(0, 6) // centered — superimposed pair = ONE clean bar
     }
+    // Each pair is exactly superimposed (identical primitives, no dumbbell).
+    for (let row = 0; row < 4; row++) {
+      const a = f.dots[row * 2]
+      const b = f.dots[row * 2 + 1]
+      expect(a.x).toBeCloseTo(b.x, 9)
+      expect(a.y).toBeCloseTo(b.y, 9)
+      expect(a.r).toBeCloseTo(b.r, 9)
+      expect(a.halfLen).toBeCloseTo(b.halfLen, 9)
+    }
+  })
+
+  it('mid-merge frames always carry a center pool (no punched-hole artifact)', () => {
+    for (const stateTime of [0.3, 0.4, 0.6, 1, 3]) {
+      const f = computeOrbFrame({ t: 30, state: 'thinking', stateTime })
+      if (f.merge > 0) expect(f.centerR).toBeGreaterThan(0)
+    }
+    const separated = computeOrbFrame({ t: 12, state: 'idle', stateTime: 12 })
+    expect(separated.centerR).toBe(0)
   })
 
   it('genesis defaults to materialized; genesisTime drives the spring', () => {
