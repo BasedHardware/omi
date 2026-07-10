@@ -130,6 +130,15 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(assignBody.contains("conversationId == \"latest\""))
   }
 
+  func testConversationStarAutomationUsesRepositoryExactlyOnce() throws {
+    let source = try bridgeSource()
+    let body = try actionBody(named: "set_conversation_starred", in: source)
+
+    XCTAssertTrue(body.contains("conversationRepository.setStarred"))
+    XCTAssertFalse(body.contains("APIClient.shared.setConversationStarred"))
+    XCTAssertFalse(body.contains("AppState.current?.setConversationStarred"))
+  }
+
   func testTranscriptionLanguageActionsPersistViaAPI() throws {
     let source = try bridgeSource()
     let setBody = try actionBody(named: "set_transcription_language", in: source)
