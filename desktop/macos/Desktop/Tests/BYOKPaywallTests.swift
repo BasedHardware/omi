@@ -22,6 +22,7 @@ final class BYOKPaywallTests: XCTestCase {
     }
 
     override func tearDown() {
+        CredentialHealthManager.shared.reset()
         clearAllBYOKKeys()
         UserDefaults.standard.removeObject(forKey: paywallKey)
         super.tearDown()
@@ -40,6 +41,61 @@ final class BYOKPaywallTests: XCTestCase {
         // All four → active
         setAllBYOKKeys()
         XCTAssertTrue(APIKeyService.isByokActive)
+    }
+
+    func testBuildHeadersDoesNotAttachPartialByokKeys() async throws {
+        clearAllBYOKKeys()
+        UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
+
+        let client = APIClient()
+        await client.setTestAuthHeader("Bearer test-token")
+        let headers = try await client.buildHeaders()
+
+        XCTAssertNil(headers[BYOKProvider.openai.headerName])
+    }
+
+    func testBuildHeadersCanExplicitlyExcludeByokKeys() async throws {
+        setAllBYOKKeys()
+
+        let client = APIClient()
+        await client.setTestAuthHeader("Bearer test-token")
+        let headers = try await client.buildHeaders(includeBYOK: false)
+
+        for provider in BYOKProvider.allCases {
+            XCTAssertNil(headers[provider.headerName])
+        }
+    }
+
+    func testLowLevelTransportDefaultsToExcludingByokKeys() async throws {
+        setAllBYOKKeys()
+
+        var transport = OmiHTTPTransport()
+        transport.testAuthHeader = "Bearer test-token"
+        let headers = try await transport.buildHeaders()
+
+        for provider in BYOKProvider.allCases {
+            XCTAssertNil(headers[provider.headerName])
+        }
+    }
+
+    func testBuildHeadersSuppressesOnlyInvalidByokHeader() async throws {
+        setAllBYOKKeys()
+        let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
+        CredentialHealthManager.shared.recordProviderFailure(
+            .providerAuthFailed(provider: .openai, mode: .byok),
+            provider: .openai,
+            authMode: .byok,
+            fingerprint: APIKeyService.byokFingerprint(openAIKey),
+            context: "test")
+
+        let client = APIClient()
+        await client.setTestAuthHeader("Bearer test-token")
+        let headers = try await client.buildHeaders()
+
+        XCTAssertNil(headers[BYOKProvider.openai.headerName])
+        for provider in BYOKProvider.allCases where provider != .openai {
+            XCTAssertEqual(headers[provider.headerName], "sk-test-\(provider.rawValue)")
+        }
     }
 
     func testPaywallFlagSuppressedWhenByokActive() {

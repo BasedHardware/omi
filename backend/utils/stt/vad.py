@@ -1,18 +1,46 @@
+import logging
 import os
 import threading
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
+import httpx
 import numpy as np
-import onnxruntime as ort
+import onnxruntime as ort  # onnxruntime is untyped
 import requests
 from fastapi import HTTPException
-from pydub import AudioSegment
+from pydub import AudioSegment  # pydub is untyped
 
 from database import redis_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
-import logging
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+
+def _hosted_vad_fallback_reason(exc: BaseException) -> str:
+    if isinstance(exc, (requests.Timeout, httpx.TimeoutException)):
+        return 'timeout'
+    response = getattr(exc, 'response', None)
+    if response is not None:
+        status_code = getattr(response, 'status_code', None)
+        if isinstance(status_code, int):
+            if status_code == 429:
+                return 'provider_429'
+            if status_code >= 500:
+                return 'provider_5xx'
+    return 'other'
+
+
+def _record_hosted_vad_fallback(exc: BaseException) -> None:
+    record_fallback(
+        component='vad',
+        from_mode='hosted',
+        to_mode='local_onnx',
+        reason=_hosted_vad_fallback_reason(exc),
+        outcome='degraded',
+    )
+
 
 # ---------------------------------------------------------------------------
 # Singleton ONNX Silero-VAD session (process-wide, thread-safe)
@@ -20,7 +48,7 @@ logger = logging.getLogger(__name__)
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 _MODEL_PATH = os.path.join(_ASSETS_DIR, 'silero_vad.onnx')
 
-_ort_session = None
+_ort_session: Optional[ort.InferenceSession] = None
 _ort_init_lock = threading.Lock()
 
 # ONNX model constants — Silero VAD v6 (full model, opset 16)
@@ -46,17 +74,17 @@ def _get_ort_session() -> ort.InferenceSession:
     with _ort_init_lock:
         if _ort_session is not None:
             return _ort_session
-        opts = ort.SessionOptions()
+        opts: Any = ort.SessionOptions()  # type: ignore[reportUnknownMemberType]  # onnxruntime untyped
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
-        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL  # type: ignore[reportUnknownMemberType]  # onnxruntime untyped
         opts.log_severity_level = 3  # suppress ORT warnings
         _ort_session = ort.InferenceSession(_MODEL_PATH, sess_options=opts)
         logger.info('Silero-VAD ONNX session initialized (model=%s)', _MODEL_PATH)
         return _ort_session
 
 
-def make_fresh_state() -> tuple:
+def make_fresh_state() -> Tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     """Return zeroed recurrent state + context for a new VAD stream.
 
     Returns (state, context) where:
@@ -66,7 +94,11 @@ def make_fresh_state() -> tuple:
     return np.zeros(_STATE_SHAPE, dtype=np.float32), np.zeros((1, VAD_CONTEXT_SAMPLES), dtype=np.float32)
 
 
-def run_vad_window(audio_window: np.ndarray, state: np.ndarray, context: np.ndarray) -> tuple:
+def run_vad_window(
+    audio_window: np.ndarray[Any, Any],
+    state: np.ndarray[Any, Any],
+    context: np.ndarray[Any, Any],
+) -> Tuple[float, np.ndarray[Any, Any], np.ndarray[Any, Any]]:
     """Run VAD on a single 512-sample window.
 
     Args:
@@ -82,7 +114,7 @@ def run_vad_window(audio_window: np.ndarray, state: np.ndarray, context: np.ndar
     # Prepend context from previous chunk — required by Silero ONNX wrapper
     x = np.concatenate([context, audio_2d], axis=1)  # shape: (1, 576)
     sr = np.array(VAD_SAMPLE_RATE, dtype=np.int64)
-    output, new_state = sess.run(
+    output, new_state = sess.run(  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # onnxruntime untyped
         None,
         {
             'input': x,
@@ -91,10 +123,20 @@ def run_vad_window(audio_window: np.ndarray, state: np.ndarray, context: np.ndar
         },
     )
     new_context = audio_2d[:, -VAD_CONTEXT_SAMPLES:]  # save tail as next context
-    return float(output[0][0]), new_state, new_context
+    return float(output[0][0]), new_state, new_context  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # onnxruntime untyped
 
 
-def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
+@overload
+def vad_is_empty(file_path: str, return_segments: Literal[True], cache: bool = False) -> List[Dict[str, Any]]: ...
+
+
+@overload
+def vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool: ...
+
+
+def vad_is_empty(
+    file_path: str, return_segments: bool = False, cache: bool = False
+) -> Union[bool, List[Dict[str, Any]]]:
     """Uses hosted pyannote VAD (best quality) with local ONNX Silero fallback."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
@@ -104,7 +146,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 return cached
             return len(cached) == 0
 
-    segments = None
+    segments: Optional[List[Dict[str, Any]]] = None
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
@@ -112,8 +154,9 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
                 response = requests.post(hosted_vad_url, files=files, timeout=300)
                 response.raise_for_status()
-                segments = response.json()
+                segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local ONNX VAD for {file_path}: {e}')
 
     if segments is None:
@@ -127,25 +170,25 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
     return len(segments) == 0
 
 
-def _run_file_vad(file_path: str, threshold: float = 0.5) -> list:
+def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]]:
     """Process an entire audio file through Silero-VAD ONNX.
 
     Reads the file, resamples to 16 kHz mono, and iterates 512-sample windows
     with 64-sample context. Returns list of dicts: [{start, end, duration}, ...]
     """
     try:
-        audio = AudioSegment.from_file(file_path)
+        audio: Any = AudioSegment.from_file(file_path)  # type: ignore[reportUnknownMemberType]  # pydub untyped
     except Exception as e:
         logger.error(f'Failed to read audio file {file_path}: {e}')
         return []
 
     # Convert to 16 kHz mono float32
-    audio = audio.set_frame_rate(VAD_SAMPLE_RATE).set_channels(1).set_sample_width(2)
-    samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0
+    audio = audio.set_frame_rate(VAD_SAMPLE_RATE).set_channels(1).set_sample_width(2)  # type: ignore[reportUnknownMemberType]  # pydub untyped
+    samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0  # type: ignore[reportUnknownMemberType]  # pydub untyped
     del audio
 
     state, context = make_fresh_state()
-    is_speech_flags = []
+    is_speech_flags: List[bool] = []
 
     # Process in 512-sample windows
     offset = 0
@@ -158,7 +201,7 @@ def _run_file_vad(file_path: str, threshold: float = 0.5) -> list:
 
     # Convert per-window flags to time segments
     window_sec = VAD_WINDOW_SAMPLES / VAD_SAMPLE_RATE
-    segments = []
+    segments: List[Dict[str, Any]] = []
     in_speech = False
     start = 0.0
     for i, flag in enumerate(is_speech_flags):
@@ -183,7 +226,19 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
+@overload
+async def async_vad_is_empty(
+    file_path: str, return_segments: Literal[True], cache: bool = False
+) -> List[Dict[str, Any]]: ...
+
+
+@overload
+async def async_vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool: ...
+
+
+async def async_vad_is_empty(
+    file_path: str, return_segments: bool = False, cache: bool = False
+) -> Union[bool, List[Dict[str, Any]]]:
     """Async version of vad_is_empty using httpx.AsyncClient for hosted VAD."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
@@ -192,7 +247,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
                 return exists
             return len(exists) == 0
 
-    segments = None
+    segments: Optional[List[Dict[str, Any]]] = None
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
@@ -201,8 +256,9 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
             client = get_stt_client()
             response = await client.post(hosted_vad_url, files=files)
             response.raise_for_status()
-            segments = response.json()
+            segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:
@@ -216,12 +272,12 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     return len(segments) == 0
 
 
-def apply_vad_for_speech_profile(file_path: str):
+def apply_vad_for_speech_profile(file_path: str) -> None:
     logger.info(f'apply_vad_for_speech_profile {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
         raise HTTPException(status_code=400, detail="Audio is empty")
-    joined_segments = []
+    joined_segments: List[Dict[str, Any]] = []
     for i, segment in enumerate(voice_segments):
         if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
             joined_segments[-1]['end'] = segment['end']
@@ -229,20 +285,20 @@ def apply_vad_for_speech_profile(file_path: str):
             joined_segments.append(segment)
 
     # Load audio file once instead of repeatedly in the loop
-    full_audio = AudioSegment.from_wav(file_path)
+    full_audio: Any = AudioSegment.from_wav(file_path)  # type: ignore[reportUnknownMemberType]  # pydub untyped
 
+    trimmed_aseg: Any = AudioSegment.empty()
     try:
         # trim silence out of file_path, but leave 1 sec of silence within chunks
-        trimmed_aseg = AudioSegment.empty()
         for i, segment in enumerate(joined_segments):
             start = segment['start'] * 1000
             end = segment['end'] * 1000
-            trimmed_aseg += full_audio[start:end]
+            trimmed_aseg += full_audio[start:end]  # type: ignore[reportUnknownMemberType]  # pydub untyped
             if i < len(joined_segments) - 1:
-                trimmed_aseg += full_audio[end : end + 1000]
+                trimmed_aseg += full_audio[end : end + 1000]  # type: ignore[reportUnknownMemberType]  # pydub untyped
 
         # file_path.replace('.wav', '-cleaned.wav')
-        trimmed_aseg.export(file_path, format="wav")
+        trimmed_aseg.export(file_path, format="wav")  # type: ignore[reportUnknownMemberType]  # pydub untyped
     finally:
         # Explicitly free memory
         del full_audio

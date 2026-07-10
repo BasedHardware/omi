@@ -14,7 +14,7 @@ import Foundation
 // turn falls back to the legacy STT cascade. The provider follows the user's "Voice
 // Model" choice in Advanced settings (RealtimeOmniSettings) — no separate picker.
 
-enum RealtimeHubProvider: String, Sendable {
+enum RealtimeHubProvider: String, Sendable, Equatable {
   case openai
   case gemini
 

@@ -1,6 +1,8 @@
 import Combine
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
+import OmiTheme
 
 // MARK: - Dashboard View Model
 
@@ -212,28 +214,34 @@ class DashboardViewModel: ObservableObject {
 
 struct DashboardPage: View {
     @ObservedObject var viewModel: DashboardViewModel
+    @ObservedObject var homeStatusStore: HomeStatusStore = HomeStatusStore()
     @ObservedObject var appState: AppState
     @ObservedObject var appProvider: AppProvider
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
-    @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
+    @State private var selectedCatalogApp: OmiApp?
+    @State private var selectedImportConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var isShowingAppsPopup = false
+    @State private var appsPopupAcceptsInput = false
+    @State private var homeConnectSheetAcceptsInput = false
+    @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
+    @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
-    @State private var screenshotCount: Int?
-    // True totals for the "What omi knows" tiles. Without these the tiles showed
-    // only the loaded page (~50 conversations, ~100 memories), badly undercounting.
-    @State private var conversationCount: Int?
-    @State private var memoryCount: Int?
-    @State private var taskCount: Int?
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+    @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+        AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
     @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+    @State private var homeMode: HomeStageMode = .hub
+    @FocusState private var homeAskFieldFocused: Bool
 
     private var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -245,26 +253,106 @@ struct DashboardPage: View {
             return .blocked
         }
 
-        if screenAnalysisEnabled && isCaptureMonitoring {
+        if isCaptureLive {
             return .active
         }
 
         return .inactive
     }
 
+    private var isCaptureLive: Bool {
+        isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
+    }
+
+    private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+        AssistantSettings.SystemAudioCaptureMode(rawValue: systemAudioCaptureModeRaw) ?? .onlyDuringMeetings
+    }
+
+    private var listeningModeTitle: String {
+        switch listeningCaptureMode {
+        case .always:
+            return "Always"
+        case .onlyDuringMeetings:
+            return appState.isAwaitingMeeting ? "Meetings only" : "In meeting"
+        case .never:
+            return "Mic only"
+        }
+    }
+
+    private static let homeStageMaxWidth: CGFloat = 1360
+    private static let homeStageMinSideInset: CGFloat = 30
+    private static let homeStageMaxSideInset: CGFloat = 96
+    private static let homeAskBarMinWidth: CGFloat = 560
+    private static let homeAskBarMaxWidth: CGFloat = 980
+    private static let homeStagePanelMaxWidth: CGFloat = 1280
+    private static let homeStageTopPadding: CGFloat = 74
+    private static let homeStageBottomPadding: CGFloat = 26
+    private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
+    private static let appsPopupMaxWidth: CGFloat = 1040
+    private static let appsPopupMaxHeight: CGFloat = 600
+    private static let appsPopupMinWidth: CGFloat = 360
+    private static let appsPopupMinHeight: CGFloat = 360
+    private static let appsPopupHorizontalMargin: CGFloat = 48
+    private static let appsPopupVerticalMargin: CGFloat = 32
+    private static let appsPopupCornerRadius: CGFloat = 22
+    private static let homeConnectSheetHorizontalMargin: CGFloat = 56
+    private static let homeConnectSheetVerticalMargin: CGFloat = 44
+    private static let homeConnectSheetMinWidth: CGFloat = 360
+    private static let homeConnectSheetMinHeight: CGFloat = 360
+    private static let homeConnectSheetCornerRadius: CGFloat = 24
+    private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
+    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
+    private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
+
+    private var homeConnectSheetIsPresented: Bool {
+        selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
+    }
+
+    private var isHomeModalPresented: Bool {
+        isShowingAppsPopup || homeConnectSheetIsPresented
+    }
+
+    private var legacySelectedCatalogApp: Binding<OmiApp?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
+            set: { selectedCatalogApp = $0 }
+        )
+    }
+
+    private var legacySelectedImportConnector: Binding<ImportConnector?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedImportConnector : nil },
+            set: { selectedImportConnector = $0 }
+        )
+    }
+
+    private var legacySelectedExportDestination: Binding<MemoryExportDestination?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedExportDestination : nil },
+            set: { selectedExportDestination = $0 }
+        )
+    }
+
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
+            || homeStatusStore.accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
     private func isImportConnectorConnected(_ connectorID: String) -> Bool {
         guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else { return false }
-        return importConnectorStatusStore.snapshot(for: connector).isConnected
+        return homeStatusStore.connectorStatusStore.snapshot(for: connector).isConnected
     }
 
-    /// Whether the hosted MCP key exists — the app's own definition of "configured" for MCP destinations.
-    private var hasMCPDestinationConnected: Bool {
-        MemoryExportService.shared.hasStoredMCPKey
+    private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
+        switch destination {
+        case .claude, .claudeCode:
+            return [.claude, .claudeCode].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
+        case .chatgpt, .codex:
+            return [.chatgpt, .codex].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
+        default:
+            return homeStatusStore.memoryExportStatuses[destination]?.hasConnection == true
+        }
     }
 
     var body: some View {
@@ -285,6 +373,34 @@ struct DashboardPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
+        }
+        .dismissableSheet(item: legacySelectedCatalogApp) { app in
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
+                .frame(width: 500, height: 650)
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        }
+        .dismissableSheet(item: legacySelectedImportConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: homeStatusStore.connectorStatusStore,
+                onDismiss: {
+                    selectedImportConnector = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
+        .dismissableSheet(item: legacySelectedExportDestination) { destination in
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $homeStatusStore.memoryExportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
         }
         .overlay {
             if isLoadingCitation {
@@ -307,15 +423,14 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
+            reportHomeAutomationMode()
+            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
+            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -325,6 +440,42 @@ struct DashboardPage: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
             syncCaptureState()
+        }
+        // Clicking into the ask bar reveals the inline chat; the same is true
+        // when focus lands there via keyboard (Tab / Full Keyboard Access).
+        .onChange(of: homeAskFieldFocused) { _, focused in
+            if focused && !useLegacyHomeDesign && homeMode != .chat {
+                openHomeChat()
+            }
+        }
+        // Automation-bridge entry points (home_open_chat / home_connect_toggle /
+        // home_close_panel / home_ask) — they call the exact functions the
+        // on-screen controls call.
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            openHomeChat()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageToggleConnect)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            toggleHomeConnectPanel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            closeHomeStagePanel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
+            guard !useLegacyHomeDesign,
+                  let query = note.userInfo?["query"] as? String else { return }
+            askHomeSuggestion(query)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
+            guard !useLegacyHomeDesign,
+                  let path = note.userInfo?["path"] as? String else { return }
+            // Same wiring the ask bar's paperclip/drag-drop runs after the
+            // OS hands back file URLs.
+            if let attachment = ChatAttachment.from(url: URL(fileURLWithPath: path)) {
+                chatProvider.addAttachments([attachment])
+            }
         }
     }
 
@@ -349,6 +500,13 @@ struct DashboardPage: View {
                 },
                 sessionsLoadError: chatProvider.sessionsLoadError,
                 onRetry: { Task { await chatProvider.retryLoad() } },
+                localSendToken: chatProvider.localSendToken,
+                onOpenAgent: { agentID, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
+                },
+                onOpenAgentRef: { ref, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
+                },
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -365,20 +523,20 @@ struct DashboardPage: View {
                 )
             )
 
+            dashboardChatErrorCard
+                .padding(.horizontal, 30)
+
             ChatInputView(
                 onSend: { text in
                     AnalyticsManager.shared.chatMessageSent(
                         messageLength: text.count,
-                        hasContext: selectedApp != nil,
+                        hasSelectedAppContext: selectedApp != nil,
                         source: "dashboard_chat"
                     )
-                    Task { await chatProvider.sendMessage(text) }
-                },
-                onFollowUp: { text in
-                    Task { await chatProvider.sendFollowUp(text) }
+                    Task { await chatProvider.sendMainDraft(text) }
                 },
                 onStop: {
-                    chatProvider.stopAgent()
+                    chatProvider.stopAgent(owner: .mainChat)
                 },
                 isSending: chatProvider.isSending,
                 isStopping: chatProvider.isStopping,
@@ -406,24 +564,680 @@ struct DashboardPage: View {
 
     private var redesignedHome: some View {
         GeometryReader { proxy in
+            let sideInset = homeStageSideInset(for: proxy.size.width)
             let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
             let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
+            let panelWidth = homeStageContentWidth(for: proxy.size.width)
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
-                homeRoutingStage
-                    .frame(maxWidth: 1120)
-                    .padding(.horizontal, 34)
-                    .frame(width: proxy.size.width)
-                    .frame(height: panelHeight)
-                    .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
+                // Clicking anywhere outside the chat / connect panel collapses
+                // back to the hub (panels and the ask bar consume their own
+                // clicks above this catcher).
+                if homeMode != .hub {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            closeHomeStagePanel()
+                        }
+                }
+
+                homeStage(stageWidth: proxy.size.width, stageHeight: proxy.size.height)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    // The popup/sheet overlays are modal: while one is up, the
+                    // stage underneath must not be reachable by VoiceOver /
+                    // Full Keyboard Access.
+                    .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
-                    .padding(.horizontal, 34)
+                    .padding(.horizontal, sideInset)
                     .padding(.top, 26)
+                    .accessibilityHidden(isHomeModalPresented)
+
+                appsPopupOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+
+                homeConnectSheetOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+
+                // Esc collapses the inline chat / connect tray back to the hub —
+                // but only while no modal overlay owns the key.
+                if homeMode != .hub && !isHomeModalPresented {
+                    OverlayModalEscapeCatcher {
+                        closeHomeStagePanel()
+                    }
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
+            .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
+            .animation(Self.homeStageAnimation, value: homeMode)
+        }
+    }
+
+    /// Vertical stage: mode content on top (hub metrics, inline chat, or the
+    /// connect tray), the persistent ask bar anchored beneath it, and the
+    /// suggested questions under the bar while the hub is showing.
+    private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
+        let askBarWidth = homeAskBarWidth(for: stageWidth)
+
+        return Group {
+            if homeMode == .hub {
+                homeHubStage(askBarWidth: askBarWidth, stageHeight: stageHeight)
+            } else {
+                homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
             }
         }
+        .padding(.top, Self.homeStageTopPadding)
+        .padding(.bottom, Self.homeStageBottomPadding)
+    }
+
+    /// Hub layout: the omi wordmark centered in the full screen, with the stats
+    /// ribbon, ask bar, and suggestions docked as one column at the bottom.
+    ///
+    /// Built as a plain VStack (wordmark, flexible gap, cluster) so the two can
+    /// never overlap. The wordmark's top inset is computed so it lands on the
+    /// true stage center when the window is tall enough, and lifts to sit just
+    /// above the cluster (with a minimum gap) when it isn't.
+    private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View {
+        // Wordmark height and a deliberately generous estimate of the docked
+        // cluster height (ribbon + gap + ask bar + gap + three suggestion rows).
+        // Overestimating only lifts the wordmark slightly early; it never lets
+        // the cluster clip.
+        let wordmarkHeight: CGFloat = 76
+        let clusterHeight: CGFloat = 340
+        let minGap: CGFloat = 24
+        let contentHeight = stageHeight - Self.homeStageTopPadding - Self.homeStageBottomPadding
+
+        let trueCenterInset = (contentHeight - wordmarkHeight) / 2
+        let maxInset = contentHeight - wordmarkHeight - clusterHeight - minGap
+        let topInset = max(0, min(trueCenterInset, maxInset))
+
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+                .frame(height: topInset)
+
+            homeHubWordmark
+                .transition(.homeHubFade)
+
+            // Flexible gap absorbs the remaining height, docking the cluster at
+            // the bottom while keeping at least `minGap` below the wordmark.
+            Spacer(minLength: minGap)
+
+            VStack(spacing: 0) {
+                homeStatRibbon
+                    .frame(width: askBarWidth)
+                    .padding(.bottom, 14)
+
+                homeAskBar
+                    .frame(width: askBarWidth)
+
+                homeSuggestionList
+                    .frame(width: askBarWidth)
+                    .padding(.top, 12)
+                    .transition(.homeSuggestionsFade)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Panel layout (chat / connect): the surface fills the height with the ask
+    /// bar anchored directly beneath it.
+    private func homePanelStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ZStack {
+                switch homeMode {
+                case .chat:
+                    homeChatPanel(stageWidth: stageWidth)
+                        .transition(.homeDropFromTop)
+                case .connect:
+                    homeConnectPanel(stageWidth: stageWidth)
+                        .transition(.homeDropFromTop)
+                case .hub:
+                    EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            homeAskBar
+                .frame(width: askBarWidth)
+                .padding(.top, 22)
+
+            dashboardChatErrorCard
+                .frame(width: askBarWidth)
+                .padding(.top, 8)
+        }
+    }
+
+    // MARK: Hub centerpiece
+
+    private var homeHubWordmark: some View {
+        Text("omi.")
+            .font(.system(size: 58, weight: .bold, design: .rounded))
+            .foregroundStyle(HomePalette.ink)
+            .lineLimit(1)
+            .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Stat summary strip that docks directly above the ask bar.
+    private var homeStatRibbon: some View {
+        HomeStatRibbon(items: [
+            HomeStatItem(
+                title: "Conversations",
+                value: conversationMetricValue,
+                systemImage: "text.bubble.fill",
+                action: { navigate(to: .conversations) }
+            ),
+            HomeStatItem(
+                title: "Tasks",
+                value: taskMetricValue,
+                systemImage: "checklist",
+                action: { navigate(to: .tasks) }
+            ),
+            HomeStatItem(
+                title: "Memories",
+                value: memoryMetricValue,
+                systemImage: "brain",
+                action: { navigate(to: .memories) }
+            ),
+            HomeStatItem(
+                title: "Screenshots",
+                value: screenshotMetricValue,
+                systemImage: "photo.on.rectangle.angled",
+                action: { navigate(to: .rewind) }
+            ),
+        ])
+    }
+
+    // MARK: Inline chat panel
+
+    private func homeChatPanel(stageWidth: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ChatMessagesView(
+                messages: chatProvider.messages,
+                isSending: chatProvider.isSending,
+                hasMoreMessages: chatProvider.hasMoreMessages,
+                isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
+                isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
+                    && !chatProvider.isClearing,
+                app: selectedApp,
+                onLoadMore: { await chatProvider.loadMoreMessages() },
+                onRate: { messageId, rating in
+                    Task { await chatProvider.rateMessage(messageId, rating: rating) }
+                },
+                onCitationTap: { citation in
+                    handleCitationTap(citation)
+                },
+                sessionsLoadError: chatProvider.sessionsLoadError,
+                onRetry: { Task { await chatProvider.retryLoad() } },
+                localSendToken: chatProvider.localSendToken,
+                onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+                onOpenAgent: { agentID, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
+                },
+                onOpenAgentRef: { ref, completion in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
+                },
+                welcomeContent: { dashboardChatWelcome }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.05),
+                        .init(color: .black, location: 0.97),
+                        .init(color: .clear, location: 1.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
+            dashboardChatErrorCard
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+        }
+        // Barely-there card so the chat reads as a bounded surface while still
+        // dissolving into the ambient Home canvas.
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.018),
+                            HomePalette.stageGlow.opacity(0.014),
+                            Color.white.opacity(0.006),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(HomePalette.stageGlow.opacity(0.10), lineWidth: 1)
+                .blur(radius: 2.5)
+                .opacity(0.65)
+        )
+        .shadow(color: HomePalette.stageGlow.opacity(0.055), radius: 28, y: 8)
+        .frame(width: homeStagePanelWidth(for: stageWidth))
+    }
+
+    // MARK: Connect tray
+
+    private func homeConnectPanel(stageWidth: CGFloat) -> some View {
+        // Sources feed omi; omi's memory flows out to the AI destinations —
+        // the chevron between the two cards reads that direction. The tray
+        // hugs its content: no scroll filler below the columns.
+        HStack(alignment: .center, spacing: 12) {
+            homeConnectColumnCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    sourceColumnHeader
+                    sourceConstellation
+                }
+            }
+
+            Image(systemName: "chevron.right")
+                .scaledFont(size: 13, weight: .bold)
+                .foregroundStyle(HomePalette.secondary)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(HomePalette.tile))
+                .overlay(Circle().stroke(HomePalette.hairline, lineWidth: 1))
+                .accessibilityHidden(true)
+
+            homeConnectColumnCard {
+                destinationStack
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(HomePalette.panel.opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+        )
+        .overlay(alignment: .topTrailing) {
+            HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
+                closeHomeStagePanel()
+            }
+            .padding(14)
+        }
+        .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+        .frame(width: homeStagePanelWidth(for: stageWidth))
+    }
+
+    private func homeConnectColumnCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.025))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+            )
+    }
+
+    // MARK: Ask bar + suggestions
+
+    @ViewBuilder
+    private var dashboardChatErrorCard: some View {
+        if let cardState = chatProvider.currentError {
+            ChatErrorCard(
+                state: cardState,
+                onRecover: {
+                    Task { await chatProvider.recoverFromError() }
+                },
+                onDismiss: {
+                    chatProvider.dismissCurrentError()
+                }
+            )
+        }
+    }
+
+    private var homeAskBar: some View {
+        HomeAskBar(
+            text: $chatProvider.draftText,
+            isSending: chatProvider.isSending,
+            isStopping: chatProvider.isStopping,
+            isConnectActive: homeMode == .connect,
+            focus: $homeAskFieldFocused,
+            attachments: $chatProvider.pendingAttachments,
+            onAttachmentsAdded: { urls in
+                let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+                chatProvider.addAttachments(toAdd)
+            },
+            onAttachmentRemoved: { id in
+                chatProvider.removePendingAttachment(id: id)
+            },
+            onSend: sendFromHomeAskBar,
+            onStop: { chatProvider.stopAgent(owner: .mainChat) },
+            onConnect: toggleHomeConnectPanel,
+            onActivate: { openHomeChat() }
+        )
+    }
+
+    private var homeSuggestedQuestions: [String] {
+        let saved = PostOnboardingPromptSuggestions.suggestions()
+        let fallback = [
+            "What should I focus on today to achieve my goals?",
+            "What did I spend my time on this week?",
+            "What's the highest-leverage thing I can do next?",
+        ]
+        return Array((saved.isEmpty ? fallback : saved).prefix(3))
+    }
+
+    private var homeSuggestionList: some View {
+        VStack(spacing: 8) {
+            ForEach(homeSuggestedQuestions, id: \.self) { question in
+                HomeSuggestionRow(text: question) {
+                    askHomeSuggestion(question)
+                }
+            }
+        }
+    }
+
+    private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat {
+        min(Self.homeStageMaxSideInset, max(Self.homeStageMinSideInset, stageWidth * 0.06))
+    }
+
+    private func homeStageContentWidth(for stageWidth: CGFloat) -> CGFloat {
+        let sideInset = homeStageSideInset(for: stageWidth)
+        return min(Self.homeStageMaxWidth, max(CGFloat(0), stageWidth - (sideInset * 2)))
+    }
+
+    private func homeStagePanelWidth(for stageWidth: CGFloat) -> CGFloat {
+        min(Self.homeStagePanelMaxWidth, homeStageContentWidth(for: stageWidth))
+    }
+
+    private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat {
+        let contentWidth = homeStageContentWidth(for: stageWidth)
+        if homeMode != .hub {
+            return min(Self.homeStagePanelMaxWidth, contentWidth)
+        }
+
+        let availableWidth = min(Self.homeAskBarMaxWidth, contentWidth)
+        let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return min(availableWidth, Self.homeAskBarMinWidth)
+        }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 15),
+        ]
+        let measuredTextWidth = (text as NSString).size(withAttributes: attributes).width
+        let chromeWidth: CGFloat = 210
+        return min(availableWidth, max(Self.homeAskBarMinWidth, measuredTextWidth + chromeWidth))
+    }
+
+    // MARK: Stage actions
+
+    private func reportHomeAutomationMode() {
+        guard DesktopAutomationLaunchOptions.isEnabled else { return }
+        let modeLabel = useLegacyHomeDesign ? nil : homeMode.automationLabel
+        DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+            snapshot.homeMode = modeLabel
+            snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+        }
+    }
+
+    private func openHomeChat(focusInput: Bool = true) {
+        guard homeMode != .chat else { return }
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = .chat
+        }
+        if focusInput {
+            focusHomeAskFieldAfterStageTransition()
+        }
+        reportHomeAutomationMode()
+    }
+
+    private func focusHomeAskFieldAfterStageTransition() {
+        Task { @MainActor in
+            await Task.yield()
+            homeAskFieldFocused = true
+        }
+    }
+
+    private func toggleHomeConnectPanel() {
+        let target: HomeStageMode = homeMode == .connect ? .hub : .connect
+        if target == .connect {
+            homeAskFieldFocused = false
+        }
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = target
+        }
+        reportHomeAutomationMode()
+    }
+
+    private func closeHomeStagePanel() {
+        homeAskFieldFocused = false
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = .hub
+        }
+        reportHomeAutomationMode()
+    }
+
+    private func sendFromHomeAskBar() {
+        let draft = chatProvider.draftText
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Text is required — ChatProvider.sendMessage no-ops on empty text, so
+        // an attachment-only "send" would silently drop the turn.
+        guard !text.isEmpty else { return }
+        openHomeChat(focusInput: false)
+        AnalyticsManager.shared.chatMessageSent(
+            messageLength: text.count,
+            hasSelectedAppContext: selectedApp != nil,
+            source: "home_ask_bar"
+        )
+        if chatProvider.isSending {
+            return
+        } else {
+            Task { await chatProvider.sendMainDraft(draft) }
+        }
+    }
+
+    private func askHomeSuggestion(_ suggestion: String) {
+        openHomeChat(focusInput: false)
+        AnalyticsManager.shared.chatMessageSent(
+            messageLength: suggestion.count,
+            hasSelectedAppContext: selectedApp != nil,
+            source: "home_suggested_question"
+        )
+        Task { await chatProvider.sendMessage(suggestion) }
+    }
+
+    @ViewBuilder
+    private func appsPopupOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if isShowingAppsPopup {
+                Color.black.opacity(0.16)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissAppsPopup()
+                    }
+                    .transition(.opacity)
+                    .zIndex(2)
+
+                let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                AppsPage(
+                    appProvider: appProvider,
+                    appState: appState,
+                    connectorStatusStore: homeStatusStore.connectorStatusStore,
+                    initialSection: appsPopupInitialSection,
+                    onDismiss: {
+                        dismissAppsPopup()
+                    },
+                    onSelectApp: { app in
+                        openAppFromAppsPopup(app)
+                    },
+                    onSelectConnector: { connector in
+                        openImportConnectorFromAppsPopup(connector)
+                    },
+                    onSelectDestination: { destination in
+                        openExportDestinationFromAppsPopup(destination)
+                    }
+                )
+                .id(appsPopupPresentationID)
+                .frame(width: popupSize.width, height: popupSize.height)
+                .background(OmiColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
+                        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .accessibilityAddTraits(.isModal)
+                .zIndex(3)
+
+                // Only the topmost modal owns Esc; the connect sheet takes over
+                // while it is presented (including the brief crossfade overlap).
+                if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
+                    OverlayModalEscapeCatcher {
+                        dismissAppsPopup()
+                    }
+                    .zIndex(3)
+                }
+            }
+        }
+        .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
+        .zIndex(2)
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if homeConnectSheetIsPresented {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissHomeConnectSheet()
+                    }
+                    .transition(.opacity)
+                    .zIndex(4)
+
+                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                homeConnectSheetContent()
+                    .frame(width: sheetSize.width, height: sheetSize.height)
+                    .background(OmiColors.backgroundPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
+                            .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+                    .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .accessibilityAddTraits(.isModal)
+                    .zIndex(5)
+
+                if homeConnectSheetAcceptsInput {
+                    OverlayModalEscapeCatcher {
+                        dismissHomeConnectSheet()
+                    }
+                    .zIndex(5)
+                }
+            }
+        }
+        .allowsHitTesting(homeConnectSheetAcceptsInput)
+        .zIndex(4)
+    }
+
+    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        let preferred = homeConnectSheetPreferredSize
+        return CGSize(
+            width: min(
+                preferred.width,
+                max(Self.homeConnectSheetMinWidth, panelWidth - (Self.homeConnectSheetHorizontalMargin * 2))
+            ),
+            height: min(
+                preferred.height,
+                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
+            )
+        )
+    }
+
+    private var homeConnectSheetPreferredSize: CGSize {
+        if selectedCatalogApp != nil {
+            return Self.appDetailSheetPreferredSize
+        }
+        if selectedImportConnector != nil {
+            return Self.importConnectorSheetPreferredSize
+        }
+        return Self.exportDestinationSheetPreferredSize
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetContent() -> some View {
+        if let app = selectedCatalogApp {
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { dismissHomeConnectSheet() })
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        } else if let connector = selectedImportConnector {
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: homeStatusStore.connectorStatusStore,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        } else if let destination = selectedExportDestination {
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $homeStatusStore.memoryExportStatuses,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        }
+    }
+
+    private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: min(
+                Self.appsPopupMaxWidth,
+                max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
+            ),
+            height: min(
+                Self.appsPopupMaxHeight,
+                max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
+            )
+        )
     }
 
     private var homeHeader: some View {
@@ -438,12 +1252,15 @@ struct DashboardPage: View {
                     action: toggleCapture
                 )
 
-                HomeStatusButton(
+                HomeListeningStatusButton(
                     title: "Listening",
                     systemImage: appState.isTranscribing ? "waveform.circle.fill" : "mic.circle",
                     status: appState.isTranscribing ? .active : .inactive,
+                    modeTitle: listeningModeTitle,
+                    isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
                     isToggling: isTogglingListening,
-                    action: toggleListening
+                    action: toggleListening,
+                    modeAction: toggleListeningMode
                 )
 
                 HomeSettingsMenuButton(
@@ -454,48 +1271,6 @@ struct DashboardPage: View {
             }
         }
         .frame(height: 36)
-    }
-
-    private var homeRoutingStage: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(HomePalette.panel)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(HomePalette.hairline.opacity(0.86), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.42), radius: 34, y: 18)
-
-            HomeMemoryBridgeBackdrop()
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceColumnHeader
-                    sourceConstellation
-                }
-                .frame(width: 320)
-
-                centerMemoryColumn
-
-                destinationStack
-                    .frame(width: 300)
-            }
-            .padding(26)
-        }
-    }
-
-    private var centerMemoryColumn: some View {
-        HomeCenterMemoryColumn(
-            conversationValue: conversationMetricValue,
-            taskValue: taskMetricValue,
-            memoryValue: memoryMetricValue,
-            screenshotValue: screenshotMetricValue,
-            onConversations: { navigate(to: .conversations) },
-            onTasks: { navigate(to: .tasks) },
-            onMemories: { navigate(to: .memories) },
-            onScreenshots: { navigate(to: .rewind) }
-        )
     }
 
     private var sourceColumnHeader: some View {
@@ -509,24 +1284,6 @@ struct DashboardPage: View {
                 .foregroundStyle(HomePalette.muted)
                 .lineLimit(1)
         }
-        .frame(height: 62, alignment: .bottomLeading)
-    }
-
-    private var centerMemoryHeader: some View {
-        VStack(spacing: 2) {
-            Text("omi.")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
-                .foregroundStyle(HomePalette.ink)
-                .lineLimit(1)
-                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
-
-            Text("What omi knows")
-                .font(.system(size: 15, weight: .medium, design: .serif))
-                .foregroundStyle(HomePalette.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-        }
-        .frame(height: 62, alignment: .bottom)
     }
 
     private var sourceConstellation: some View {
@@ -547,105 +1304,64 @@ struct DashboardPage: View {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .imports)
             }
         }
     }
 
     private var destinationStack: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Connect your AI")
-                    .font(.system(size: 22, weight: .medium, design: .serif))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Use omi memory anywhere")
+                    .font(.system(size: 20, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
-                Text("Use Omi memory where you already work.")
+                Text("Bring your memories to the apps you use")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
+                openHomeChat()
+            }
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
                 openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
                 openExportDestination(.codex)
             }
-            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
                 openExportDestination(.openclaw)
             }
-            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: hasMCPDestinationConnected) {
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
                 openExportDestination(.hermes)
             }
-            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
-                navigate(to: .chat)
-            }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .exports)
             }
-        }
-    }
-
-    private var homeMetricsStrip: some View {
-        VStack(spacing: 8) {
-            homeMetricTopRow
-            homeMetricBottomRow
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var homeMetricTopRow: some View {
-        HStack(spacing: 8) {
-            HomeCenterMetricTile(
-                title: "Conversations",
-                value: conversationMetricValue,
-                systemImage: "text.bubble.fill",
-                action: { navigate(to: .conversations) }
-            )
-            HomeCenterMetricTile(
-                title: "Tasks",
-                value: taskMetricValue,
-                systemImage: "checklist",
-                action: { navigate(to: .tasks) }
-            )
-        }
-    }
-
-    private var homeMetricBottomRow: some View {
-        HStack(spacing: 8) {
-            HomeCenterMetricTile(
-                title: "Memories",
-                value: memoryMetricValue,
-                systemImage: "brain",
-                action: { navigate(to: .memories) }
-            )
-            HomeCenterMetricTile(
-                title: "Screenshots",
-                value: screenshotMetricValue,
-                systemImage: "photo.on.rectangle.angled",
-                action: { navigate(to: .rewind) }
-            )
         }
     }
 
     private var conversationMetricValue: String {
-        formattedCount(conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
+        formattedCount(
+            homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
+        )
     }
 
     private var taskMetricValue: String {
-        formattedCount(taskCount ?? incompleteTaskCount)
+        formattedCount(homeStatusStore.taskCount ?? incompleteTaskCount)
     }
 
     private var memoryMetricValue: String {
-        let count = memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
+        let count = homeStatusStore.memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
             ? memoriesViewModel.totalMemoriesCount
             : memoriesViewModel.memories.count)
         return formattedCount(count)
     }
 
     private var screenshotMetricValue: String {
-        screenshotCount.map(formattedCount) ?? "—"
+        homeStatusStore.screenshotCount.map(formattedCount) ?? "—"
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -653,30 +1369,73 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPage() {
-        navigate(to: .apps)
+    private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
+        // Filters left behind by earlier catalog visits (a category, a search,
+        // "Installed") would otherwise replace the Imports/Exports sections
+        // this popup exists to show.
+        appProvider.clearFilters()
+        appsPopupInitialSection = initialSection
+        appsPopupPresentationID = UUID()
+        appsPopupAcceptsInput = true
+        isShowingAppsPopup = true
+    }
+
+    private func dismissAppsPopup() {
+        appsPopupAcceptsInput = false
+        isShowingAppsPopup = false
+    }
+
+    private func openAppFromAppsPopup(_ app: OmiApp) {
+        dismissAppsPopup()
+        presentCatalogApp(app)
+    }
+
+    private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
+        dismissAppsPopup()
+        presentImportConnector(connector)
+    }
+
+    private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
+        dismissAppsPopup()
+        presentExportDestination(destination)
     }
 
     private func openImportConnector(_ connectorID: String) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenImportRequested,
-                object: nil,
-                userInfo: ["connector": connectorID]
-            )
+        if let connector = ImportConnector.all.first(where: { $0.id == connectorID }) {
+            presentImportConnector(connector)
         }
     }
 
     private func openExportDestination(_ destination: MemoryExportDestination) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenExportRequested,
-                object: nil,
-                userInfo: ["destination": destination.rawValue]
-            )
-        }
+        presentExportDestination(destination)
+    }
+
+    private func presentCatalogApp(_ app: OmiApp) {
+        homeConnectSheetAcceptsInput = true
+        selectedImportConnector = nil
+        selectedExportDestination = nil
+        selectedCatalogApp = app
+    }
+
+    private func presentImportConnector(_ connector: ImportConnector) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedExportDestination = nil
+        selectedImportConnector = connector
+    }
+
+    private func presentExportDestination(_ destination: MemoryExportDestination) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = destination
+    }
+
+    private func dismissHomeConnectSheet() {
+        homeConnectSheetAcceptsInput = false
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = nil
     }
 
     private func openReferFriend() {
@@ -719,8 +1478,20 @@ struct DashboardPage: View {
         }
     }
 
+    private func toggleListeningMode() {
+        let nextMode: AssistantSettings.SystemAudioCaptureMode =
+            listeningCaptureMode == .onlyDuringMeetings ? .always : .onlyDuringMeetings
+        systemAudioCaptureModeRaw = nextMode.rawValue
+        AssistantSettings.shared.systemAudioCaptureMode = nextMode
+        AnalyticsManager.shared.settingToggled(
+            setting: "meetings_only_listening",
+            enabled: nextMode == .onlyDuringMeetings
+        )
+    }
+
     private func toggleCapture() {
-        let enabled = !screenAnalysisEnabled
+        syncCaptureState()
+        let enabled = !isCaptureLive
         isTogglingCapture = true
 
         if enabled {
@@ -729,10 +1500,7 @@ struct DashboardPage: View {
                 screenAnalysisEnabled = false
                 isCaptureMonitoring = false
                 isTogglingCapture = false
-                ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    ScreenCaptureService.requestAllScreenCapturePermissions()
-                }
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 return
             }
         }
@@ -766,30 +1534,6 @@ struct DashboardPage: View {
         ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
         screenAnalysisEnabled = AssistantSettings.shared.screenAnalysisEnabled
         isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-    }
-
-    private func loadScreenshotCount() async {
-        let stats = await RewindIndexer.shared.getStats()
-        await MainActor.run {
-            screenshotCount = stats?.total
-        }
-    }
-
-    /// Load the true totals behind the "What omi knows" tiles. Conversations come
-    /// from the server count endpoint (not stored locally); memories and tasks are
-    /// counted from the synced local DB — the same totals the detail pages show.
-    private func loadKnowledgeCounts() async {
-        async let convos = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
-        async let mems = try? MemoryStorage.shared.getLocalMemoriesCount()
-        // Open tasks only (matches the "Tasks" label and the old tile's intent —
-        // the old value just under-counted, capping each bucket at a 7-day window).
-        async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let (c, m, t) = await (convos, mems, tasks)
-        await MainActor.run {
-            if let c { conversationCount = c }
-            if let m { memoryCount = m }
-            if let t { taskCount = t }
-        }
     }
 
     private func formattedCount(_ count: Int) -> String {
@@ -1051,9 +1795,8 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    static let glow = Color(red: 0.95, green: 0.33, blue: 0.45)
-    static let glowSoft = Color(red: 0.52, green: 0.18, blue: 0.27)
-    static let flowPink = Color(red: 1.0, green: 0.16, blue: 0.44)
+    static let stageGlow = Color(red: 0.48, green: 0.30, blue: 0.95)
+    static let glow = stageGlow
 }
 
 private enum HomeRowStatus {
@@ -1067,124 +1810,398 @@ private enum HomeDestinationProminence {
     case quiet
 }
 
+private enum HomeStageMode: Equatable {
+    case hub
+    case chat
+    case connect
+
+    var automationLabel: String {
+        switch self {
+        case .hub: return "hub"
+        case .chat: return "chat"
+        case .connect: return "connect"
+        }
+    }
+}
+
+/// Shared "drop from the top" motion for stage panels: a short slide with a
+/// slight top-anchored scale and fade — deliberate, not a full-height fly-in.
+private struct HomeStageDropModifier: ViewModifier {
+    let offsetY: CGFloat
+    let scale: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: offsetY)
+            .scaleEffect(scale, anchor: .top)
+            .opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    fileprivate static var homeDropFromTop: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: -46, scale: 0.97, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+
+    fileprivate static var homeHubFade: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: 14, scale: 1, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+
+    fileprivate static var homeSuggestionsFade: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: 10, scale: 1, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+}
+
+/// The persistent home ask bar: a pill-shaped chat input with attachments
+/// (paperclip + drag-drop, same limits as the chat page), a send/stop action,
+/// and the Connect toggle living inside the pill.
+private struct HomeAskBar: View {
+    @Binding var text: String
+    let isSending: Bool
+    let isStopping: Bool
+    let isConnectActive: Bool
+    var focus: FocusState<Bool>.Binding
+    @Binding var attachments: [ChatAttachment]
+    let onAttachmentsAdded: ([URL]) -> Void
+    let onAttachmentRemoved: (String) -> Void
+    let onSend: () -> Void
+    let onStop: () -> Void
+    let onConnect: () -> Void
+    let onActivate: () -> Void
+
+    @State private var isHovering = false
+    @State private var isDropTargeted = false
+
+    private var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Requires text: ChatProvider.sendMessage drops empty-text sends, so
+    /// presenting attachment-only as sendable would silently do nothing.
+    /// Staged files ride along with the typed message instead.
+    private var canSend: Bool {
+        hasText
+    }
+
+    private var isFocused: Bool { focus.wrappedValue }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if !attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: attachments,
+                    onRemove: onAttachmentRemoved
+                )
+                .padding(.top, 10)
+                .padding(.horizontal, 12)
+            }
+
+            HStack(spacing: 10) {
+                Button(action: pickFiles) {
+                    Image(systemName: "paperclip")
+                        .scaledFont(size: 15, weight: .medium)
+                        .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(attachments.count >= kMaxChatAttachments)
+                .help("Attach files")
+
+                TextField(
+                    "",
+                    text: $text,
+                    prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .foregroundStyle(HomePalette.ink)
+                .focused(focus)
+                .onSubmit(handleSubmit)
+
+                actionButton
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 8)
+            .frame(height: 58)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 29, style: .continuous)
+                .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
+        )
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 29, style: .continuous)
+                    .stroke(Color.white.opacity(0.42), lineWidth: 1)
+            } else {
+                RoundedRectangle(cornerRadius: 29, style: .continuous)
+                    .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
+                    .blur(radius: 1.8)
+            }
+        }
+        .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
+        .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
+        .contentShape(.rect(cornerRadius: 29))
+        .onTapGesture {
+            onActivate()
+            focus.wrappedValue = true
+        }
+        .onHover { isHovering = $0 }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
+        .animation(.easeOut(duration: 0.16), value: isFocused)
+        .animation(.easeOut(duration: 0.16), value: canSend)
+        .animation(.easeOut(duration: 0.16), value: attachments.count)
+    }
+
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [
+            .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
+            .pdf, .plainText, .json, .commaSeparatedText, .html,
+            .text, .content,
+        ]
+        if panel.runModal() == .OK {
+            let remaining = max(0, kMaxChatAttachments - attachments.count)
+            let urls = Array(panel.urls.prefix(remaining))
+            if !urls.isEmpty {
+                onAttachmentsAdded(urls)
+            }
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        ChatAttachmentDropHandler.collectURLs(from: providers) { [attachments] urls in
+            guard !urls.isEmpty else { return }
+            let remaining = max(0, kMaxChatAttachments - attachments.count)
+            let allowed = Array(urls.prefix(remaining))
+            if !allowed.isEmpty {
+                onAttachmentsAdded(allowed)
+            }
+        }
+    }
+
+    private func handleSubmit() {
+        if isSending {
+            onStop()
+        } else if canSend {
+            onSend()
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        switch actionMode {
+        case .stop:
+            stopButton
+        case .send:
+            sendButton
+        case .connect:
+            connectButton
+        case .none:
+            EmptyView()
+        }
+    }
+
+    private var actionMode: HomeAskBarActionMode {
+        if isSending { return .stop }
+        if canSend { return .send }
+        if isFocused { return .none }
+        return .connect
+    }
+
+    private var sendButton: some View {
+        Button(action: handleSubmit) {
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+
+                Image(systemName: "arrow.up")
+                    .scaledFont(size: 13, weight: .bold)
+                    .foregroundStyle(Color.black)
+            }
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Send")
+        .accessibilityLabel("Send message")
+    }
+
+    private var stopButton: some View {
+        Button(action: onStop) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.14))
+
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.6)
+                } else {
+                    Image(systemName: "square.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundStyle(HomePalette.ink)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isStopping)
+        .help("Stop")
+        .accessibilityLabel("Stop response")
+    }
+
+    private var connectButton: some View {
+        HomeAskBarConnectButton(isActive: isConnectActive, action: onConnect)
+    }
+}
+
+private enum HomeAskBarActionMode: Equatable {
+    case connect
+    case send
+    case stop
+    case none
+}
+
+private struct HomeAskBarConnectButton: View {
+    let isActive: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .scaledFont(size: 11, weight: .semibold)
+
+                Text("Connect")
+                    .scaledFont(size: 12, weight: .semibold)
+            }
+            .foregroundStyle(isActive ? Color.black : HomePalette.ink)
+            .padding(.horizontal, 13)
+            .frame(height: 34)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isActive ? Color.white : Color.white.opacity(isHovering ? 0.14 : 0.07))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isActive ? Color.clear : HomePalette.hairline, lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help("Connect data & use omi anywhere")
+        .accessibilityLabel(isActive ? "Close connect" : "Connect")
+    }
+}
+
+private struct HomeSuggestionRow: View {
+    let text: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundStyle(isHovering ? Color(hex: 0xE3BF63) : HomePalette.muted)
+
+                Text(text)
+                    .scaledFont(size: 13, weight: .medium)
+                    .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.up.right")
+                    .scaledFont(size: 10, weight: .bold)
+                    .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 42)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .stroke(HomePalette.hairline.opacity(isHovering ? 1 : 0.55), lineWidth: 1)
+            )
+            .contentShape(.rect(cornerRadius: 21))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(text)
+    }
+}
+
 private struct HomeCanvasBackground: View {
     var body: some View {
         ZStack {
             HomePalette.paper
 
+            // Neutral key light high behind the wordmark, with a soft ambient
+            // wash so the redesigned Home stage reads against the dark canvas.
             RadialGradient(
-                colors: [
-                    HomePalette.glow.opacity(0.16),
-                    HomePalette.glow.opacity(0.035),
-                    .clear,
-                ],
-                center: .center,
-                startRadius: 30,
-                endRadius: 520
+                colors: [Color.white.opacity(0.040), .clear],
+                center: UnitPoint(x: 0.5, y: 0.16),
+                startRadius: 0,
+                endRadius: 560
             )
-            .blur(radius: 12)
+
+            RadialGradient(
+                colors: [HomePalette.stageGlow.opacity(0.075), .clear],
+                center: UnitPoint(x: 0.48, y: 0.24),
+                startRadius: 0,
+                endRadius: 680
+            )
+
+            RadialGradient(
+                colors: [HomePalette.stageGlow.opacity(0.040), .clear],
+                center: UnitPoint(x: 0.20, y: 0.78),
+                startRadius: 100,
+                endRadius: 560
+            )
+
+            RadialGradient(
+                colors: [.clear, HomePalette.paper.opacity(0.88), Color.black.opacity(0.62)],
+                center: UnitPoint(x: 0.50, y: 0.48),
+                startRadius: 470,
+                endRadius: 900
+            )
+
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.50),
+                    .init(color: HomePalette.stageGlow.opacity(0.026), location: 0.78),
+                    .init(color: Color.white.opacity(0.014), location: 0.90),
+                    .init(color: .clear, location: 1.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
         .ignoresSafeArea()
-    }
-}
-
-private struct HomeMemoryBridgeBackdrop: View {
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let height = proxy.size.height
-                let progress = CGFloat(
-                    timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 7.0) / 7.0)
-
-                ZStack {
-                    ForEach(0..<5, id: \.self) { index in
-                        HomeFlowCloud(index: index, progress: progress, width: width, height: height)
-                    }
-
-                    ForEach(0..<14, id: \.self) { index in
-                        HomeFlowParticle(index: index, progress: progress, width: width, height: height)
-                    }
-                }
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct HomeFlowCloud: View {
-    let index: Int
-    let progress: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    var body: some View {
-        let baseX = CGFloat(0.13 + Double(index) * 0.19)
-        let wave = CGFloat(sin(Double(progress) * Double.pi * 2 + Double(index) * 0.82))
-        let drift = CGFloat(cos(Double(progress) * Double.pi * 2 + Double(index) * 0.55))
-        let cloudWidth = width * (index == 2 ? 0.46 : 0.34)
-        let cloudHeight = height * (index == 2 ? 0.42 : 0.32)
-        let opacity = index == 2 ? 0.18 : 0.12
-
-        Ellipse()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        (index % 2 == 0 ? HomePalette.glow : HomePalette.flowPink).opacity(opacity),
-                        HomePalette.glowSoft.opacity(opacity * 0.58),
-                        .clear,
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: cloudWidth * 0.46
-                )
-            )
-            .frame(width: cloudWidth, height: cloudHeight)
-            .position(
-                x: width * baseX + drift * width * 0.020,
-                y: height * (0.47 + wave * 0.052)
-            )
-            .blur(radius: 36)
-            .blendMode(.screen)
-    }
-}
-
-private struct HomeFlowParticle: View {
-    let index: Int
-    let progress: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    var body: some View {
-        let base = CGFloat(index) / 14.0
-        let wrapped = (base + progress).truncatingRemainder(dividingBy: 1)
-        let wave = CGFloat(sin(Double(wrapped) * Double.pi * 2 + Double(index) * 0.72))
-        let fade = min(max((wrapped < 0.5 ? wrapped : 1 - wrapped) * 2.4, 0), 1)
-        let lane = CGFloat((index % 5) - 2) * 0.018
-        let x = width * (-0.06 + wrapped * 1.12)
-        let y = height * (0.49 + lane + wave * 0.052)
-        let size = CGFloat(26 + (index % 4) * 9)
-        let opacity = 0.04 + fade * 0.16
-
-        Ellipse()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        (index % 3 == 0 ? HomePalette.flowPink : HomePalette.glow).opacity(opacity),
-                        HomePalette.glowSoft.opacity(opacity * 0.46),
-                        .clear,
-                    ],
-                    center: .center,
-                    startRadius: 2,
-                    endRadius: size
-                )
-            )
-            .frame(width: size * 2.3, height: size * 1.12)
-            .position(x: x, y: y)
-            .rotationEffect(.degrees(Double(wave) * 9))
-            .blur(radius: 15)
-            .blendMode(.screen)
     }
 }
 
@@ -1998,135 +3015,80 @@ private struct HomeSourceTile: View {
     }
 }
 
-private struct HomeCenterMemoryColumn: View {
-    let conversationValue: String
-    let taskValue: String
-    let memoryValue: String
-    let screenshotValue: String
-    let onConversations: () -> Void
-    let onTasks: () -> Void
-    let onMemories: () -> Void
-    let onScreenshots: () -> Void
-
-    var body: some View {
-        content
-    }
-
-    private var content: AnyView {
-        let stack = VStack(spacing: 18) {
-            header
-            metrics
-        }
-        // Group the title directly above the cards and center the unit in a
-        // column the same height as the side lists.
-        let columnHeight = CGFloat(422)
-        let framed = stack.frame(width: CGFloat(340), height: columnHeight, alignment: Alignment.center)
-        return AnyView(framed)
-    }
-
-    private var header: AnyView {
-        AnyView(VStack(spacing: 2) {
-            Text("omi.")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
-                .foregroundStyle(HomePalette.ink)
-                .lineLimit(1)
-                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
-
-            Text("What omi knows")
-                .font(.system(size: 15, weight: .medium, design: .serif))
-                .foregroundStyle(HomePalette.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-        }
-        .frame(height: 62, alignment: .bottom))
-    }
-
-    private var metrics: AnyView {
-        AnyView(VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Conversations",
-                    value: conversationValue,
-                    systemImage: "text.bubble.fill",
-                    action: onConversations
-                )
-                HomeCenterMetricTile(
-                    title: "Tasks",
-                    value: taskValue,
-                    systemImage: "checklist",
-                    action: onTasks
-                )
-            }
-
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Memories",
-                    value: memoryValue,
-                    systemImage: "brain",
-                    action: onMemories
-                )
-                HomeCenterMetricTile(
-                    title: "Screenshots",
-                    value: screenshotValue,
-                    systemImage: "photo.on.rectangle.angled",
-                    action: onScreenshots
-                )
-            }
-        }
-        .frame(maxWidth: .infinity))
-    }
-}
-
-private struct HomeCenterMetricTile: View {
+private struct HomeStatItem: Identifiable {
+    let id = UUID()
     let title: String
     let value: String
     let systemImage: String
     let action: () -> Void
+}
+
+/// Slim summary strip: the four Home metrics fused into a single
+/// hairline-divided bar so they read as one glanceable object instead of
+/// four heavy widgets. Each cell still hovers and navigates.
+private struct HomeStatRibbon: View {
+    let items: [HomeStatItem]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    Rectangle()
+                        .fill(HomePalette.hairline.opacity(0.7))
+                        .frame(width: 1)
+                        .padding(.vertical, 16)
+                }
+                HomeStatRibbonCell(item: item)
+            }
+        }
+        // Pin the height so the hairline dividers (greedy Rectangles) size to the
+        // content instead of stretching the whole strip in taller windows.
+        .frame(height: 76)
+        .background(HomePalette.tile.opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 8)
+    }
+}
+
+private struct HomeStatRibbonCell: View {
+    let item: HomeStatItem
 
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: systemImage)
-                        .scaledFont(size: 12, weight: .semibold)
+        Button(action: item.action) {
+            VStack(spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: item.systemImage)
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
+
+                    Text(item.value)
+                        .font(.system(size: 22, weight: .medium, design: .serif))
                         .foregroundStyle(HomePalette.ink)
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 9, weight: .bold)
-                        .foregroundStyle(isHovering ? HomePalette.flowPink : HomePalette.faint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
 
-                Text(value)
-                    .font(.system(size: 20, weight: .medium, design: .serif))
-                    .foregroundStyle(HomePalette.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                Text(title)
+                Text(item.title)
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundStyle(HomePalette.muted)
+                    .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .minimumScaleFactor(0.78)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(isHovering ? HomePalette.flowPink.opacity(0.5) : HomePalette.hairline.opacity(0.82), lineWidth: 1)
-            )
-            .contentShape(.rect(cornerRadius: 15))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .padding(.horizontal, 10)
+            .background(isHovering ? HomePalette.tileHover : Color.clear)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .accessibilityLabel("\(title), \(value)")
+        .accessibilityLabel("\(item.title), \(item.value)")
     }
 }
 
@@ -2659,14 +3621,11 @@ private struct HomeStatusButton: View {
                 Text(title)
                     .scaledFont(size: 12, weight: .semibold)
                     .lineLimit(1)
-
-                Circle()
-                    .fill(status.indicator)
-                    .frame(width: 6, height: 6)
             }
             .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
                     .fill(statusFill)
@@ -2682,6 +3641,123 @@ private struct HomeStatusButton: View {
         .onHover { isHovering = $0 }
         .help("\(title): \(status.text)")
         .accessibilityLabel("\(title) \(status.text)")
+    }
+
+    private var statusFill: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(isHovering ? 0.20 : 0.12)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHovering ? 0.16 : 0.10)
+        }
+        return isHovering ? HomePalette.tileHover : HomePalette.panel
+    }
+
+    private var statusStroke: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(0.38)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHovering ? 0.54 : 0.38)
+        }
+        return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
+    }
+}
+
+private struct HomeListeningStatusButton: View {
+    let title: String
+    let systemImage: String
+    let status: HomeStatusState
+    let modeTitle: String
+    let isMeetingsOnly: Bool
+    let isToggling: Bool
+    let action: () -> Void
+    let modeAction: () -> Void
+
+    // Single pill-level hover flag so moving between the title and the mode
+    // toggle never flickers the revealed controls.
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        if isToggling {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.55)
+                        } else {
+                            Image(systemName: systemImage)
+                                .scaledFont(size: 13, weight: .semibold)
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .scaledFont(size: 12, weight: .semibold)
+                            .lineLimit(1)
+
+                        // Mode ("Always" / "In meeting" / …) is revealed only on
+                        // hover to keep the resting pill clean.
+                        if isHovering {
+                            Text(modeTitle)
+                                .scaledFont(size: 8, weight: .medium)
+                                .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
+                    }
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .frame(height: 34)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isToggling)
+            .help("Listening: \(status.text), \(modeTitle)")
+            .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+
+            // Divider + mode toggle are revealed only on hover to keep the
+            // resting pill compact.
+            if isHovering {
+                Rectangle()
+                    .fill(HomePalette.hairline.opacity(0.65))
+                    .frame(width: 1, height: 18)
+                    .transition(.opacity)
+
+                Button(action: modeAction) {
+                    Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundStyle(modeIconColor)
+                        .frame(width: 30, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
+                .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
+                .transition(.opacity)
+            }
+        }
+        .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
+        .background(
+            Capsule(style: .continuous)
+                .fill(statusFill)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(statusStroke, lineWidth: 1)
+        )
+        .contentShape(Capsule())
+        .frame(height: 34)
+        .onHover { isHovering = $0 }
+        .animation(.easeInOut(duration: 0.14), value: isHovering)
+    }
+
+    private var modeIconColor: Color {
+        status.isActive ? HomePalette.green : HomePalette.muted
     }
 
     private var statusFill: Color {
@@ -3092,6 +4168,7 @@ private struct HomeAIButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     DashboardPage(
         viewModel: DashboardViewModel(),
@@ -3104,3 +4181,4 @@ private struct HomeAIButton: View {
     .frame(width: 800, height: 600)
     .background(OmiColors.backgroundPrimary)
 }
+#endif

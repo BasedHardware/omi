@@ -3,7 +3,8 @@
 // Issue #6592: Support multiple AI harnesses via common interface.
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
-import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { OutboundMessageDraft, WarmupSessionConfig } from "../protocol.js";
+import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
 /**
@@ -66,7 +67,7 @@ export type ToolExecutor = (
 /**
  * Event callback for streaming updates.
  */
-export type EventCallback = (event: OutboundMessage) => void;
+export type EventCallback = (event: OutboundMessageDraft) => void;
 
 /**
  * Features that a harness may or may not support.
@@ -223,13 +224,35 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   },
   hermes: {
     adapterId: "hermes",
-    productionAdapter: false,
-    expectations: placeholderExpectations("Hermes", "TICKET-hermes-adapter"),
+    productionAdapter: true,
+    expectations: {
+      // Hermes ACP sessions are tracked by the running server's in-memory
+      // session manager and are only valid for that process. After a restart
+      // the old session ids are stale, so bindings must not be marked as
+      // native-resumable. See https://hermes-agent.nousresearch.com/docs/user-guide/features/acp
+      nativeResume: unsupported("Hermes ACP session ids are process-local and are stale after adapter process restart."),
+      cancellationDispatch: required("Hermes supports cancellation dispatch for active attempts."),
+      cancellationAck: knownLimitation("Hermes cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("Hermes keeps session state in the adapter process and must stay worker-pinned while active."),
+      modelSwitching: required("Hermes supports model selection during session open and resume."),
+      artifactEmission: unsupported("Hermes ACP adapter does not emit artifact references yet."),
+      toolSupport: required("Hermes projects tool calls through canonical adapter tool events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Hermes bindings stale."),
+    },
   },
   openclaw: {
     adapterId: "openclaw",
-    productionAdapter: false,
-    expectations: placeholderExpectations("OpenClaw", "TICKET-openclaw-adapter"),
+    productionAdapter: true,
+    expectations: {
+      nativeResume: required("OpenClaw ACP exposes native sessions through the Gateway-backed ACP bridge."),
+      cancellationDispatch: required("OpenClaw ACP accepts cancellation through the shared ACP interrupt path."),
+      cancellationAck: knownLimitation("OpenClaw cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("OpenClaw ACP sessions are native and do not require process-local pinned workers."),
+      modelSwitching: unsupported("OpenClaw ACP does not currently expose session/set_model; model selection is configured in the OpenClaw gateway/agent."),
+      artifactEmission: unsupported("OpenClaw ACP adapter does not emit artifact references yet."),
+      toolSupport: unsupported("OpenClaw ACP rejects per-session MCP servers; Omi tools are unavailable until configured through the OpenClaw gateway/agent."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable OpenClaw bindings."),
+    },
   },
   a2a: {
     adapterId: "a2a",
@@ -239,11 +262,11 @@ export const ADAPTER_CAPABILITY_MATRIX = {
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
 
 export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
-export type ProductionAdapterId = "acp" | "pi-mono";
+export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw";
 export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
 
-export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono"] as const satisfies readonly ProductionAdapterId[];
-export const PLACEHOLDER_ADAPTER_IDS = ["hermes", "openclaw", "a2a"] as const satisfies readonly PlaceholderAdapterId[];
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw"] as const satisfies readonly ProductionAdapterId[];
+export const PLACEHOLDER_ADAPTER_IDS = ["a2a"] as const satisfies readonly PlaceholderAdapterId[];
 
 export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
   return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId);
@@ -257,10 +280,11 @@ export function isPlaceholderAdapterId(adapterId: string): adapterId is Placehol
   return isKnownAdapterId(adapterId) && !ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
 }
 
-const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
-  acp: "native_bindings_survive",
-  "pi-mono": "process_local_bindings_stale",
-};
+function restartBehaviorFor(expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>): AdapterCapabilities["restartBehavior"] {
+  if (expectations.nativeResume.status === "required") return "native_bindings_survive";
+  if (expectations.pinnedWorker.status === "required") return "process_local_bindings_stale";
+  return "attempts_orphaned";
+}
 
 export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {
   const expectations = ADAPTER_CAPABILITY_MATRIX[adapterId].expectations;
@@ -273,7 +297,7 @@ export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterC
     supportsModelSwitching: expectations.modelSwitching.status === "required",
     supportsArtifactEmission: expectations.artifactEmission.status === "required",
     supportsTools: expectations.toolSupport.status === "required",
-    restartBehavior: PRODUCTION_ADAPTER_RESTART_BEHAVIOR[adapterId],
+    restartBehavior: restartBehaviorFor(expectations),
   };
 }
 
@@ -310,7 +334,9 @@ export type OpenedBinding = AdapterBindingHandle;
 export interface AdapterAttemptContext {
   /** Omi-owned correlation id for host/runtime bookkeeping only. */
   sessionId: string;
-  /** Compatibility transport correlation for request-scoped tool relays. */
+  /** Omi/Firebase owner from the active Omi request context. Adapter payloads must not override this. */
+  ownerId: string;
+  /** Transport correlation for request-scoped tool relays. */
   requestId: string;
   clientId: string;
   runId: string;
@@ -323,7 +349,7 @@ export interface AdapterAttemptContext {
   metadata?: Record<string, unknown>;
 }
 
-export type AdapterEventSink = (event: OutboundMessage) => void;
+export type AdapterEventSink = (event: OutboundMessageDraft) => void;
 
 export interface AdapterArtifactReference {
   kind: string;
@@ -343,14 +369,18 @@ export interface AdapterAttemptResult {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
+  /** Adapter-owned native session id for request-scoped tool relays. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
+  failure?: RuntimeFailure;
   artifacts?: AdapterArtifactReference[];
 }
 
 export interface CancelAttemptContext {
   sessionId: string;
+  ownerId?: string;
+  requestId?: string;
+  clientId?: string;
   runId?: string;
   attemptId?: string;
   binding?: AdapterBindingHandle;
@@ -381,6 +411,19 @@ export interface RuntimeAdapter {
 
   cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>;
   closeBinding?(binding: AdapterBindingHandle): Promise<void>;
+
+  /**
+   * Return the MCP server configuration this adapter actually passes to its
+   * underlying session. Adapters that strip per-session MCP servers (e.g.
+   * OpenClaw with {@code sessionMcpServersMode: "empty"}) should return an
+   * empty array so the kernel's binding hash reflects what the
+   * adapter truly saw, not the raw input. Adapters that pass MCP servers
+   * through unchanged can omit this method; the kernel treats absent
+   * implementations as identity (passthrough).
+   *
+   * @param mcpServers Raw MCP server list from the run input.
+   */
+  effectiveMcpServers?(mcpServers: Record<string, unknown>[]): Record<string, unknown>[];
 }
 
 export interface PlaceholderRuntimeAdapter {

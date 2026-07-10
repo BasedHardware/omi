@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Insight View Model
 
@@ -640,8 +641,10 @@ struct InsightCard: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     InsightPage()
         .frame(width: 800, height: 600)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

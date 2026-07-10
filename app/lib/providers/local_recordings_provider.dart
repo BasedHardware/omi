@@ -32,7 +32,7 @@ import 'package:omi/utils/waveform_utils.dart';
 /// `completed` (never fire-and-forget).
 /// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
 /// react (fair-use message, generic error, or navigate away) instead of guessing.
-enum LocalUploadOutcome { started, rateLimited, failed, busy }
+enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
 
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
@@ -117,10 +117,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
       final seen = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
-        // Only batch recordings (audio_omibatch_*) — never offline-sync WAL flushes,
-        // which share this directory and the same audio_*.bin naming. The native
-        // writer stamps the `batchRecordingDevice` marker into the device segment.
-        if (!name.startsWith('audio_${batchRecordingDevice}_') || !name.endsWith('.bin')) continue;
+        // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
+        // marker) — never offline-sync WAL flushes, which share this directory and
+        // the same audio_*.bin naming.
+        if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -184,11 +184,6 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// 202 queued: persist the jobId and let the reconciler finish it.
   Future<LocalUploadOutcome> upload(LocalRecording rec) async {
     if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
-      return LocalUploadOutcome.rateLimited;
-    }
-
     _isUploading = true;
     _uploadingName = rec.fileName;
     _failedName = null;
@@ -202,8 +197,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _failedName = rec.fileName;
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await uploadLocalFilesV2([file]);
-        SyncRateLimiter.instance.clear();
+        final result = await SyncUploadGate.instance.upload([file]);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -215,8 +209,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
         }
       }
     } on SyncRateLimitedException catch (e) {
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
-      outcome = LocalUploadOutcome.rateLimited;
+      outcome =
+          e.kind == SyncRateLimitKind.fairUse ? LocalUploadOutcome.fairUseLimited : LocalUploadOutcome.backendBusy;
     } catch (e) {
       _failedName = rec.fileName;
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');

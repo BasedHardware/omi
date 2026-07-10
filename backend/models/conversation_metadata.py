@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,7 @@ class ConversationMetadata(BaseModel):
 def metadata_list(metadata: dict[str, Any], key: str) -> list[str]:
     value = metadata.get(key, [])
     if isinstance(value, list):
-        return value
+        return cast(list[str], value)
     if isinstance(value, tuple):
-        return list(value)
+        return [str(item) for item in cast(tuple[object, ...], value)]
     return []

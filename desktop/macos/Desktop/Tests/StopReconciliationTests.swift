@@ -1,41 +1,9 @@
 import XCTest
 @testable import Omi_Computer
 
-/// Tests for the stop/reconciliation logic in the from-segments removal migration.
-/// Covers: generation guard, source filtering, and force-process response validation.
+/// Tests for the stop/reconciliation logic in the deterministic desktop finalization flow.
+/// Covers: source filtering, bound backend ids, and legacy timestamp fallback validation.
 final class StopReconciliationTests: XCTestCase {
-
-    // MARK: - Recording Generation Guard
-
-    /// Verify that recordingGeneration increments correctly and can detect
-    /// when a new recording started during a delay window.
-    func testRecordingGenerationDetectsNewRecording() {
-        // Simulate the pattern used in stopTranscription():
-        // 1. Capture generation before stop
-        // 2. New recording starts (increments generation)
-        // 3. Check if generation changed
-        var generation: UInt64 = 0
-        let capturedGeneration = generation
-
-        // Simulate new recording starting
-        generation &+= 1
-
-        XCTAssertNotEqual(generation, capturedGeneration,
-            "Generation should change when a new recording starts")
-    }
-
-    func testRecordingGenerationStableWhenNoNewRecording() {
-        var generation: UInt64 = 42
-        let capturedGeneration = generation
-
-        // No new recording
-        XCTAssertEqual(generation, capturedGeneration,
-            "Generation should be stable when no new recording starts")
-
-        // Incrementing only when recording starts
-        generation &+= 1
-        XCTAssertNotEqual(generation, capturedGeneration)
-    }
 
     // MARK: - Conversation Source Filtering
 
@@ -53,11 +21,11 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertNotEqual(omiSource, .desktop, "Omi source should not match desktop filter")
     }
 
-    // MARK: - Force-Process Response Validation
+    // MARK: - Legacy Timestamp Fallback Validation
 
-    /// Simulate the validation logic used in stopTranscription() when
-    /// force-process returns a conversation.
-    func testForceProcessValidationAcceptsMatchingConversation() {
+    /// Simulate the validation logic used only for older unbound sessions that have no durable
+    /// backend conversation id.
+    func testTimestampFallbackAcceptsMatchingConversation() {
         let sessionStartTime = Date()
         let convStartedAt = sessionStartTime.addingTimeInterval(2) // 2s offset
         let convSource: ConversationSource = .desktop
@@ -71,7 +39,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertTrue(matches, "Conversation within 10s and source=desktop should match")
     }
 
-    func testForceProcessValidationRejectsTimeMismatch() {
+    func testTimestampFallbackRejectsTimeMismatch() {
         let sessionStartTime = Date()
         let convStartedAt = sessionStartTime.addingTimeInterval(15) // 15s offset
         let convSource: ConversationSource = .desktop
@@ -85,7 +53,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertFalse(matches, "Conversation >10s away should not match")
     }
 
-    func testForceProcessValidationRejectsSourceMismatch() {
+    func testTimestampFallbackRejectsSourceMismatch() {
         let sessionStartTime = Date()
         let convStartedAt = sessionStartTime.addingTimeInterval(1) // 1s offset
         let convSource: ConversationSource = .phone
@@ -99,7 +67,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertFalse(matches, "Non-desktop conversation should not match")
     }
 
-    func testForceProcessValidationRejectsBothMismatch() {
+    func testTimestampFallbackRejectsBothMismatch() {
         let sessionStartTime = Date()
         let convStartedAt = sessionStartTime.addingTimeInterval(20)
         let convSource: ConversationSource = .omi
@@ -142,6 +110,38 @@ final class StopReconciliationTests: XCTestCase {
         )
 
         XCTAssertTrue(matches, "9.99s offset should match")
+    }
+
+    func testTimestampReconciliationQueriesInProgressProcessingAndCompleted() {
+        XCTAssertEqual(
+            DesktopConversationMatchPolicy.cloudReconciliationStatuses,
+            [.inProgress, .processing, .completed]
+        )
+    }
+
+    func testTimestampMatchedInProgressConversationUsesSpecificFinalizeBeforeCompletion() {
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .inProgress)
+        )
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+                status: .inProgress,
+                source: .desktop
+            ),
+            "Timestamp matches must not complete locally until exact-id finalize returns a non-in-progress status"
+        )
+    }
+
+    func testTimestampMatchedProcessingConversationCanCompleteWithoutFinalize() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: .processing)
+        )
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+                status: .processing,
+                source: .desktop
+            )
+        )
     }
 
     func testNegativeTimeOffset() {
@@ -241,6 +241,56 @@ final class StopReconciliationTests: XCTestCase {
             "Force-process must not bind a different conversation when the listen session id is known")
     }
 
+    func testBoundBackendConversationShouldUseSpecificFinalizePath() {
+        let capturedBackendId = "backend-conversation-123"
+
+        XCTAssertFalse(capturedBackendId.isEmpty)
+        XCTAssertEqual(
+            "v1/conversations/\(capturedBackendId)/finalize",
+            "v1/conversations/backend-conversation-123/finalize"
+        )
+    }
+
+    func testUnboundStopDoesNotUseGlobalForceProcessFallback() {
+        let capturedBackendId: String? = nil
+
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: capturedBackendId,
+                persistedBackendId: nil
+            ),
+            "Unbound sessions should not force-process the user's current in-progress pointer"
+        )
+    }
+
+    func testCapturedButUnpersistedBackendIdDoesNotUseGlobalForceProcessFallback() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: nil
+            ),
+            "A captured listen id must be durably stored before force-processing is allowed"
+        )
+    }
+
+    func testCapturedBackendIdMustMatchPersistedBackendIdBeforeForceProcess() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: "backend-conversation-456"
+            )
+        )
+    }
+
+    func testPersistedCapturedBackendIdAllowsSpecificFinalize() {
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: "backend-conversation-123"
+            )
+        )
+    }
+
     func testBoundBackendConversationCompletionRejectsNonDesktopExactMatch() {
         XCTAssertFalse(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
             id: "backend-conversation-123",
@@ -289,6 +339,48 @@ final class StopReconciliationTests: XCTestCase {
             incomingBackendId: "active-conversation",
             activeBackendId: "active-conversation",
             ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionRejectsStaleConversationBinding() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "stale-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionAcceptsExactConversationBinding() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "recording-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testLifecycleEventRejectsStaleRecordingIdentity() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "stale-conversation",
+            recordingSessionId: "stale-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsExactRecordingIdentity() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: "recording-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsLegacyEventWhenConversationIdStillMatches() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: nil,
+            expectedBackendId: "recording-conversation"
         ))
     }
 

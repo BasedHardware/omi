@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Debouncer
 
@@ -73,8 +74,7 @@ struct ConversationsPage: View {
             await appState.moveConversationToFolder(conversationId, folderId: folderId)
           },
           onDelete: {
-            appState.deleteConversationLocally(selected.id)
-            selectedConversation = nil
+            // Cascade is owned by ConversationDetailView; refresh list after dismiss.
             Task {
               await appState.refreshConversations()
             }
@@ -435,8 +435,10 @@ struct ConversationsPage: View {
 
   private func performSearch(query: String) {
     guard !query.isEmpty else {
+      appState.cancelConversationSearch()
       searchResults = []
       searchError = nil
+      isSearching = false
       return
     }
 
@@ -447,15 +449,12 @@ struct ConversationsPage: View {
 
     Task {
       do {
-        let result = try await APIClient.shared.searchConversations(
-          query: query,
-          page: 1,
-          perPage: 50,
-          includeDiscarded: false
-        )
-        log("Search: Found \(result.items.count) results")
-        searchResults = result.items
+        let result = try await appState.searchConversations(query)
+        log("Search: Found \(result.count) results")
+        searchResults = result
         isSearching = false
+      } catch is CancellationError {
+        // A newer query owns the search UI now.
       } catch {
         logError("Search: Failed", error: error)
         searchError = error.localizedDescription
@@ -792,8 +791,10 @@ private struct TranscriptNotesDivider: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }
+#endif

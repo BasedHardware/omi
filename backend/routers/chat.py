@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import json
 import tempfile
 import uuid
@@ -8,7 +9,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, run_blocking
+from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -24,9 +25,11 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
+from pydantic import BaseModel
 
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
@@ -37,20 +40,22 @@ from models.chat import (
     ResponseMessage,
     MessageConversation,
     FileChat,
+    RateMessageRequest,
+    ShareChatMessagesRequest,
 )
-from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
+    acquire_chat_session,
+    initial_message_util,
     process_voice_message_segment,
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
     transcribe_pcm_bytes,
 )
+from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
-from utils.llm.persona import initial_persona_chat_message
-from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
@@ -84,6 +89,37 @@ _WS_IDLE_TIMEOUT_S = 60
 _MAX_PCM_BODY_BYTES = 200_000_000
 
 
+class VoiceMessageTranscriptionResponse(BaseModel):
+    transcript: str
+    language: Optional[str] = None
+
+
+class MessageReportResponse(BaseModel):
+    message: str
+
+
+class ChatRatingResponse(BaseModel):
+    status: str
+
+
+class ShareChatMessagesResponse(BaseModel):
+    url: str
+    token: str
+
+
+class SharedChatMessage(BaseModel):
+    id: str
+    text: str
+    sender: str
+    created_at: Optional[str] = None
+
+
+class SharedChatMessagesResponse(BaseModel):
+    sender_name: str
+    messages: List[SharedChatMessage] = []
+    count: int
+
+
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
     if not raw:
         return []
@@ -115,14 +151,6 @@ def filter_messages(messages, app_id):
     return collected
 
 
-def acquire_chat_session(uid: str, app_id: Optional[str] = None):
-    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
-    if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
-    return chat_session
-
-
 def _build_quota_exceeded_reply(
     uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: dict
 ) -> ResponseMessage:
@@ -143,7 +171,7 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, user_msg.dict())
+    chat_db.add_message(uid, user_msg.model_dump())
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -176,8 +204,30 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, ai_msg.dict())
-    return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
+    chat_db.add_message(uid, ai_msg.model_dump())
+    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
+
+
+def _record_chat_quota_question_safe(
+    uid: str,
+    *,
+    idempotency_key: str,
+    source: str,
+    message_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    platform: Optional[str] = None,
+):
+    try:
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            idempotency_key=idempotency_key,
+            source=source,
+            message_id=message_id,
+            chat_session_id=chat_session_id,
+            platform=platform,
+        )
+    except Exception:
+        logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
@@ -251,7 +301,15 @@ def send_message(
         message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
+    _record_chat_quota_question_safe(
+        uid,
+        idempotency_key=f'v2_messages:{message.id}',
+        source='v2_messages',
+        message_id=message.id,
+        chat_session_id=message.chat_session_id,
+        platform=x_app_platform,
+    )
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
@@ -262,7 +320,20 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Skip a malformed/legacy stored message rather than 500 the whole chat send.
+    messages = list(
+        reversed(
+            Message.deserialize_many_safe(
+                chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -297,7 +368,7 @@ def send_message(
             ai_message.chat_session_id = chat_session.id
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -325,7 +396,7 @@ def send_message(
                     response = callback_data.get('answer')
                     if response:
                         ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.dict()
+                        ai_message_dict = ai_message.model_dump()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
@@ -338,7 +409,7 @@ def send_message(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
+@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
@@ -383,55 +454,6 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
-    logger.info(f'initial_message_util {app_id}')
-
-    # init chat session — use provided session_id if available, otherwise acquire by app_id
-    if chat_session_id:
-        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
-        if chat_session is None:
-            raise HTTPException(status_code=404, detail='Chat session not found')
-    else:
-        chat_session = acquire_chat_session(uid, app_id=app_id)
-
-    # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
-    if chat_session_id:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
-    else:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
-
-    app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
-
-    # persona
-    text: str
-    if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, prev_messages)
-    else:
-        prev_messages_str = ''
-        if prev_messages:
-            prev_messages_str = 'Previous conversation history:\n'
-            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
-        logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
-        text = initial_chat_message(uid, app, prev_messages_str)
-
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        app_id=app_id,
-        from_external_integration=False,
-        type='text',
-        memories_id=[],
-        chat_session_id=chat_session['id'],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
-    return ai_message
-
-
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
     app_id: Optional[str] = None,
@@ -470,7 +492,16 @@ def get_messages(
     return messages
 
 
-@router.post("/v2/voice-messages")
+@router.post(
+    "/v2/voice-messages",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream of chat message chunks.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
@@ -500,13 +531,31 @@ def create_voice_message_stream(
 
     # process
     async def generate_stream():
+        quota_recorded = False
         async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
+            if not quota_recorded and chunk.startswith('message: '):
+                payload = chunk.removeprefix('message: ').strip()
+                try:
+                    message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
+                    await run_blocking(
+                        db_executor,
+                        _record_chat_quota_question_safe,
+                        uid,
+                        idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
+                        source='v2_voice_messages',
+                        message_id=message_data.get('id'),
+                        chat_session_id=message_data.get('chat_session_id'),
+                        platform=x_app_platform,
+                    )
+                    quota_recorded = True
+                except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    logger.warning('Failed to record voice chat quota question: %s', exc)
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post("/v2/voice-message/transcribe")
+@router.post("/v2/voice-message/transcribe", response_model=VoiceMessageTranscriptionResponse)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
@@ -565,7 +614,9 @@ async def transcribe_voice_message(
 
         resolved_language = resolve_voice_message_language(uid, language)
         try:
-            transcript, detected_language = transcribe_pcm_bytes(
+            transcript, detected_language = await run_blocking(
+                sync_executor,
+                transcribe_pcm_bytes,
                 audio_bytes,
                 uid,
                 language=resolved_language,
@@ -647,7 +698,9 @@ async def transcribe_voice_message(
     is_multi = resolved_language == 'multi'
     for wav_path in wav_paths:
         try:
-            transcript, detected_language = transcribe_voice_message_segment(wav_path, uid, language=resolved_language)
+            transcript, detected_language = await run_blocking(
+                sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
+            )
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:
@@ -1008,11 +1061,11 @@ def upload_file_chat(
                 thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 
@@ -1066,11 +1119,11 @@ def upload_file_chat(
             thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 
@@ -1133,14 +1186,14 @@ def create_initial_message(
 # MARK: - Message Rating
 
 
-@router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
+@router.patch('/v2/messages/{message_id}/rating', tags=['chat'], response_model=ChatRatingResponse)
 def rate_message(
     message_id: str,
-    data: dict,
+    data: RateMessageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
-    rating = data.get('rating')
+    rating = data.rating
 
     # Update rating on the message document
     chat_db.update_message_rating(uid, message_id, rating)
@@ -1174,13 +1227,13 @@ def rate_message(
 # MARK: - Chat Sharing
 
 
-@router.post('/v2/messages/share', tags=['chat'])
+@router.post('/v2/messages/share', tags=['chat'], response_model=ShareChatMessagesResponse)
 def share_chat_messages(
-    data: dict,
+    data: ShareChatMessagesRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a shareable link for chat messages."""
-    message_ids = data.get('message_ids', [])
+    message_ids = data.message_ids
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 
@@ -1199,7 +1252,7 @@ def share_chat_messages(
     return {"url": f"https://h.omi.me/chat/{token}", "token": token}
 
 
-@router.get('/v2/messages/shared/{token}', tags=['chat'])
+@router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)
 def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)

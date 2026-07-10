@@ -20,7 +20,11 @@ pub struct RedisReview {
 impl RedisService {
     /// Create a new Redis service with explicit connection parameters
     /// This avoids URL encoding issues with special characters in passwords
-    pub fn new_with_params(host: &str, port: u16, password: Option<&str>) -> Result<Self, redis::RedisError> {
+    pub fn new_with_params(
+        host: &str,
+        port: u16,
+        password: Option<&str>,
+    ) -> Result<Self, redis::RedisError> {
         let info = ConnectionInfo {
             addr: ConnectionAddr::Tcp(host.to_string(), port),
             redis: RedisConnectionInfo {
@@ -81,7 +85,11 @@ impl RedisService {
         let mut conn = self.get_connection().await?;
         let key = format!("memories-visibility:{}", conversation_id);
         let _: () = conn.set(&key, uid).await?;
-        tracing::info!("Stored conversation visibility: {} -> {}", conversation_id, uid);
+        tracing::info!(
+            "Stored conversation visibility: {} -> {}",
+            conversation_id,
+            uid
+        );
         Ok(())
     }
 
@@ -166,7 +174,9 @@ impl RedisService {
             "display_name": display_name,
             "task_ids": task_ids,
         });
-        let _: () = conn.set_ex(&key, value.to_string(), 30 * 24 * 60 * 60).await?;
+        let _: () = conn
+            .set_ex(&key, value.to_string(), 30 * 24 * 60 * 60)
+            .await?;
         tracing::info!("Stored task share: {} -> {} tasks", token, task_ids.len());
         Ok(())
     }
@@ -187,7 +197,11 @@ impl RedisService {
                     let display_name = parsed["display_name"].as_str().unwrap_or("").to_string();
                     let task_ids: Vec<String> = parsed["task_ids"]
                         .as_array()
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     Ok(Some((uid, display_name, task_ids)))
                 } else {
@@ -419,20 +433,36 @@ fn parse_python_reviews(raw: &str) -> Vec<RedisReview> {
         if let Some(obj) = parsed.as_object() {
             for (_uid, review) in obj {
                 if let Some(score) = review.get("score").and_then(|s| s.as_i64()) {
-                    reviews.push(RedisReview { score: score as i32 });
+                    reviews.push(RedisReview {
+                        score: score as i32,
+                    });
                 }
             }
         }
         return reviews;
     }
 
-    // Fallback: parse Python dict format using regex
-    // Looking for 'score': <number> patterns
-    let score_regex = regex::Regex::new(r"'score':\s*(\d+)").unwrap();
-    for cap in score_regex.captures_iter(raw) {
-        if let Some(score_match) = cap.get(1) {
-            if let Ok(score) = score_match.as_str().parse::<i32>() {
-                reviews.push(RedisReview { score });
+    // Fallback: parse Python dict format using regex.
+    // Compile the constant pattern once per process (and log at most once on the
+    // impossible error path) instead of recompiling on every call.
+    static SCORE_REGEX: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let score_regex = SCORE_REGEX.get_or_init(|| match regex::Regex::new(r"'score':\s*(\d+)") {
+        Ok(re) => Some(re),
+        Err(error) => {
+            tracing::error!(
+                "Failed to compile Redis review score fallback regex: {}",
+                error
+            );
+            None
+        }
+    });
+
+    if let Some(score_regex) = score_regex {
+        for cap in score_regex.captures_iter(raw) {
+            if let Some(score_match) = cap.get(1) {
+                if let Ok(score) = score_match.as_str().parse::<i32>() {
+                    reviews.push(RedisReview { score });
+                }
             }
         }
     }

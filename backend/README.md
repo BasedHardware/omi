@@ -90,32 +90,34 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     pip install -r requirements.txt
     ```
 
-13. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
+13. Model assets are local-only. `pretrained_models/` is intentionally ignored; do not commit model binaries or symlinks. Runtime VAD uses the tracked ONNX asset under `utils/stt/assets/`, while live integration tests that reference legacy Silero fixtures need those files placed locally under `pretrained_models/`.
+
+14. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
     - During onboarding, get your authentication token and run `ngrok config add-authtoken <your-token>`
 
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
+15. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
     ```bash
     ngrok http --domain=example.ngrok-free.app 8000
     ```
 
-15. Start the backend server:
+16. Start the backend server:
     ```bash
     uvicorn main:app --reload --env-file .env
     ```
 
-16. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
+17. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
     ```python
     import ssl
     ssl._create_default_https_context = ssl._create_unverified_context
     ```
 
-17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
+18. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 
-18. In your Omi app's environment, set `BASE_API_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
+19. In your Omi app's environment, set `BASE_API_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
 
-19. Your app should now be using your local backend
+20. Your app should now be using your local backend
 
-20. If you used a virtual environment, when you're done, deactivate it by running:
+21. If you used a virtual environment, when you're done, deactivate it by running:
     ```bash
     deactivate
     ```

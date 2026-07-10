@@ -13,20 +13,30 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
 
-/// Mock PeopleProvider that tracks setPeople calls
-class MockPeopleProvider extends PeopleProvider {
+/// Fake external actions that tracks people-refresh calls.
+class MockCaptureExternalActions extends NoopCaptureExternalActions {
   int setPeopleCallCount = 0;
+  int fetchSubscriptionCallCount = 0;
   Completer<void>? _setPeopleCompleter;
+  bool? outOfCreditsOverride;
+  String? topConversationIdOverride;
 
   @override
-  Future<void> setPeople() async {
+  bool? get isOutOfCredits => outOfCreditsOverride;
+
+  @override
+  String? get topConversationId => topConversationIdOverride;
+
+  @override
+  Future<void> refreshPeople() async {
     setPeopleCallCount++;
     if (_setPeopleCompleter != null) {
       // Simulate async work - wait for completer
@@ -37,6 +47,11 @@ class MockPeopleProvider extends PeopleProvider {
   /// Set a completer to control when setPeople completes
   void setSetPeopleCompleter(Completer<void> completer) {
     _setPeopleCompleter = completer;
+  }
+
+  @override
+  Future<void> fetchSubscription() async {
+    fetchSubscriptionCallCount++;
   }
 }
 
@@ -66,6 +81,35 @@ TranscriptSegment _segment(String id, String text) {
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
 
+/// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
+/// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get openAIAPIKey => null;
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => null;
+  @override
+  String? get googleMapsApiKey => null;
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+  @override
+  String? get stagingApiUrl => null;
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +123,11 @@ void main() {
       },
     );
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    try {
+      Env.init(_TestEnvFields());
+    } catch (_) {
+      // Env._instance is late final — ignore if already initialized in this isolate.
+    }
     try {
       await ServiceManager.init();
     } catch (_) {
@@ -370,8 +419,8 @@ void main() {
 
     test('triggers setPeople when segment has unknown personId', () {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
-      provider.peopleProvider = mockPeopleProvider;
+      final mockExternalActions = MockCaptureExternalActions();
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -382,13 +431,13 @@ void main() {
       provider.onSegmentReceived(segments);
 
       // Should have triggered setPeople
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
     });
 
     test('does not trigger refresh for segments without personId', () {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
-      provider.peopleProvider = mockPeopleProvider;
+      final mockExternalActions = MockCaptureExternalActions();
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -398,18 +447,18 @@ void main() {
       provider.onSegmentReceived(segments);
 
       // Should NOT trigger setPeople (no personId to check)
-      expect(mockPeopleProvider.setPeopleCallCount, 0);
+      expect(mockExternalActions.setPeopleCallCount, 0);
     });
 
     test('does not trigger multiple refreshes while one is in-flight', () async {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
+      final mockExternalActions = MockCaptureExternalActions();
 
       // Set up a completer to control when setPeople completes
       final completer = Completer<void>();
-      mockPeopleProvider.setSetPeopleCompleter(completer);
+      mockExternalActions.setSetPeopleCompleter(completer);
 
-      provider.peopleProvider = mockPeopleProvider;
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -419,14 +468,14 @@ void main() {
       provider.onSegmentReceived(segments1);
 
       // Should trigger first call
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
 
       // Second segment with different unknown personId while first is still in-flight
       final segments2 = [_segmentWithPerson('seg-b', 'unknown-2')];
       provider.onSegmentReceived(segments2);
 
       // Should NOT trigger another call (first is still in-flight)
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
 
       // Complete the first call
       completer.complete();
@@ -437,7 +486,44 @@ void main() {
       provider.onSegmentReceived(segments3);
 
       // Should trigger a new call
-      expect(mockPeopleProvider.setPeopleCallCount, 2);
+      expect(mockExternalActions.setPeopleCallCount, 2);
+    });
+  });
+
+  group('external actions port', () {
+    test('topConversationId delegates through external actions', () {
+      final provider = CaptureProvider();
+      final mockExternalActions = MockCaptureExternalActions()..topConversationIdOverride = 'conversation-1';
+
+      provider.updateExternalActions(mockExternalActions);
+
+      expect(provider.topConversationId, 'conversation-1');
+    });
+
+    test('bare provider does not reset freemium threshold when usage state is unknown', () async {
+      final provider = CaptureProvider();
+      provider.onMessageEventReceived(
+        FreemiumThresholdReachedEvent(remainingSeconds: 120, action: FreemiumAction.setupOnDeviceStt),
+      );
+
+      expect(provider.freemiumThresholdReached, isTrue);
+      await provider.checkCreditsAndResetThresholdIfNeeded();
+
+      expect(provider.freemiumThresholdReached, isTrue);
+    });
+
+    test('resets freemium threshold when wired usage state reports credits restored', () async {
+      final provider = CaptureProvider();
+      final mockExternalActions = MockCaptureExternalActions()..outOfCreditsOverride = false;
+      provider.updateExternalActions(mockExternalActions);
+      provider.onMessageEventReceived(
+        FreemiumThresholdReachedEvent(remainingSeconds: 120, action: FreemiumAction.setupOnDeviceStt),
+      );
+
+      await provider.checkCreditsAndResetThresholdIfNeeded();
+
+      expect(mockExternalActions.fetchSubscriptionCallCount, 1);
+      expect(provider.freemiumThresholdReached, isFalse);
     });
   });
 
@@ -638,17 +724,11 @@ void main() {
       provider.dispose();
     });
 
-    test('returns false for Frame', () {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
-      expect(provider.hasNativeBleAudioRoute, isFalse);
-      provider.dispose();
-    });
-
-    test('returns false for Limitless', () {
+    test('returns true for Limitless (flash-drain route) but no background-stream route', () {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.limitless));
-      expect(provider.hasNativeBleAudioRoute, isFalse);
+      expect(provider.hasNativeBleAudioRoute, isTrue);
+      expect(provider.hasNativeBackgroundStreamRoute, isFalse);
       provider.dispose();
     });
 
@@ -685,7 +765,7 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
-      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isNull);
+      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isEmpty);
       provider.dispose();
     });
 
@@ -743,17 +823,6 @@ void main() {
     test('enable rejects for device with no native route (Fieldy)', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.fieldy));
-
-      final result = await provider.setBackgroundModeEnabled(true);
-
-      expect(result, isFalse);
-      expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
-      provider.dispose();
-    });
-
-    test('enable rejects for device with no native route (Frame)', () async {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
 
       final result = await provider.setBackgroundModeEnabled(true);
 
@@ -874,7 +943,7 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
-      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isNull);
+      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isEmpty);
       provider.dispose();
     });
 
@@ -917,7 +986,7 @@ void main() {
 
     test('switching from no-route device to Omi gains route', () {
       final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.fieldy));
       expect(provider.hasNativeBleAudioRoute, isFalse);
 
       provider.updateRecordingDevice(_device(id: '11:22:33:44:55:66', type: DeviceType.omi));
@@ -953,6 +1022,49 @@ void main() {
       await provider.setBackgroundModeEnabled(true);
       // setBackgroundModeEnabled with batch mode on should keep nativeBleStreaming false
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      provider.dispose();
+    });
+  });
+
+  // ------------------------------------------------------------------ //
+  // Device mute persistence: a double-tap mute must survive an app      //
+  // kill/restart, otherwise the device silently resumes recording on    //
+  // the next reconnect (Featurebase: "If I turn off recording why       //
+  // doesn't it stay off?", "Cv1 unmutes on disconnect/reconnect").      //
+  // ------------------------------------------------------------------ //
+  group('device mute persistence', () {
+    setUp(() {
+      SharedPreferencesUtil().deviceMuted = false;
+    });
+
+    test('constructor restores muted state when deviceMuted pref is set', () {
+      SharedPreferencesUtil().deviceMuted = true;
+
+      final provider = CaptureProvider();
+
+      // _isPaused restored from prefs so the reconnect path re-applies the mute
+      // instead of resuming capture.
+      expect(provider.isPaused, isTrue);
+      provider.dispose();
+    });
+
+    test('constructor leaves recording unpaused when deviceMuted pref is unset', () {
+      SharedPreferencesUtil().deviceMuted = false;
+
+      final provider = CaptureProvider();
+
+      expect(provider.isPaused, isFalse);
+      provider.dispose();
+    });
+
+    test('pauseDeviceRecording persists the mute to prefs', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      await provider.pauseDeviceRecording();
+
+      expect(provider.isPaused, isTrue);
+      expect(SharedPreferencesUtil().deviceMuted, isTrue);
       provider.dispose();
     });
   });

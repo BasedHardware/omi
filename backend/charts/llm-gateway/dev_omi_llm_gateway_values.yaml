@@ -1,0 +1,131 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/llm-gateway
+  pullPolicy: Always
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+podLabels: {}
+
+service:
+  type: ClusterIP
+  backendConfig: dev-llm-gateway-backend-config
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "dev-llm-gateway-backend-config"}'
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "dev-llm-gateway-ilb-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+env:
+  - name: OMI_LLM_GATEWAY_PROD
+    value: "true"
+  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: LLM_GATEWAY_ALLOWED_CALLERS
+    value: "backend"
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENAI_API_KEY
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENROUTER_API_KEY
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: METRICS_SECRET
+  - name: DD_SERVICE
+    value: "llm-gateway"
+  - name: DD_ENV
+    value: "dev"
+  - name: DD_TRACE_ENABLED
+    value: "false"
+  - name: LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
+    value: "true"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 5
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

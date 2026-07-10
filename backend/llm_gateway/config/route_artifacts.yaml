@@ -1,0 +1,114 @@
+route_artifacts:
+  - route_artifact_id: route.chat_structured.2026_06_27.001
+    artifact_digest: sha256:271229622698025cd7f496f3d0cb3cb505306c2e7b5d6ce32a35d059b1908094
+    lane_id: omi:auto:chat-structured
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks:
+      - provider: openai
+        model: gpt-4.1-mini
+    timeouts:
+      request_ms: 30000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.chat_structured.2026_06_27
+      eval_report: eval.chat_extraction_requires_context.2026_06_27
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: shadow
+      percent: 0
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    fallback_policy:
+      fallback_on:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_on:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+
+  - route_artifact_id: route.chat_structured.2026_06_20.001
+    artifact_digest: sha256:70492be577ce8833273a58f04802aafa251d7981c0ad4c7a818a895fb5d1d9fc
+    lane_id: omi:auto:chat-structured
+    surface: openai.chat_completions
+    # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
+    # that while the pilot's active route is shadow-only, serving this route is a
+    # no-user-visible behavior match instead of silently swapping gpt-4.1-mini
+    # for gpt-4o-mini and changing classifier behavior for 100% of pilot calls.
+    primary:
+      provider: openai
+      model: gpt-4.1-mini
+    fallbacks: []
+    timeouts:
+      request_ms: 30000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    evidence:
+      benchmark_snapshot: bench.omi.chat_structured.2026_06_20
+      eval_report: eval.chat_extraction_requires_context.2026_06_20
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: active
+      percent: 100
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    fallback_policy:
+      fallback_on:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_on:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config

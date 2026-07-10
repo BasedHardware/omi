@@ -31,6 +31,7 @@ from utils.notifications import (
 )
 from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field, ValidationError
+from models.shared import StatusResponse
 
 router = APIRouter()
 
@@ -93,6 +94,84 @@ class ActionItemResponse(BaseModel):
     indent_level: int = 0
 
 
+class ActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    has_more: bool = False
+
+
+class ActionItemsSearchResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+
+
+class ActionItemIdsResponse(BaseModel):
+    ids: List[str]
+
+
+class ConversationActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    conversation_id: str
+
+
+class PendingSyncResponse(BaseModel):
+    pending_export: List[ActionItemResponse]
+    synced_items: List[ActionItemResponse]
+
+
+class BatchMutationResponse(BaseModel):
+    status: str
+    updated_count: int
+    updated_ids: Optional[List[str]] = None
+    missing_ids: Optional[List[str]] = None
+    noop_ids: Optional[List[str]] = None
+    locked_ids: Optional[List[str]] = None
+
+
+class BatchDeleteActionItemsResponse(BaseModel):
+    status: str
+    deleted_count: int
+    deleted_ids: List[str]
+
+
+class BatchCreateActionItemsResponse(BaseModel):
+    action_items: List[ActionItemResponse]
+    created_count: int
+
+
+class ShareActionItemsResponse(BaseModel):
+    url: str
+    token: str
+
+
+class SharedActionItemPreview(BaseModel):
+    description: str
+    due_at: Optional[datetime] = None
+
+
+class SharedActionItemsResponse(BaseModel):
+    sender_name: str
+    tasks: List[SharedActionItemPreview]
+    count: int
+
+
+class AcceptSharedActionItemsResponse(BaseModel):
+    created: List[str]
+    count: int
+
+
+def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> List[ActionItemResponse]:
+    """Build ActionItemResponse objects from raw records, skipping any that fail
+    validation so one malformed or legacy item cannot 500 a whole list endpoint."""
+    responses: List[ActionItemResponse] = []
+    for item in items:
+        try:
+            responses.append(ActionItemResponse(**item))
+        except ValidationError:
+            item_id = item.get('id') if isinstance(item, dict) else None
+            suffix = f', {context}' if context else ''
+            logger.warning('Skipping malformed action item %s (uid=%s%s)', item_id, uid, suffix)
+    return responses
+
+
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -119,7 +198,12 @@ class BatchUpdateActionItemsRequest(BaseModel):
     items: List[BatchUpdateActionItemEntry] = Field(..., max_length=500)
 
 
-@router.patch("/v1/action-items/batch", tags=['action-items'])
+@router.patch(
+    "/v1/action-items/batch",
+    response_model=BatchMutationResponse,
+    response_model_exclude_none=True,
+    tags=['action-items'],
+)
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
     result = action_items_db.batch_update_action_items(uid, request.items)
@@ -145,7 +229,7 @@ class SyncBatchRequest(BaseModel):
     items: List[SyncBatchItem] = Field(..., max_length=100)
 
 
-@router.get("/v1/action-items/pending-sync", tags=['action-items'])
+@router.get("/v1/action-items/pending-sync", response_model=PendingSyncResponse, tags=['action-items'])
 def get_pending_sync_items(
     platform: str = Query('apple_reminders', description="Sync platform"),
     uid: str = Depends(auth.get_current_user_uid),
@@ -155,12 +239,17 @@ def get_pending_sync_items(
     pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
     synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
     return {
-        "pending_export": [ActionItemResponse(**item) for item in pending_export],
-        "synced_items": [ActionItemResponse(**item) for item in synced_items],
+        "pending_export": _safe_action_item_responses(pending_export, uid=uid, context='pending_export'),
+        "synced_items": _safe_action_item_responses(synced_items, uid=uid, context='synced_items'),
     }
 
 
-@router.patch("/v1/action-items/sync-batch", tags=['action-items'])
+@router.patch(
+    "/v1/action-items/sync-batch",
+    response_model=BatchMutationResponse,
+    response_model_exclude_none=True,
+    tags=['action-items'],
+)
 def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update action items during reminders sync. Single Firestore batch commit."""
     if not request.items:
@@ -274,7 +363,14 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
     return ActionItemResponse(**action_item)
 
 
-@router.get("/v1/action-items", tags=['action-items'])
+def _ensure_aware(value: datetime) -> datetime:
+    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
+    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
+    # range never raises TypeError on mixed awareness (which would surface as a 500).
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+@router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
 def get_action_items(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
@@ -287,6 +383,15 @@ def get_action_items(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
+    if (
+        due_start_date is not None
+        and due_end_date is not None
+        and _ensure_aware(due_start_date) > _ensure_aware(due_end_date)
+    ):
+        raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
+
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -304,7 +409,7 @@ def get_action_items(
             description = item.get('description', '')
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
-    response_items = [ActionItemResponse(**item) for item in action_items]
+    response_items = _safe_action_item_responses(action_items, uid=uid)
 
     has_more = len(action_items) == limit
     if has_more:
@@ -324,7 +429,7 @@ def get_action_items(
     return {"action_items": response_items, "has_more": has_more}
 
 
-@router.get("/v1/action-items/search", tags=['action-items'])
+@router.get("/v1/action-items/search", response_model=ActionItemsSearchResponse, tags=['action-items'])
 def search_action_items(
     query: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
@@ -337,7 +442,18 @@ def search_action_items(
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
     action_items = [item for item in action_items if not item.get('is_locked', False)]
-    return {"action_items": [ActionItemResponse(**item) for item in action_items]}
+    return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
+
+
+@router.get("/v1/action-items/ids", response_model=ActionItemIdsResponse, tags=['action-items'])
+def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
+    """Return all of the user's action-item IDs (IDs only, no field reads).
+
+    A lightweight way for a client to reconcile which tasks it has without paging the full
+    list. Declared before /v1/action-items/{action_item_id} so the static path is not
+    captured as an action item id.
+    """
+    return {"ids": action_items_db.get_action_item_ids(uid)}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -478,14 +594,12 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
     # Send FCM deletion message to cancel scheduled notification
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
 
-    return {"status": "Ok"}
-
 
 class BatchDeleteActionItemsRequest(BaseModel):
     ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=10000)
 
 
-@router.post("/v1/action-items/batch-delete", tags=['action-items'])
+@router.post("/v1/action-items/batch-delete", response_model=BatchDeleteActionItemsResponse, tags=['action-items'])
 def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Delete multiple action items in one request.
 
@@ -507,7 +621,11 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
 # *****************************
 
 
-@router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
+@router.get(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationActionItemsResponse,
+    tags=['action-items'],
+)
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
     conversation = conversations_db.get_conversation(uid, conversation_id)
@@ -516,20 +634,21 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    response_items = []
-    for item in action_items:
-        try:
-            response_items.append(ActionItemResponse(**item))
-        except ValidationError:
-            logger.warning(
-                f"Skipping malformed action item {item.get('id')} for conversation {conversation_id}, uid {uid}"
-            )
-            continue
+    response_items = _safe_action_item_responses(action_items, uid=uid, context=f'conversation {conversation_id}')
 
     return {"action_items": response_items, "conversation_id": conversation_id}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", status_code=204, tags=['action-items'])
+class ConversationActionItemsDeleteResponse(BaseModel):
+    status: str
+    deleted_count: int
+
+
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationActionItemsDeleteResponse,
+    tags=['action-items'],
+)
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
     existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
@@ -543,7 +662,7 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
     return {"status": "Ok", "deleted_count": deleted_count}
 
 
-@router.post("/v1/action-items/batch", tags=['action-items'])
+@router.post("/v1/action-items/batch", response_model=BatchCreateActionItemsResponse, tags=['action-items'])
 def create_action_items_batch(
     action_items: List[CreateActionItemRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -605,7 +724,7 @@ class AcceptSharedTasksRequest(BaseModel):
     token: str = Field(description="Share token from the shared URL")
 
 
-@router.post("/v1/action-items/share", tags=['action-items'])
+@router.post("/v1/action-items/share", response_model=ShareActionItemsResponse, tags=['action-items'])
 def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a shareable link for selected action items."""
     # Validate all task_ids belong to user and are not locked
@@ -628,7 +747,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
 
 
-@router.get("/v1/action-items/shared/{token}", tags=['action-items'])
+@router.get("/v1/action-items/shared/{token}", response_model=SharedActionItemsResponse, tags=['action-items'])
 def get_shared_action_items(token: str):
     """Public endpoint — get shared task preview (no auth required)."""
     share_data = redis_db.get_task_share(token)
@@ -657,7 +776,7 @@ def get_shared_action_items(token: str):
     }
 
 
-@router.post("/v1/action-items/accept", tags=['action-items'])
+@router.post("/v1/action-items/accept", response_model=AcceptSharedActionItemsResponse, tags=['action-items'])
 def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Save shared tasks to the recipient's task list."""
     share_data = redis_db.get_task_share(request.token)

@@ -1,4 +1,6 @@
 import SwiftUI
+import MarkdownUI
+import OmiTheme
 
 /// A markdown text view that supports text selection across paragraph breaks.
 ///
@@ -34,13 +36,13 @@ struct SelectableMarkdown: View {
         Group {
             if cachedSegments.count == 1, case .text = cachedSegments[0].kind {
                 // Single text segment — no VStack overhead
-                textView(cachedSegments[0].content)
+                textSegmentView(cachedSegments[0].content)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(cachedSegments) { segment in
                         switch segment.kind {
                         case .text:
-                            textView(segment.content)
+                            textSegmentView(segment.content)
                         case .codeBlock:
                             codeBlockView(segment.content)
                         }
@@ -48,6 +50,11 @@ struct SelectableMarkdown: View {
                 }
             }
         }
+        // Selection belongs on message bodies only. Applying `.textSelection(.enabled)`
+        // higher in the chat stack wraps every chrome `Text` (card headers, timestamps,
+        // tool summaries) in SwiftUI's SelectionOverlay and can infinite-loop layout
+        // via setFont → invalidateIntrinsicContentSize → GraphHost updates.
+        .textSelection(.enabled)
         .onChange(of: text) { _, newText in
             cachedSegments = Self.splitSegments(newText)
             attrCache.removeAll()
@@ -60,6 +67,15 @@ struct SelectableMarkdown: View {
     }
 
     // MARK: - Text Segment (selectable across paragraphs)
+
+    @ViewBuilder
+    private func textSegmentView(_ content: String) -> some View {
+        if Self.containsGFMTable(content) {
+            markdownBlockView(content)
+        } else {
+            textView(content)
+        }
+    }
 
     @ViewBuilder
     private func textView(_ content: String) -> some View {
@@ -96,6 +112,14 @@ struct SelectableMarkdown: View {
                 attrCache[content] = styled
             }
         }
+    }
+
+    @ViewBuilder
+    private func markdownBlockView(_ content: String) -> some View {
+        Markdown(content)
+            .scaledMarkdownTheme(sender)
+            .textSelection(.enabled)
+            .if_available_writingToolsNone()
     }
 
     // MARK: - Code Block (boxed, monospace)
@@ -192,6 +216,48 @@ struct SelectableMarkdown: View {
 
             return processed
         }.joined(separator: "\n")
+    }
+
+    static func containsGFMTable(_ text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        guard lines.count >= 2 else { return false }
+
+        for index in 0..<(lines.count - 1) {
+            let header = lines[index].trimmingCharacters(in: .whitespaces)
+            let separator = lines[index + 1].trimmingCharacters(in: .whitespaces)
+            let headerCells = markdownTableCells(header)
+            let separatorCells = markdownTableCells(separator)
+            guard headerCells.count >= 2,
+                  separatorCells.count >= 2,
+                  headerCells.count == separatorCells.count else {
+                continue
+            }
+            if isMarkdownTableSeparator(separator) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private static func markdownTableCells(_ line: String) -> [Substring] {
+        line
+            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+            .split(separator: "|", omittingEmptySubsequences: false)
+    }
+
+    private static func isMarkdownTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let cells = markdownTableCells(trimmed)
+        guard !cells.isEmpty else { return false }
+
+        return cells.allSatisfy { cell in
+            let value = cell.trimmingCharacters(in: .whitespaces)
+            return value.range(
+                of: #"^:?-{3,}:?$"#,
+                options: .regularExpression
+            ) != nil
+        }
     }
 
     // MARK: - Segment Splitting

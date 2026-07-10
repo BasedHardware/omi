@@ -1,7 +1,9 @@
+# async-blockers: no-import-scope
+# async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any, Callable, TypeVar, List, Optional, Tuple
+from typing import Dict, Any, Callable, List, Awaitable, cast
 
 from pydantic import BaseModel
 from ulid import ULID
@@ -12,11 +14,12 @@ from database.apps import (
     get_persona_by_id_db,
     get_persona_by_username_twitter_handle_db,
 )
-from database.redis_db import delete_generic_cache, save_username, is_username_taken
+from database.redis_db import delete_generic_cache, save_username
 import httpx
 
-from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
+from utils.llm.persona import generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,10 +67,7 @@ class TwitterProfile(BaseModel):
         )
 
 
-T = TypeVar('T')
-
-
-async def async_with_retry(operation_name: str, func: Callable) -> T:
+async def async_with_retry(operation_name: str, func: Callable[[], Awaitable[Any]]) -> Any:
     max_retries = 5
     base_delay = 1
 
@@ -88,7 +88,7 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
     """Fetch Twitter profile for a user and return structured data"""
     url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
 
-    headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
+    headers = cast(Dict[str, str], {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host})
 
     async def fetch_profile():
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
@@ -123,7 +123,7 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     logger.info(f"Fetching Twitter timeline for {handle}...")
     url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
 
-    headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
+    headers = cast(Dict[str, str], {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host})
 
     async def fetch_timeline():
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
@@ -177,20 +177,22 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     timeline = await get_twitter_timeline(handle)
 
     # Create or update persona
-    persona = _create_or_update_persona(profile, username, uid, handle)
+    persona = await run_blocking(db_executor, _create_or_update_persona, profile, username, uid, handle)
 
     # Generate persona prompt from tweets
     formatted_tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
-    persona_prompt = generate_twitter_persona_prompt(formatted_tweets, persona["name"])
+    persona_prompt = await run_blocking(
+        llm_executor, generate_twitter_persona_prompt, formatted_tweets, persona["name"]
+    )
     persona['persona_prompt'] = persona_prompt
 
     # Save persona to database
-    upsert_app_to_db(persona)
-    save_username(username, uid)
-    delete_generic_cache('get_public_approved_apps_data')
+    await run_blocking(db_executor, upsert_app_to_db, persona)
+    await run_blocking(db_executor, save_username, username, uid)
+    await run_blocking(db_executor, delete_generic_cache, 'get_public_approved_apps_data')
 
     # Create memories from persona prompt and tweets
-    create_memories_from_twitter_tweets(uid, persona['id'], timeline.timeline)
+    await run_blocking(postprocess_executor, create_memories_from_twitter_tweets, uid, persona['id'], timeline.timeline)
 
     return persona
 
@@ -201,22 +203,25 @@ def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, 
 
     # Create new persona if it doesn't exist
     if not persona:
-        persona = {
-            "name": profile.name,
-            "author": profile.name,
-            "uid": uid,
-            "id": str(ULID()),
-            "status": "approved",
-            "capabilities": ["persona"],
-            "username": username,
-            "connected_accounts": ["twitter"],
-            "description": profile.desc,
-            "image": profile.avatar,
-            "category": "personality-emulation",
-            "approved": True,
-            "private": False,
-            "created_at": datetime.now(timezone.utc),
-        }
+        persona = cast(
+            Dict[str, Any],
+            {
+                "name": profile.name,
+                "author": profile.name,
+                "uid": uid,
+                "id": str(ULID()),
+                "status": "approved",
+                "capabilities": ["persona"],
+                "username": username,
+                "connected_accounts": ["twitter"],
+                "description": profile.desc,
+                "image": profile.avatar,
+                "category": "personality-emulation",
+                "approved": True,
+                "private": False,
+                "created_at": datetime.now(timezone.utc),
+            },
+        )
 
     # Update persona with Twitter data
     persona["twitter"] = {
@@ -233,9 +238,11 @@ def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, 
     return persona
 
 
-async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
+async def add_twitter_to_persona(handle: str, persona_id: str) -> Dict[str, Any]:
     """Add Twitter account to an existing persona"""
-    persona = get_persona_by_id_db(persona_id)
+    persona = await run_blocking(db_executor, get_persona_by_id_db, persona_id)
+    if persona is None:
+        raise ValueError(f"Persona not found: {persona_id}")
     profile = await get_twitter_profile(handle)
 
     if 'twitter' not in persona['connected_accounts']:
@@ -247,14 +254,16 @@ async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
         "connected_at": datetime.now(timezone.utc),
     }
 
-    update_app_in_db(persona)
-    delete_generic_cache('get_public_approved_apps_data')
+    await run_blocking(db_executor, update_app_in_db, persona)
+    await run_blocking(db_executor, delete_generic_cache, 'get_public_approved_apps_data')
 
     # Get tweets from the Twitter timeline
     timeline = await get_twitter_timeline(handle)
 
     # Create memories from the tweets
     if timeline and timeline.timeline:
-        create_memories_from_twitter_tweets(persona['uid'], persona_id, timeline.timeline)
+        await run_blocking(
+            postprocess_executor, create_memories_from_twitter_tweets, persona['uid'], persona_id, timeline.timeline
+        )
 
     return persona

@@ -1,0 +1,74 @@
+# Backend route policy manifest for the primary FastAPI app in backend/main.py.
+#
+# PR 1 starts report-only: keep semantic claims out of this file until route
+# owners review them. Add entries with review_status: reviewed or
+# legacy_unreviewed as the route inventory workstream is baselined.
+schema_version: 1
+service: backend-main
+routes:
+  - route_type: http
+    method: POST
+    path: /v2/desktop/releases
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: admin
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
+    path: /v2/desktop/channels/promote
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: admin
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
+    path: /v1/users/account-deletion-wipes/run
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - service_oidc
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: account_deletion_wipe
+      surface: internal_task
+      visibility: internal
+      data_domain: user_profile
+      deprecation:
+        state: active

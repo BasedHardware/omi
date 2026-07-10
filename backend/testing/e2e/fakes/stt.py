@@ -12,10 +12,71 @@ If Deepgram HTTP pre-recorded transcription is used instead, we can fake that
 endpoint.
 """
 
-# TODO: Implement Deepgram WebSocket fake for full /v4/listen and pusher scenarios.
-# The Deepgram WS protocol sends JSON metadata followed by binary audio, then
-# streams back transcript results. That remains broader v2 coverage; custom-STT
-# tests below are explicitly scoped to the backend's suggested-transcript seam.
+
+class FakeStreamingSTTSocket:
+    """Minimal STT socket surface used by routers.transcribe._stream_handler."""
+
+    def __init__(self, callback):
+        self.callback = callback
+        self.sent_chunks = []
+        self.finish_calls = 0
+        self.drain_calls = 0
+        self._dead = False
+        self._death_reason = None
+        self._emitted = False
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead
+
+    @property
+    def death_reason(self):
+        return self._death_reason
+
+    def send(self, data: bytes) -> None:
+        self.sent_chunks.append(data)
+        if self._emitted:
+            return
+        self._emitted = True
+        self.callback(
+            [
+                {
+                    "id": "seg-streaming-stt-1",
+                    "text": "Hermetic streaming STT transcript from the fake socket.",
+                    "speaker": "SPEAKER_00",
+                    "is_user": True,
+                    "person_id": None,
+                    "start": 0.0,
+                    "end": 1.25,
+                    "stt_provider": "e2e-streaming-stt",
+                }
+            ]
+        )
+
+    async def drain_and_close(self):
+        self.drain_calls += 1
+
+    def finish(self) -> None:
+        self.finish_calls += 1
+
+
+def install_streaming_stt_fake(monkeypatch):
+    """Patch routers.transcribe.process_audio_dg and return created fake sockets."""
+    import routers.transcribe as transcribe_router
+
+    sockets = []
+
+    async def fake_process_audio_dg(
+        callback, language, sample_rate, channels, model="nova-3", keywords=None, is_active=None
+    ):
+        socket = FakeStreamingSTTSocket(callback)
+        sockets.append(socket)
+        return socket
+
+    monkeypatch.setattr(transcribe_router, "process_audio_dg", fake_process_audio_dg)
+    monkeypatch.setattr(transcribe_router, "has_transcription_credits", lambda *args, **kwargs: True)
+    monkeypatch.setattr(transcribe_router, "record_usage", lambda *args, **kwargs: None)
+    return sockets
 
 
 def fake_suggested_transcript_event():

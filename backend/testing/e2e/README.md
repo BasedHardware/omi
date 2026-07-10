@@ -5,7 +5,7 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-72 passed, 6 skipped, 43 warnings
+80 passed, 6 skipped, 49 warnings
 ```
 
 The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely.
@@ -27,17 +27,18 @@ python -m pip install -r testing/e2e/requirements.txt
 
 ## Scope of v1
 
-This version proves the backend can boot hermetically and that selected core CRUD, mobile-facing lifecycle, user/account, storage, webhook, task-integration, listen-routing, retrieval/search, deterministic processing-seam, and legacy-shape paths can execute without real Firestore, Redis, GCS, Pinecone, Typesense, Google ADC, or production API keys.
+This version proves the backend can boot hermetically and that selected core CRUD, mobile-facing lifecycle, user/account, storage, webhook, task-integration, listen-routing, sync-job, conversation lifecycle, retrieval/search, deterministic processing-seam, and legacy-shape paths can execute without real Firestore, Redis, GCS, Pinecone, Typesense, Google ADC, or production API keys.
 
 | Scenario | Status | Notes |
 |---|---:|---|
 | CRUD golden path | ✅ Green | Conversations are seeded directly because `POST /v1/conversations` processes an existing in-progress conversation; action items and memories use real create/update/delete routes. |
 | Mobile lifecycle / client compatibility | ✅ Green | Canonical Flutter/desktop-facing flows assert response shapes for conversation lists/details, memory create/list/visibility/delete, action-item list/update/batch/pending-sync/delete, and language/transcription prefs. Conversations are still seeded directly where no generic creation route exists. |
-| Deterministic conversation-processing seam | ✅ Partial | Reprocess route, auth, model serialization, Firestore update, memory readback, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
-| Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler; custom-STT suggested transcript events also run through the real listen websocket loop into client emission and decrypted conversation readback. Full Deepgram-compatible streaming fake remains v2. |
+| Deterministic conversation-processing seam | ✅ Partial | Reprocess and finalize routes, auth, model serialization, Firestore update, memory readback, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
+| Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler; custom-STT suggested transcript events also run through the real listen websocket loop into client emission, reconnect behavior, decrypted conversation readback, and finalize lifecycle. Full Deepgram-compatible streaming fake remains v2. |
+| Sync v2 job lifecycle | ✅ Partial | `/v2/sync-local-files` fast path, Redis job creation, deterministic background pipeline completion, job polling, and conversation persistence run with decode/VAD/STT/provider-heavy segment work replaced by deterministic seams. Full audio decoding and provider transcription remain lower-level/unit or v2 fake work. |
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
 | Webhooks | ✅ Partial | Developer webhook config/status routes, disabled no-op behavior, realtime delivery payload, non-2xx failure health recording, timeout/exception health recording, and threshold auto-disable are covered with `httpx.MockTransport`. Marketplace app webhook retry/circuit-breaker behavior remains v2. |
-| Task integrations | ✅ Partial | CRUD/default list paths plus connected/disconnected/no-token and Todoist success, provider 500, 401 disconnect, and timeout failure paths are covered. Task creation uses deterministic integration lookup due a fake-firestore single-doc lookup/delete limitation on this nested subcollection shape. |
+| Task integrations | ✅ Green | CRUD/default/delete paths plus connected/disconnected/no-token and Todoist success, provider 500, 401 disconnect, and timeout failure paths exercise real task-integration database helpers against fake Firestore. |
 | User/auth/profile/account | ✅ Green | Auth guard, profile, onboarding, language/transcription prefs, people CRUD, notification/assistant settings, AI profile, and BYOK activation/deactivation routes are covered. |
 | Retrieval/search | ✅ Partial | Memory, action-item, conversation summary, and transcript-chunk retrieval routes run through real public APIs with Firestore-backed records and a deterministic in-memory replacement for Pinecone/OpenAI embeddings at the `database.vector_db` client seam. Full Pinecone/Typesense service compatibility remains out of scope. |
 | Failure / edge modes | ✅ Partial | Invalid input and edge-case coverage runs. Redis-unavailable, LLM 500, and STT timeout cases are explicitly skipped or deferred until per-test failure fakes are wired. |
@@ -74,6 +75,9 @@ bash backend/testing/e2e/run.sh -k "test_crud"
 
 # Conversation processing and state seams
 bash backend/testing/e2e/run.sh -k "conversation_processing"
+
+# Core listen/sync/conversation lifecycle seams
+bash backend/testing/e2e/run.sh -k "core_flow_expansion"
 
 # Listen/STT websocket route seam
 bash backend/testing/e2e/run.sh -k "listen_stt"
@@ -118,6 +122,7 @@ run.sh
         │   ├── conversations.json
         │   ├── memories.json
         │   └── action_items.json
+        ├── test_core_flow_expansion.py
         ├── test_crud.py
         ├── test_conversation_processing.py
         ├── test_conversation_processing_deterministic.py
@@ -166,13 +171,14 @@ def test_read_seeded_conversation(client, auth_headers, sample_conversation_data
 
 ## Current limitations / v2 work
 
+- [x] Add hermetic core-flow coverage for custom-STT listen reconnect/finalize, sync v2 job lifecycle, and conversation finalization.
 - [ ] Implement Deepgram streaming WebSocket fake for `/v4/listen` / pusher scenarios.
 - [ ] Wire deterministic LLM endpoints into all OpenAI/Anthropic/OpenRouter clients used by processing code.
 - [ ] Add per-test HTTP failure injection for LLM 500 / timeout scenarios.
 - [ ] Add real Redis-unavailable fail-open tests; v1 uses fakeredis-backed paths.
 - [ ] Execute production migration scripts against fake fixtures if migration-script coverage is needed.
 - [ ] Add marketplace app webhook retry/circuit-breaker tests beyond the developer realtime transcript failure/auto-disable paths.
-- [ ] Improve fake-firestore support for nested task-integration single-doc lookup/delete so the task creation route no longer needs deterministic lookup patching.
+- [x] Improve fake-firestore support for nested task-integration single-doc lookup/delete so the task creation route no longer needs deterministic lookup patching.
 - [ ] Expand retrieval/search beyond the deterministic in-memory vector seam to cover real Typesense keyword behavior and closer Pinecone response compatibility if those service contracts become in-scope.
 - [x] Run under Python 3.11 in CI-like environments; the required `Backend Hermetic E2E` GitHub Action now installs dependencies, prewarms tokenizer cache, and runs the harness.
 

@@ -9,8 +9,19 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
+
+typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
+typedef DailySummariesChecker = Future<bool> Function();
+typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
+  String query, {
+  int? page,
+  int? limit,
+  required bool includeDiscarded,
+  String? speakerId,
+});
 
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
@@ -26,6 +37,7 @@ class ConversationProvider extends ChangeNotifier {
   bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
   String? selectedFolderId;
+  String? selectedSpeakerId;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -58,6 +70,7 @@ class ConversationProvider extends ChangeNotifier {
   bool conversationsLoadFailed = false;
   Timer? _initialFetchRetryTimer;
   int _initialFetchRetryCount = 0;
+  int _sessionGeneration = 0;
   static const int _maxInitialFetchRetries = 4;
   // After the fast backoff budget is spent we keep retrying on a slow fixed
   // interval rather than giving up — otherwise a prolonged outage latches the
@@ -68,8 +81,22 @@ class ConversationProvider extends ChangeNotifier {
   // The empty-state widget should defer to a pending auto-retry so the user
   // doesn't see "No conversations yet" in the gap between backoff attempts.
   bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
+  bool get hasActiveSearch => previousQuery.isNotEmpty || selectedSpeakerId != null;
 
-  ConversationProvider() {
+  final ConversationListFetcher? _conversationListFetcher;
+  final DailySummariesChecker? _dailySummariesChecker;
+  final ConversationSearchFetcher _conversationSearchFetcher;
+  final bool Function() _isSignedIn;
+
+  ConversationProvider({
+    ConversationListFetcher? conversationListFetcher,
+    DailySummariesChecker? dailySummariesChecker,
+    ConversationSearchFetcher? conversationSearchFetcher,
+    bool Function()? isSignedIn,
+  })  : _conversationListFetcher = conversationListFetcher,
+        _dailySummariesChecker = dailySummariesChecker,
+        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -92,6 +119,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _sessionGeneration++;
     conversations = [];
     searchedConversations = [];
     groupedConversations = {};
@@ -103,6 +131,7 @@ class ConversationProvider extends ChangeNotifier {
     hasDailySummaries = false;
     selectedDate = null;
     selectedFolderId = null;
+    selectedSpeakerId = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;
@@ -131,12 +160,15 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
-    groupedConversations[date]![idx] = convo;
+    final group = groupedConversations[date];
+    if (group == null || idx < 0 || idx >= group.length) return;
+    group[idx] = convo;
     notifyListeners();
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
-    if (query.isEmpty) {
+    if (!_isSignedIn()) return;
+    if (query.isEmpty && selectedSpeakerId == null) {
       previousQuery = "";
       currentSearchPage = 0;
       totalSearchPages = 0;
@@ -145,6 +177,7 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
 
+    final generation = _sessionGeneration;
     if (showShimmer) {
       setLoadingConversations(true);
     } else {
@@ -152,7 +185,12 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     previousQuery = query;
-    var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
+    var (convos, current, total) = await _conversationSearchFetcher(
+      query,
+      includeDiscarded: showDiscardedConversations,
+      speakerId: selectedSpeakerId,
+    );
+    if (generation != _sessionGeneration || !_isSignedIn()) return;
     convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
@@ -168,16 +206,25 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSpeakerFilter(String? speakerId) async {
+    selectedSpeakerId = speakerId;
+    await searchConversations(previousQuery, showShimmer: true);
+  }
+
   Future<void> searchMoreConversations() async {
+    if (!_isSignedIn()) return;
     if (totalSearchPages < currentSearchPage + 1) {
       return;
     }
+    final generation = _sessionGeneration;
     setLoadingConversations(true);
-    var (newConvos, current, total) = await searchConversationsServer(
+    var (newConvos, current, total) = await _conversationSearchFetcher(
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      speakerId: selectedSpeakerId,
     );
+    if (generation != _sessionGeneration || !_isSignedIn()) return;
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     totalSearchPages = total;
@@ -223,7 +270,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -240,7 +287,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -255,7 +302,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -286,10 +333,15 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   /// Check if user has any daily summaries
-  Future<void> checkHasDailySummaries() async {
-    final summaries = await getDailySummaries(limit: 1, offset: 0);
-    hasDailySummaries = summaries.isNotEmpty;
+  Future<bool> checkHasDailySummaries() async {
+    if (!_isSignedIn()) return false;
+    final generation = _sessionGeneration;
+    final hasSummaries = await (_dailySummariesChecker?.call() ??
+        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    if (generation != _sessionGeneration || !_isSignedIn()) return false;
+    hasDailySummaries = hasSummaries;
     notifyListeners();
+    return true;
   }
 
   /// Filter conversations by folder
@@ -345,8 +397,15 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future _fetchNewConversations() async {
+    if (!_isSignedIn()) return;
+    final generation = _sessionGeneration;
     setLoadingConversations(true);
     final result = await _getConversationsFromServer();
+    if (generation != _sessionGeneration) return;
+    if (!_isSignedIn()) {
+      setLoadingConversations(false);
+      return;
+    }
     setLoadingConversations(false);
 
     // A background/debounced refresh failed (transient network error, token
@@ -390,7 +449,13 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future fetchConversations() async {
+  Future<bool> fetchConversations() async {
+    if (!_isSignedIn()) {
+      _cancelInitialFetchRetry();
+      conversationsLoadFailed = false;
+      return false;
+    }
+    final generation = _sessionGeneration;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -398,6 +463,15 @@ class ConversationProvider extends ChangeNotifier {
 
     setLoadingConversations(true);
     final result = await _getConversationsFromServer();
+    if (generation != _sessionGeneration) {
+      _cancelInitialFetchRetry();
+      return false;
+    }
+    if (!_isSignedIn()) {
+      setLoadingConversations(false);
+      _cancelInitialFetchRetry();
+      return false;
+    }
     setLoadingConversations(false);
 
     if (!result.ok) {
@@ -416,7 +490,7 @@ class ConversationProvider extends ChangeNotifier {
       _groupConversationsByDateWithoutNotify();
       notifyListeners();
       _scheduleInitialFetchRetry();
-      return;
+      return false;
     }
 
     conversationsLoadFailed = false;
@@ -443,9 +517,14 @@ class ConversationProvider extends ChangeNotifier {
     _groupConversationsByDateWithoutNotify();
 
     notifyListeners();
+    return true;
   }
 
   void _scheduleInitialFetchRetry() {
+    if (!_isSignedIn()) {
+      _cancelInitialFetchRetry();
+      return;
+    }
     _initialFetchRetryTimer?.cancel();
     final int delaySeconds;
     if (_initialFetchRetryCount < _maxInitialFetchRetries) {
@@ -459,16 +538,22 @@ class ConversationProvider extends ChangeNotifier {
       delaySeconds = _slowFetchRetryIntervalSeconds;
     }
     _initialFetchRetryTimer = Timer(Duration(seconds: delaySeconds), () {
-      if (conversationsLoadFailed) fetchConversations();
+      if (conversationsLoadFailed && _isSignedIn()) fetchConversations();
     });
   }
 
-  Future getInitialConversations() async {
+  void _cancelInitialFetchRetry() {
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryTimer = null;
+    _initialFetchRetryCount = 0;
+  }
+
+  Future<void> getInitialConversations() async {
     // A manual/initial entry gets a fresh retry budget so pull-to-refresh
     // can recover even after the auto-retries were exhausted.
-    _initialFetchRetryTimer?.cancel();
-    _initialFetchRetryCount = 0;
-    await fetchConversations();
+    _cancelInitialFetchRetry();
+    final fetched = await fetchConversations();
+    if (!fetched || !_isSignedIn()) return;
     await checkHasDailySummaries();
   }
 
@@ -522,6 +607,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = date;
 
     // Clear search when applying date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -538,6 +624,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = null;
 
     // Clear search when clearing date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -587,7 +674,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void groupConversationsByDate() {
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       _groupSearchConvosByDateWithoutNotify();
     } else {
       _groupConversationsByDateWithoutNotify();
@@ -607,6 +694,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
+    final fetcher = _conversationListFetcher;
+    if (fetcher != null) return fetcher();
+
     final (startDate, endDate) = _getDateFilterRange();
 
     return await getConversationsResult(
@@ -726,7 +816,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       int si = searchedConversations.indexWhere((element) => element.id == conversation.id);
       if (si != -1) {
         searchedConversations[si] = conversation;

@@ -50,7 +50,13 @@ _install_stub('database._client', _fake_client_mod)
 # imports from them at module level, and they transitively require real clients.
 for _mod_name in ('database.firestore_cache', 'database.redis_db'):
     _mod = types.ModuleType(_mod_name)
-    for _attr in ('CachePolicy', 'get_or_fetch', 'invalidate', 'try_acquire_user_platform_write_lock'):
+    for _attr in (
+        'CachePolicy',
+        'get_or_fetch',
+        'invalidate',
+        'try_acquire_client_device_write_lock',
+        'try_acquire_user_platform_write_lock',
+    ):
         setattr(_mod, _attr, MagicMock())
     _install_stub(_mod_name, _mod)
 
@@ -95,9 +101,12 @@ def _make_snapshot(data):
 def _make_txn():
     """Create a mock transaction that records update calls."""
     updates = []
+    sets = []
     txn = types.SimpleNamespace()
     txn._updates = updates
+    txn._sets = sets
     txn.update = lambda ref, fields: updates.append((ref, fields))
+    txn.set = lambda ref, fields, **kwargs: sets.append((ref, fields, kwargs))
     return txn
 
 
@@ -119,6 +128,39 @@ def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=time
 
     result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after)
     return result, txn._updates
+
+
+def _run_mark_billing_failed(data):
+    txn = _make_txn()
+    txn_obj = users_db._mark_user_deletion_billing_failed_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(data)
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    result = raw_fn(txn, FakeDocRef(), 'uid1', 'sub_123', 'stripe down')
+    return result, txn._sets
+
+
+def test_mark_billing_failed_allows_pre_wipe_states():
+    result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': 'deleting_auth'})
+
+    assert result is True
+    assert len(sets) == 1
+    _, fields, kwargs = sets[0]
+    assert fields['wipe_status'] == 'billing_failed'
+    assert fields['billing_subscription_id'] == 'sub_123'
+    assert fields['billing_error'] == 'stripe down'
+    assert kwargs == {'merge': True}
+
+
+def test_mark_billing_failed_does_not_clobber_actionable_or_terminal_wipes():
+    for status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+        result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': status})
+        assert result is False
+        assert sets == []
 
 
 def test_claim_txn_skips_fresh_pending_marker():
@@ -401,7 +443,7 @@ def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
 def test_get_pending_deletion_wipes_includes_stale_running():
     """Stale ``running`` records (worker crashed mid-execution) are recovered.
 
-    A ``running`` marker older than ``running_stale_after`` (default 30 min)
+    A ``running`` marker older than ``running_stale_after`` (default 6 hours)
     is included so the reconciler can re-enqueue a wipe whose worker died.
     """
     now = datetime.now(timezone.utc)
@@ -413,7 +455,7 @@ def test_get_pending_deletion_wipes_includes_stale_running():
             # Fresh running — worker is live, should NOT be recovered.
             {'uid': 'live1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=12)},
             # Stale running — worker probably crashed, SHOULD be recovered.
-            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=45)},
+            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(hours=7)},
         ],
         'retrying': [],
     }

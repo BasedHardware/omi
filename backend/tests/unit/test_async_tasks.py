@@ -13,6 +13,7 @@ import utils.async_tasks as async_tasks_mod
 from utils.async_tasks import (
     GatherResult,
     SupervisorResult,
+    WebSocketTaskSupervisor,
     supervise_tasks,
     drain_tasks,
     gather_safe,
@@ -145,11 +146,85 @@ class TestCreateNamedTask:
         asyncio.run(_run())
 
 
+class TestWebSocketTaskSupervisor:
+    def test_pairs_gauge_start_and_end(self):
+        class FakeGauge:
+            def __init__(self):
+                self.count = 0
+
+            def inc(self):
+                self.count += 1
+
+            def dec(self):
+                self.count -= 1
+
+        gauge = FakeGauge()
+        supervisor = WebSocketTaskSupervisor(uid="u1", label="listen", gauge=gauge)
+        supervisor.start_session()
+        supervisor.start_session()
+        assert gauge.count == 1
+        supervisor.end_session()
+        supervisor.end_session()
+        assert gauge.count == 0
+        assert supervisor.shutdown_event.is_set()
+
+    def test_names_tasks_with_ws_uid_prefix(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def noop():
+                pass
+
+            task = supervisor.create_task(noop(), name="worker")
+            assert task.get_name() == "ws:u1:worker"
+            await task
+
+        asyncio.run(_run())
+
+    def test_rejects_preformatted_task_names(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def noop():
+                pass
+
+            coro = noop()
+            with pytest.raises(ValueError):
+                supervisor.create_task(coro, name="ws:u1:worker")
+            coro.close()
+
+        asyncio.run(_run())
+
+    def test_finite_task_completion_does_not_end_session(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def receive():
+                await asyncio.sleep(1)
+
+            async def finite():
+                await asyncio.sleep(0.01)
+
+            async def lifetime():
+                await asyncio.sleep(0.05)
+
+            recv = supervisor.create_task(receive(), name="receive")
+            supervisor.create_finite_task(finite(), name="finite")
+            supervisor.create_lifetime_task(lifetime(), name="lifetime")
+            result = await supervisor.supervise(receive_task=recv)
+            await supervisor.drain_all(timeout=1.0)
+            assert result.reason == "lifetime_done"
+            assert result.task_name == "ws:u1:lifetime"
+
+        asyncio.run(_run())
+
+
 # ---------------------------------------------------------------------------
 # Tests for drain_tasks
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasks:
     def test_drain_empty_list(self):
         async def _run():
@@ -217,6 +292,7 @@ class TestDrainTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestSuperviseTasks:
     def test_disconnect_exit(self):
         async def _run():
@@ -336,6 +412,7 @@ class TestSuperviseTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestGatherWithLogging:
     def test_all_succeed(self):
         async def _run():
@@ -535,6 +612,7 @@ class TestGatherChunked:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasksEdgeCases:
     def test_drain_force_cancel_reports_count(self):
         """After timeout, force-cancelled tasks are counted correctly."""
@@ -649,9 +727,9 @@ class TestStructuralUsage:
             if isinstance(node, ast.ImportFrom) and node.module == 'utils.async_tasks':
                 imports.extend(alias.name for alias in node.names)
 
-        assert 'supervise_tasks' in imports
+        assert 'WebSocketTaskSupervisor' in imports
         assert 'drain_tasks' in imports
-        assert 'create_named_task' in imports
+        assert 'wait_for_event' in imports
 
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""

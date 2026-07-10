@@ -21,32 +21,32 @@ void main() {
       expect(painter1.shouldRepaint(painter2), true);
     });
 
-    test('shouldRepaint returns true when level differs by more than 0.01', () {
+    test('shouldRepaint returns true when level differs by more than 0.005', () {
       final painter1 = AudioWavePainter(levels: [0.5, 0.6, 0.7]);
       final painter2 = AudioWavePainter(levels: [0.5, 0.65, 0.7]);
 
       expect(painter1.shouldRepaint(painter2), true);
     });
 
-    test('shouldRepaint returns false when level differs by 0.01 or less', () {
+    test('shouldRepaint returns false when level differs by less than 0.005', () {
       final painter1 = AudioWavePainter(levels: [0.5, 0.6, 0.7]);
-      final painter2 = AudioWavePainter(levels: [0.5, 0.605, 0.7]);
+      final painter2 = AudioWavePainter(levels: [0.5, 0.604, 0.7]); // ~0.004 diff - below threshold
 
       expect(painter1.shouldRepaint(painter2), false);
     });
 
-    // Boundary tests for the 0.01 threshold (implementation uses > 0.01, not >=)
-    // Note: Floating point precision means 0.51 - 0.5 = 0.010000000000000009, not exactly 0.01
-    test('shouldRepaint returns true when level differs by clearly more than 0.01', () {
+    // Boundary tests for the 0.005 threshold (implementation uses > 0.005, not >=).
+    // Note: floating point precision means 0.505 - 0.5 = 0.005000000000000004, not exactly 0.005.
+    test('shouldRepaint returns true when level differs by clearly more than 0.005', () {
       final painter1 = AudioWavePainter(levels: [0.5, 0.6, 0.7]);
       final painter2 = AudioWavePainter(levels: [0.5, 0.62, 0.7]); // 0.02 diff - clearly above threshold
 
       expect(painter1.shouldRepaint(painter2), true);
     });
 
-    test('shouldRepaint returns false when level differs by clearly less than 0.01', () {
+    test('shouldRepaint returns false when level differs by clearly less than 0.005', () {
       final painter1 = AudioWavePainter(levels: [0.5, 0.6, 0.7]);
-      final painter2 = AudioWavePainter(levels: [0.5, 0.605, 0.7]); // 0.005 diff - clearly below threshold
+      final painter2 = AudioWavePainter(levels: [0.5, 0.602, 0.7]); // 0.002 diff - clearly below threshold
 
       expect(painter1.shouldRepaint(painter2), false);
     });
@@ -58,11 +58,11 @@ void main() {
       expect(painter1.shouldRepaint(painter2), true);
     });
 
-    test('shouldRepaint with 0.01 boundary affected by floating point precision', () {
-      // Due to floating point: 0.51 - 0.5 = 0.010000000000000009 > 0.01
-      // This documents the actual behavior - slight imprecision at boundary
+    test('shouldRepaint at the 0.005 boundary is affected by floating point precision', () {
+      // Due to floating point: 0.505 - 0.5 = 0.005000000000000004 > 0.005
+      // This documents the actual behavior - slight imprecision at the boundary.
       final painter1 = AudioWavePainter(levels: [0.5, 0.5, 0.5]);
-      final painter2 = AudioWavePainter(levels: [0.5, 0.51, 0.5]);
+      final painter2 = AudioWavePainter(levels: [0.5, 0.505, 0.5]);
       // Because of floating point, this returns true (repaint triggered)
       expect(painter1.shouldRepaint(painter2), true);
     });

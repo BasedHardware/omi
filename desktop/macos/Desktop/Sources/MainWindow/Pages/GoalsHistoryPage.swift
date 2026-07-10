@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Page showing completed goals history
 struct GoalsHistoryPage: View {

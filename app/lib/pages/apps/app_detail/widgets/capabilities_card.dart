@@ -10,7 +10,7 @@ class CapabilitiesCard extends StatelessWidget {
 
   const CapabilitiesCard({super.key, required this.capabilities});
 
-  IconData _getCapabilityIcon(String id) {
+  FaIconData _getCapabilityIcon(String id) {
     switch (id) {
       case 'chat':
         return FontAwesomeIcons.solidComment;
@@ -49,7 +49,7 @@ class CapabilitiesCard extends StatelessWidget {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -67,7 +67,7 @@ class CapabilitiesCard extends StatelessWidget {
               final color = _getCapabilityColor(capability.id);
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

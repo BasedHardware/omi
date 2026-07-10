@@ -87,7 +87,16 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return _AutoMock(spec.name)
 
     def exec_module(self, module):
-        pass
+        if module.__name__ == 'utils.request_validation':
+            module.NonNegativeOffset = int
+            module.PositiveLimit = int
+        elif module.__name__ == 'utils.other':
+            endpoints = types.ModuleType('utils.other.endpoints')
+            endpoints.get_current_user_uid = lambda: 'uid1'
+            endpoints.timeit = lambda fn: fn
+            endpoints.with_rate_limit = lambda dependency, _policy: dependency
+            module.endpoints = endpoints
+            sys.modules['utils.other.endpoints'] = endpoints
 
 
 _finder = _Finder()
@@ -105,8 +114,14 @@ from fastapi import HTTPException  # noqa: E402
 
 
 def test_invalid_stored_timestamp_returns_400_not_500():
+    async def _run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
     convo = {'id': 'c1', 'started_at': 'not-a-real-timestamp', 'finished_at': 'not-a-real-timestamp'}
-    with patch.object(conv_mod, '_get_valid_conversation_by_id', return_value=convo):
+    with (
+        patch.object(conv_mod, '_get_valid_conversation_by_id', return_value=convo),
+        patch.object(conv_mod, 'run_blocking', _run_blocking),
+    ):
         with pytest.raises(HTTPException) as e:
             asyncio.run(conv_mod.auto_link_calendar_event(conversation_id='c1', uid='uid1'))
     assert e.value.status_code == 400

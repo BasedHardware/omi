@@ -1,0 +1,36 @@
+version: 1
+name: ask-omi-chat-power-benchmark
+tier: 3
+description: Cursor-free CPU/RSS sampling while the floating Ask Omi chat is open and idle.
+app: non-prod
+preconditions:
+  - automation_bridge_ready
+  - run with --process-match or OMI_HARNESS_PROCESS_MATCH
+
+steps:
+  - id: S1
+    name: Open Ask Omi
+    bridge.action:
+      name: open_ask_omi
+      reset: true
+    wait:
+      state.askOmiOpen: true
+
+  - id: S2
+    name: Sample Open Chat Idle Power
+    power.sample:
+      warmup_ms: 500
+      duration_ms: 8000
+      interval_ms: 250
+
+  - id: S3
+    name: Assert Ask Omi Stayed Open
+    state.expect:
+      state.askOmiOpen: true
+
+  - id: S4
+    name: Assert Logs Are Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"

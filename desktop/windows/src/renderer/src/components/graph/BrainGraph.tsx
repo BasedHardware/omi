@@ -24,6 +24,9 @@ export type BrainGraphProps = {
   // when shown. Use for the Memories tab. Leave false (default) for onboarding,
   // where the map is deliberately kept mounted across steps and must not blank.
   pauseWhenHidden?: boolean
+  // Use demand for idle-heavy surfaces such as Memories so the WebGL canvas
+  // stops rendering once layout/easing has settled.
+  frameLoop?: 'always' | 'demand'
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -46,7 +49,8 @@ function GraphNodeMesh({
   node,
   centerNodeId,
   reduced,
-  posMap
+  posMap,
+  frameLoop
 }: {
   sim: GraphSimulation
   node: NodePosition
@@ -55,6 +59,7 @@ function GraphNodeMesh({
   // Shared map (owned by GraphScene, recreated on mount) where each node writes
   // its eased on-screen position so the edges can connect to it.
   posMap: Map<string, THREE.Vector3>
+  frameLoop: 'always' | 'demand'
 }): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null)
   const coreMat = useRef<THREE.MeshStandardMaterial>(null)
@@ -67,6 +72,7 @@ function GraphNodeMesh({
   // The center ("you") label gets a bit bigger than the proportional size.
   const labelSize = labelFontSize(node.sizeScale) * (isFixed ? 1.35 : 1)
   const phase = useMemo(() => hashPhase(node.id), [node.id])
+  const invalidate = useThree((state) => state.invalidate)
 
   // Read the live simulation position each frame (no React state in the loop)
   // and ease toward it so motion stays smooth. New nodes fly out from the
@@ -77,6 +83,7 @@ function GraphNodeMesh({
     const live = sim.liveNode(node.id)
     if (live) target.current.set(live.x ?? 0, live.y ?? 0, live.z ?? 0)
 
+    let shouldContinue = false
     if (reduced) {
       g.position.copy(target.current)
       g.scale.setScalar(1)
@@ -84,7 +91,9 @@ function GraphNodeMesh({
       // Low lerp factor = slow, smooth glide toward the target (used both for
       // the initial reveal and for the gentle reshuffle drift between screens).
       g.position.lerp(target.current, 0.045)
+      if (g.position.distanceToSquared(target.current) < 0.01) g.position.copy(target.current)
       if (g.scale.x < 1) g.scale.setScalar(Math.min(1, g.scale.x + 0.05))
+      shouldContinue = g.position.distanceToSquared(target.current) > 0.01 || g.scale.x < 1
     }
     // Record the eased on-screen position so the connecting lines follow the
     // sphere exactly (instead of snapping to the raw sim position). The map is
@@ -106,6 +115,7 @@ function GraphNodeMesh({
     if (coreMat.current) coreMat.current.emissiveIntensity = (0.85 + 0.45 * pulse) * flare
     if (glowMat.current) glowMat.current.opacity = (0.12 + 0.14 * pulse) * flare
     if (glowMesh.current) glowMesh.current.scale.setScalar(1 + 0.18 * pulse)
+    if (frameLoop === 'demand' && shouldContinue) invalidate()
   })
 
   return (
@@ -253,6 +263,7 @@ function CameraRig(): null {
     const aspect = size.width / Math.max(1, size.height)
     const fitForHeight = r / Math.tan(vfov / 2)
     const fitForWidth = r / (Math.tan(vfov / 2) * aspect)
+    // eslint-disable-next-line react-hooks/immutability -- r3f: three.js objects (camera, vectors) are mutated imperatively by design
     cam.position.z = Math.max(fitForHeight, fitForWidth) * FRAME_MARGIN
     cam.lookAt(0, 0, 0)
   })
@@ -263,15 +274,19 @@ function GraphScene({
   graph,
   centerNodeId,
   interactive,
-  shuffleKey
+  shuffleKey,
+  frameLoop = 'always'
 }: BrainGraphProps): React.JSX.Element {
   const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId)
+  const invalidate = useThree((state) => state.invalidate)
 
   // Eased on-screen position of each node, written by the meshes and read by the
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
   // recreated on mount, so it can never go stale across hot-reloads.
   const posMapRef = useRef<Map<string, THREE.Vector3>>(undefined)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   if (!posMapRef.current) posMapRef.current = new Map<string, THREE.Vector3>()
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   const posMap = posMapRef.current
 
   // Rearrange the modules on every screen change. Skip the first run so the
@@ -284,13 +299,20 @@ function GraphScene({
       firstShuffle.current = false
       return
     }
-    if (!reduced) sim.reshuffle?.()
-  }, [shuffleKey, sim, reduced])
+    if (!reduced) {
+      sim.reshuffle?.()
+      if (frameLoop === 'demand') invalidate()
+    }
+  }, [shuffleKey, sim, reduced, frameLoop, invalidate])
+
+  useEffect(() => {
+    if (frameLoop === 'demand') invalidate()
+  }, [graph, frameLoop, invalidate])
 
   // Advance the physics in the render loop (only while warm). Nothing here
   // touches React state, so the scene never re-renders frame to frame.
   useFrame(() => {
-    if (!reduced) sim.settleFrame()
+    if (!reduced && sim.settleFrame() && frameLoop === 'demand') invalidate()
   })
 
   return (
@@ -298,6 +320,7 @@ function GraphScene({
       <ambientLight intensity={0.8} />
       <directionalLight position={[200, 300, 400]} intensity={0.6} />
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
+      {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
       {nodes.map((n) => (
         <GraphNodeMesh
           key={n.id}
@@ -306,6 +329,7 @@ function GraphScene({
           centerNodeId={centerNodeId}
           reduced={reduced}
           posMap={posMap}
+          frameLoop={frameLoop}
         />
       ))}
       {interactive ? (
@@ -331,7 +355,8 @@ export function BrainGraph({
   centerNodeId,
   interactive = true,
   shuffleKey,
-  pauseWhenHidden = false
+  pauseWhenHidden = false,
+  frameLoop = 'always'
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
@@ -365,7 +390,7 @@ export function BrainGraph({
         // its distance from the FOV, so the framing/zoom is unchanged.
         camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
         dpr={[1, 2]}
-        frameloop="always"
+        frameloop={frameLoop}
         gl={{ antialias: true, alpha: true }}
       >
         <GraphScene
@@ -373,6 +398,7 @@ export function BrainGraph({
           centerNodeId={centerNodeId}
           interactive={interactive}
           shuffleKey={shuffleKey}
+          frameLoop={frameLoop}
         />
       </Canvas>
       )}
