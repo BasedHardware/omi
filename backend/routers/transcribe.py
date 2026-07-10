@@ -802,8 +802,10 @@ async def _stream_handler(
         MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
     )
 
-    # Create or get conversation ID early for audio chunk storage
-    private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
+    # Create or get conversation ID early for audio chunk storage.
+    # These are synchronous Firestore/GCS reads on the connect path — offload them so a slow
+    # backend read cannot block the event loop for every other live connection (#9239).
+    private_cloud_sync_enabled = await run_blocking(db_executor, user_db.get_user_private_cloud_sync_enabled, uid)
 
     # Enable speaker identification when user has speech profile or private cloud sync
     has_speech_profile = False
@@ -812,7 +814,7 @@ async def _stream_handler(
         is_multi_channel=is_multi_channel,
         include_speech_profile=include_speech_profile,
     ):
-        has_speech_profile = get_user_has_speech_profile(uid)
+        has_speech_profile = await run_blocking(storage_executor, get_user_has_speech_profile, uid)
     session.speaker_id_enabled = should_enable_speaker_identification(
         use_custom_stt=use_custom_stt,
         private_cloud_sync_enabled=private_cloud_sync_enabled,
