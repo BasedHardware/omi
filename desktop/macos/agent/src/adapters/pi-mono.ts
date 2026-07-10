@@ -135,6 +135,16 @@ function requiredAgentControlFailure(toolName: string, output: string): string |
   return undefined;
 }
 
+function requiredControlOperationKey(toolName: string, input: Record<string, unknown> | undefined): string {
+  const ignored = new Set(["adapterId", "provider", "defaultAdapterId", "requestId", "clientId"]);
+  const normalized = Object.fromEntries(
+    Object.entries(input ?? {})
+      .filter(([key]) => !ignored.has(key))
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+  return `${toolName}:${JSON.stringify(normalized)}`;
+}
+
 /**
  * PiMonoAdapter spawns pi-mono in RPC mode and translates its events
  * into the normalized bridge protocol.
@@ -232,8 +242,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private nextRequestId = 1;
   private eventHandler: EventCallback | null = null;
   private toolExecutor: ToolExecutor | null = null;
-  /** A failed required agent-control operation must not become a green parent completion. */
-  private requiredAgentControlFailure: string | undefined;
+  /** Unresolved required control obligations for the active turn. */
+  private requiredAgentControlFailures = new Map<string, string>();
+  private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
@@ -244,6 +255,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
   private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
@@ -324,6 +336,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
     env.OMI_ADAPTER_ID = "pi-mono";
+    env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
@@ -396,6 +409,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
+    await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
@@ -427,6 +441,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     return sessionId;
   }
 
+  async setExecutionRole(role: "coordinator" | "leaf"): Promise<void> {
+    if (role === this.currentExecutionRole) return;
+    this.currentExecutionRole = role;
+    if (this.process) {
+      await this.stop();
+    }
+  }
+
   async sendPrompt(
     sessionId: string,
     prompt: PromptBlock[],
@@ -449,7 +471,8 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
-    this.requiredAgentControlFailure = undefined;
+    this.requiredAgentControlFailures.clear();
+    this.requiredControlInputs.clear();
     this.currentAbortController = new AbortController();
     this.writeRelayContext(relayContext);
 
@@ -827,6 +850,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private handleToolStart(event: PiRpcEvent): void {
     const name = event.toolName as string;
     const toolCallId = event.toolCallId as string;
+    if (REQUIRED_AGENT_CONTROL_TOOLS.has(name)) {
+      this.requiredControlInputs.set(toolCallId, (event.args as Record<string, unknown> | undefined) ?? {});
+    }
     this.eventHandler?.({
       type: "tool_activity",
       name,
@@ -848,15 +874,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       .join("") || "";
 
     if (REQUIRED_AGENT_CONTROL_TOOLS.has(name)) {
+      const operationKey = requiredControlOperationKey(name, this.requiredControlInputs.get(toolCallId));
+      this.requiredControlInputs.delete(toolCallId);
       const failure = requiredAgentControlFailure(name, output);
       if (failure) {
-        this.requiredAgentControlFailure = failure;
+        this.requiredAgentControlFailures.set(operationKey, failure);
       } else {
-        // A successful retry of any required agent-control operation resolves
-        // the pending operation failure for this turn.
+        // Only a successful retry of the same logical operation resolves its
+        // obligation; unrelated control success cannot erase a prior failure.
         try {
           if ((JSON.parse(output) as { ok?: unknown }).ok === true) {
-            this.requiredAgentControlFailure = undefined;
+            this.requiredAgentControlFailures.delete(operationKey);
           }
         } catch {
           // Non-canonical output cannot clear a prior control-operation failure.
@@ -931,8 +959,8 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
 
-    if (this.requiredAgentControlFailure) {
-      const controlFailure = this.requiredAgentControlFailure;
+    const controlFailure = this.requiredAgentControlFailures.values().next().value as string | undefined;
+    if (controlFailure) {
       this.eventHandler?.({
         type: "error",
         message: controlFailure,
@@ -1004,11 +1032,13 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
       model: input.model,
       systemPrompt: input.systemPrompt,
       mcpServers: input.mcpServers,
+      executionRole: input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     return this.binding(input, adapterNativeSessionId);
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.harness.setExecutionRole(input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator");
     await this.start();
     // pi-mono has no native resume after daemon/process loss, but while this
     // RuntimeAdapter instance is alive the opaque session id is still usable as

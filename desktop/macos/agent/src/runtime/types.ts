@@ -17,6 +17,10 @@ export type AttemptStatus = RunStatus;
 
 export type RunMode = "ask" | "act";
 
+export type AgentExecutionRole = "coordinator" | "leaf";
+
+export type ProviderBoundary = "managed_cloud" | `local_user:${string}`;
+
 export type ResumeFidelity = "native" | "reconstructed" | "none";
 
 export type AdapterBindingStatus = "active" | "stale" | "invalid" | "closed";
@@ -141,6 +145,8 @@ export interface AgentSession {
   title: string | null;
   status: SessionStatus;
   surfaceKind: string;
+  executionRole: AgentExecutionRole;
+  providerBoundary: ProviderBoundary;
   externalRefKind: string | null;
   externalRefId: string | null;
   defaultAdapterId: string;

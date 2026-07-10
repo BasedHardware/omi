@@ -331,6 +331,7 @@ describe("JsonlTransport", () => {
       requestId: "shared-request",
       clientId: "client-hermes",
       externalRefId: "task-hermes",
+      prompt: "hermes correlation",
     });
     const openclawRun = kernel.executeRun({
       ...baseRunInput,
@@ -339,6 +340,7 @@ describe("JsonlTransport", () => {
       requestId: "shared-request",
       clientId: "client-openclaw",
       externalRefId: "task-openclaw",
+      prompt: "openclaw correlation",
     });
     await waitUntil(() => hermes.executed.length === 1 && openclaw.executed.length === 1);
 
@@ -436,6 +438,7 @@ describe("JsonlTransport", () => {
       protocolVersion: 2,
       sessionId: "session-mcp",
       adapterId: "fake",
+      executionRole: "coordinator",
     });
     store.close();
   });
@@ -1093,6 +1096,7 @@ describe("JsonlTransport", () => {
         requestId: "request-acp",
         clientId: "client-acp",
         adapterId: "acp",
+        externalRefId: "task-acp",
       }),
       facade.handleQuery({
         ...v2Query({ prompt: "use pi" }),
@@ -1100,6 +1104,7 @@ describe("JsonlTransport", () => {
         requestId: "request-pi",
         clientId: "client-pi",
         adapterId: "pi-mono",
+        externalRefId: "task-pi",
       }),
     ]);
 

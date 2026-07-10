@@ -1537,7 +1537,7 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("lets invalid adapter ids reach kernel adapter-not-registered handling", async () => {
+  it("fails closed for an unknown adapter before starting a control run", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
     const first = await kernel.executeRun(baseRunInput);
 
@@ -1552,14 +1552,12 @@ describe("agent control tools", () => {
     );
 
     expect(failed).toMatchObject({
-      ok: true,
-      terminalStatus: "failed",
-      run: {
-        status: "failed",
-        errorCode: "adapter_not_registered",
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Adapter missing-adapter is outside the owning execution boundary.",
       },
     });
-    expect(failed.run.errorMessage).toContain("Adapter not registered: missing-adapter");
     store.close();
   });
 
@@ -1755,11 +1753,16 @@ describe("agent control tools", () => {
       defaultAdapterId: "pi-mono",
     });
 
-    for (const provider of ["hermes", "openclaw"] as const) {
+    for (const provider of ["acp", "hermes", "openclaw", "unknown-adapter"] as const) {
+      const expectedMessage = provider === "acp"
+        ? "Local Claude is available only when the User Claude mode is selected."
+        : provider === "unknown-adapter"
+          ? "Unknown production adapter: unknown-adapter"
+          : "Managed Omi agents can only use Omi cloud routing.";
       const spawned = parseToolResult(
         await handleAgentControlToolCall(context, "spawn_agent", {
           objective: `do not route to ${provider}`,
-          provider,
+          adapterId: provider,
           requestId: `managed-provider-${provider}`,
           clientId: "managed-routing",
           ownerId: "owner",
@@ -1767,7 +1770,7 @@ describe("agent control tools", () => {
       );
       expect(spawned).toMatchObject({
         ok: false,
-        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+        error: { code: "control_tool_failed", message: expectedMessage },
       });
 
       const background = parseToolResult(
@@ -1781,7 +1784,7 @@ describe("agent control tools", () => {
       );
       expect(background).toMatchObject({
         ok: false,
-        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+        error: { code: "control_tool_failed", message: expectedMessage },
       });
 
       const continued = parseToolResult(
@@ -1796,7 +1799,7 @@ describe("agent control tools", () => {
       );
       expect(continued).toMatchObject({
         ok: false,
-        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+        error: { code: "control_tool_failed", message: expectedMessage },
       });
 
       const delegated = parseToolResult(
@@ -1811,7 +1814,7 @@ describe("agent control tools", () => {
       );
       expect(delegated).toMatchObject({
         ok: false,
-        error: { code: "control_tool_failed", message: "Managed Omi agents can only use Omi cloud routing." },
+        error: { code: "control_tool_failed", message: expectedMessage },
       });
     }
 
@@ -1843,6 +1846,99 @@ describe("agent control tools", () => {
       },
     });
     expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("denies every nested-agent creation entry point for a leaf role", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const parent = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const context = {
+      ...ownerContext(kernel),
+      defaultAdapterId: "pi-mono",
+      providerBoundary: "managed_cloud" as const,
+      executionRole: "leaf" as const,
+      callerSessionId: parent.session.sessionId,
+    };
+    const calls = [
+      ["spawn_agent", { objective: "nested", visible: false }, "Background agents are leaf workers and cannot start additional agents."],
+      ["spawn_background_agent", { prompt: "nested" }, "Background agents are leaf workers and cannot start additional agents."],
+      ["run_agent_and_wait", { objective: "nested", parentRunId: parent.run.runId }, "Background agents are leaf workers and cannot start additional agents."],
+      ["send_agent_message", { sessionId: parent.session.sessionId, prompt: "continue" }, "Leaf workers cannot continue agent sessions."],
+    ] as const;
+
+    for (const [name, input, message] of calls) {
+      const result = parseToolResult(await handleAgentControlToolCall(context, name, input));
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "control_tool_failed",
+          message,
+        },
+      });
+    }
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
+  });
+
+  it("rejects kernel background spawns from leaf callers without trusted authority", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const leaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    await expect(
+      kernel.spawnBackgroundAgent({
+        ownerId: "owner",
+        clientId: "client",
+        requestId: "leaf-bypass",
+        prompt: "should fail",
+        adapterId: "pi-mono",
+        defaultAdapterId: "pi-mono",
+        callerSessionId: leaf.sessionId,
+      }),
+    ).rejects.toThrow("Leaf workers cannot create background agents.");
+
+    await expect(
+      kernel.spawnBackgroundAgent({
+        ownerId: "owner",
+        clientId: "client",
+        requestId: "unscoped-bypass",
+        prompt: "should fail",
+        adapterId: "pi-mono",
+        defaultAdapterId: "pi-mono",
+      }),
+    ).rejects.toThrow("Background agent spawn requires a coordinator caller session.");
+
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("loads owned session execution policy by id instead of a bounded list", () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const leaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    expect(kernel.executionPolicyForOwnedSession(leaf.sessionId, "owner")).toEqual({
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+    expect(() => kernel.executionPolicyForOwnedSession(leaf.sessionId, "other-owner")).toThrow(
+      "Agent session is not visible to the active owner",
+    );
     store.close();
   });
 
@@ -1932,6 +2028,10 @@ describe("agent control tools", () => {
       protocolVersion: 2,
       includeSwiftBackedTools: true,
       screenContext: true,
+      executionRole: "leaf",
+      surfaceKind: undefined,
+      externalRefKind: undefined,
+      externalRefId: undefined,
     });
     expect(toolNamesForAdapter("omi-tools-stdio", { screenContext: true })).toEqual(
       expect.arrayContaining(["get_work_context", "request_permission", "check_permission_status", "capture_screen"]),
@@ -1985,6 +2085,10 @@ describe("agent control tools", () => {
       protocolVersion: 2,
       includeSwiftBackedTools: true,
       screenContext: true,
+      executionRole: "leaf",
+      surfaceKind: undefined,
+      externalRefKind: undefined,
+      externalRefId: undefined,
     });
     store.close();
   });
@@ -2163,13 +2267,14 @@ describe("agent control tools", () => {
       ownerId: "owner",
       requestId: "delegate-spawn-1",
       clientId: "delegate-client",
-      adapterId: "acp",
+      adapterId: "fake",
       protocolVersion: 2,
       surfaceKind: "delegated_agent",
       externalRefKind: undefined,
       externalRefId: undefined,
       includeSwiftBackedTools: true,
       screenContext: true,
+      executionRole: "leaf",
     });
     await waitUntil(() => adapter.executed.length === 2);
 

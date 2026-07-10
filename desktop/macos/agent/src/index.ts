@@ -85,6 +85,7 @@ import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-stor
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 import { failureFromError } from "./runtime/failures.js";
 import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
+import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -292,19 +293,38 @@ function startOmiToolsRelay(): Promise<string> {
                     requestKey: controlRequestKey({ requestId, clientId }),
                     ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                   });
-                  const controlToolContext = agentControlToolContext
-                    ? {
+                  let result: string;
+                  try {
+                    if (!agentControlToolContext) {
+                      throw new Error("Agent runtime kernel is not ready");
+                    }
+                    const activeSession = requireControlSessionPolicy(
+                      resolvedCorrelation.sessionId,
+                      controlOwnerId,
+                    );
+                    result = await handleAgentControlToolCall(
+                      {
                         ...agentControlToolContext,
-                        canSpawnAgents: !isLeafWorkerSession(resolvedCorrelation.sessionId, controlOwnerId),
+                        callerSessionId: resolvedCorrelation.sessionId,
+                        executionRole: activeSession.executionRole,
+                        providerBoundary: activeSession.providerBoundary,
+                        defaultAdapterId: activeSession.defaultAdapterId,
                         getOwnerId: () => controlOwnerId,
-                      }
-                    : undefined;
-                  const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
-                    : JSON.stringify({
-                        ok: false,
-                        error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-                      });
+                      },
+                      msg.name,
+                      msg.input ?? {},
+                    );
+                  } catch (error) {
+                    result = JSON.stringify({
+                      ok: false,
+                      error: {
+                        code: error instanceof Error && error.message === "Agent runtime kernel is not ready"
+                          ? "runtime_not_ready"
+                          : "control_tool_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                      },
+                    });
+                  }
                   try {
                     client.write(
                       JSON.stringify({
@@ -639,6 +659,10 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
+    omiToolsEnv.push({
+      name: "OMI_EXECUTION_ROLE",
+      value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
+    });
     servers.push({
       name: "omi-tools",
       command: process.execPath,
@@ -704,14 +728,11 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
 }
 
-function isLeafWorkerSession(sessionId: string | undefined, ownerId: string | undefined): boolean {
-  if (!sessionId || !ownerId || !agentControlToolContext) return false;
-  const session = agentControlToolContext.kernel
-    .listSessions({ ownerId, limit: 200 })
-    .find((candidate) => candidate.session.sessionId === sessionId)?.session;
-  return session?.surfaceKind === "delegated_agent"
-    || session?.surfaceKind === "background_agent"
-    || (session?.surfaceKind === "floating_bar" && session.externalRefKind === "pill");
+function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
+  if (!sessionId || !ownerId || !agentControlToolContext) {
+    throw new Error("missing active control session policy");
+  }
+  return agentControlToolContext.kernel.executionPolicyForOwnedSession(sessionId, ownerId);
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
@@ -985,6 +1006,8 @@ async function main(): Promise<void> {
   agentControlToolContext = {
     kernel,
     defaultAdapterId,
+    providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
+    executionRole: "coordinator",
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
     recoverRunInput,

@@ -39,6 +39,7 @@ import type {
   RunAttempt,
   StartupReconciliationResult,
 } from "./types.js";
+import { providerBoundaryForAdapter } from "./execution-policy.js";
 
 const DATABASE_FILENAME = "omi-agentd.sqlite3";
 const PHASE_1_MIGRATION_VERSION = 1;
@@ -54,6 +55,7 @@ const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
 const CONVERSATION_TURNS_MIGRATION_VERSION = 11;
 const BINDING_TURN_DELIVERY_MIGRATION_VERSION = 12;
 const WORKSTREAM_CONTINUITY_MIGRATION_VERSION = 13;
+const SESSION_EXECUTION_POLICY_MIGRATION_VERSION = 14;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -351,6 +353,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runConversationTurnsMigration(db, Date.now());
     runBindingTurnDeliveryMigration(db, Date.now());
     runWorkstreamContinuityMigration(db, Date.now());
+    runSessionExecutionPolicyMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -440,6 +443,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(WORKSTREAM_CONTINUITY_MIGRATION_VERSION)) {
       runWorkstreamContinuityMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(SESSION_EXECUTION_POLICY_MIGRATION_VERSION)) {
+      runSessionExecutionPolicyMigration(this.db, this.nowMs());
     }
   }
 
@@ -736,6 +742,8 @@ export class SqliteAgentStore implements AgentStore {
       title: input.title ?? null,
       status: input.status ?? "open",
       surfaceKind: input.surfaceKind,
+      executionRole: input.executionRole ?? "coordinator",
+      providerBoundary: input.providerBoundary ?? providerBoundaryForAdapter(input.defaultAdapterId),
       externalRefKind: input.externalRefKind ?? null,
       externalRefId: input.externalRefId ?? null,
       defaultAdapterId: input.defaultAdapterId,
@@ -748,11 +756,11 @@ export class SqliteAgentStore implements AgentStore {
     };
     this.db.prepare(
       `INSERT INTO sessions (
-        session_id, owner_id, agent_definition_id, title, status, surface_kind,
+        session_id, owner_id, agent_definition_id, title, status, surface_kind, execution_role, provider_boundary,
         external_ref_kind, external_ref_id, legacy_client_scope, legacy_session_key,
         default_adapter_id, default_cwd, model_profile, metadata_json,
         created_at_ms, updated_at_ms, last_activity_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(...sessionValues(session));
     return session;
   }
@@ -1967,6 +1975,33 @@ function runActiveAttemptAuthorityMigration(db: Pick<DatabaseSync, "exec" | "pre
   });
 }
 
+function runSessionExecutionPolicyMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE sessions
+        ADD COLUMN execution_role TEXT NOT NULL DEFAULT 'coordinator'
+        CHECK (execution_role IN ('coordinator', 'leaf'));
+      ALTER TABLE sessions
+        ADD COLUMN provider_boundary TEXT NOT NULL DEFAULT 'local_user:acp';
+      UPDATE sessions
+      SET execution_role = CASE
+        WHEN surface_kind IN ('delegated_agent', 'background_agent')
+          OR (surface_kind = 'floating_bar' AND external_ref_kind = 'pill')
+        THEN 'leaf'
+        ELSE 'coordinator'
+      END,
+      provider_boundary = CASE
+        WHEN default_adapter_id = 'pi-mono' THEN 'managed_cloud'
+        ELSE 'local_user:' || default_adapter_id
+      END;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      SESSION_EXECUTION_POLICY_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
 function runTransaction<T>(db: Pick<DatabaseSync, "exec" | "isTransaction">, work: () => T): T {
   if (db.isTransaction) {
     return work();
@@ -2013,6 +2048,8 @@ function sessionValues(session: AgentSession): SQLInputValue[] {
     session.title,
     session.status,
     session.surfaceKind,
+    session.executionRole,
+    session.providerBoundary,
     session.externalRefKind,
     session.externalRefId,
     null,

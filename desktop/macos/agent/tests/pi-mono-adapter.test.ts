@@ -411,6 +411,43 @@ describe("PiMonoAdapter prompt correlation", () => {
     await expect(prompt).resolves.toMatchObject({ text: "child created" });
   });
 
+  it("does not let an unrelated control success erase a failed obligation", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create both children" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      args: { objective: "child A" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "failed A" } }) }] },
+    });
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      args: { objective: "child B" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child B created"));
+
+    await expect(prompt).rejects.toThrow("failed A");
+  });
+
   it("resolves abort before turn_end and drops the late completion", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");

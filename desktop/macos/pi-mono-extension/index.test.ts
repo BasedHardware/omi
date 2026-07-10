@@ -23,6 +23,7 @@ import {
   appendAudit,
   __resetAuditWarnedForTest,
   OMI_TOOLS,
+  omiToolsForExecutionRole,
   OMI_TOOL_TIMEOUT_MS,
   OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
   isSafeSkillName,
@@ -995,6 +996,14 @@ test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
     OMI_TOOLS.map((tool) => tool.name),
     toolNamesForAdapter("pi-mono"),
   );
+});
+
+test("OMI_TOOLS: leaf projection omits every agent-management tool", () => {
+  const names = omiToolsForExecutionRole("leaf").map((tool) => tool.name);
+  assert.ok(!names.includes("spawn_agent"));
+  assert.ok(!names.includes("spawn_background_agent"));
+  assert.ok(!names.includes("run_agent_and_wait"));
+  assert.ok(!names.includes("send_agent_message"));
 });
 
 test("OMI_TOOLS: all tools preserve canonical pi-mono projection metadata and schema shape", () => {

@@ -15,11 +15,15 @@ must name the invariant they affect and update the matching guard test.
   authority for this runtime's run/attempt status.
 - Keep a local task Candidate in an independent review state after a canonical
   backend receipt exists.
+- Select an adapter outside the session's persisted provider boundary.
+- Grant leaf workers agent-management tools or nested-agent authority.
+- Persist a successful run while a required control operation remains failed.
 
 ## Surfaces
 
 - Desktop TypeScript agent runtime (`desktop/macos/agent/src/runtime`)
 - Adapter bindings, control tools, request-scoped relay, startup reconciliation
+- Adapter credential scopes, session execution roles, and terminal control obligations
 
 ## Guard tests
 

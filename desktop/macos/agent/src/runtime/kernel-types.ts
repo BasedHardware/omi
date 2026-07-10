@@ -12,6 +12,8 @@ import type {
   NewAgentGrant,
   RunAttempt,
   RunMode,
+  AgentExecutionRole,
+  ProviderBoundary,
   RunStatus,
   DelegationMode,
 } from "./types.js";
@@ -37,6 +39,8 @@ export interface KernelSessionResolutionInput {
   sessionId?: string;
   ownerId: string;
   surfaceKind: string;
+  executionRole?: AgentExecutionRole;
+  providerBoundary?: ProviderBoundary;
   externalRefKind?: string;
   externalRefId?: string;
   title?: string;
@@ -258,6 +262,13 @@ export interface SpawnBackgroundAgentInput {
   externalRefId?: string;
   adapterId?: string;
   defaultAdapterId?: string;
+  /** When set, the caller session must be a coordinator owned by ownerId. */
+  callerSessionId?: string;
+  /**
+   * Trusted desktop/user control may spawn without a caller session.
+   * Agent-originated spawns must supply callerSessionId instead.
+   */
+  trustedUserSpawn?: boolean;
   cwd?: string;
   model?: string;
   mcpServers?: Record<string, unknown>[];
