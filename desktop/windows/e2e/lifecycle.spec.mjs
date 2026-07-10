@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type -- plain-JS test harness */
 // Lifecycle E2E: drives the REAL built app (out/main/index.js) via Playwright's
 // _electron and asserts main-process lifecycle facts. Hermetic — no network is
 // required; the renderer's Firebase errors are irrelevant because every
