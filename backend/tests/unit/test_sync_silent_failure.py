@@ -681,6 +681,14 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
+        sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
+        sys.modules['utils.other.storage'].mark_conversation_playback_unavailable = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(
+            return_value=None
+        )
         sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
         sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)

@@ -37,6 +37,9 @@ enum DefaultsKey: String {
     case aiChatWorkingDirectory = "aiChatWorkingDirectory"
     case onboardingStep = "onboardingStep"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+    case hasCompletedOnboarding = "hasCompletedOnboarding"
+    /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
+    case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
