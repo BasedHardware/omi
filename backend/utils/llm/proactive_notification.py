@@ -1,5 +1,6 @@
+import os
 import re
-from typing import List, Optional
+from typing import Mapping, Optional, cast
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +8,8 @@ from utils.llm.clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+Record = Mapping[str, object]
 
 
 # ---------------------------------------------------------------------------
@@ -253,11 +256,31 @@ FREQUENCY_GUIDANCE = {
     1: "Ultra selective. Only prevent clear mistakes or truly critical insights. 1-3 per day max.",
     2: "Very selective. Only non-obvious insights tied to specific goals or history. 3-5 per day.",
     3: "Balanced. Only when you have a specific, actionable insight the user would miss. 5-8 per day.",
-    4: "Proactive. Share specific insights connecting this conversation to goals/history. 8-12 per day.",
-    5: "Very proactive. Share insights when you spot non-obvious connections. Up to 12 per day.",
+    4: "Proactive. Share specific insights connecting this conversation to goals/history. 6-9 per day.",
+    5: "Very proactive. Share insights when you spot non-obvious connections. Up to 9 per day.",
 }
 
-MAX_DAILY_NOTIFICATIONS = 12
+
+def _resolve_daily_cap(default: int = 9, minimum: int = 1, maximum: int = 1000) -> int:
+    """Read the daily-cap override, clamped to a sane range.
+
+    A non-integer or unset value falls back to the default, and the result is
+    bounded so a typo cannot silently disable proactive notifications (0/negative)
+    or remove throttling entirely (an accidental huge value)."""
+    raw = os.getenv('MAX_DAILY_NOTIFICATIONS')
+    if raw is None:
+        return default
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
+# Hard ceiling on proactive notifications per user per day, across every source
+# (mentor + third-party proactive apps). Defaults to 9 to keep the user under the
+# "less than 10 daily notifs" target in #4859; override with the env var to tune
+# without a code change.
+MAX_DAILY_NOTIFICATIONS = _resolve_daily_cap()
 
 
 # ---------------------------------------------------------------------------
@@ -265,13 +288,19 @@ MAX_DAILY_NOTIFICATIONS = 12
 # ---------------------------------------------------------------------------
 
 
-def _format_goals(goals: list) -> str:
+def _str_value(value: object, default: str = "") -> str:
+    if isinstance(value, str):
+        return value
+    return default
+
+
+def _format_goals(goals: list[Record]) -> str:
     if not goals:
         return "No active goals set."
-    lines = []
+    lines: list[str] = []
     for g in goals:
-        title = g.get('title', g.get('description', 'Unnamed goal'))
-        description = g.get('description', '')
+        title = _str_value(g.get('title'), _str_value(g.get('description'), 'Unnamed goal'))
+        description = _str_value(g.get('description'))
         if description and description != title:
             lines.append(f"- {title}: {description}")
         else:
@@ -279,23 +308,23 @@ def _format_goals(goals: list) -> str:
     return "\n".join(lines)
 
 
-def _format_current_conversation(messages: list, user_name: str) -> str:
+def _format_current_conversation(messages: list[Record], user_name: str) -> str:
     if not messages:
         return "No conversation in progress."
-    lines = []
+    lines: list[str] = []
     for msg in messages:
         speaker = user_name if msg.get('is_user') else "Other"
-        lines.append(f"[{speaker}]: {msg.get('text', '')}")
+        lines.append(f"[{speaker}]: {_str_value(msg.get('text'))}")
     return "\n".join(lines)
 
 
-def _format_recent_notifications(notifications: list) -> str:
+def _format_recent_notifications(notifications: list[Record]) -> str:
     if not notifications:
         return "No recent notifications sent."
-    lines = []
+    lines: list[str] = []
     for n in notifications:
-        created = n.get('created_at', 'unknown time')
-        text = n.get('text', '')
+        created = _str_value(n.get('created_at'), 'unknown time')
+        text = _str_value(n.get('text'))
         lines.append(f"[{created}]: {text}")
     return "\n".join(lines)
 
@@ -308,9 +337,9 @@ def _format_recent_notifications(notifications: list) -> str:
 def evaluate_relevance(
     user_name: str,
     user_facts: str,
-    goals: list,
-    current_messages: list,
-    recent_notifications: list,
+    goals: list[Record],
+    current_messages: list[Record],
+    recent_notifications: list[Record],
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
     goals_text = _format_goals(goals)
@@ -326,7 +355,7 @@ def evaluate_relevance(
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(RelevanceResult)
-    result: RelevanceResult = with_parser.invoke(prompt)
+    result = cast(RelevanceResult, with_parser.invoke(prompt))
     return result
 
 
@@ -338,10 +367,10 @@ def evaluate_relevance(
 def generate_notification(
     user_name: str,
     user_facts: str,
-    goals: list,
+    goals: list[Record],
     past_conversations_str: str,
-    current_messages: list,
-    recent_notifications: list,
+    current_messages: list[Record],
+    recent_notifications: list[Record],
     frequency: int,
     gate_reasoning: str,
     output_language: str = 'en',
@@ -367,7 +396,7 @@ def generate_notification(
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(NotificationDraft)
-    result: NotificationDraft = with_parser.invoke(prompt)
+    result = cast(NotificationDraft, with_parser.invoke(prompt))
     return result
 
 
@@ -380,8 +409,8 @@ def validate_notification(
     user_name: str,
     notification_text: str,
     draft_reasoning: str,
-    current_messages: list,
-    goals: list,
+    current_messages: list[Record],
+    goals: list[Record],
     output_language: str = 'en',
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
@@ -398,7 +427,7 @@ def validate_notification(
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(ValidationResult)
-    result: ValidationResult = with_parser.invoke(prompt)
+    result = cast(ValidationResult, with_parser.invoke(prompt))
     return result
 
 
@@ -476,10 +505,10 @@ REASONING must cite a SPECIFIC date, quote, or detail from {user_name}'s facts, 
 def evaluate_proactive_notification(
     user_name: str,
     user_facts: str,
-    goals: list,
+    goals: list[Record],
     past_conversations_str: str,
-    current_messages: list,
-    recent_notifications: list,
+    current_messages: list[Record],
+    recent_notifications: list[Record],
     frequency: int,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
@@ -501,5 +530,5 @@ def evaluate_proactive_notification(
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(ProactiveNotificationResult)
-    result: ProactiveNotificationResult = with_parser.invoke(prompt)
+    result = cast(ProactiveNotificationResult, with_parser.invoke(prompt))
     return result

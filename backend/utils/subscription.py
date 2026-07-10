@@ -1,7 +1,7 @@
 import os
 import time
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
@@ -17,6 +17,11 @@ from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _get_user(uid: str) -> Any:
+    return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
@@ -152,8 +157,8 @@ def _is_trial_expired_uncached(uid: str) -> bool:
             return False
         if users_db.is_byok_active(uid):
             return False
-        user_record = firebase_auth.get_user(uid)
-        creation_ms = user_record.user_metadata.creation_timestamp
+        user_record = _get_user(uid)
+        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
         if not creation_ms:
             return False
         age_seconds = time.time() - (creation_ms / 1000)
@@ -242,8 +247,8 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
                 plan_after_trial=get_plan_display_name(PlanType.basic),
             )
 
-        user_record = firebase_auth.get_user(uid)
-        creation_ms = user_record.user_metadata.creation_timestamp
+        user_record = _get_user(uid)
+        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
         if not creation_ms:
             # No creation timestamp — treat as active trial (fail-open).
             return TrialMetadata(
@@ -283,7 +288,7 @@ def is_paid_plan(plan: PlanType) -> bool:
     return plan in PAID_PLAN_TYPES
 
 
-def get_paid_plan_definitions() -> list[dict]:
+def get_paid_plan_definitions() -> List[Dict[str, Any]]:
     """All plan definitions.
 
     Unlimited is kept as legacy so existing subscribers keep their access
@@ -354,7 +359,7 @@ LEGACY_PRICE_MAP = {
 _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 
 
-def _platform_hidden_plans(platform: Optional[str]) -> set:
+def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans that are hidden from the purchase catalog for the given platform.
 
     Desktop (macOS) sells Operator + Architect (pricier tier with usage-based
@@ -392,11 +397,11 @@ def has_ever_purchased(uid: str, subscription: Optional[Subscription] = None) ->
 
 
 def filter_plans_for_user(
-    definitions: list[dict],
+    definitions: List[Dict[str, Any]],
     current_plan: PlanType,
     platform: Optional[str] = None,
     ever_purchased: bool = False,
-) -> list[dict]:
+) -> List[Dict[str, Any]]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
     Subscribers already on a "wrong-platform" plan (e.g. a Neo subscriber
@@ -407,7 +412,7 @@ def filter_plans_for_user(
     """
     hidden = _platform_hidden_plans(platform)
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
-    out: list[dict] = []
+    out: List[Dict[str, Any]] = []
     for d in definitions:
         plan_type = d.get('plan_type')
         if d.get('legacy') and plan_type != current_plan:
@@ -462,7 +467,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     return False
 
 
-def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
+def adapt_plans_for_legacy_client(definitions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform the new-shape plan catalog back into the pre-v0.11.324 shape
     so older clients (mobile, stable desktop) keep showing the old plan titles
     and don't see desktop-only plans.
@@ -471,7 +476,7 @@ def adapt_plans_for_legacy_client(definitions: list[dict]) -> list[dict]:
     Drops the legacy suffix + flag from Unlimited so pre-rollout clients
     still see it as "Omi Unlimited".
     """
-    out: list[dict] = []
+    out: List[Dict[str, Any]] = []
     for d in definitions:
         if d['plan_id'] in ('operator', 'pro'):
             continue
@@ -571,7 +576,7 @@ def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
 
 
-def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> dict:
+def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
 
@@ -817,7 +822,7 @@ def _has_active_stripe_subscription(uid: str) -> bool:
     try:
         subs = stripe.Subscription.list(customer=customer_id, status='active', limit=5)
         for sub in subs.data:
-            sub_dict = sub.to_dict()
+            sub_dict: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
             if sub_dict.get('cancel_at_period_end'):
                 continue
             if sub_dict.get('metadata', {}).get('uid') == uid:
@@ -851,14 +856,14 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
         return None
 
     for sub in subs.data:
-        d = sub.to_dict()
+        d: Dict[str, Any] = sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
         sub_uid = d.get('metadata', {}).get('uid')
         if sub_uid and sub_uid != uid:
             continue
-        items = d.get('items', {}).get('data') or []
+        items: List[Dict[str, Any]] = d.get('items', {}).get('data') or []
         if not items or not items[0].get('price'):
             continue
-        price_id = items[0]['price'].get('id')
+        price_id: Any = items[0]['price'].get('id')
         try:
             plan = get_plan_type_from_price_id(price_id)
         except ValueError:
@@ -878,7 +883,7 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
     return None
 
 
-def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, str]:
+def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
 
@@ -924,7 +929,7 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
                     try:
                         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
                         if stripe_sub:
-                            stripe_sub_dict = stripe_sub.to_dict()
+                            stripe_sub_dict: Dict[str, Any] = stripe_sub.to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
                             if stripe_sub_dict['items']['data']:
                                 current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
@@ -942,7 +947,7 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
     return True, "User can make payment"
 
 
-def get_monthly_usage_for_subscription(uid: str) -> dict:
+def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
@@ -955,12 +960,12 @@ def get_monthly_usage_for_subscription(uid: str) -> dict:
 
     try:
         # Use strptime to enforce YYYY-MM-DD format
-        launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d')
+        launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
         # Invalid date format, treat as not launched.
         return {}
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if now < launch_date:
         # Launch date is in the future, so no usage is counted yet.
         return {}
@@ -1058,12 +1063,12 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             return subscription
 
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-        stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else None
+        stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
         if not stripe_sub_dict:
             return subscription
 
-        items = stripe_sub_dict.get('items', {}).get('data') or []
-        price_id = None
+        items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+        price_id: Optional[str] = None
         if items and items[0].get('price'):
             price_id = items[0]['price'].get('id')
 
@@ -1085,7 +1090,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
                 subscription.limits = get_plan_limits(plan_type)
 
                 # Persist the corrected subscription back to Firestore (without dynamic fields).
-                users_db.update_user_subscription(uid, subscription.dict())
+                users_db.update_user_subscription(uid, subscription.model_dump())
                 return subscription
 
         # Stored sub is canceled / unknown / not a paid plan. The user may have
@@ -1095,7 +1100,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         # can't leave a paying user stranded on basic.
         active = find_active_paid_subscription_for_user(uid)
         if active:
-            users_db.update_user_subscription(uid, active.dict())
+            users_db.update_user_subscription(uid, active.model_dump())
             return active
 
     except Exception as e:

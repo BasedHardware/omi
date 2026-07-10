@@ -13,24 +13,28 @@ Endpoints:
 - GET   /v1/tools/action-items           — list action items
 - POST  /v1/tools/action-items           — create action item
 - PATCH /v1/tools/action-items/{id}      — update action item
+- POST  /v1/tools/calendar-events        — create calendar event
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import database.vector_db as vector_db
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tool_services.action_items import (
     get_action_items_text,
     create_action_item_text,
     update_action_item_text,
 )
+from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +80,22 @@ class UpdateActionItemRequest(BaseModel):
     completed: Optional[bool] = Field(default=None)
     description: Optional[str] = Field(default=None)
     due_at: Optional[str] = Field(default=None, description="ISO date with timezone")
+
+
+class CreateCalendarEventRequest(BaseModel):
+    title: str = Field(description="Event title")
+    start_time: datetime = Field(description="ISO date/time with timezone")
+    end_time: datetime = Field(description="ISO date/time with timezone")
+    description: Optional[str] = Field(default=None, description="Event description")
+    location: Optional[str] = Field(default=None, description="Event location")
+    attendees: Optional[str] = Field(default=None, description="Comma-separated attendee names or email addresses")
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            raise ValueError('datetime must include timezone')
+        return value
 
 
 # --------------- conversation endpoints ---------------
@@ -161,6 +181,7 @@ def get_memories(
         start_date=start_date,
         end_date=end_date,
     )
+    result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
     return _ok("get_memories", result)
 
 
@@ -174,6 +195,7 @@ def search_memories(
         query=body.query,
         limit=body.limit,
     )
+    result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
     return _ok("search_memories", result)
 
 
@@ -234,3 +256,29 @@ def update_action_item(
         due_at=body.due_at,
     )
     return _ok("update_action_item", result)
+
+
+# --------------- calendar endpoints ---------------
+
+
+@router.post("/v1/tools/calendar-events", response_model=ToolResponse)
+async def create_calendar_event(
+    body: CreateCalendarEventRequest,
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
+):
+    result = await create_calendar_event_tool.ainvoke(
+        {
+            "title": body.title,
+            "start_time": body.start_time.isoformat(),
+            "end_time": body.end_time.isoformat(),
+            "description": body.description,
+            "location": body.location,
+            "attendees": body.attendees,
+        },
+        config={"configurable": {"user_id": uid}},
+    )
+    return {
+        "tool_name": "create_calendar_event",
+        "result_text": result,
+        "is_error": not result.startswith("✅ Successfully created calendar event:"),
+    }

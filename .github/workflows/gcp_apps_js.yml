@@ -11,10 +11,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+        type: choice
+        options:
+          - development
+          - prod
 
 env:
   SERVICE: apps-js
@@ -22,7 +22,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -42,27 +42,13 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
+          IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
           docker build \
-            --build-arg OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --build-arg OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} \
-            --build-arg UPSTASH_REDIS_HOST=${{ secrets.UPSTASH_REDIS_HOST }} \
-            --build-arg UPSTASH_REDIS_PASSWORD=${{ secrets.UPSTASH_REDIS_PASSWORD }} \
-            --build-arg UPSTASH_REDIS_PORT=${{ secrets.UPSTASH_REDIS_PORT }} \
-            --build-arg JWT_SECRET=${{ secrets.JWT_SECRET }} \
-            --build-arg GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            --build-arg GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --build-arg GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }} \
-            --build-arg GOOGLE_CALLBACK_URL=${{ secrets.GOOGLE_CALLBACK_URL }} \
-            --build-arg BASE_URL=${{ secrets.BASE_URL }} \
-            --build-arg SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --build-arg SUPABASE_KEY=${{ secrets.SUPABASE_KEY }} \
-            --build-arg OMI_APP_ID=${{ secrets.OMI_APP_ID }} \
-            --build-arg OMI_APP_SECRET=${{ secrets.OMI_APP_SECRET }} \
-            --build-arg DECK_APP_ID=${{ secrets.DECK_APP_ID }} \
-            --build-arg DECK_APP_SECRET=${{ secrets.DECK_APP_SECRET }} \
-            --build-arg SLIDESGPT_API_KEY=${{ secrets.SLIDESGPT_API_KEY }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/apps-js/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+            -t "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" -f plugins/apps-js/Dockerfile .
+          docker push "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}"
+          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -70,7 +56,35 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
+          secrets: |
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+            OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest
+            UPSTASH_REDIS_HOST=UPSTASH_REDIS_HOST:latest
+            UPSTASH_REDIS_PASSWORD=UPSTASH_REDIS_PASSWORD:latest
+            UPSTASH_REDIS_PORT=UPSTASH_REDIS_PORT:latest
+            JWT_SECRET=JWT_SECRET:latest
+            GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest
+            GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest
+            GOOGLE_REDIRECT_URI=GOOGLE_REDIRECT_URI:latest
+            GOOGLE_CALLBACK_URL=GOOGLE_CALLBACK_URL:latest
+            BASE_URL=BASE_URL:latest
+            SUPABASE_URL=SUPABASE_URL:latest
+            SUPABASE_KEY=SUPABASE_KEY:latest
+            OMI_APP_ID=OMI_APP_ID:latest
+            OMI_APP_SECRET=OMI_APP_SECRET:latest
+            DECK_APP_ID=DECK_APP_ID:latest
+            DECK_APP_SECRET=DECK_APP_SECRET:latest
+            SLIDESGPT_API_KEY=SLIDESGPT_API_KEY:latest
+
+      - name: Verify Cloud Run rollout
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service ${{ env.SERVICE }}
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

@@ -19,9 +19,13 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      service:
+        description: 'Service to deploy'
+        required: false
+        default: 'pusher'
 
 env:
-  SERVICE: pusher
+  SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
 jobs:
@@ -37,6 +41,14 @@ jobs:
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "${{ env.SERVICE }}" != "pusher" && "${{ env.SERVICE }}" != "llm-gateway" ]]; then
+            echo "Invalid service: ${{ env.SERVICE }}. Must be 'pusher' or 'llm-gateway'."
+            exit 1
+          fi
+          if [[ "${{ env.SERVICE }}" == "llm-gateway" && "${{ github.event.inputs.environment }}" != "development" ]]; then
+            echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
             exit 1
           fi
 
@@ -58,27 +70,52 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Bootstrap LLM Gateway dev service token
+        if: env.SERVICE == 'llm-gateway' && github.event.inputs.environment == 'development'
+        run: |
+          SECRET_NAME="OMI_LLM_GATEWAY_SERVICE_TOKEN"
+          if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            if [[ "${{ github.event.inputs.release_version }}" == "rotate-dev-token" ]]; then
+              echo "Rotating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
+              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$SECRET_NAME" \
+                --project="${{ vars.GCP_PROJECT_ID }}" \
+                --data-file=- >/dev/null
+              exit 0
+            fi
+            echo "$SECRET_NAME already exists in ${{ vars.GCP_PROJECT_ID }}."
+            exit 0
+          fi
+
+          echo "Creating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
+          # Tolerate a concurrent create from another workflow run losing the
+          # check-then-create race (ALREADY_EXISTS); the secret existing is the
+          # desired end state regardless of which run created it.
+          openssl rand -base64 48 | tr -d '\n' | gcloud secrets create "$SECRET_NAME" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --replication-policy="automatic" \
+            --data-file=- >/dev/null || {
+              if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+                echo "$SECRET_NAME now exists (created concurrently by another run)."
+                exit 0
+              fi
+              echo "Failed to create or find $SECRET_NAME." >&2
+              exit 1
+            }
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
-
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+          else
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          fi
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-
-      # - name: Deploy to Cloud Run
-      #   id: deploy
-      #   uses: google-github-actions/deploy-cloudrun@v2
-      #   with:
-      #     service: ${{ env.SERVICE }}
-      #     region: ${{ env.REGION }}
-      #     image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -88,12 +125,107 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy Pusher to GKE cluster using Helm
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            python3 -m pip install -q pyyaml
+            python3 backend/scripts/validate-llm-gateway-env.py \
+              backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+              backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
+            if ! IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh; then
+              python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway || true
+              echo "=== llm-gateway deployment ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend describe deploy/${{ vars.ENV }}-omi-llm-gateway || true
+              echo "=== llm-gateway pods ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway -o wide || true
+              kubectl -n ${{ vars.ENV }}-omi-backend describe pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway || true
+              # NOTE: raw `kubectl logs` is intentionally omitted here because the gateway is an
+              # OpenAI-compatible service that processes chat content and service tokens — its
+              # runtime logs may leak sensitive payloads into CI output. Use `gcloud compute ssh`,
+              # `kubectl logs` interactively from an authenticated operator shell, or structured
+              # error reporting instead of dumping raw logs in CI.
+              echo "=== backend ExternalSecret status ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend describe externalsecret/${{ vars.ENV }}-omi-backend-external-secret || true
+              echo "=== backend secret key presence ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data}' | python -c 'import json,sys; print("\\n".join(sorted(json.load(sys.stdin).keys())))' || true
+              exit 1
+            fi
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
+          else
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+            if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s; then
+              python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
+              exit 1
+            fi
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
+          fi
+
+      - name: Smoke LLM Gateway
+        if: env.SERVICE == 'llm-gateway'
+        run: |
+          SMOKE_POD="llm-gateway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+          cleanup() {
+            kubectl -n ${{ vars.ENV }}-omi-backend delete pod "$SMOKE_POD" --ignore-not-found=true
+          }
+          trap cleanup EXIT
+
+          cat <<EOF | kubectl -n ${{ vars.ENV }}-omi-backend apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: $SMOKE_POD
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: smoke
+                image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+                command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics --metrics-token \"\$METRICS_SECRET\""]
+                env:
+                  - name: SMOKE_URL
+                    value: http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080
+                  - name: SMOKE_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${{ vars.ENV }}-omi-backend-secrets
+                        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+                  - name: METRICS_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${{ vars.ENV }}-omi-backend-secrets
+                        key: METRICS_SECRET
+          EOF
+
+          for _ in {1..120}; do
+            PHASE="$(kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [[ "$PHASE" == "Succeeded" ]]; then
+              echo "=== llm-gateway smoke pod ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o wide || true
+              kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
+              echo "=== llm-gateway smoke logs ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend logs "$SMOKE_POD" || true
+              exit 0
+            fi
+            if [[ "$PHASE" == "Failed" ]]; then
+              break
+            fi
+            sleep 1
+          done
+
+          echo "=== llm-gateway smoke pod ==="
+          kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o wide || true
+          kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
+          echo "=== llm-gateway smoke logs ==="
+          kubectl -n ${{ vars.ENV }}-omi-backend logs "$SMOKE_POD" || true
+          exit 1
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+        run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

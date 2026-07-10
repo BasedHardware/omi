@@ -245,13 +245,26 @@ class InsightStorage: ObservableObject {
         }
     }
 
+    /// Mark all insights as read on the backend using the working per-memory
+    /// read-status endpoint. The legacy `markAllMemoriesRead` bulk route was
+    /// removed and `markAllMemoriesRead(scope:)` now throws
+    /// `unsupportedTierScopedBulkMutation`, so update each unread insight
+    /// individually to ensure the optimistic local read state is persisted.
     private func markAllReadOnBackend() async {
-        do {
-            try await APIClient.shared.markAllMemoriesRead()
-            log("Insight: Marked all as read on backend")
-        } catch {
-            logError("Insight: Failed to mark all as read on backend", error: error)
+        let unreadIds = insightHistory.filter { !$0.isRead }.map { $0.id }
+        guard !unreadIds.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for id in unreadIds {
+                group.addTask {
+                    do {
+                        _ = try await APIClient.shared.updateMemoryReadStatus(id: id, isRead: true, isDismissed: nil)
+                    } catch {
+                        logError("Insight: Failed to mark \(id) as read on backend", error: error)
+                    }
+                }
+            }
         }
+        log("Insight: Marked \(unreadIds.count) insight(s) as read on backend")
     }
 
     // MARK: - Local Cache

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class OnboardingCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -122,15 +124,19 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                             elevation: 0,
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Start Using Omi',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                                context.l10n.startUsingOmi,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Manrope',
+                                ),
                               ),
-                              SizedBox(width: 8),
-                              Icon(Icons.arrow_forward_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded, size: 20),
                             ],
                           ),
                         ),

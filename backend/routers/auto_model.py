@@ -6,6 +6,7 @@ import time
 import httpx
 from fastapi import APIRouter, Depends
 
+from models.auto_model import AutoModelPick
 from utils.other.endpoints import get_current_user_uid
 
 router = APIRouter()
@@ -76,7 +77,7 @@ async def _fetch_and_score():
     return pick, {"scores": scores}
 
 
-@router.get("/v1/auto/model-pick")
+@router.get("/v1/auto/model-pick", response_model=AutoModelPick)
 async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
     """Current best realtime-voice provider for 'Auto' users (daily-cached)."""
     now = time.time()

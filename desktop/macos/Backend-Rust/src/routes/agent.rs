@@ -12,6 +12,10 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::agent::{AgentStatusResponse, AgentVmStatus, ProvisionAgentResponse};
 use crate::AppState;
 
+fn local_harness_agent_disabled() -> bool {
+    std::env::var("ENVIRONMENT").as_deref() == Ok("local-dev-harness")
+}
+
 /// POST /v2/agent/provision
 /// Idempotent — if user already has a VM, returns existing info.
 /// Creates a GCE VM from the omi-agent image family for this user.
@@ -19,6 +23,10 @@ async fn provision_agent_vm(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
 ) -> Result<Json<ProvisionAgentResponse>, StatusCode> {
+    if local_harness_agent_disabled() {
+        tracing::debug!("Agent VM provision disabled in local dev harness");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
     let user: AuthUser = user.into();
     tracing::info!("Agent VM provision request for user {}", user.uid);
 
@@ -40,7 +48,10 @@ async fn provision_agent_vm(
             }));
         }
         Ok(None) => {
-            tracing::info!("No existing agent VM for user {}, provisioning...", user.uid);
+            tracing::info!(
+                "No existing agent VM for user {}, provisioning...",
+                user.uid
+            );
         }
         Err(e) => {
             tracing::error!("Failed to check existing agent VM: {}", e);
@@ -85,7 +96,9 @@ async fn provision_agent_vm(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let gce_source_image = state.config.gce_source_image.clone().ok_or_else(|| {
-        tracing::error!("GCE_SOURCE_IMAGE not set and no project ID to derive it — cannot provision agent VM");
+        tracing::error!(
+            "GCE_SOURCE_IMAGE not set and no project ID to derive it — cannot provision agent VM"
+        );
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let agent_gcs_bucket = state.config.agent_gcs_bucket.clone().ok_or_else(|| {
@@ -164,6 +177,9 @@ async fn get_agent_status(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
 ) -> Result<Json<Option<AgentStatusResponse>>, StatusCode> {
+    if local_harness_agent_disabled() {
+        return Ok(Json(None));
+    }
     let user: AuthUser = user.into();
     tracing::info!("Agent VM status request for user {}", user.uid);
 
@@ -190,7 +206,14 @@ async fn get_agent_status(
                         })));
                     }
                 };
-                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone, &gce_project_id).await {
+                match check_gce_instance_status(
+                    &state.firestore,
+                    &vm.vm_name,
+                    &vm.zone,
+                    &gce_project_id,
+                )
+                .await
+                {
                     Ok(gce_status) if gce_status == "TERMINATED" || gce_status == "STOPPED" => {
                         tracing::info!(
                             "VM {} is {} (idle auto-stop), restarting...",
@@ -221,7 +244,8 @@ async fn get_agent_status(
                         let gce_project = gce_project_id.clone();
 
                         tokio::spawn(async move {
-                            match start_stopped_vm(&firestore, &vm_name, &zone, &gce_project).await {
+                            match start_stopped_vm(&firestore, &vm_name, &zone, &gce_project).await
+                            {
                                 Ok(ip) => {
                                     tracing::info!("VM {} restarted with IP {}", vm_name, ip);
                                     let now = chrono::Utc::now().to_rfc3339();
@@ -274,9 +298,10 @@ async fn get_agent_status(
                         let _ = state.firestore.delete_agent_vm(&user.uid).await;
                         return Ok(Json(None));
                     }
-                    Ok(gce_status) if gce_status == "RUNNING"
-                        && (vm.status == AgentVmStatus::Error
-                            || vm.status == AgentVmStatus::Stopped) =>
+                    Ok(gce_status)
+                        if gce_status == "RUNNING"
+                            && (vm.status == AgentVmStatus::Error
+                                || vm.status == AgentVmStatus::Stopped) =>
                     {
                         // VM is actually running but Firestore is stale — recover
                         tracing::info!(
@@ -304,16 +329,21 @@ async fn get_agent_status(
                             {
                                 if let Ok(resp) = resp.send().await {
                                     if let Ok(instance) = resp.json::<serde_json::Value>().await {
-                                        let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                                        let ip = instance["networkInterfaces"][0]["accessConfigs"]
+                                            [0]["natIP"]
                                             .as_str()
                                             .unwrap_or("unknown")
                                             .to_string();
                                         let now = chrono::Utc::now().to_rfc3339();
                                         let _ = firestore
                                             .set_agent_vm(
-                                                &uid, &vm_name, &zone,
-                                                Some(&ip), AgentVmStatus::Ready,
-                                                &auth_token, &now,
+                                                &uid,
+                                                &vm_name,
+                                                &zone,
+                                                Some(&ip),
+                                                AgentVmStatus::Ready,
+                                                &auth_token,
+                                                &now,
                                             )
                                             .await;
                                         tracing::info!("VM {} recovered — ip={}", vm_name, ip);
@@ -338,11 +368,7 @@ async fn get_agent_status(
                     }
                     Err(e) => {
                         // If we can't reach GCE, return Firestore data as-is
-                        tracing::warn!(
-                            "Could not check GCE status for {}: {}",
-                            vm.vm_name,
-                            e
-                        );
+                        tracing::warn!("Could not check GCE status for {}: {}", vm.vm_name, e);
                     }
                 }
             }
@@ -388,10 +414,7 @@ async fn check_gce_instance_status(
     }
 
     let instance: serde_json::Value = resp.json().await?;
-    let status = instance["status"]
-        .as_str()
-        .unwrap_or("UNKNOWN")
-        .to_string();
+    let status = instance["status"].as_str().unwrap_or("UNKNOWN").to_string();
     Ok(status)
 }
 
@@ -402,7 +425,6 @@ async fn start_stopped_vm(
     zone: &str,
     project: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-
     // Call GCE start API
     let start_url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}/start",

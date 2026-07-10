@@ -69,7 +69,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
               child: Row(
                 children: [
@@ -178,9 +180,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         height: 44,
                                         child: SearchBar(
                                           hintText: context.l10n.searchMemories,
-                                          leading: const Padding(
+                                          leading: Padding(
                                             padding: EdgeInsets.only(left: 6.0),
-                                            child: Icon(
+                                            child: FaIcon(
                                               FontAwesomeIcons.magnifyingGlass,
                                               color: Colors.white70,
                                               size: 14,
@@ -234,9 +236,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                             height: 44,
                                             child: SearchBar(
                                               hintText: context.l10n.searchMemories,
-                                              leading: const Padding(
+                                              leading: Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
-                                                child: Icon(
+                                                child: FaIcon(
                                                   FontAwesomeIcons.magnifyingGlass,
                                                   color: Colors.white70,
                                                   size: 14,
@@ -291,6 +293,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       },
                                     ),
                                     const SizedBox(width: 8),
+                                    FilterChip(
+                                      label: Text(context.l10n.memoryThisDevice, style: const TextStyle(fontSize: 12)),
+                                      selected: provider.filterThisDeviceOnly,
+                                      onSelected: provider.setFilterThisDeviceOnly,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    const SizedBox(width: 8),
                                     SizedBox(
                                       width: 44,
                                       height: 44,
@@ -306,7 +316,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.brain, size: 16),
+                                        child: FaIcon(FontAwesomeIcons.brain, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -323,7 +333,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.sliders, size: 16),
+                                        child: FaIcon(FontAwesomeIcons.sliders, size: 16),
                                       ),
                                     ),
                                   ],
@@ -374,6 +384,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
                                         _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                       },
+                                      onDeleteNotification: showDeleteNotification,
                                     );
                                   }, childCount: provider.filteredMemories.length),
                                 ),

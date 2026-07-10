@@ -1,0 +1,7 @@
+{
+  "version": "0.11.555",
+  "date": "2026-06-28",
+  "changes": [
+    "Fixed automatic desktop updates getting stuck after they were deferred during active conversations"
+  ]
+}

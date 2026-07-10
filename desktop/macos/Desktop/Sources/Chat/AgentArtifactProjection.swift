@@ -1,11 +1,11 @@
 import Combine
 import Foundation
 
-struct AgentArtifactProjection: Equatable, Identifiable {
+struct AgentArtifactProjection: Codable, Equatable, Identifiable {
   var id: String { artifactId }
 
   let artifactId: String
-  let omiSessionId: String
+  let sessionId: String
   let runId: String?
   let attemptId: String?
   let kind: String
@@ -27,6 +27,18 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     return uri
   }
 
+  /// True for artifacts worth surfacing to the user as a result card (a produced
+  /// file/output), excluding inputs, intermediate context, and dismissed items.
+  var isUserFacingResult: Bool {
+    if lifecycleState == "dismissed" { return false }
+    switch role {
+    case "input", "context", "reference":
+      return false
+    default:
+      return true
+    }
+  }
+
   static func parseList(fromToolResult result: String) throws -> [AgentArtifactProjection] {
     guard let data = result.data(using: .utf8),
       let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -41,12 +53,16 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     guard let artifacts = root["artifacts"] as? [[String: Any]] else {
       throw AgentArtifactProjectionError.invalidResponse
     }
-    return artifacts.compactMap(parseArtifact(_:))
+    return parseList(fromJSONArray: artifacts)
+  }
+
+  static func parseList(fromJSONArray artifacts: [[String: Any]]) -> [AgentArtifactProjection] {
+    artifacts.compactMap(parseArtifact(_:))
   }
 
   private static func parseArtifact(_ dict: [String: Any]) -> AgentArtifactProjection? {
     guard let artifactId = dict["artifactId"] as? String,
-      let omiSessionId = dict["omiSessionId"] as? String,
+      let sessionId = dict["sessionId"] as? String,
       let kind = dict["kind"] as? String,
       let role = dict["role"] as? String,
       let uri = dict["uri"] as? String
@@ -55,7 +71,7 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     }
     return AgentArtifactProjection(
       artifactId: artifactId,
-      omiSessionId: omiSessionId,
+      sessionId: sessionId,
       runId: dict["runId"] as? String,
       attemptId: dict["attemptId"] as? String,
       kind: kind,

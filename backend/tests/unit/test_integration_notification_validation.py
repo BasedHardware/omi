@@ -96,9 +96,14 @@ finally:
     _restore(_snap)
 
 from fastapi import HTTPException  # noqa: E402
+from models.other import SendAppNotificationRequest  # noqa: E402
 
 
 def test_missing_message_returns_400():
     with pytest.raises(HTTPException) as e:
-        notif_mod.send_app_notification_to_user(request=MagicMock(), data={'aid': 'app1'}, authorization=None)
+        notif_mod.send_app_notification_to_user(
+            request=MagicMock(),
+            data=SendAppNotificationRequest(aid='app1', message='', uid='uid1'),
+            authorization=None,
+        )
     assert e.value.status_code == 400

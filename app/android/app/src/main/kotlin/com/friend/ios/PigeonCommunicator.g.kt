@@ -320,6 +320,41 @@ data class BleDeviceDiagnostics (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/**
+ * A pair of Ray-Ban Meta glasses reported by the Meta Wearables toolkit.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RayBanMetaGlasses (
+  val id: String,
+  val name: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RayBanMetaGlasses {
+      val id = pigeonVar_list[0] as String
+      val name = pigeonVar_list[1] as String
+      return RayBanMetaGlasses(id, name)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      name,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is RayBanMetaGlasses) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -348,6 +383,11 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
           BleDeviceDiagnostics.fromList(it)
         }
       }
+      134.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          RayBanMetaGlasses.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -371,6 +411,10 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       is BleDeviceDiagnostics -> {
         stream.write(133)
+        writeValue(stream, value.toList())
+      }
+      is RayBanMetaGlasses -> {
+        stream.write(134)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1310,6 +1354,531 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
     val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(fileNameArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+}
+/**
+ * Dart → native. Camera/photo capture goes through the Meta Wearables Device
+ * Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
+ * uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
+ * are safe to call on builds without the DAT SDK — getAvailabilityMode()
+ * reports which mode this build supports.
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface RayBanMetaHostAPI {
+  /**
+   * 'full' (DAT SDK linked + Meta app credentials configured),
+   * 'audio_only' (no DAT — platform Bluetooth audio route only), or 'none'.
+   */
+  fun getAvailabilityMode(): String
+  fun initialize()
+  /** 'unregistered' | 'registering' | 'registered' ('unavailable' without DAT). */
+  fun getRegistrationState(): String
+  /** Launches the Meta AI companion app to authorize this app for the glasses. */
+  fun startRegistration()
+  fun unregister()
+  fun getAvailableGlasses(callback: (Result<List<RayBanMetaGlasses>>) -> Unit)
+  fun connect(deviceId: String)
+  fun disconnect()
+  /** 'disconnected' | 'connecting' | 'connected'. */
+  fun getConnectionState(): String
+  /** DAT camera permission for the glasses: resolves 'granted' | 'denied'. */
+  fun requestCameraPermission(callback: (Result<String>) -> Unit)
+  /** 'granted' | 'denied' | 'not_determined' | 'unavailable'. */
+  fun getCameraPermissionStatus(callback: (Result<String>) -> Unit)
+  /**
+   * Starts capturing the glasses microphone over the Bluetooth HFP route and
+   * streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
+   */
+  fun startAudioCapture()
+  fun stopAudioCapture()
+  /** True when the active audio input route is the glasses' Bluetooth HFP mic. */
+  fun isGlassesAudioRouteActive(): Boolean
+  /**
+   * Bluetooth HFP input port names currently available, for the audio-only
+   * fallback when the DAT SDK is not part of this build.
+   */
+  fun getBluetoothHfpInputNames(): List<String>
+  /**
+   * Starts the DAT camera stream session so photo capture is ready. While
+   * active the glasses' capture LED is on (hardware-enforced by Meta).
+   */
+  fun startCamera()
+  fun stopCamera()
+  /** Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured. */
+  fun capturePhoto()
+
+  companion object {
+    /** The codec used by RayBanMetaHostAPI. */
+    val codec: MessageCodec<Any?> by lazy {
+      PigeonCommunicatorPigeonCodec()
+    }
+    /** Sets up an instance of `RayBanMetaHostAPI` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: RayBanMetaHostAPI?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailabilityMode$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getAvailabilityMode())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.initialize$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.initialize()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getRegistrationState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getRegistrationState())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startRegistration$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.startRegistration()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.unregister$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.unregister()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailableGlasses$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.getAvailableGlasses{ result: Result<List<RayBanMetaGlasses>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.connect$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val deviceIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.connect(deviceIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.disconnect$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.disconnect()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getConnectionState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getConnectionState())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.requestCameraPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.requestCameraPermission{ result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.getCameraPermissionStatus{ result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.startAudioCapture()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopAudioCapture$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.stopAudioCapture()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.isGlassesAudioRouteActive$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.isGlassesAudioRouteActive())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputNames$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getBluetoothHfpInputNames())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.startCamera()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopCamera$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.stopCamera()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.capturePhoto$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.capturePhoto()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
+/**
+ * Native → Dart events for Ray-Ban Meta.
+ *
+ * Generated class from Pigeon that represents Flutter messages that can be called from Kotlin.
+ */
+class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private val messageChannelSuffix: String = "") {
+  companion object {
+    /** The codec used by RayBanMetaFlutterAPI. */
+    val codec: MessageCodec<Any?> by lazy {
+      PigeonCommunicatorPigeonCodec()
+    }
+  }
+  fun onRegistrationStateChanged(stateArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onGlassesDiscovered(glassesArg: RayBanMetaGlasses, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(glassesArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onConnectionStateChanged(deviceIdArg: String, stateArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(deviceIdArg, stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic. */
+  fun onAudioFrame(pcm16FrameArg: ByteArray, sampleRateArg: Double, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(pcm16FrameArg, sampleRateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Whether the glasses' HFP mic is the active input route right now. */
+  fun onAudioRouteChanged(glassesRouteActiveArg: Boolean, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(glassesRouteActiveArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** JPEG bytes plus clockwise orientation in degrees (0/90/180/270). */
+  fun onPhotoCaptured(jpegBytesArg: ByteArray, orientationDegreesArg: Long, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(jpegBytesArg, orientationDegreesArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** 'stopped' | 'starting' | 'streaming' | 'paused'. */
+  fun onCameraStateChanged(stateArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onCameraPermissionChanged(statusArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(statusArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onError(codeArg: String, messageArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(codeArg, messageArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

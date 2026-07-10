@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Horizontally scrollable filmstrip of search result thumbnails
 struct SearchResultsFilmstrip: View {
@@ -375,6 +376,7 @@ extension Screenshot {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     SearchResultsFilmstrip(
         screenshots: [],
@@ -385,3 +387,4 @@ extension Screenshot {
     .frame(width: 800, height: 200)
     .background(Color.black)
 }
+#endif

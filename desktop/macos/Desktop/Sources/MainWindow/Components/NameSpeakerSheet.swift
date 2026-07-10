@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Modal sheet for naming a speaker in a transcript
 struct NameSpeakerSheet: View {

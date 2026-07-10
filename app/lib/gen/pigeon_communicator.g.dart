@@ -351,6 +351,53 @@ class BleDeviceDiagnostics {
 ;
 }
 
+/// A pair of Ray-Ban Meta glasses reported by the Meta Wearables toolkit.
+class RayBanMetaGlasses {
+  RayBanMetaGlasses({
+    required this.id,
+    required this.name,
+  });
+
+  String id;
+
+  String name;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      name,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RayBanMetaGlasses decode(Object result) {
+    result as List<Object?>;
+    return RayBanMetaGlasses(
+      id: result[0]! as String,
+      name: result[1]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RayBanMetaGlasses || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -374,6 +421,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BleDeviceDiagnostics) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
+    }    else if (value is RayBanMetaGlasses) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -392,6 +442,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return BleBatteryPoint.decode(readValue(buffer)!);
       case 133: 
         return BleDeviceDiagnostics.decode(readValue(buffer)!);
+      case 134: 
+        return RayBanMetaGlasses.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -1729,6 +1781,762 @@ abstract class BleFlutterApi {
               'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized was null, expected non-null String.');
           try {
             api.onBatchRecordingFinalized(arg_fileName!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+  }
+}
+
+/// Dart → native. Camera/photo capture goes through the Meta Wearables Device
+/// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
+/// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
+/// are safe to call on builds without the DAT SDK — getAvailabilityMode()
+/// reports which mode this build supports.
+class RayBanMetaHostAPI {
+  /// Constructor for [RayBanMetaHostAPI].  The [binaryMessenger] named argument is
+  /// available for dependency injection.  If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  RayBanMetaHostAPI({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  /// 'full' (DAT SDK linked + Meta app credentials configured),
+  /// 'audio_only' (no DAT — platform Bluetooth audio route only), or 'none'.
+  Future<String> getAvailabilityMode() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailabilityMode$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  Future<void> initialize() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.initialize$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// 'unregistered' | 'registering' | 'registered' ('unavailable' without DAT).
+  Future<String> getRegistrationState() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getRegistrationState$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// Launches the Meta AI companion app to authorize this app for the glasses.
+  Future<void> startRegistration() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startRegistration$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> unregister() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.unregister$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<List<RayBanMetaGlasses>> getAvailableGlasses() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getAvailableGlasses$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<RayBanMetaGlasses>();
+    }
+  }
+
+  Future<void> connect(String deviceId) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.connect$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[deviceId]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> disconnect() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.disconnect$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// 'disconnected' | 'connecting' | 'connected'.
+  Future<String> getConnectionState() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getConnectionState$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// DAT camera permission for the glasses: resolves 'granted' | 'denied'.
+  Future<String> requestCameraPermission() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.requestCameraPermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
+  Future<String> getCameraPermissionStatus() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
+
+  /// Starts capturing the glasses microphone over the Bluetooth HFP route and
+  /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
+  Future<void> startAudioCapture() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> stopAudioCapture() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopAudioCapture$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// True when the active audio input route is the glasses' Bluetooth HFP mic.
+  Future<bool> isGlassesAudioRouteActive() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.isGlassesAudioRouteActive$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as bool?)!;
+    }
+  }
+
+  /// Bluetooth HFP input port names currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build.
+  Future<List<String>> getBluetoothHfpInputNames() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputNames$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<String>();
+    }
+  }
+
+  /// Starts the DAT camera stream session so photo capture is ready. While
+  /// active the glasses' capture LED is on (hardware-enforced by Meta).
+  Future<void> startCamera() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> stopCamera() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.stopCamera$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
+  Future<void> capturePhoto() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.capturePhoto$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+}
+
+/// Native → Dart events for Ray-Ban Meta.
+abstract class RayBanMetaFlutterAPI {
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  void onRegistrationStateChanged(String state);
+
+  void onGlassesDiscovered(RayBanMetaGlasses glasses);
+
+  void onConnectionStateChanged(String deviceId, String state);
+
+  /// PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic.
+  void onAudioFrame(Uint8List pcm16Frame, double sampleRate);
+
+  /// Whether the glasses' HFP mic is the active input route right now.
+  void onAudioRouteChanged(bool glassesRouteActive);
+
+  /// JPEG bytes plus clockwise orientation in degrees (0/90/180/270).
+  void onPhotoCaptured(Uint8List jpegBytes, int orientationDegrees);
+
+  /// 'stopped' | 'starting' | 'streaming' | 'paused'.
+  void onCameraStateChanged(String state);
+
+  void onCameraPermissionChanged(String status);
+
+  void onError(String code, String message);
+
+  static void setUp(RayBanMetaFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
+    messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_state = (args[0] as String?);
+          assert(arg_state != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onRegistrationStateChanged was null, expected non-null String.');
+          try {
+            api.onRegistrationStateChanged(arg_state!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final RayBanMetaGlasses? arg_glasses = (args[0] as RayBanMetaGlasses?);
+          assert(arg_glasses != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onGlassesDiscovered was null, expected non-null RayBanMetaGlasses.');
+          try {
+            api.onGlassesDiscovered(arg_glasses!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_deviceId = (args[0] as String?);
+          assert(arg_deviceId != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged was null, expected non-null String.');
+          final String? arg_state = (args[1] as String?);
+          assert(arg_state != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onConnectionStateChanged was null, expected non-null String.');
+          try {
+            api.onConnectionStateChanged(arg_deviceId!, arg_state!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final Uint8List? arg_pcm16Frame = (args[0] as Uint8List?);
+          assert(arg_pcm16Frame != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame was null, expected non-null Uint8List.');
+          final double? arg_sampleRate = (args[1] as double?);
+          assert(arg_sampleRate != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioFrame was null, expected non-null double.');
+          try {
+            api.onAudioFrame(arg_pcm16Frame!, arg_sampleRate!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_glassesRouteActive = (args[0] as bool?);
+          assert(arg_glassesRouteActive != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onAudioRouteChanged was null, expected non-null bool.');
+          try {
+            api.onAudioRouteChanged(arg_glassesRouteActive!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final Uint8List? arg_jpegBytes = (args[0] as Uint8List?);
+          assert(arg_jpegBytes != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured was null, expected non-null Uint8List.');
+          final int? arg_orientationDegrees = (args[1] as int?);
+          assert(arg_orientationDegrees != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onPhotoCaptured was null, expected non-null int.');
+          try {
+            api.onPhotoCaptured(arg_jpegBytes!, arg_orientationDegrees!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_state = (args[0] as String?);
+          assert(arg_state != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraStateChanged was null, expected non-null String.');
+          try {
+            api.onCameraStateChanged(arg_state!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_status = (args[0] as String?);
+          assert(arg_status != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onCameraPermissionChanged was null, expected non-null String.');
+          try {
+            api.onCameraPermissionChanged(arg_status!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_code = (args[0] as String?);
+          assert(arg_code != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError was null, expected non-null String.');
+          final String? arg_message = (args[1] as String?);
+          assert(arg_message != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onError was null, expected non-null String.');
+          try {
+            api.onError(arg_code!, arg_message!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

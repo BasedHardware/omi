@@ -3438,10 +3438,7 @@ export function SettingsPage() {
     // UI uses 'transcript_received' but API expects 'realtime_transcript'
     const apiType = type === 'transcript_received' ? 'realtime_transcript' : type;
     const webhookType = apiType as
-      | 'memory_created'
-      | 'realtime_transcript'
-      | 'audio_bytes'
-      | 'day_summary';
+      'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
     try {
       // For audio_bytes, combine URL and delay if both are provided
       const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;

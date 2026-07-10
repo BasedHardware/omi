@@ -121,7 +121,118 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(migratedResearch, 15)
     XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
     XCTAssertEqual(migratedGoal, 17)
+    // After Research removal and BYOK removal, legacy Tasks (19) lands on Tasks (17).
     XCTAssertEqual(migratedTasks, 17)
+  }
+
+  func testMigrationRemovesBYOKStepAndKeepsUsersOnTasks() {
+    let migratedFromBYOK = OnboardingFlow.migratedStep(
+      currentStep: 17,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    let migratedFromTasks = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    XCTAssertEqual(migratedFromBYOK, 17)
+    XCTAssertEqual(migratedFromTasks, 17)
+  }
+
+  func testMigrationRemovesBYOKAfterPendingNotificationPermissionRemoval() {
+    // Legacy index 18 = BYOK while the old notification-permission step (index 8)
+    // was still counted. Notification removal must run before BYOK removal so the
+    // user lands on Tasks (17), not Goal (16).
+    let migratedFromLegacyBYOK = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    let migratedFromLegacyTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    // Users paused on the removed notification-permission step (8) advance to
+    // Accessibility (still 8), not back to Microphone (7).
+    let migratedFromLegacyNotificationPermission = OnboardingFlow.migratedStep(
+      currentStep: 8,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    XCTAssertEqual(migratedFromLegacyBYOK, 17)
+    XCTAssertEqual(migratedFromLegacyTasks, 17)
+    XCTAssertEqual(migratedFromLegacyNotificationPermission, 8)
+    XCTAssertEqual(OnboardingFlow.steps[8], "Accessibility")
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {

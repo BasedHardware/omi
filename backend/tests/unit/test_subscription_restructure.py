@@ -1,11 +1,31 @@
 """Tests for subscription restructure: Basic + Operator ($49) + Architect ($400),
-deprecate Unlimited for existing users. Issue #6734."""
+deprecate Unlimited for existing users. Issue #6734.
 
-import sys
-import types
+``utils.subscription`` pulls in ``database.users`` / ``database.user_usage`` at import
+time, and ``database.users`` imports back from ``utils.subscription`` (circular). The
+original test broke the cycle by pre-corrupting ``sys.modules`` at module scope with
+empty stubs. This file uses the sanctioned Tier-2 reserve seam: a module-scoped
+fixture exposing a context manager that installs the stubs via ``stub_modules`` and
+exec's ``utils.subscription`` fresh with ``load_module_fresh`` each time, then
+restores on exit. No ``importlib.reload`` and no reliance on a specific
+``utils.subscription`` object identity surviving across tests. See
+backend/docs/test_isolation.md and testing/import_isolation.py.
+"""
 
-# Mock external dependencies before importing app code
-_announcements_mod = types.ModuleType("database.announcements")
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+import pytest
+
+from models.users import PlanLimits, PlanType, Subscription
+from testing.import_isolation import load_module_fresh, stub_modules
+
+pytestmark = pytest.mark.slow
+
+_BACKEND = Path(__file__).resolve().parents[2]
+_SUBSCRIPTION_PATH = os.path.join(str(_BACKEND), "utils", "subscription.py")
 
 
 def _compare_versions(a, b):
@@ -18,91 +38,100 @@ def _compare_versions(a, b):
     return len(a_parts) - len(b_parts)
 
 
-_announcements_mod._compare_versions = _compare_versions
-# subscription.py imports the public name `compare_versions`; expose it on the
-# mock too so this module runs standalone (not just inside the full suite where
-# the real database.announcements already loaded first).
-_announcements_mod.compare_versions = _compare_versions
-sys.modules.setdefault("database.users", types.SimpleNamespace())
-sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
-sys.modules.setdefault("database.announcements", _announcements_mod)
+def _circular_import_fakes():
+    """Stubs for the circular-import deps of utils.subscription."""
+    announcements = ModuleType("database.announcements")
+    announcements._compare_versions = _compare_versions
+    # subscription.py imports the public name `compare_versions`; expose it on the
+    # stub so the fresh exec resolves without the real database.announcements.
+    announcements.compare_versions = _compare_versions
+    return {
+        "database.users": SimpleNamespace(),
+        "database.user_usage": SimpleNamespace(),
+        "database.announcements": announcements,
+    }
 
-from models.users import PlanType, PlanLimits, Subscription
+
+@pytest.fixture(scope="module")
+def load_subscription():
+    """Return a context manager that loads ``utils.subscription`` fresh.
+
+    Each invocation re-installs the circular-import stubs (via ``stub_modules``) and
+    re-execs ``utils.subscription`` so env-var-driven module constants are read
+    against the current environment. Nothing relies on a specific module object
+    surviving in ``sys.modules`` across tests, which keeps the file safe in a
+    multi-file pytest run.
+    """
+
+    @contextmanager
+    def _loader():
+        with stub_modules(_circular_import_fakes()):
+            yield load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
+
+    return _loader
 
 
-def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
+def test_operator_chat_cap_independent_from_unlimited(monkeypatch, load_subscription):
     """F4: Operator and Unlimited chat caps must be independently configurable."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "750")
     monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "3000")
 
-    # Re-import to pick up env vars
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    operator_limits = sub_mod.get_plan_limits(PlanType.operator)
-    unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        operator_limits = sub_mod.get_plan_limits(PlanType.operator)
+        unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 750
     assert unlimited_limits.chat_questions_per_month == 3000
     assert operator_limits.chat_questions_per_month != unlimited_limits.chat_questions_per_month
 
 
-def test_operator_and_neo_defaults(monkeypatch):
+def test_operator_and_neo_defaults(monkeypatch, load_subscription):
     """Operator defaults to 500, Neo defaults to 200."""
     monkeypatch.delenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", raising=False)
     monkeypatch.delenv("NEO_CHAT_QUESTIONS_PER_MONTH", raising=False)
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    operator_limits = sub_mod.get_plan_limits(PlanType.operator)
-    unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        operator_limits = sub_mod.get_plan_limits(PlanType.operator)
+        unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 500
     assert unlimited_limits.chat_questions_per_month == 200
 
 
-def test_architect_uses_dollar_cap():
+def test_architect_uses_dollar_cap(load_subscription):
     """Architect plan uses dollar cap, not question count."""
-    from utils.subscription import get_plan_limits
+    with load_subscription() as sub_mod:
+        limits = sub_mod.get_plan_limits(PlanType.architect)
 
-    limits = get_plan_limits(PlanType.architect)
     assert limits.chat_cost_usd_per_month is not None
     assert limits.chat_questions_per_month is None
     assert limits.transcription_seconds is None  # unlimited transcription
 
 
-def test_operator_is_paid():
-    from utils.subscription import is_paid_plan
+def test_operator_is_paid(load_subscription):
+    with load_subscription() as sub_mod:
+        assert sub_mod.is_paid_plan(PlanType.operator)
+        assert sub_mod.is_paid_plan(PlanType.architect)
+        assert sub_mod.is_paid_plan(PlanType.unlimited)
+        assert not sub_mod.is_paid_plan(PlanType.basic)
 
-    assert is_paid_plan(PlanType.operator)
-    assert is_paid_plan(PlanType.architect)
-    assert is_paid_plan(PlanType.unlimited)
-    assert not is_paid_plan(PlanType.basic)
 
-
-def test_filter_plans_for_basic_user():
+def test_filter_plans_for_basic_user(load_subscription):
     """Basic users see Neo, Operator, and Architect in purchase catalog."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
-
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.basic)
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic)
 
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'operator' in plan_ids
     assert 'architect' in plan_ids
 
 
-def test_filter_plans_keeps_legacy_for_current_subscriber():
+def test_filter_plans_keeps_legacy_for_current_subscriber(load_subscription):
     """Unlimited subscribers see their plan in catalog for active-plan detection."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
-
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited)
 
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' in plan_ids
@@ -110,72 +139,73 @@ def test_filter_plans_keeps_legacy_for_current_subscriber():
     assert 'architect' in plan_ids
 
 
-def test_filter_plans_hides_neo_on_mobile_for_new_user():
+def test_filter_plans_hides_neo_on_mobile_for_new_user(load_subscription):
     """New / never-paid mobile users don't see Neo (unlimited) in the catalog."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android'):
+            filtered = sub_mod.filter_plans_for_user(
+                definitions, PlanType.basic, platform=platform, ever_purchased=False
+            )
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert 'unlimited' not in plan_ids, platform
+            assert 'operator' in plan_ids
+            assert 'architect' in plan_ids
 
-    definitions = get_paid_plan_definitions()
-    for platform in ('ios', 'android'):
-        filtered = filter_plans_for_user(definitions, PlanType.basic, platform=platform, ever_purchased=False)
-        plan_ids = [d['plan_id'] for d in filtered]
-        assert 'unlimited' not in plan_ids, platform
-        assert 'operator' in plan_ids
-        assert 'architect' in plan_ids
 
-
-def test_filter_plans_shows_neo_on_mobile_for_past_purchaser():
+def test_filter_plans_shows_neo_on_mobile_for_past_purchaser(load_subscription):
     """Mobile users who have bought a plan before still see Neo (resubscribe)."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='ios', ever_purchased=True)
 
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.basic, platform='ios', ever_purchased=True)
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
-def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber():
+def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber(load_subscription):
     """Current Neo subscribers always see Neo even without ever_purchased flag."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(
+            definitions, PlanType.unlimited, platform='android', ever_purchased=False
+        )
 
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.unlimited, platform='android', ever_purchased=False)
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
-def test_filter_plans_keeps_neo_on_web_for_new_user():
+def test_filter_plans_keeps_neo_on_web_for_new_user(load_subscription):
     """Web / unknown platform is unaffected — Neo stays in the catalog."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None, ever_purchased=False)
 
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.basic, platform=None, ever_purchased=False)
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
-def test_has_ever_purchased_signals(monkeypatch):
+def test_has_ever_purchased_signals(monkeypatch, load_subscription):
     """Paid plan, stored stripe sub id, or a stripe customer id each count as purchased."""
-    import utils.subscription as sub_mod
+    with load_subscription() as sub_mod:
+        monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: None, raising=False)
 
-    monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: None, raising=False)
+        paid = Subscription(plan=PlanType.operator, limits=PlanLimits())
+        assert sub_mod.has_ever_purchased('u', paid)
 
-    paid = Subscription(plan=PlanType.operator, limits=PlanLimits())
-    assert sub_mod.has_ever_purchased('u', paid)
+        lapsed = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_123', limits=PlanLimits())
+        assert sub_mod.has_ever_purchased('u', lapsed)
 
-    lapsed = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_123', limits=PlanLimits())
-    assert sub_mod.has_ever_purchased('u', lapsed)
+        new_user = Subscription(plan=PlanType.basic, limits=PlanLimits())
+        assert not sub_mod.has_ever_purchased('u', new_user)
 
-    new_user = Subscription(plan=PlanType.basic, limits=PlanLimits())
-    assert not sub_mod.has_ever_purchased('u', new_user)
-
-    # No cheap signal on the subscription, but a stored Stripe customer id exists.
-    monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: 'cus_123', raising=False)
-    assert sub_mod.has_ever_purchased('u', new_user)
+        # No cheap signal on the subscription, but a stored Stripe customer id exists.
+        monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: 'cus_123', raising=False)
+        assert sub_mod.has_ever_purchased('u', new_user)
 
 
-def test_legacy_client_adaptation():
+def test_legacy_client_adaptation(load_subscription):
     """Old clients see Unlimited Plan (not legacy suffix) and no Operator."""
-    from utils.subscription import get_paid_plan_definitions, adapt_plans_for_legacy_client
-
-    definitions = get_paid_plan_definitions()
-    adapted = adapt_plans_for_legacy_client(definitions)
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        adapted = sub_mod.adapt_plans_for_legacy_client(definitions)
 
     plan_ids = [d['plan_id'] for d in adapted]
     assert 'operator' not in plan_ids
@@ -190,71 +220,64 @@ def test_legacy_client_adaptation():
     assert architect_def['title'] == 'Omi Pro'
 
 
-def test_version_gating_macos_always_new():
+def test_version_gating_macos_always_new(load_subscription):
     """Desktop platforms get new plans (no version header = True)."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('macos', None) is True
+        assert sub_mod.should_show_new_plans('macos', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('linux', None) is True
+        assert sub_mod.should_show_new_plans('linux', '99.99.999') is True
 
-    assert should_show_new_plans('macos', None) is True
-    assert should_show_new_plans('macos', '99.99.999') is True
-    assert should_show_new_plans('linux', None) is True
-    assert should_show_new_plans('linux', '99.99.999') is True
 
-
-def test_version_gating_mobile_requires_version():
+def test_version_gating_mobile_requires_version(load_subscription):
     """Mobile requires version header and must meet minimum."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', None) is False
+        assert sub_mod.should_show_new_plans('ios', None) is False
 
-    assert should_show_new_plans('android', None) is False
-    assert should_show_new_plans('ios', None) is False
-
-    assert should_show_new_plans('android', '99.99.999') is True
-    assert should_show_new_plans('ios', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('android', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('ios', '99.99.999') is True
 
 
-def test_version_gating_old_mobile_gets_legacy():
+def test_version_gating_old_mobile_gets_legacy(load_subscription):
     """Old mobile builds get legacy catalog."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '0.0.1') is False
+        assert sub_mod.should_show_new_plans('ios', '0.0.1') is False
 
-    assert should_show_new_plans('android', '0.0.1') is False
-    assert should_show_new_plans('ios', '0.0.1') is False
 
-
-def test_version_gating_exact_threshold():
+def test_version_gating_exact_threshold(load_subscription):
     """Exact threshold version gets new plans."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '1.0.530') is True
+        assert sub_mod.should_show_new_plans('ios', '1.0.530') is True
+        assert sub_mod.should_show_new_plans('macos', '0.11.324') is True
+        assert sub_mod.should_show_new_plans('linux', '0.11.324') is True
 
-    assert should_show_new_plans('android', '1.0.530') is True
-    assert should_show_new_plans('ios', '1.0.530') is True
-    assert should_show_new_plans('macos', '0.11.324') is True
-    assert should_show_new_plans('linux', '0.11.324') is True
 
-
-def test_version_gating_just_below_threshold():
+def test_version_gating_just_below_threshold(load_subscription):
     """One version below threshold gets legacy."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '1.0.529') is False
+        assert sub_mod.should_show_new_plans('ios', '1.0.529') is False
+        assert sub_mod.should_show_new_plans('macos', '0.11.323') is False
+        assert sub_mod.should_show_new_plans('linux', '0.11.323') is False
 
-    assert should_show_new_plans('android', '1.0.529') is False
-    assert should_show_new_plans('ios', '1.0.529') is False
-    assert should_show_new_plans('macos', '0.11.323') is False
-    assert should_show_new_plans('linux', '0.11.323') is False
 
-
-def test_version_gating_malformed_version():
+def test_version_gating_malformed_version(load_subscription):
     """Malformed version: macOS fail-open, mobile fail-closed."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('macos', 'not.a.version') is True
+        assert sub_mod.should_show_new_plans('linux', 'not.a.version') is True
+        assert sub_mod.should_show_new_plans('android', 'not.a.version') is False
+        assert sub_mod.should_show_new_plans('ios', 'not.a.version') is False
 
-    assert should_show_new_plans('macos', 'not.a.version') is True
-    assert should_show_new_plans('linux', 'not.a.version') is True
-    assert should_show_new_plans('android', 'not.a.version') is False
-    assert should_show_new_plans('ios', 'not.a.version') is False
 
-
-def test_version_gating_unknown_platform():
+def test_version_gating_unknown_platform(load_subscription):
     """Unknown platform gets legacy catalog."""
-    from utils.subscription import should_show_new_plans
-
-    assert should_show_new_plans(None, None) is False
-    assert should_show_new_plans('windows', '1.0.0') is False
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans(None, None) is False
+        assert sub_mod.should_show_new_plans('windows', '1.0.0') is False
 
 
 def test_subscription_deprecation_fields():
@@ -270,41 +293,32 @@ def test_subscription_deprecation_fields():
     assert sub2.deprecation_message is None
 
 
-def test_operator_price_id_mapping(monkeypatch):
+def test_operator_price_id_mapping(monkeypatch, load_subscription):
     """Operator price IDs resolve to operator plan type."""
     monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_op_monthly")
     monkeypatch.setenv("STRIPE_OPERATOR_ANNUAL_PRICE_ID", "price_op_annual")
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    assert sub_mod.get_plan_type_from_price_id("price_op_monthly") == PlanType.operator
-    assert sub_mod.get_plan_type_from_price_id("price_op_annual") == PlanType.operator
+    with load_subscription() as sub_mod:
+        assert sub_mod.get_plan_type_from_price_id("price_op_monthly") == PlanType.operator
+        assert sub_mod.get_plan_type_from_price_id("price_op_annual") == PlanType.operator
 
 
-def test_plan_features_differentiate_operator_neo(monkeypatch):
+def test_plan_features_differentiate_operator_neo(monkeypatch, load_subscription):
     """Operator and Neo show separate feature lists with their own caps."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "600")
     monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "300")
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    op_features = sub_mod.get_plan_features(PlanType.operator)
-    neo_features = sub_mod.get_plan_features(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        op_features = sub_mod.get_plan_features(PlanType.operator)
+        neo_features = sub_mod.get_plan_features(PlanType.unlimited)
 
     assert "600 chat questions per month" in op_features
     assert "300 chat questions per month" in neo_features
 
 
-def test_plan_display_names():
-    from utils.subscription import get_plan_display_name
-
-    assert get_plan_display_name(PlanType.basic) == 'Free'
-    assert get_plan_display_name(PlanType.operator) == 'Operator'
-    assert get_plan_display_name(PlanType.architect) == 'Architect'
-    assert get_plan_display_name(PlanType.unlimited) == 'Neo'
+def test_plan_display_names(load_subscription):
+    with load_subscription() as sub_mod:
+        assert sub_mod.get_plan_display_name(PlanType.basic) == 'Free'
+        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Operator'
+        assert sub_mod.get_plan_display_name(PlanType.architect) == 'Architect'
+        assert sub_mod.get_plan_display_name(PlanType.unlimited) == 'Neo'

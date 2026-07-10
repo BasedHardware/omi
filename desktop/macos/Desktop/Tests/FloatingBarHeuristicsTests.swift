@@ -37,6 +37,8 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "send a message to my team about the launch",
             "buy the top-rated keyboard on Amazon",
             "download the report and rename it",
+            "spawn a subagent to look at my memories",
+            "start a background agent to review my notes",
             // long, no explicit signal — word-count gate should still keep the router
             "tell me a fun fact about cats and dogs and birds and fish and lizards please",
         ]
@@ -44,6 +46,83 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             XCTAssertFalse(
                 FloatingControlBarManager.routerCanSkipToChat(q),
                 "Expected to KEEP the router for task-like query: \"\(q)\"")
+        }
+    }
+
+    func testExplicitFloatingAgentRequestsAreDetected() {
+        let spawnRequests: [(String, String)] = [
+            ("spawn a subagent to look at my memories", "look at my memories"),
+            ("start a background agent to review my notes", "review my notes"),
+            ("launch an agent to research this", "research this"),
+            ("make a floating agent for this task", "this task"),
+            ("have an agent make a simple snake facts html page", "make a simple snake facts html page"),
+            ("ask a subagent if it can also see my screen or not", "if it can also see my screen or not"),
+        ]
+        for (q, task) in spawnRequests {
+            XCTAssertTrue(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected explicit floating-agent request: \"\(q)\"")
+            XCTAssertEqual(
+                AgentPillsManager.floatingAgentHandoff(for: q)?.agentTask,
+                task,
+                "Expected child agent task to exclude the parent control command: \"\(q)\"")
+        }
+
+        let normalFollowUps = [
+            "how did it go?",
+            "ask this agent what it found",
+            "what do you know about my memories?",
+            "can you explain that result?",
+        ]
+        for q in normalFollowUps {
+            XCTAssertFalse(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected normal follow-up, not floating-agent control command: \"\(q)\"")
+        }
+    }
+
+    // MARK: - scoped negation guard (Cubic P1)
+
+    func testNegationGuardDoesNotSuppressLegitimateSpawnRequests() {
+        // These contain "no"/"not"/"without"/"don't" for unrelated reasons but are
+        // legitimate spawn requests — must NOT be suppressed by the negation guard.
+        let legitimateSpawns = [
+            "spawn an agent to run without errors",
+            "start a background agent that never logs secrets",
+            "launch a subagent to fix the not-found bug",
+            "create a pill to clean up notes with no duplicates",
+            "run an agent to remove items that are not pinned",
+            // Action verb after negation but NOT followed by an agent noun
+            "don't make me laugh, spawn an agent",
+            "not sure how to start a background agent",
+            "never mind, launch an agent anyway",
+        ]
+        for q in legitimateSpawns {
+            XCTAssertTrue(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected floating-agent request, but negation guard wrongly suppressed: \"\(q)\"")
+        }
+    }
+
+    func testNegationGuardSuppressesExplicitOptOuts() {
+        // These are explicit opt-outs that should answer inline, not spawn a pill.
+        let optOuts = [
+            "don't spawn an agent",
+            "do not create a pill",
+            "no agent, just answer here",
+            "not an agent, just tell me",
+            "without spawning a subagent",
+            "without a pill",
+            "don't run any agents",
+            // Gerund-based opt-outs
+            "not spawning an agent",
+            "never creating pills",
+            "without creating any agents",
+        ]
+        for q in optOuts {
+            XCTAssertFalse(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected inline answer, but negation guard did NOT suppress explicit opt-out: \"\(q)\"")
         }
     }
 

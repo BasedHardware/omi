@@ -2,16 +2,19 @@
 
 import os
 import sys
+import types
 from unittest.mock import MagicMock
 
 import pytest
 
 _HEAVY_MOCKS = {
+    'anthropic': MagicMock(),
     'firebase_admin': MagicMock(),
     'firebase_admin.firestore': MagicMock(),
     'google.cloud.firestore': MagicMock(),
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
+    'tiktoken': MagicMock(encoding_for_model=MagicMock(return_value=MagicMock())),
     'database': MagicMock(),
     'database._client': MagicMock(),
     'database.llm_usage': MagicMock(),
@@ -19,11 +22,45 @@ _HEAVY_MOCKS = {
 for _mod, _mock in _HEAVY_MOCKS.items():
     sys.modules.setdefault(_mod, _mock)
 
+if 'langchain_core.language_models' not in sys.modules:
+    langchain_core_stub = types.ModuleType('langchain_core')
+    language_models_stub = types.ModuleType('langchain_core.language_models')
+
+    class BaseChatModel:
+        pass
+
+    setattr(language_models_stub, 'BaseChatModel', BaseChatModel)
+    sys.modules.setdefault('langchain_core', langchain_core_stub)
+    sys.modules['langchain_core.language_models'] = language_models_stub
+
+if 'langchain_google_genai' not in sys.modules:
+    google_genai_stub = types.ModuleType('langchain_google_genai')
+
+    class ChatGoogleGenerativeAI:
+        pass
+
+    setattr(google_genai_stub, 'ChatGoogleGenerativeAI', ChatGoogleGenerativeAI)
+    sys.modules['langchain_google_genai'] = google_genai_stub
+
+if 'langchain_openai' not in sys.modules:
+    openai_stub = types.ModuleType('langchain_openai')
+
+    class ChatOpenAI:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def bind(self, **kwargs):
+            self.bound_kwargs = kwargs
+            return self
+
+    setattr(openai_stub, 'ChatOpenAI', ChatOpenAI)
+    setattr(openai_stub, 'OpenAIEmbeddings', MagicMock())
+    sys.modules['langchain_openai'] = openai_stub
+
 # Some older tests install lightweight langchain_core stubs. If this test runs
 # after them, provide the prompt submodule conversation_folder imports.
 if 'langchain_core' in sys.modules and 'langchain_core.prompts' not in sys.modules:
-    import types
-
     prompts_stub = types.ModuleType('langchain_core.prompts')
 
     class ChatPromptTemplate:
@@ -33,6 +70,34 @@ if 'langchain_core' in sys.modules and 'langchain_core.prompts' not in sys.modul
 
     setattr(prompts_stub, 'ChatPromptTemplate', ChatPromptTemplate)
     sys.modules['langchain_core.prompts'] = prompts_stub
+
+if 'langchain_core.output_parsers' not in sys.modules:
+    output_parsers_stub = types.ModuleType('langchain_core.output_parsers')
+
+    class PydanticOutputParser:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    setattr(output_parsers_stub, 'PydanticOutputParser', PydanticOutputParser)
+    sys.modules['langchain_core.output_parsers'] = output_parsers_stub
+
+if 'langchain_core.callbacks' not in sys.modules:
+    callbacks_stub = types.ModuleType('langchain_core.callbacks')
+
+    class BaseCallbackHandler:
+        pass
+
+    setattr(callbacks_stub, 'BaseCallbackHandler', BaseCallbackHandler)
+    sys.modules['langchain_core.callbacks'] = callbacks_stub
+
+if 'langchain_core.outputs' not in sys.modules:
+    outputs_stub = types.ModuleType('langchain_core.outputs')
+
+    class LLMResult:
+        pass
+
+    setattr(outputs_stub, 'LLMResult', LLMResult)
+    sys.modules['langchain_core.outputs'] = outputs_stub
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test')

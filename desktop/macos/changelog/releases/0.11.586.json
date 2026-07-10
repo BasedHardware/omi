@@ -1,0 +1,8 @@
+{
+  "version": "0.11.586",
+  "date": "2026-07-01",
+  "changes": [
+    "Google Calendar now tells you exactly why a connection failed — sign-in needed vs. expired session vs. network — instead of a confusing \"Network error\", and checks all your browser profiles before giving up",
+    "Fixed Gmail/Email import hanging forever on 'Importing…' when reading a large mailbox"
+  ]
+}

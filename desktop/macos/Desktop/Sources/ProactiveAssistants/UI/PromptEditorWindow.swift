@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import OmiTheme
 
 /// SwiftUI view for editing the analysis prompt
 struct PromptEditorView: View {
@@ -145,6 +146,8 @@ extension PromptEditorWindow: NSWindowDelegate {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     PromptEditorView()
 }
+#endif

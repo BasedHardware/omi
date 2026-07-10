@@ -15,6 +15,7 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 
 RUN_SWIFT=1
 RUN_NODE=1
+RUN_GAUNTLET=0
 SKIP_INSTALL=0
 VERBOSE=0
 INTERNAL_FAILURE_PROBE=0
@@ -37,6 +38,7 @@ Options:
   --swift-only    Run only Swift focused tests
   --node-only     Run only Node/package focused tests
   --skip-install  Do not run npm ci for pi-mono-extension if deps are missing
+  --with-gauntlet   After unit tests, run agent-continuity-gauntlet.sh (requires live app)
   --verbose       Stream command output instead of saving it quietly
   --help          Show this help
 USAGE
@@ -54,6 +56,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-install)
       SKIP_INSTALL=1
+      ;;
+    --with-gauntlet)
+      RUN_GAUNTLET=1
       ;;
     --verbose)
       VERBOSE=1
@@ -164,17 +169,23 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|RealtimeHubSpawnAgentTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|PTTVoiceOutputCoordinatorTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests'
   )
 }
 
 run_agent_runtime_focus() {
   (
+    cd "$DESKTOP_DIR"
+    scripts/test-tool-surfaces.sh
+  )
+  (
     cd "$DESKTOP_DIR/agent"
     npm test -- --run \
       tests/codemagic-pi-mono-extension-ci.test.ts \
       tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts
+      tests/pi-mono-adapter.test.ts \
+      tests/surface-session.test.ts \
+      tests/chat-continuity-invariant.test.ts
   )
 }
 
@@ -196,7 +207,14 @@ run_pi_mono_extension_exact() {
   ensure_pi_mono_extension_deps
   (
     cd "$DESKTOP_DIR/pi-mono-extension"
-    node --experimental-strip-types --test index.test.ts
+    npx --yes tsx --test index.test.ts
+  )
+}
+
+run_continuity_gauntlet() {
+  (
+    cd "$DESKTOP_DIR"
+    ./scripts/agent-continuity-gauntlet.sh
   )
 }
 
@@ -223,6 +241,10 @@ fi
 if [[ "$RUN_NODE" -eq 1 ]]; then
   run_step "agent runtime focused tests" run_agent_runtime_focus
   run_step "pi-mono-extension exact package tests" run_pi_mono_extension_exact
+fi
+
+if [[ "$RUN_GAUNTLET" -eq 1 ]]; then
+  run_step "agent continuity gauntlet (INV-6)" run_continuity_gauntlet
 fi
 
 total_elapsed="$(elapsed_seconds "$total_start")"

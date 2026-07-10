@@ -1,0 +1,7 @@
+{
+  "version": "0.11.592",
+  "date": "2026-07-02",
+  "changes": [
+    "Prompt to update to the latest Omi when running an older desktop version"
+  ]
+}

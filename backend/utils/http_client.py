@@ -62,6 +62,10 @@ class WebhookCircuitBreaker:
                 self._half_open_in_flight = 0
         return self._state
 
+    @property
+    def last_access_time(self) -> float:
+        return self._last_access_time
+
     def allow_request(self) -> bool:
         self._last_access_time = time.monotonic()
         s = self.state
@@ -120,7 +124,7 @@ def _evict_stale_circuit_breakers():
     """
     now = time.monotonic()
     stale_keys = [
-        k for k, cb in _webhook_circuit_breakers.items() if now - cb._last_access_time > _CIRCUIT_BREAKER_IDLE_TTL
+        k for k, cb in _webhook_circuit_breakers.items() if now - cb.last_access_time > _CIRCUIT_BREAKER_IDLE_TTL
     ]
     for k in stale_keys:
         del _webhook_circuit_breakers[k]

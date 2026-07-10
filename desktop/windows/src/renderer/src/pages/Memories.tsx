@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -31,7 +31,7 @@ export function Memories(): React.JSX.Element {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
-  const stopRef = useState({ stop: false })[0]
+  const stopRef = useRef({ stop: false }).current
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -205,8 +205,18 @@ export function Memories(): React.JSX.Element {
 
         {!manage && brainGraph.nodes.length > 0 && (
           <div className="mx-auto mb-6 max-w-4xl">
-            <div className="surface-card relative h-80 overflow-hidden p-0">
-              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive={false} pauseWhenHidden />
+            {/* Flat background (no .glass backdrop-filter): layering a WebGL
+                canvas over a blurred surface forces the compositor to re-blend
+                the graph on every unrelated UI repaint, pinning GPU at 50-60%.
+                Keeps the card look via a solid tint + hairline border. */}
+            <div className="relative h-80 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 p-0">
+              <BrainGraph
+                graph={brainGraph}
+                centerNodeId={centerNodeId}
+                interactive={false}
+                pauseWhenHidden
+                frameLoop="demand"
+              />
             </div>
           </div>
         )}

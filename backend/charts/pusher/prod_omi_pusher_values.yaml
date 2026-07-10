@@ -143,6 +143,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
+  - name: GOOGLE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GOOGLE_CLIENT_ID
+  - name: GOOGLE_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GOOGLE_CLIENT_SECRET
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
@@ -271,6 +281,11 @@ env:
     value: "price_1TMxVM1F8wnoWYvwNfXdF6LW"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:

@@ -138,6 +138,12 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final peopleProvider = context.watch<PeopleProvider>();
     final people = peopleProvider.people;

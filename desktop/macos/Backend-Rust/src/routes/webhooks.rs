@@ -54,7 +54,10 @@ async fn handle_sentry_webhook(
         .filter(|(k, _)| k.as_str().starts_with("sentry-hook"))
         .map(|(k, v)| format!("{}={}", k, v.to_str().unwrap_or("?")))
         .collect();
-    tracing::info!("Sentry webhook: received request, headers: [{}]", sentry_headers.join(", "));
+    tracing::info!(
+        "Sentry webhook: received request, headers: [{}]",
+        sentry_headers.join(", ")
+    );
 
     // Handle Sentry verification/installation pings (return 200 immediately)
     let hook_resource = headers
@@ -84,17 +87,25 @@ async fn handle_sentry_webhook(
                 let expected = hex::encode(mac.finalize().into_bytes());
 
                 if expected != sig {
-                    tracing::warn!("Sentry webhook: signature mismatch (expected={}, got={})", expected, sig);
+                    tracing::warn!(
+                        "Sentry webhook: signature mismatch (expected={}, got={})",
+                        expected,
+                        sig
+                    );
                     return Err(StatusCode::UNAUTHORIZED);
                 }
                 tracing::info!("Sentry webhook: signature verified");
             }
             None => {
-                tracing::warn!("Sentry webhook: no signature header, proceeding anyway (Sentry may omit it)");
+                tracing::warn!(
+                    "Sentry webhook: no signature header, proceeding anyway (Sentry may omit it)"
+                );
             }
         }
     } else {
-        tracing::warn!("Sentry webhook: SENTRY_WEBHOOK_SECRET not set, skipping signature verification");
+        tracing::warn!(
+            "Sentry webhook: SENTRY_WEBHOOK_SECRET not set, skipping signature verification"
+        );
     }
 
     // Parse the payload
@@ -111,38 +122,21 @@ async fn handle_sentry_webhook(
         }));
     }
 
-    let issue_category = payload
-        .data
-        .issue
-        .issue_category
-        .as_deref()
-        .unwrap_or("");
+    let issue_category = payload.data.issue.issue_category.as_deref().unwrap_or("");
     if issue_category != "feedback" {
-        tracing::info!(
-            "Sentry webhook: ignoring issueCategory={}",
-            issue_category
-        );
+        tracing::info!("Sentry webhook: ignoring issueCategory={}", issue_category);
         return Ok(Json(WebhookResponse {
             status: "ignored".to_string(),
         }));
     }
 
-    let admin_uid = state
-        .config
-        .sentry_admin_uid
-        .as_deref()
-        .ok_or_else(|| {
-            tracing::error!("Sentry webhook: SENTRY_ADMIN_UID not configured");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let admin_uid = state.config.sentry_admin_uid.as_deref().ok_or_else(|| {
+        tracing::error!("Sentry webhook: SENTRY_ADMIN_UID not configured");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let issue_id = &payload.data.issue.id;
-    let short_id = payload
-        .data
-        .issue
-        .short_id
-        .as_deref()
-        .unwrap_or("unknown");
+    let short_id = payload.data.issue.short_id.as_deref().unwrap_or("unknown");
     let issue_title = payload.data.issue.title.as_deref().unwrap_or("");
 
     tracing::info!(
@@ -154,7 +148,9 @@ async fn handle_sentry_webhook(
     // Dedup + relevance score: fetch existing items once for both checks
     let existing_items = state
         .firestore
-        .get_action_items(admin_uid, 500, 0, None, None, None, None, None, None, None, None)
+        .get_action_items(
+            admin_uid, 500, 0, None, None, None, None, None, None, None, None,
+        )
         .await
         .unwrap_or_default();
 
@@ -182,7 +178,11 @@ async fn handle_sentry_webhook(
     }
 
     // Dynamically calculate top-10% relevance score from existing tasks
-    let max_score = existing_items.iter().filter_map(|i| i.relevance_score).max().unwrap_or(100);
+    let max_score = existing_items
+        .iter()
+        .filter_map(|i| i.relevance_score)
+        .max()
+        .unwrap_or(100);
     let top_10_score = std::cmp::max(1, (max_score as f64 * 0.1).round() as i32);
 
     // Fetch full event details from Sentry API
@@ -231,15 +231,15 @@ async fn handle_sentry_webhook(
         .create_action_item(
             admin_uid,
             &description,
-            None,                          // due_at
-            Some("sentry_feedback"),       // source
-            Some("high"),                  // priority
-            Some(&metadata_str),           // metadata
-            Some("bug"),                   // category
-            Some(top_10_score),            // relevance_score
-            None,                          // from_staged
-            None,                          // recurrence_rule
-            None,                          // recurrence_parent_id
+            None,                    // due_at
+            Some("sentry_feedback"), // source
+            Some("high"),            // priority
+            Some(&metadata_str),     // metadata
+            Some("bug"),             // category
+            Some(top_10_score),      // relevance_score
+            None,                    // from_staged
+            None,                    // recurrence_rule
+            None,                    // recurrence_parent_id
         )
         .await
     {
@@ -278,10 +278,7 @@ async fn fetch_sentry_event_details(
         }
     };
 
-    let url = format!(
-        "https://sentry.io/api/0/issues/{}/events/latest/",
-        issue_id
-    );
+    let url = format!("https://sentry.io/api/0/issues/{}/events/latest/", issue_id);
 
     let client = reqwest::Client::new();
     let response = match client
@@ -309,7 +306,11 @@ async fn fetch_sentry_event_details(
     let event: Value = match response.json().await {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!("Failed to parse Sentry event JSON for issue {}: {}", issue_id, e);
+            tracing::error!(
+                "Failed to parse Sentry event JSON for issue {}: {}",
+                issue_id,
+                e
+            );
             return (String::new(), String::new(), String::new(), None);
         }
     };
@@ -346,8 +347,12 @@ async fn fetch_sentry_event_details(
         let mut tags_map = json!({});
         for tag in tags {
             if let (Some(key), Some(value)) = (
-                tag.get("key").or_else(|| tag.get(0 as usize)).and_then(|v| v.as_str()),
-                tag.get("value").or_else(|| tag.get(1 as usize)).and_then(|v| v.as_str()),
+                tag.get("key")
+                    .or_else(|| tag.get(0 as usize))
+                    .and_then(|v| v.as_str()),
+                tag.get("value")
+                    .or_else(|| tag.get(1 as usize))
+                    .and_then(|v| v.as_str()),
             ) {
                 tags_map[key] = json!(value);
                 // Also extract specific top-level fields from tags
@@ -418,29 +423,43 @@ async fn fetch_sentry_event_details(
     (feedback_message, reporter_name, reporter_email, Some(extra))
 }
 
+/// Maps a non-success Sentry API HTTP status to a compact, typed reason string so the
+/// poll endpoint can classify expected external states instead of emitting a 500.
+fn sentry_poll_skip_reason(status: u16) -> &'static str {
+    match status {
+        401 | 403 => "sentry_auth_error",
+        429 => "sentry_rate_limited",
+        _ => "sentry_upstream_error",
+    }
+}
+
+/// Builds the typed 2xx body returned when a poll is skipped due to an expected external
+/// state (auth expiry, rate limit, upstream/network failure). Shape mirrors the success
+/// response so callers can treat "ok" and "skipped" uniformly.
+fn sentry_poll_skipped_body(reason: &str, sentry_status: Option<u16>) -> Value {
+    json!({
+        "status": "skipped",
+        "reason": reason,
+        "sentry_status": sentry_status,
+        "created": 0,
+        "skipped": 0,
+        "total_fetched": 0,
+    })
+}
+
 /// POST /v1/webhooks/sentry/poll - Poll Sentry for new feedback and create action items
 /// This is needed because Sentry webhooks don't fire for feedback category issues
 /// (see https://github.com/getsentry/sentry/issues/89436)
-async fn poll_sentry_feedback(
-    State(state): State<AppState>,
-) -> Result<Json<Value>, StatusCode> {
-    let admin_uid = state
-        .config
-        .sentry_admin_uid
-        .as_deref()
-        .ok_or_else(|| {
-            tracing::error!("Sentry poll: SENTRY_ADMIN_UID not configured");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+async fn poll_sentry_feedback(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    let admin_uid = state.config.sentry_admin_uid.as_deref().ok_or_else(|| {
+        tracing::error!("Sentry poll: SENTRY_ADMIN_UID not configured");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    let auth_token = state
-        .config
-        .sentry_auth_token
-        .as_deref()
-        .ok_or_else(|| {
-            tracing::error!("Sentry poll: SENTRY_AUTH_TOKEN not configured");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let auth_token = state.config.sentry_auth_token.as_deref().ok_or_else(|| {
+        tracing::error!("Sentry poll: SENTRY_AUTH_TOKEN not configured");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     tracing::info!("Sentry poll: fetching recent feedback issues");
 
@@ -449,22 +468,23 @@ async fn poll_sentry_feedback(
         .firestore
         .get_action_items(
             admin_uid,
-            500,   // limit — must be large enough to include all sentry_feedback items
-            0,     // offset
-            None,  // completed_filter
-            None,  // conversation_id
-            None,  // start_date
-            None,  // end_date
-            None,  // due_start_date
-            None,  // due_end_date
-            None,  // sort_by
-            None,  // include_deleted
+            500,  // limit — must be large enough to include all sentry_feedback items
+            0,    // offset
+            None, // completed_filter
+            None, // conversation_id
+            None, // start_date
+            None, // end_date
+            None, // due_start_date
+            None, // due_end_date
+            None, // sort_by
+            None, // include_deleted
         )
         .await
         .unwrap_or_default();
 
     // Extract sentry_issue_ids from existing action items' metadata
-    let mut existing_issue_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut existing_issue_ids: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
     for item in &existing_items {
         if item.source.as_deref() != Some("sentry_feedback") {
             continue;
@@ -494,31 +514,53 @@ async fn poll_sentry_feedback(
         top_10_score,
     );
 
-    // 2. Fetch recent feedback issues from Sentry
+    // 2. Fetch recent feedback issues from Sentry.
+    // Expected external states (auth expiry/permission, rate limit, upstream/network
+    // failure, unparseable body) are transient and outside this service's control, so
+    // they return a typed 2xx "skipped" response instead of a 500 — a 500 here wrongly
+    // implies desktop-backend broke and spams the prod error logs. See issue #9139.
     let client = reqwest::Client::new();
     let sentry_url = "https://sentry.io/api/0/organizations/mediar-n5/issues/?query=issue.category:feedback&limit=25&sort=date";
 
-    let response = client
+    let response = match client
         .get(sentry_url)
         .header("Authorization", format!("Bearer {}", auth_token))
         .send()
         .await
-        .map_err(|e| {
-            tracing::error!("Sentry poll: API request failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::warn!("Sentry poll: skipping, Sentry API unreachable: {}", e);
+            return Ok(Json(sentry_poll_skipped_body("sentry_unreachable", None)));
+        }
+    };
 
     if !response.status().is_success() {
-        tracing::error!("Sentry poll: API returned {}", response.status());
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = response.status().as_u16();
+        let reason = sentry_poll_skip_reason(status);
+        tracing::warn!(
+            "Sentry poll: skipping, Sentry API returned {} ({})",
+            status,
+            reason
+        );
+        return Ok(Json(sentry_poll_skipped_body(reason, Some(status))));
     }
 
-    let issues: Vec<Value> = response.json().await.map_err(|e| {
-        tracing::error!("Sentry poll: failed to parse issues: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let issues: Vec<Value> = match response.json().await {
+        Ok(issues) => issues,
+        Err(e) => {
+            tracing::warn!(
+                "Sentry poll: skipping, failed to parse Sentry response: {}",
+                e
+            );
+            return Ok(Json(sentry_poll_skipped_body("sentry_bad_response", None)));
+        }
+    };
 
-    tracing::info!("Sentry poll: fetched {} feedback issues from Sentry", issues.len());
+    tracing::info!(
+        "Sentry poll: fetched {} feedback issues from Sentry",
+        issues.len()
+    );
 
     // 3. Create action items for new issues
     let mut created = 0;
@@ -526,7 +568,10 @@ async fn poll_sentry_feedback(
 
     for issue in &issues {
         let issue_id = issue.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        let short_id = issue.get("shortId").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let short_id = issue
+            .get("shortId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
 
         if issue_id.is_empty() {
             continue;
@@ -540,7 +585,11 @@ async fn poll_sentry_feedback(
 
         let issue_title = issue.get("title").and_then(|v| v.as_str()).unwrap_or("");
 
-        tracing::info!("Sentry poll: processing new feedback issue {} ({})", issue_id, short_id);
+        tracing::info!(
+            "Sentry poll: processing new feedback issue {} ({})",
+            issue_id,
+            short_id
+        );
 
         // Fetch full event details
         let (feedback_message, reporter_name, reporter_email, metadata) =
@@ -636,4 +685,31 @@ pub fn webhook_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/webhooks/sentry", post(handle_sentry_webhook))
         .route("/v1/webhooks/sentry/poll", post(poll_sentry_feedback))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentry_poll_skip_reason_classifies_expected_states() {
+        // Regression for #9139: a persistent 403 from Sentry must classify as an auth
+        // error (typed skip), not fall through to a 500 and spam prod error logs.
+        assert_eq!(sentry_poll_skip_reason(401), "sentry_auth_error");
+        assert_eq!(sentry_poll_skip_reason(403), "sentry_auth_error");
+        assert_eq!(sentry_poll_skip_reason(429), "sentry_rate_limited");
+        assert_eq!(sentry_poll_skip_reason(500), "sentry_upstream_error");
+        assert_eq!(sentry_poll_skip_reason(502), "sentry_upstream_error");
+    }
+
+    #[test]
+    fn sentry_poll_skipped_body_is_typed_non_500_shape() {
+        let body = sentry_poll_skipped_body("sentry_auth_error", Some(403));
+        assert_eq!(body["status"], "skipped");
+        assert_eq!(body["reason"], "sentry_auth_error");
+        assert_eq!(body["sentry_status"], 403);
+        assert_eq!(body["created"], 0);
+        assert_eq!(body["skipped"], 0);
+        assert_eq!(body["total_fetched"], 0);
+    }
 }

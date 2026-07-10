@@ -20,4 +20,11 @@ final class ShortcutSettingsTests: XCTestCase {
             ]
         )
     }
+
+    func testAskOmiCommandShiftReturnShowsEveryShortcutToken() {
+        let tokens = ShortcutSettings.askOmiCommandShiftReturnShortcut.displayTokens
+
+        XCTAssertEqual(tokens, ["⇧", "⌘", "↩"])
+        XCTAssertEqual(ShortcutHintLayout.visibleTokens(for: tokens), tokens)
+    }
 }

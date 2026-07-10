@@ -29,4 +29,3 @@ pub struct Folder {
 fn default_color() -> String {
     "#6B7280".to_string()
 }
-

@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => '会话已过期，请重新登录。';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7628,6 +7631,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewAll => '查看全部';
 
   @override
+  String get expand => '展开';
+
+  @override
   String get addTask => '添加任务';
 
   @override
@@ -9168,7 +9174,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
 
   @override
-  String get transcribeLaterNote => '目前仅支持 Omi 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9193,4 +9199,203 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
+
+  @override
+  String get memoryThisDevice => '此设备';
+
+  @override
+  String get memoryThisIphone => '这台 iPhone';
+
+  @override
+  String get memoryThisPhone => '这部手机';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => '如何使用 Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '说几句话，看它们实时显示出来';
+
+  @override
+  String get deviceOnboardingGoodJob => '做得好！';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '开始说话…';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => '向 Omi 提问';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '按一下按钮，说出你的问题，说完后再按一下';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '正在处理你的问题…';
+
+  @override
+  String get deviceOnboardingListening => '正在聆听…';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '关机';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '开机';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '长按按钮 3 秒';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '按下按钮重新开机';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '用力长按按钮，直到指示灯熄灭';
+
+  @override
+  String get deviceOnboardingStatusConnected => '已连接';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '已连接！';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '已断开';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '正在关机…';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '自定义双击';
+
+  @override
+  String get deviceOnboardingEndConversation => '结束对话';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '保存并结束当前对话';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '静音 / 取消静音';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '开启或关闭麦克风';
+
+  @override
+  String get deviceOnboardingStarConversation => '收藏进行中的对话';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '将对话标记为重要';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '那是单击——试着快速点击两次！';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '现在就试试！双击你的 Omi';
+
+  @override
+  String get deviceOnboardingContinue => '继续';
+
+  @override
+  String get deviceOnboardingFinish => '完成';
+
+  @override
+  String get deviceOnboardingIntroTitle => '了解你的 Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => '快速、上手地体验 Omi 的全部功能。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '大约 1 分钟';
+
+  @override
+  String get jumpToLatestMessage => '跳转到最新消息';
+
+  @override
+  String get latest => '最新';
+
+  @override
+  String get flashFirmware => '刷写固件';
+
+  @override
+  String get pendantRecordingTitle => '吊坠录音中';
+
+  @override
+  String get pendantRecordingNote => '你的吊坠会自行录音。应用打开时，录音会同步到手机。';
+
+  @override
+  String get pendantSyncingRecordings => '正在从吊坠同步录音…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分钟已存储';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '吊坠存储空间即将用尽——请保持应用打开以同步。';
+
+  @override
+  String get connectRayBanMeta => '连接 Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription => '将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。';
+
+  @override
+  String get raybanMetaOpenMetaAI => '通过 Meta AI 连接';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => '在 Meta AI 应用中完成连接，然后返回此处。';
+
+  @override
+  String get raybanMetaCheckAgain => '再次检查';
+
+  @override
+  String get raybanMetaAllowCamera => '允许在眼镜上使用摄像头';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。';
+
+  @override
+  String get raybanMetaSkipForNow => '暂时跳过';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 纯音频模式';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation => '此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。';
+
+  @override
+  String get raybanMetaMusicPauseNote => '使用眼镜麦克风时，您手机上的音乐将暂停。';
+
+  @override
+  String get raybanMetaContinue => '继续';
+
+  @override
+  String get raybanMetaCapturePhoto => '拍摄照片';
+
+  @override
+  String get raybanMetaPhotoRequested => '已请求拍照 — 照片将显示在您的对话中。';
+
+  @override
+  String get raybanMetaMicrophoneReady => '麦克风已就绪';
+
+  @override
+  String get raybanMetaImageCaptureReady => '图像采集已就绪';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '在纯音频模式下不可用';
+
+  @override
+  String get raybanMetaCamera => '摄像头';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return '连接 Ray-Ban Meta 时出错：$error';
+  }
 }

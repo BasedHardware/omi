@@ -189,6 +189,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// Message shown after an expired authenticated session returns the user to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired — sign in again.'**
+  String get sessionExpiredSignInAgain;
+
   /// The app title displayed in various places
   ///
   /// In en, this message translates to:
@@ -14523,6 +14529,12 @@ abstract class AppLocalizations {
   /// **'View All'**
   String get viewAll;
 
+  /// Button text to expand/open a section such as the mind map preview
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
+
   /// Menu option to add a new task
   ///
   /// In en, this message translates to:
@@ -17400,7 +17412,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17450,6 +17462,396 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
+
+  /// Filter chip and provenance label for the current device
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get memoryThisDevice;
+
+  /// Provenance label when capture device is this iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone'**
+  String get memoryThisIphone;
+
+  /// Provenance label when capture device is this Android phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get memoryThisPhone;
+
+  /// Provenance label for a Mac capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Mac'**
+  String get memoryProvenanceMac;
+
+  /// Provenance label for an iPhone capture device
+  ///
+  /// In en, this message translates to:
+  /// **'iPhone'**
+  String get memoryProvenanceIphone;
+
+  /// Provenance label for an Android capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Android'**
+  String get memoryProvenanceAndroid;
+
+  /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
+  ///
+  /// In en, this message translates to:
+  /// **'How to Use Your Omi'**
+  String get deviceTutorial;
+
+  /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Into Your Omi'**
+  String get deviceOnboardingTranscriptionTitle;
+
+  /// Tutorial step 1 subtitle — explains that spoken words appear in real time
+  ///
+  /// In en, this message translates to:
+  /// **'Say a few words and watch them appear in real-time'**
+  String get deviceOnboardingTranscriptionSubtitle;
+
+  /// Tutorial step 1 success message after the user speaks enough words
+  ///
+  /// In en, this message translates to:
+  /// **'Good job!'**
+  String get deviceOnboardingGoodJob;
+
+  /// Tutorial step 1 placeholder in the live transcript area before any speech is detected
+  ///
+  /// In en, this message translates to:
+  /// **'Start speaking...'**
+  String get deviceOnboardingStartSpeaking;
+
+  /// Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi a Question'**
+  String get deviceOnboardingAskQuestionTitle;
+
+  /// Tutorial step 2 subtitle — instructions for the single-press ask-a-question flow
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button once, speak your question, then press again when done'**
+  String get deviceOnboardingAskQuestionSubtitle;
+
+  /// Tutorial step 2 status while the spoken question is processed by the AI
+  ///
+  /// In en, this message translates to:
+  /// **'Processing your question...'**
+  String get deviceOnboardingProcessingQuestion;
+
+  /// Tutorial step 2 status chip while Omi is actively listening to the question
+  ///
+  /// In en, this message translates to:
+  /// **'Listening...'**
+  String get deviceOnboardingListening;
+
+  /// Tutorial step 3 title while waiting for the user to power the device off
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Off'**
+  String get deviceOnboardingTurnOffTitle;
+
+  /// Tutorial step 3 title while waiting for the user to power the device back on
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On'**
+  String get deviceOnboardingTurnOnTitle;
+
+  /// Tutorial step 3 instruction to long-press the button to turn the device off
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button for 3 seconds'**
+  String get deviceOnboardingTurnOffSubtitle;
+
+  /// Tutorial step 3 instruction to press the button to turn the device back on
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button to turn it back on'**
+  String get deviceOnboardingTurnOnSubtitle;
+
+  /// Tutorial step 3 hint shown if the device has not turned off after a while
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button firmly until the light turns off'**
+  String get deviceOnboardingHoldButtonHint;
+
+  /// Tutorial step 3 status chip — device connected (before power-off)
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get deviceOnboardingStatusConnected;
+
+  /// Tutorial step 3 status chip — device reconnected after the power cycle
+  ///
+  /// In en, this message translates to:
+  /// **'Connected!'**
+  String get deviceOnboardingStatusConnectedDone;
+
+  /// Tutorial step 3 status chip — device disconnected/off
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected'**
+  String get deviceOnboardingStatusDisconnected;
+
+  /// Tutorial step 3 status chip while the device is powering off
+  ///
+  /// In en, this message translates to:
+  /// **'Turning off...'**
+  String get deviceOnboardingStatusTurningOff;
+
+  /// Tutorial step 4 title — configure the device double-tap action
+  ///
+  /// In en, this message translates to:
+  /// **'Customize Double Tap'**
+  String get deviceOnboardingDoubleTapTitle;
+
+  /// Tutorial step 4 double-tap option title — end the current conversation
+  ///
+  /// In en, this message translates to:
+  /// **'End Conversation'**
+  String get deviceOnboardingEndConversation;
+
+  /// Tutorial step 4 double-tap option description for End Conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Save and end current conversation'**
+  String get deviceOnboardingEndConversationDesc;
+
+  /// Tutorial step 4 double-tap option title — mute or unmute the microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Mute / Unmute'**
+  String get deviceOnboardingMuteUnmute;
+
+  /// Tutorial step 4 double-tap option description for Mute/Unmute
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle microphone on or off'**
+  String get deviceOnboardingMuteUnmuteDesc;
+
+  /// Tutorial step 4 double-tap option title — star the ongoing conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Star Ongoing Conversation'**
+  String get deviceOnboardingStarConversation;
+
+  /// Tutorial step 4 double-tap option description for Star Conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Mark conversation as important'**
+  String get deviceOnboardingStarConversationDesc;
+
+  /// Tutorial step 4 hint shown when the user single-taps instead of double-tapping
+  ///
+  /// In en, this message translates to:
+  /// **'That was a single tap — try tapping twice quickly!'**
+  String get deviceOnboardingSingleTapHint;
+
+  /// Tutorial step 4 prompt encouraging the user to double-tap the device
+  ///
+  /// In en, this message translates to:
+  /// **'Try it now! Double tap your Omi'**
+  String get deviceOnboardingTryDoubleTap;
+
+  /// Onboarding tutorial primary button label to advance to the next step
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get deviceOnboardingContinue;
+
+  /// Onboarding tutorial final button label to complete the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get deviceOnboardingFinish;
+
+  /// Onboarding intro screen title shown before the device tutorial steps
+  ///
+  /// In en, this message translates to:
+  /// **'Get to Know Your Omi'**
+  String get deviceOnboardingIntroTitle;
+
+  /// Onboarding intro screen subtitle explaining the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  String get deviceOnboardingIntroSubtitle;
+
+  /// Onboarding intro screen estimated duration hint
+  ///
+  /// In en, this message translates to:
+  /// **'About 1 minute'**
+  String get deviceOnboardingIntroDuration;
+
+  /// Accessibility label and tooltip for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to latest message'**
+  String get jumpToLatestMessage;
+
+  /// Visible label for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get latest;
+
+  /// Button on the manual firmware flash page (developer settings)
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Firmware'**
+  String get flashFirmware;
+
+  /// No description provided for @pendantRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording on Pendant'**
+  String get pendantRecordingTitle;
+
+  /// No description provided for @pendantRecordingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is recording on its own. Recordings sync to your phone while the app is open.'**
+  String get pendantRecordingNote;
+
+  /// No description provided for @pendantSyncingRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing recordings from your pendant…'**
+  String get pendantSyncingRecordings;
+
+  /// No description provided for @pendantMinutesStored.
+  ///
+  /// In en, this message translates to:
+  /// **'~{minutes} min stored'**
+  String pendantMinutesStored(int minutes);
+
+  /// No description provided for @pendantStorageAlmostFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant storage is almost full — keep the app open to sync.'**
+  String get pendantStorageAlmostFull;
+
+  /// No description provided for @connectRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Ray-Ban Meta'**
+  String get connectRayBanMeta;
+
+  /// No description provided for @raybanMetaSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.'**
+  String get raybanMetaSetupDescription;
+
+  /// No description provided for @raybanMetaOpenMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through Meta AI'**
+  String get raybanMetaOpenMetaAI;
+
+  /// No description provided for @raybanMetaWaitingForMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish connecting in the Meta AI app, then come back here.'**
+  String get raybanMetaWaitingForMetaAI;
+
+  /// No description provided for @raybanMetaCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get raybanMetaCheckAgain;
+
+  /// No description provided for @raybanMetaAllowCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Camera on Glasses'**
+  String get raybanMetaAllowCamera;
+
+  /// No description provided for @raybanMetaCameraExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.'**
+  String get raybanMetaCameraExplanation;
+
+  /// No description provided for @raybanMetaSkipForNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get raybanMetaSkipForNow;
+
+  /// No description provided for @raybanMetaAudioOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ray-Ban Meta audio-only mode'**
+  String get raybanMetaAudioOnlyTitle;
+
+  /// No description provided for @raybanMetaAudioOnlyExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.'**
+  String get raybanMetaAudioOnlyExplanation;
+
+  /// No description provided for @raybanMetaMusicPauseNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Music on your phone pauses while the glasses microphone is in use.'**
+  String get raybanMetaMusicPauseNote;
+
+  /// No description provided for @raybanMetaContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get raybanMetaContinue;
+
+  /// No description provided for @raybanMetaCapturePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture Photo'**
+  String get raybanMetaCapturePhoto;
+
+  /// No description provided for @raybanMetaPhotoRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo requested — it will appear in your conversation.'**
+  String get raybanMetaPhotoRequested;
+
+  /// No description provided for @raybanMetaMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone ready'**
+  String get raybanMetaMicrophoneReady;
+
+  /// No description provided for @raybanMetaImageCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Image capture ready'**
+  String get raybanMetaImageCaptureReady;
+
+  /// No description provided for @raybanMetaImageCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable in audio-only mode'**
+  String get raybanMetaImageCaptureUnavailable;
+
+  /// No description provided for @raybanMetaCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get raybanMetaCamera;
+
+  /// No description provided for @errorConnectingRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Ray-Ban Meta: {error}'**
+  String errorConnectingRayBanMeta(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

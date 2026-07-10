@@ -13,99 +13,206 @@ struct CalendarEvent: Identifiable {
   let isAllDay: Bool
 }
 
-enum CalendarReaderError: LocalizedError {
+/// Result of a functional connection probe (philosophy §3/§4). Distinct from a
+/// stored "connected" flag: it reflects what is true *right now*.
+enum CalendarConnectionStatus: Equatable {
+  case connected(verifiedAt: Date)
+  case needsSignIn(message: String)
+  case error(message: String)
+
+  var isConnected: Bool {
+    if case .connected = self { return true }
+    return false
+  }
+}
+
+struct CalendarFetchParameters: Equatable {
+  let daysBack: Int
+  let daysForward: Int
+  let maxResults: Int
+
+  static func normalized(daysBack: Int, daysForward: Int, maxResults: Int) -> CalendarFetchParameters {
+    CalendarFetchParameters(
+      daysBack: min(max(daysBack, 0), 3650),
+      daysForward: min(max(daysForward, 0), 3650),
+      maxResults: min(max(maxResults, 1), 2500)
+    )
+  }
+}
+
+enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
-  case noGoogleCookies
+  case notSignedIn
+  case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
-  case authFailed
+  case configurationError(String)
   case pythonNotFound
 
   var errorDescription: String? {
     switch self {
     case .noBrowserFound:
-      return "No browser with Google session found. Log into Google in Chrome, Arc, Brave, or Edge."
-    case .noGoogleCookies:
-      return "No Google session cookies found. Make sure you're logged into Google."
+      return "No supported browser found. Open Google Calendar in Chrome, Arc, Brave, or Edge, then try again."
+    case .notSignedIn:
+      return "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
-      return "Cookie decryption failed: \(msg)"
+      return "Couldn't read your browser session: \(msg)"
     case .networkError(let msg):
-      return "Network error: \(msg)"
-    case .authFailed:
-      return
-        "Google Calendar authentication failed. Try refreshing your Google session in the browser."
+      return "Couldn't reach Google Calendar: \(msg)"
+    case .configurationError(let msg):
+      return "Couldn't use Google Calendar: \(msg)"
     case .pythonNotFound:
       return "Python 3 not found. Install it via Homebrew: brew install python3"
     }
   }
 }
 
-// MARK: - Browser Config (same as Gmail)
+// MARK: - Fetch outcome (pure, testable layer)
 
-private struct CalBrowserConfig {
-  let name: String
-  let keychainService: String
-  let cookiePath: String
+/// The classified outcome of a fetch attempt across all browsers/profiles.
+///
+/// Per `docs/integrations-philosophy.md` §2 (observe → recover, never a script)
+/// and §3 (the UI must reflect reality): we aggregate every browser/profile
+/// attempt instead of surfacing whichever one happened to be tried last, then
+/// classify the failure into an actionable error — never the catch-all
+/// "Network error" that a login problem used to render as.
+enum CalendarFetchOutcome: Equatable {
+  case success(events: [[String: Any]], browser: String)
+  case failure(CalendarFailureClass, summary: String, attempts: [CalendarAttempt])
 
-  private struct BrowserFamily {
-    let name: String
-    let keychainService: String
-    let userDataPath: String
-  }
-
-  private static func cookiePaths(in userDataPath: String) -> [String] {
-    let fm = FileManager.default
-    guard let entries = try? fm.contentsOfDirectory(atPath: userDataPath) else { return [] }
-
-    return
-      entries
-      .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
-      .sorted { lhs, rhs in
-        if lhs == "Default" { return true }
-        if rhs == "Default" { return false }
-        return lhs.localizedStandardCompare(rhs) == .orderedAscending
-      }
-      .map { "\(userDataPath)/\($0)/Cookies" }
-      .filter { fm.fileExists(atPath: $0) }
-  }
-
-  static func allBrowsers() -> [CalBrowserConfig] {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let families = [
-      BrowserFamily(
-        name: "Arc",
-        keychainService: "Arc Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Arc/User Data"
-      ),
-      BrowserFamily(
-        name: "Chrome",
-        keychainService: "Chrome Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Google/Chrome"
-      ),
-      BrowserFamily(
-        name: "Brave",
-        keychainService: "Brave Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/BraveSoftware/Brave-Browser"
-      ),
-      BrowserFamily(
-        name: "Edge",
-        keychainService: "Microsoft Edge Safe Storage",
-        userDataPath: "\(home)/Library/Application Support/Microsoft Edge"
-      ),
-    ]
-
-    return families.flatMap { family in
-      cookiePaths(in: family.userDataPath).map { cookiePath in
-        let profileName = URL(fileURLWithPath: cookiePath).deletingLastPathComponent()
-          .lastPathComponent
-        let browserName = profileName == "Default" ? family.name : "\(family.name) (\(profileName))"
-        return CalBrowserConfig(
-          name: browserName,
-          keychainService: family.keychainService,
-          cookiePath: cookiePath
-        )
-      }
+  static func == (lhs: CalendarFetchOutcome, rhs: CalendarFetchOutcome) -> Bool {
+    switch (lhs, rhs) {
+    case let (.success(_, lb), .success(_, rb)):
+      return lb == rb
+    case let (.failure(lc, ls, la), .failure(rc, rs, ra)):
+      return lc == rc && ls == rs && la == ra
+    default:
+      return false
     }
+  }
+}
+
+/// One browser/profile attempt, carrying only non-sensitive diagnostics — names,
+/// stages, and reasons, never cookie values (philosophy §7: sanitized traces).
+struct CalendarAttempt: Equatable {
+  let browser: String
+  let stage: String  // "decrypt" | "auth" | "fetch" | "ok"
+  let reason: String
+  let hadAuthCookies: Bool
+}
+
+enum CalendarFailureClass: String, Equatable {
+  case noBrowser = "no_browser"
+  case notSignedIn = "not_signed_in"
+  case sessionExpired = "session_expired"
+  case decryptFailed = "decrypt_failed"
+  case configuration = "configuration"
+  case network = "network"
+  case unknown = "unknown"
+
+  var plainFallbackSummary: String {
+    switch self {
+    case .noBrowser:
+      return "No supported browser with a readable session was found."
+    case .notSignedIn:
+      return "No browser is signed into Google. Sign into calendar.google.com and try again."
+    case .sessionExpired:
+      return "Your Google session expired. Reload calendar.google.com to refresh it."
+    case .decryptFailed:
+      return "browser session could not be decrypted"
+    case .configuration:
+      return "Calendar API key is invalid or unavailable"
+    case .network:
+      return "please check your connection and try again"
+    case .unknown:
+      return "unexpected error"
+    }
+  }
+
+  var asError: CalendarReaderError {
+    asError(summary: nil)
+  }
+
+  func detailFragment(from summary: String?) -> String? {
+    guard let raw = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+      return nil
+    }
+
+    switch self {
+    case .network:
+      let prefix = "Could not reach Google Calendar"
+      if raw.hasPrefix(prefix) {
+        let tail = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        return tail.isEmpty ? nil : tail
+      }
+      return raw
+    case .decryptFailed:
+      if raw == "Your browser session could not be read." {
+        return nil
+      }
+      return raw
+    case .noBrowser, .notSignedIn, .sessionExpired:
+      return nil
+    case .configuration, .unknown:
+      return raw
+    }
+  }
+
+  func asError(summary: String? = nil) -> CalendarReaderError {
+    func detailOr(_ fallback: String) -> String {
+      detailFragment(from: summary) ?? fallback
+    }
+
+    switch self {
+    case .noBrowser: return .noBrowserFound
+    case .notSignedIn: return .notSignedIn
+    case .sessionExpired: return .sessionExpired
+    case .decryptFailed:
+      return .cookieDecryptionFailed(detailOr("browser session could not be decrypted"))
+    case .configuration:
+      return .configurationError(detailOr("Calendar API key is invalid or unavailable"))
+    case .network:
+      return .networkError(detailOr("please check your connection and try again"))
+    case .unknown:
+      return .networkError(detailOr("unexpected error"))
+    }
+  }
+}
+
+/// Parses the structured JSON the Python helper writes into a classified
+/// outcome. Pure and side-effect free so it can be unit-tested against captured
+/// payloads without a browser or Python (philosophy §7: make the surface
+/// testable).
+enum CalendarOutcomeParser {
+  static func parse(_ json: [String: Any]) -> CalendarFetchOutcome {
+    let attempts = (json["attempts"] as? [[String: Any]] ?? []).map { dict in
+      CalendarAttempt(
+        browser: dict["browser"] as? String ?? "unknown",
+        stage: dict["stage"] as? String ?? "unknown",
+        reason: dict["reason"] as? String ?? "",
+        hadAuthCookies: dict["had_auth"] as? Bool ?? false
+      )
+    }
+
+    if json["ok"] as? Bool == true {
+      let events = json["events"] as? [[String: Any]] ?? []
+      let browser = json["browser"] as? String ?? "unknown"
+      return .success(events: events, browser: browser)
+    }
+
+    let cls = CalendarFailureClass(rawValue: json["error_class"] as? String ?? "") ?? .unknown
+    let summary =
+      (json["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      ?? cls.plainFallbackSummary
+    return .failure(cls, summary: summary, attempts: attempts)
+  }
+
+  /// Human-readable, non-sensitive one-liner for logs and the eval corpus.
+  static func diagnosticsLine(_ attempts: [CalendarAttempt]) -> String {
+    guard !attempts.isEmpty else { return "no browsers scanned" }
+    return attempts.map { "\($0.browser)[\($0.stage):\($0.reason)]" }.joined(separator: ", ")
   }
 }
 
@@ -120,9 +227,36 @@ actor CalendarReaderService {
   func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
     -> [CalendarEvent]
   {
+    await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
     return events.sorted { $0.startTime > $1.startTime }
+  }
+
+  /// Lightweight functional probe — does the integration actually work right now?
+  ///
+  /// Per `docs/integrations-philosophy.md` §3/§4, "connected" must mean "verified
+  /// recently against the real surface," never a stored latch. Callers use this
+  /// to render honest status and to drive self-healing, rather than trusting a
+  /// one-time success. It runs the same real fetch path over a tiny window so a
+  /// green result guarantees the whole chain (cookies → auth → API) works.
+  func verifyConnection() async -> CalendarConnectionStatus {
+    do {
+      await APIKeyService.shared.waitForKeys()
+      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
+      return .connected(verifiedAt: Date())
+    } catch let error as CalendarReaderError {
+      switch error {
+      case .notSignedIn, .noBrowserFound:
+        return .needsSignIn(message: error.errorDescription ?? "Sign into Google to connect.")
+      case .sessionExpired:
+        return .needsSignIn(message: error.errorDescription ?? "Your Google session expired.")
+      default:
+        return .error(message: error.errorDescription ?? "Couldn't verify the connection.")
+      }
+    } catch {
+      return .error(message: error.localizedDescription)
+    }
   }
 
   /// Synthesize profile memories and tasks from calendar events.
@@ -190,15 +324,12 @@ actor CalendarReaderService {
         || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
         throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
       }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
+      let result = try await AgentClient.run(
+        surface: .service("calendar_reader"),
         prompt: synthesisPrompt,
+        model: ModelQoS.Claude.synthesis,
         systemPrompt:
           "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }
@@ -239,23 +370,28 @@ actor CalendarReaderService {
       let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
       let profileSummary = parsed["profile"] as? String ?? ""
 
-      // Save memories
-      var memoriesSaved = 0
-      for memory in memoryStrings {
-        do {
-          _ = try await APIClient.shared.createMemory(
+      let artifacts = memoryStrings.map { memory in
+        ImportEvidenceBatchItem(
+            title: "Calendar Profile Insight",
+            snippet: memory,
             content: memory,
-            visibility: "private",
-            category: .system,
-            tags: ["calendar", "onboarding", "profile"],
-            source: "google_calendar",
-            headline: "Calendar Profile Insight"
-          )
-          memoriesSaved += 1
-        } catch {
-          log("CalendarReaderService: Failed to save memory: \(error)")
-        }
+            metadata: ["import_kind": "profile"]
+        )
       }
+      let legacyMemories = memoryStrings.map { memory in
+        MemoryBatchItem(
+          content: memory,
+          tags: ["calendar", "onboarding"],
+          headline: "Calendar Profile Insight",
+          source: "google_calendar"
+        )
+      }
+      let saveResult = await OnboardingImportEvidenceService.save(
+        artifacts,
+        sourceType: "google_calendar",
+        logPrefix: "CalendarReaderService",
+        legacyMemories: legacyMemories
+      )
 
       // Save tasks
       var tasksSaved = 0
@@ -277,9 +413,9 @@ actor CalendarReaderService {
       }
 
       log(
-        "CalendarReaderService: Synthesis complete — \(memoriesSaved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
+        "CalendarReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
       )
-      return (memoriesSaved, tasksSaved, profileSummary)
+      return (saveResult.saved, tasksSaved, profileSummary)
 
     } catch {
       if attempt < maxAttempts {
@@ -299,38 +435,57 @@ actor CalendarReaderService {
     let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
     guard !eventsToSave.isEmpty else { return (0, 0) }
 
-    let concurrency = min(8, eventsToSave.count)
-    var nextIndex = 0
-
-    return await withTaskGroup(of: Bool.self) { group in
-      func enqueueNext() {
-        guard nextIndex < eventsToSave.count else { return }
-        let event = eventsToSave[nextIndex]
-        nextIndex += 1
-        group.addTask {
-          await Self.saveMemory(for: event)
-        }
+    let artifacts = eventsToSave.map { event in
+      var parts = ["Calendar event — \(event.summary)"]
+      if !event.startTime.isEmpty {
+        parts.append("Starts: \(event.startTime)")
+      }
+      if !event.location.isEmpty {
+        parts.append("Location: \(event.location)")
+      }
+      if !event.attendees.isEmpty {
+        parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
       }
 
-      for _ in 0..<concurrency {
-        enqueueNext()
-      }
-
-      var saved = 0
-      var failed = 0
-
-      while let success = await group.next() {
-        if success {
-          saved += 1
-        } else {
-          failed += 1
-        }
-        enqueueNext()
-      }
-
-      log("CalendarReaderService: Saved \(saved) events as memories (\(failed) failed)")
-      return (saved, failed)
+      return ImportEvidenceBatchItem(
+        externalId: "google_calendar:\(event.id)",
+        title: event.summary,
+        snippet: parts.joined(separator: " | "),
+        content: parts.joined(separator: " | "),
+        metadata: [
+          "import_kind": "event",
+          "start_time": event.startTime,
+          "location": event.location,
+        ]
+      )
     }
+    let legacyMemories = eventsToSave.map { event in
+      var parts = ["Calendar event — \(event.summary)"]
+      if !event.startTime.isEmpty {
+        parts.append("Starts: \(event.startTime)")
+      }
+      if !event.location.isEmpty {
+        parts.append("Location: \(event.location)")
+      }
+      if !event.attendees.isEmpty {
+        parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
+      }
+      return MemoryBatchItem(
+        content: parts.joined(separator: " | "),
+        tags: ["calendar", "onboarding", "event"],
+        headline: event.summary,
+        source: "google_calendar"
+      )
+    }
+
+    let result = await OnboardingImportEvidenceService.save(
+      artifacts,
+      sourceType: "google_calendar",
+      logPrefix: "CalendarReaderService",
+      legacyMemories: legacyMemories
+    )
+    log("CalendarReaderService: Saved \(result.saved) events as import evidence (\(result.failed) failed)")
+    return result
   }
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
@@ -338,19 +493,20 @@ actor CalendarReaderService {
   private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
     -> [CalendarEvent]
   {
+    let parameters = CalendarFetchParameters.normalized(
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults
+    )
+    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingUTF8: $0) }),
+      !calendarKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      throw CalendarReaderError.configurationError("Calendar API key is unavailable; try again after startup finishes.")
+    }
+
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    var browserConfigs: [[String: String]] = []
-    for browser in CalBrowserConfig.allBrowsers() {
-      guard FileManager.default.fileExists(atPath: browser.cookiePath) else { continue }
-      guard let password = getKeychainPassword(service: browser.keychainService) else { continue }
-
-      browserConfigs.append([
-        "name": browser.name,
-        "db_path": browser.cookiePath,
-        "password": password,
-      ])
-    }
+    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "CalendarReaderService")
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound
@@ -367,99 +523,14 @@ actor CalendarReaderService {
     // No temp file cleanup needed — we read the original DB directly in read-only mode
 
     let pythonScript = """
-      import sys, json, os, sqlite3, hashlib, time, urllib.request, urllib.error, urllib.parse
-      from http.cookiejar import MozillaCookieJar, Cookie
+      \(BrowserGoogleSession.chromiumCookiePythonSupport)
+      import urllib.request, urllib.error, urllib.parse
       from datetime import datetime, timedelta, timezone
 
-      try:
-          from Crypto.Cipher import AES
-      except ImportError:
-          try:
-              from Cryptodome.Cipher import AES
-          except ImportError:
-              import subprocess
-              def decrypt_aes_cbc(key, iv, data):
-                  p = subprocess.run(['openssl', 'enc', '-aes-128-cbc', '-d', '-K', key.hex(), '-iv', iv.hex(), '-nopad'],
-                                     input=data, capture_output=True)
-                  return p.stdout
-              USE_OPENSSL = True
-          else:
-              USE_OPENSSL = False
-      else:
-          USE_OPENSSL = False
-
-      browsers = json.loads(sys.argv[1])
-      days_back = int(sys.argv[2]) if len(sys.argv) > 2 else 30
-      days_forward = int(sys.argv[3]) if len(sys.argv) > 3 else 14
-      max_results = int(sys.argv[4]) if len(sys.argv) > 4 else 100
-
-      def decrypt_cookies(db_path, password):
-          key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
-          iv = b' ' * 16
-          try:
-              conn = sqlite3.connect(f'file:{db_path}?mode=ro&immutable=1', uri=True, timeout=5)
-              c = conn.cursor()
-              c.execute('SELECT value FROM meta WHERE key="version"')
-              row = c.fetchone()
-              db_version = int(row[0]) if row else 0
-              c.execute("SELECT host_key, name, encrypted_value, path, is_secure, expires_utc FROM cookies WHERE host_key LIKE '%google.com%'")
-              rows = c.fetchall()
-              conn.close()
-          except Exception as e:
-              return None, str(e)
-
-          cookies = []
-          for host_key, name, enc, path, is_secure, expires_utc in rows:
-              if not enc:
-                  continue
-              enc = bytes(enc) if not isinstance(enc, bytes) else enc
-              value = None
-              if enc[:3] in (b'v10', b'v11'):
-                  ciphertext = enc[3:]
-                  try:
-                      if USE_OPENSSL:
-                          decrypted = decrypt_aes_cbc(key, iv, ciphertext)
-                      else:
-                          cipher = AES.new(key, AES.MODE_CBC, IV=iv)
-                          decrypted = cipher.decrypt(ciphertext)
-                      pad_len = decrypted[-1] if decrypted else 0
-                      if 1 <= pad_len <= 16:
-                          decrypted = decrypted[:-pad_len]
-                      if db_version >= 24 and len(decrypted) > 32:
-                          decrypted = decrypted[32:]
-                      value = decrypted.decode('utf-8', errors='replace')
-                  except Exception:
-                      continue
-              elif enc:
-                  try:
-                      value = enc.decode('utf-8', errors='replace')
-                  except Exception:
-                      continue
-              if value:
-                  cookies.append({
-                      'domain': host_key,
-                      'name': name,
-                      'value': value,
-                      'path': path or '/',
-                      'secure': bool(is_secure),
-                  })
-          return cookies, None
-
-      def make_cookie_jar(cookie_list):
-          jar = MozillaCookieJar()
-          for c in cookie_list:
-              cookie = Cookie(
-                  version=0, name=c['name'], value=c['value'],
-                  port=None, port_specified=False,
-                  domain=c['domain'], domain_specified=True,
-                  domain_initial_dot=c['domain'].startswith('.'),
-                  path=c['path'], path_specified=True,
-                  secure=c['secure'], expires=int(time.time()) + 86400,
-                  discard=False, comment=None, comment_url=None,
-                  rest={}, rfc2109=False
-              )
-              jar.set_cookie(cookie)
-          return jar
+      browsers = json.loads(sys.stdin.read())
+      days_back = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+      days_forward = int(sys.argv[2]) if len(sys.argv) > 2 else 14
+      max_results = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 
       def get_sapisidhash(sapisid, origin):
           timestamp = str(int(time.time()))
@@ -467,7 +538,26 @@ actor CalendarReaderService {
           hash_val = hashlib.sha1(raw.encode('utf-8')).hexdigest()
           return "SAPISIDHASH " + timestamp + "_" + hash_val
 
+      def google_error_detail(raw_body):
+          try:
+              payload = json.loads(raw_body.decode('utf-8', errors='replace'))
+              error = payload.get('error', {})
+              message = error.get('message') or ''
+              status = error.get('status') or ''
+              reasons = [
+                  e.get('reason', '')
+                  for e in error.get('errors', [])
+                  if isinstance(e, dict)
+              ]
+              parts = [p for p in [status, message, ','.join([r for r in reasons if r])] if p]
+              return ': '.join(parts) if parts else None
+          except Exception:
+              return None
+
       def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_results):
+          # Returns (events, error, http_status). http_status lets the caller
+          # distinguish an expired session (401/403) from a transient network
+          # failure so the user gets the right recovery step (philosophy §3).
           # Find SAPISID cookie
           sapisid = None
           for c in cookies_list:
@@ -481,7 +571,7 @@ actor CalendarReaderService {
                       sapisid = c['value']
                       break
           if not sapisid:
-              return None, "No SAPISID cookie found"
+              return None, "No SAPISID cookie found", None
 
           origin = "https://calendar.google.com"
           auth_header = get_sapisidhash(sapisid, origin)
@@ -517,13 +607,13 @@ actor CalendarReaderService {
                   status = resp.getcode()
                   body = resp.read()
                   if status != 200:
-                      return None, f"HTTP {status}"
+                      return None, f"HTTP {status}", status
                   data = json.loads(body)
               except urllib.error.HTTPError as e:
-                  body = e.read().decode('utf-8', errors='replace')[:200] if e.fp else ''
-                  return None, f"HTTP {e.code}: {body}"
+                  detail = google_error_detail(e.read())
+                  return None, f"HTTP {e.code}" + (f": {detail}" if detail else ""), e.code
               except Exception as e:
-                  return None, str(e)
+                  return None, str(e), None
 
               items = data.get('items', [])
               all_items.extend(items)
@@ -531,28 +621,66 @@ actor CalendarReaderService {
               if not page_token or not items:
                   break
 
-          return all_items[:max_results], None
+          return all_items[:max_results], None, 200
 
-      last_error = None
+      # Aggregate every browser/profile attempt instead of last-writer-wins, so
+      # we can classify the *most actionable* failure rather than surfacing
+      # whichever profile happened to be tried last (philosophy §2, §3, §7).
+      attempts = []
 
-      # Try each browser
+      def classify(attempts):
+          # No browser produced any readable cookies at all.
+          if not attempts:
+              return 'no_browser', 'No supported browser with a readable session was found.'
+          # API-key/config failures are not user sign-in problems. Google uses
+          # 400 for invalid keys and 403 for missing/unregistered callers.
+          config_markers = (
+              'API key not valid',
+              'API key expired',
+              'API key is invalid',
+              'unregistered callers',
+              'API key',
+          )
+          for a in attempts:
+              reason = a.get('reason') or ''
+              if a['stage'] == 'fetch' and any(marker in reason for marker in config_markers):
+                  return 'configuration', 'Calendar API key is invalid or unavailable.'
+          # Session expired beats "not signed in": if any profile HAD auth
+          # cookies but Google rejected them, telling the user to re-login is the
+          # actionable next step.
+          if any(a['stage'] == 'fetch' and a.get('http') in (401, 403) for a in attempts):
+              return 'session_expired', 'Your Google session expired. Reload calendar.google.com to refresh it.'
+          # Some profile had auth cookies but the fetch failed for another reason.
+          if any(a['stage'] == 'fetch' for a in attempts):
+              detail = next(a['reason'] for a in attempts if a['stage'] == 'fetch')
+              return 'network', f'Could not reach Google Calendar ({detail}).'
+          # Cookies decrypted but no profile was signed into Google.
+          if any(a['stage'] == 'auth' for a in attempts):
+              return 'not_signed_in', 'No browser is signed into Google. Sign into calendar.google.com and try again.'
+          # Everything failed at the decrypt stage.
+          return 'decrypt_failed', 'Your browser session could not be read.'
+
+      # Try each browser/profile
       for browser in browsers:
-          cookies, err = decrypt_cookies(browser['db_path'], browser['password'])
+          cookies, err = decrypt_google_cookies(browser['db_path'], browser['password'])
           if err or not cookies:
-              last_error = f"{browser['name']}: cookie read failed ({err or 'no cookies'})"
+              attempts.append({'browser': browser['name'], 'stage': 'decrypt',
+                               'reason': (err or 'no cookies'), 'had_auth': False})
               continue
 
           # Check for auth cookies
-          auth_names = {'SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'}
-          found_auth = [c for c in cookies if c['name'] in auth_names]
+          found_auth = [c for c in cookies if c['name'] in GOOGLE_AUTH_COOKIE_NAMES]
           if not found_auth:
-              last_error = f"{browser['name']}: no Google auth cookies"
+              attempts.append({'browser': browser['name'], 'stage': 'auth',
+                               'reason': 'no Google auth cookies', 'had_auth': False})
               continue
 
           jar = make_cookie_jar(cookies)
-          events, fetch_err = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
+          events, fetch_err, http_status = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
           if fetch_err or events is None:
-              last_error = f"{browser['name']}: {fetch_err or 'unknown fetch error'}"
+              attempts.append({'browser': browser['name'], 'stage': 'fetch',
+                               'reason': (fetch_err or 'unknown fetch error'),
+                               'had_auth': True, 'http': http_status})
               continue
 
           # Format events for output
@@ -576,88 +704,41 @@ actor CalendarReaderService {
                   'is_all_day': 'date' in start and 'dateTime' not in start,
               })
 
+          attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
           # Write to temp file to avoid pipe buffer truncation with large event lists
-          import tempfile
-          outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
-          with open(outfile, 'w') as f:
-              json.dump({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}, f)
-          print(outfile)
+          write_json_result('omi_cal_', {'ok': True, 'browser': browser['name'], 'events': result_events,
+                                         'count': len(result_events), 'attempts': attempts})
           sys.exit(0)
 
-      import tempfile
-      outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
-      with open(outfile, 'w') as f:
-          json.dump({'ok': False, 'error': last_error or 'No browser with valid Google session found'}, f)
-      print(outfile)
+      error_class, summary = classify(attempts)
+      write_json_result('omi_cal_', {'ok': False, 'error_class': error_class, 'summary': summary,
+                                     'attempts': attempts})
       sys.exit(0)
       """
 
-    // Find Python
-    let pythonPaths = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
-    guard let pythonPath = pythonPaths.first(where: { FileManager.default.fileExists(atPath: $0) })
-    else {
-      throw CalendarReaderError.pythonNotFound
-    }
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = [
-      "-c", pythonScript, configJSON,
-      String(daysBack), String(daysForward), String(maxResults),
-    ]
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
-
-    // Read pipe data asynchronously to avoid deadlock
-    // (waitUntilExit blocks if pipe buffers are full)
-    var outputData = Data()
-    var errData = Data()
-    let outputSem = DispatchSemaphore(value: 0)
-    let errSem = DispatchSemaphore(value: 0)
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        pipe.fileHandleForReading.readabilityHandler = nil
-        outputSem.signal()
-      } else {
-        outputData.append(d)
-      }
-    }
-    errPipe.fileHandleForReading.readabilityHandler = { handle in
-      let d = handle.availableData
-      if d.isEmpty {
-        errPipe.fileHandleForReading.readabilityHandler = nil
-        errSem.signal()
-      } else {
-        errData.append(d)
-      }
-    }
-
+    let result: BrowserPythonRunner.Result
     do {
-      try process.run()
-      // Timeout after 60 seconds
-      DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
-        if process.isRunning { process.terminate() }
-      }
-      process.waitUntilExit()
+      result = try BrowserPythonRunner.run(
+        script: pythonScript,
+        arguments: [
+          String(parameters.daysBack), String(parameters.daysForward), String(parameters.maxResults),
+        ],
+        stdinData: Data(configJSON.utf8)
+      )
+    } catch BrowserPythonRunnerError.pythonNotFound {
+      throw CalendarReaderError.pythonNotFound
     } catch {
-      throw CalendarReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
+      throw CalendarReaderError.networkError(error.localizedDescription)
     }
 
-    // Wait for pipe reads to finish (max 5s after process exit)
-    _ = outputSem.wait(timeout: .now() + .seconds(5))
-    _ = errSem.wait(timeout: .now() + .seconds(5))
-
-    let errOutput = String(data: errData, encoding: .utf8) ?? ""
+    let errOutput = String(data: result.stderr, encoding: .utf8) ?? ""
     if !errOutput.isEmpty {
       log("CalendarReaderService: Python stderr: \(errOutput.prefix(500))")
     }
 
     // Python writes JSON to a temp file and prints the path to stdout
     let outputPath =
-      String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      String(data: result.stdout, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
       ?? ""
     guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
       throw CalendarReaderError.networkError(
@@ -671,86 +752,34 @@ actor CalendarReaderService {
       throw CalendarReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
     }
 
-    guard json["ok"] as? Bool == true else {
-      let errMsg = json["error"] as? String ?? "Unknown error"
-      throw CalendarReaderError.networkError(errMsg)
-    }
+    let outcome = CalendarOutcomeParser.parse(json)
+    switch outcome {
+    case let .failure(cls, summary, attempts):
+      // Structured, non-sensitive diagnostics for the eval corpus (philosophy §7).
+      log(
+        "CalendarReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
+          + "attempts: \(CalendarOutcomeParser.diagnosticsLine(attempts))")
+      throw cls.asError(summary: summary)
 
-    guard let eventDicts = json["events"] as? [[String: Any]] else {
-      return []
-    }
+    case let .success(eventDicts, browserName):
+      log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
+      return eventDicts.compactMap { dict -> CalendarEvent? in
+        guard let id = dict["id"] as? String,
+          let summary = dict["summary"] as? String
+        else { return nil }
 
-    let browserName = json["browser"] as? String ?? "unknown"
-    log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
-
-    return eventDicts.compactMap { dict -> CalendarEvent? in
-      guard let id = dict["id"] as? String,
-        let summary = dict["summary"] as? String
-      else { return nil }
-
-      return CalendarEvent(
-        id: id,
-        summary: summary,
-        startTime: dict["start_time"] as? String ?? "",
-        endTime: dict["end_time"] as? String ?? "",
-        attendees: dict["attendees"] as? [String] ?? [],
-        location: dict["location"] as? String ?? "",
-        description: dict["description"] as? String ?? "",
-        isAllDay: dict["is_all_day"] as? Bool ?? false
-      )
-    }
-  }
-
-  // MARK: - Keychain
-
-  private func getKeychainPassword(service: String) -> String? {
-    BrowserKeychainCache.shared.password(for: service) {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-      process.arguments = ["find-generic-password", "-s", service, "-w"]
-      let pipe = Pipe()
-      let errPipe = Pipe()
-      process.standardOutput = pipe
-      process.standardError = errPipe
-      do {
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        return output?.isEmpty == false ? output : nil
-      } catch {
-        return nil
+        return CalendarEvent(
+          id: id,
+          summary: summary,
+          startTime: dict["start_time"] as? String ?? "",
+          endTime: dict["end_time"] as? String ?? "",
+          attendees: dict["attendees"] as? [String] ?? [],
+          location: dict["location"] as? String ?? "",
+          description: dict["description"] as? String ?? "",
+          isAllDay: dict["is_all_day"] as? Bool ?? false
+        )
       }
     }
   }
 
-  nonisolated private static func saveMemory(for event: CalendarEvent) async -> Bool {
-    var parts = ["Calendar event — \(event.summary)"]
-    if !event.startTime.isEmpty {
-      parts.append("Starts: \(event.startTime)")
-    }
-    if !event.location.isEmpty {
-      parts.append("Location: \(event.location)")
-    }
-    if !event.attendees.isEmpty {
-      parts.append("With: \(event.attendees.prefix(5).joined(separator: ", "))")
-    }
-    let content = parts.joined(separator: " | ")
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["calendar", "onboarding", "event"],
-        source: "google_calendar",
-        headline: event.summary
-      )
-      return true
-    } catch {
-      log("CalendarReaderService: Failed to save raw event memory \(event.id): \(error)")
-      return false
-    }
-  }
 }

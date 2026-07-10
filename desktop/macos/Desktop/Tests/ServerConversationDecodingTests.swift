@@ -31,6 +31,40 @@ final class ServerConversationDecodingTests: XCTestCase {
         return try decoder.decode(ServerConversation.self, from: Data(json.utf8))
     }
 
+    private func decodeSearchResult(_ itemFields: String) throws -> ConversationSearchResult {
+        let json = """
+        {
+          "items": [
+            {
+              "id": "conversation-1",
+              "created_at": "2026-06-25T10:00:00+00:00",
+              "started_at": null,
+              "finished_at": null,
+              "structured": {
+                "title": "Search hit",
+                "overview": "Overview",
+                "emoji": "💬",
+                "category": "other",
+                "action_items": [],
+                "events": []
+              },
+              "status": "completed",
+              "discarded": false,
+              "starred": false,
+              "deferred": false
+              \(itemFields)
+            }
+          ],
+          "current_page": 1,
+          "total_pages": 1,
+          "per_page": 50
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(ConversationSearchResult.self, from: Data(json.utf8))
+    }
+
     func testOmittedTranscriptSegmentsAreMarkedOmitted() throws {
         let conversation = try decodeConversation("")
 
@@ -85,6 +119,24 @@ final class ServerConversationDecodingTests: XCTestCase {
         XCTAssertTrue(conversation.transcriptSegments.isEmpty)
         XCTAssertEqual(conversation.transcriptPresenceState, .includedEmpty)
         XCTAssertFalse(conversation.shouldFetchDetailForTranscript)
+    }
+
+    func testConversationSearchResultDecodesCanonicalListRowWithOmittedTranscript() throws {
+        let result = try decodeSearchResult("")
+
+        XCTAssertEqual(result.items.count, 1)
+        XCTAssertEqual(result.items[0].title, "Search hit")
+        XCTAssertFalse(result.items[0].transcriptSegmentsIncluded)
+        XCTAssertEqual(result.items[0].transcriptPresenceState, .omittedFromResponse)
+        XCTAssertTrue(result.items[0].shouldFetchDetailForTranscript)
+    }
+
+    func testConversationSearchResultRejectsRawPartialTypesenseTranscriptShape() throws {
+        XCTAssertThrowsError(
+            try decodeSearchResult(
+                ",\n\"transcript_segments\": [{\"person_id\": \"person-1\"}]"
+            )
+        )
     }
 
     func testLockStateParticipatesInConversationEquality() throws {

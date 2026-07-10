@@ -90,6 +90,9 @@ def _set_e2e_env():
     os.environ["BUCKET_APP_THUMBNAILS"] = "app-thumbnails"
     os.environ["BUCKET_CHAT_FILES"] = "chat-files"
     os.environ["BUCKET_DESKTOP_UPDATES"] = "desktop-updates"
+    os.environ["DEV_WEBHOOK_RETRY_DELAYS"] = "0,0,0"
+    os.environ["SYNC_DISPATCH_MODE"] = "inline"
+    os.environ["AUDIO_MERGE_DISPATCH_MODE"] = "inline"
     # Disable Stripe validation so startup doesn't fail.
     os.environ["STRIPE_SECRET_KEY"] = ""
     os.environ["ADMIN_KEY"] = ""
