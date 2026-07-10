@@ -163,6 +163,29 @@ async function main() {
       }
     }
 
+    // --- 5b. Thinking pulse is VISIBLE (and bounded) ---------------------------
+    // Review round 3: per-dot phase smearing made the "faster autonomous pulse"
+    // nearly static (±0.7%). Sample one pulse period finely and require a real
+    // but tasteful radius oscillation.
+    {
+      const PERIOD = (2 * Math.PI) / 4.6
+      const means = []
+      for (let i = 0; i < 16; i++) {
+        const img = await renderPixels(page, {
+          t: 40 + (i / 16) * PERIOD,
+          state: 'thinking',
+          stateTime: 3 + (i / 16) * PERIOD
+        })
+        checked++
+        means.push(contourWaviness(img).mean)
+      }
+      const lo = Math.min(...means)
+      const hi = Math.max(...means)
+      const swing = (hi - lo) / ((hi + lo) / 2)
+      if (swing < 0.025) failures.push(`thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — invisible (<2.5%)`)
+      if (swing > 0.12) failures.push(`thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — past tasteful (>12%)`)
+    }
+
     // --- 6. Agents transition never bridges rows -------------------------------
     // Component count must stay within 4..8 and no component may exceed ~1.4×
     // a settled pill's area (a cross-row bridge is ~2× — review round 2).

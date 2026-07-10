@@ -303,8 +303,11 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // Voice blob vs thinking blob — deliberately distinct characters:
   // speech = looser, slower pulse whose depth tracks the (bounded) voice;
   // thinking = tighter pool, faster autonomous pulse, no audio coupling.
-  const pulseFreq = thinking ? 4.8 : 2.3
-  const pulseAmp = thinking ? 0.05 : 0.04 + 0.1 * shaped * merge
+  // Thinking pulses IN PHASE (no per-dot offset) and harder — per-dot phase
+  // smearing made the radial sum nearly static (±0.7%, review round 3).
+  const pulseFreq = thinking ? 4.6 : 2.3
+  const pulseAmp = thinking ? 0.09 : 0.04 + 0.1 * shaped * merge
+  const pulsePhase = (i: number): number => (thinking ? 0 : i * 1.7)
 
   // Agents pose: dot PAIRS converge onto the same center and stretch into one
   // capsule per row — identical superimposed primitives, so each pill is a
@@ -343,7 +346,8 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
     // Dots grow modestly as they pool (a puddle, not a giant ball — review
     // finding), with a gentle per-dot pulse so the held blob oscillates
     // organically instead of sitting as a static disc.
-    let r = p.dotRadius * (1 + mi * 1.0) * (1 + pulseAmp * mi * Math.sin(t * pulseFreq + i * 1.7))
+    let r =
+      p.dotRadius * (1 + mi * 1.0) * (1 + pulseAmp * mi * Math.sin(t * pulseFreq + pulsePhase(i)))
     let halfLen = 0
     if (agents > 0 && rowOf) {
       const row = rowOf[i]
@@ -364,7 +368,7 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.15) / 0.3)))
   const poolBase = thinking ? 0.34 : 0.42 * (0.92 + 0.14 * shaped)
   const poolPulse = thinking
-    ? 0.06 * Math.sin(t * 4.4)
+    ? 0.13 * Math.sin(t * 4.6)
     : (0.07 + 0.05 * shaped) * Math.sin(t * 1.7)
   // Hard-zero below a visibility floor: smin INFLATES even a sub-pixel pool
   // into a faint center speck (review round 2), so the pool only exists once

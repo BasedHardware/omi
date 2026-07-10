@@ -18,6 +18,9 @@ export type ForegroundWindowInfo = {
   className: string | null
 }
 
+/** Screen rect in PHYSICAL pixels (Win32 coordinates, not DIPs). */
+export type ForegroundRect = { x: number; y: number; width: number; height: number }
+
 type Win32 = {
   getForegroundExePath: () => string | null
   // Foreground window's HWND (as a decimal string the C# helper can parse) plus
@@ -26,6 +29,13 @@ type Win32 = {
   // Foreground window's title text (GetWindowTextW). Lets Rewind detect
   // login/private-browsing screens without the C# helper running.
   getForegroundWindowTitle: () => string | null
+  // Foreground window's screen rect (physical px) + class + exe, read in one
+  // GetForegroundWindow() call — the bar's fullscreen-suppression signal.
+  getForegroundWindowRect: () => {
+    rect: ForegroundRect | null
+    className: string | null
+    exePath: string | null
+  }
   // Fire `cb` whenever the foreground window changes. Returns an unsubscribe.
   subscribeForegroundChange: (cb: () => void) => () => void
 }
@@ -57,6 +67,14 @@ function load(): Win32 | null {
     const GetWindowTextW = user32.func(
       'int32 GetWindowTextW(void* hWnd, _Out_ uint16* lpString, int32 nMaxCount)'
     )
+    const RECT = koffi.struct('OMI_RECT', {
+      left: 'int32',
+      top: 'int32',
+      right: 'int32',
+      bottom: 'int32'
+    })
+    const GetWindowRect = user32.func('bool GetWindowRect(void* hWnd, _Out_ OMI_RECT* lpRect)')
+    void RECT
 
     // Read an HWND's title text. Returns null on any edge. Titles can be long
     // (browser tabs include the page name), so allow 512 UTF-16 chars.
@@ -176,6 +194,25 @@ function load(): Win32 | null {
         const hwnd = GetForegroundWindow()
         if (!hwnd) return null
         return titleFromHwnd(hwnd)
+      },
+      getForegroundWindowRect() {
+        const hwnd = GetForegroundWindow()
+        if (!hwnd) return { rect: null, className: null, exePath: null }
+        let rect: ForegroundRect | null = null
+        try {
+          const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+          if (GetWindowRect(hwnd, out) && typeof out.left === 'number') {
+            rect = {
+              x: out.left,
+              y: out.top!,
+              width: out.right! - out.left,
+              height: out.bottom! - out.top!
+            }
+          }
+        } catch {
+          rect = null
+        }
+        return { rect, className: classNameFromHwnd(hwnd), exePath: exePathFromHwnd(hwnd) }
       }
     }
     return cached
@@ -220,6 +257,22 @@ export function getForegroundWindowTitle(): string | null {
   } catch (e) {
     console.warn('[usage] getForegroundWindowTitle failed:', e)
     return null
+  }
+}
+
+// Returns the current foreground window's rect (physical px) + class + exe, or
+// nulls when unavailable. Never throws.
+export function getForegroundWindowRect(): {
+  rect: ForegroundRect | null
+  className: string | null
+  exePath: string | null
+} {
+  if (process.platform !== 'win32') return { rect: null, className: null, exePath: null }
+  try {
+    return load()?.getForegroundWindowRect() ?? { rect: null, className: null, exePath: null }
+  } catch (e) {
+    console.warn('[usage] getForegroundWindowRect failed:', e)
+    return { rect: null, className: null, exePath: null }
   }
 }
 
