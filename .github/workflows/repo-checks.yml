@@ -109,6 +109,9 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Check backend prod promotion policy
+        run: python3 .github/scripts/check-backend-prod-promotion-policy.py
+
       - name: Check desktop release terminology
         run: python3 .github/scripts/check-desktop-release-terminology.py
 
@@ -117,6 +120,12 @@ jobs:
 
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
+
+      - name: Test python backend blessing gate
+        run: python3 .github/scripts/test_check_python_backend_blessing.py
+
+      - name: Test release blessing helpers
+        run: python3 .github/scripts/test_release_blessing.py
 
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
