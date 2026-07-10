@@ -85,12 +85,6 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
 
 
 def _render_secret_names(secret_entries: ConfigDict) -> str:
-    # Comma-separated list of names bound to Secret Manager for this target.
-    # Consumers pass this to `--remove-env-vars=` so any stale plain-literal env
-    # var with the same name (from an earlier deploy) is stripped before the
-    # secret binding is applied — Cloud Run rejects updates when a name is bound
-    # as both env-var and secret. `--remove-env-vars` on a name that isn't set
-    # is a no-op, so this is safe even on a clean target.
     return ','.join(secret_entries.keys())
 
 
