@@ -9,6 +9,7 @@ class ViewModelContainer: ObservableObject {
 
     // ViewModels for each page
     let dashboardViewModel = DashboardViewModel()
+    let homeStatusStore = HomeStatusStore()
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
@@ -53,7 +54,7 @@ class ViewModelContainer: ObservableObject {
 
     /// Load critical startup data, then stage warmup work after the first usable window.
     func loadAllData() async {
-        let currentUserId = UserDefaults.standard.string(forKey: "auth_userId")
+        let currentUserId = UserDefaults.standard.string(forKey: .authUserId)
         if loadedUserId != nil, loadedUserId != currentUserId {
             resetStartupState()
         }
@@ -134,6 +135,7 @@ class ViewModelContainer: ObservableObject {
         warmupCoordinator.reset()
         tasksStore.resetSessionState()
         dashboardViewModel.resetSessionState()
+        homeStatusStore.resetSessionState()
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
         memoryGraphViewModel.resetSessionState()
@@ -150,7 +152,7 @@ class ViewModelContainer: ObservableObject {
         log("ViewModelContainer: Retrying database initialization...")
 
         // Re-configure userId in case it changed (e.g. sign-in completed since first attempt)
-        let userId = UserDefaults.standard.string(forKey: "auth_userId")
+        let userId = UserDefaults.standard.string(forKey: .authUserId)
         await RewindDatabase.shared.configure(userId: userId)
 
         do {

@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStatusStore.swift
 preconditions:
   - automation_bridge_ready
 
@@ -61,6 +62,14 @@ steps:
       state.selectedTabIndex: 9
 
   - id: S7
+    name: Return to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S8
     name: Logs clean
     log.expect:
       absent:
