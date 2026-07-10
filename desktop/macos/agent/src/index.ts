@@ -288,14 +288,15 @@ function startOmiToolsRelay(): Promise<string> {
               }
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
+                  const controlOwnerId = activeControlToolOwnerId({
+                    requestKey: controlRequestKey({ requestId, clientId }),
+                    ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                  });
                   const controlToolContext = agentControlToolContext
                     ? {
                         ...agentControlToolContext,
-                        getOwnerId: () =>
-                          activeControlToolOwnerId({
-                            requestKey: controlRequestKey({ requestId, clientId }),
-                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                          }),
+                        canSpawnAgents: !isLeafWorkerSession(resolvedCorrelation.sessionId, controlOwnerId),
+                        getOwnerId: () => controlOwnerId,
                       }
                     : undefined;
                   const result = controlToolContext
@@ -701,6 +702,16 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   const defaultFromInput =
     typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
+}
+
+function isLeafWorkerSession(sessionId: string | undefined, ownerId: string | undefined): boolean {
+  if (!sessionId || !ownerId || !agentControlToolContext) return false;
+  const session = agentControlToolContext.kernel
+    .listSessions({ ownerId, limit: 200 })
+    .find((candidate) => candidate.session.sessionId === sessionId)?.session;
+  return session?.surfaceKind === "delegated_agent"
+    || session?.surfaceKind === "background_agent"
+    || (session?.surfaceKind === "floating_bar" && session.externalRefKind === "pill");
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {

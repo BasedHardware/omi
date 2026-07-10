@@ -16,6 +16,8 @@ import {
   getVoiceSeedContext,
   getVoiceSeedSnapshot,
   isExplicitAgentControlToolTurn,
+  isLeafWorkerSurface,
+  leafWorkerExecutionBoundary,
   shouldInjectCoordinatorRoute,
   shouldInjectCompletedAgentDelta,
   turnSourceAttribution,
@@ -39,6 +41,18 @@ describe("turn-context", () => {
       rmSync(cleanupDir, { recursive: true, force: true });
       cleanupDir = undefined;
     }
+  });
+
+  it("gives floating-pill workers a leaf-only execution boundary", () => {
+    const surfaceRef = { surfaceKind: "floating_bar", externalRefKind: "pill", externalRefId: "pill-1" };
+    expect(isLeafWorkerSurface(surfaceRef)).toBe(true);
+    expect(leafWorkerExecutionBoundary(surfaceRef)).toContain("cannot create more agents");
+  });
+
+  it("keeps main-chat coordinators able to create background work", () => {
+    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "chat-1" };
+    expect(isLeafWorkerSurface(surfaceRef)).toBe(false);
+    expect(leafWorkerExecutionBoundary(surfaceRef)).toBeNull();
   });
 
   it("does not inject undelivered transcript delta when native binding has seen all turns", () => {

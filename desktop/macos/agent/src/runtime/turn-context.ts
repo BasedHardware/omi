@@ -68,6 +68,19 @@ export interface AssembleTurnContextInput {
   nowMs?: number;
 }
 
+export function isLeafWorkerSurface(surfaceRef: SurfaceRef): boolean {
+  return surfaceRef.surfaceKind === "delegated_agent"
+    || surfaceRef.surfaceKind === "background_agent"
+    || (surfaceRef.surfaceKind === "floating_bar" && surfaceRef.externalRefKind === "pill");
+}
+
+export function leafWorkerExecutionBoundary(surfaceRef: SurfaceRef): string | null {
+  if (!isLeafWorkerSurface(surfaceRef)) return null;
+  return `# Execution Boundary
+
+You are a leaf background worker. Complete the assigned objective yourself and report the result to your parent. Do not call spawn_agent, spawn_background_agent, or run_agent_and_wait; background agents cannot create more agents.`;
+}
+
 export interface AssembledTurnContext {
   prompt: string;
   promptBlocks?: PromptBlock[];
@@ -179,6 +192,11 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
         sections.push(transcript);
       }
     }
+  }
+
+  const leafWorkerBoundary = leafWorkerExecutionBoundary(input.surfaceRef);
+  if (leafWorkerBoundary) {
+    sections.push(leafWorkerBoundary);
   }
 
   sections.push(`# User Message\n\n${input.userText}`);

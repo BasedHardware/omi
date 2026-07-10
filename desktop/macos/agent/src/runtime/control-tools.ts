@@ -328,6 +328,8 @@ export interface AgentControlToolContext {
    * must inherit this route rather than silently selecting a local provider.
    */
   defaultAdapterId?: string;
+  /** Leaf/background workers may complete assigned work, but cannot fan out more agents. */
+  canSpawnAgents?: boolean;
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
   recoverRunInput?: (
@@ -359,6 +361,12 @@ function assertAdapterAllowedForControlRun(context: AgentControlToolContext, ada
   // desktop surface explicitly selected the User Claude harness.
   if (adapterId === "acp" && defaultControlAdapterId(context) !== "acp") {
     throw new Error("Local Claude is available only when the User Claude mode is selected.");
+  }
+}
+
+function assertAgentSpawningAllowed(context: AgentControlToolContext): void {
+  if (context.canSpawnAgents === false) {
+    throw new Error("Background agents are leaf workers and cannot start additional agents.");
   }
 }
 
@@ -662,6 +670,7 @@ export async function handleAgentControlToolCall(
         });
       }
       case "spawn_background_agent": {
+        assertAgentSpawningAllowed(context);
         const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -693,6 +702,7 @@ export async function handleAgentControlToolCall(
         });
       }
       case "spawn_agent": {
+        assertAgentSpawningAllowed(context);
         const parsed = agentControlToolSchemas.spawn_agent.parse(input);
         if (parsed.parentRunId) {
           assertCanonicalRunId(parsed.parentRunId, "parentRunId");
@@ -780,6 +790,7 @@ export async function handleAgentControlToolCall(
         });
       }
       case "run_agent_and_wait": {
+        assertAgentSpawningAllowed(context);
         const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
         assertCanonicalRunId(parsed.parentRunId, "parentRunId");
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);

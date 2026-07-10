@@ -1565,6 +1565,33 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("prevents leaf background workers from spawning more agents", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), defaultAdapterId: "pi-mono", canSpawnAgents: false },
+        "spawn_agent",
+        {
+          objective: "fan out more work",
+          visible: true,
+          requestId: "leaf-worker-spawn-1",
+          clientId: "spawn-client",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Background agents are leaf workers and cannot start additional agents.",
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
   it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
