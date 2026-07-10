@@ -1,5 +1,6 @@
 {
     "@@locale": "zh",
+    "sessionExpiredSignInAgain": "会话已过期，请重新登录。",
     "appTitle": "Omi",
     "conversationTab": "对话",
     "transcriptTab": "转录",
@@ -3076,7 +3077,7 @@
     "syncCustomSttWarningMessage": "您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。",
     "transcribeLaterTitle": "稍后转写",
     "transcribeLaterDescription": "先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。",
-    "transcribeLaterNote": "目前仅支持 Omi 设备。在你主动上传之前，音频会一直保留在手机上。",
+    "transcribeLaterNote": "目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。",
     "transcribeLaterStorageFull": "手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。",
     "unmute": "取消静音",
     "newRecording": "新建录音",
@@ -3086,6 +3087,12 @@
     "captureModeLiveDescription": "在你说话时实时转写。",
     "captureModeLaterDescription": "立即保存音频，随时转写。",
     "backgroundModeUnavailable": "后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。",
+    "memoryThisDevice": "此设备",
+    "memoryThisIphone": "这台 iPhone",
+    "memoryThisPhone": "这部手机",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "如何使用 Omi",
     "deviceOnboardingTranscriptionTitle": "对着 Omi 说话",
     "deviceOnboardingTranscriptionSubtitle": "说几句话，看它们实时显示出来",
@@ -3119,5 +3126,44 @@
     "deviceOnboardingIntroSubtitle": "快速、上手地体验 Omi 的全部功能。",
     "deviceOnboardingIntroDuration": "大约 1 分钟",
     "jumpToLatestMessage": "跳转到最新消息",
-    "latest": "最新"
+    "latest": "最新",
+    "flashFirmware": "刷写固件",
+    "pendantRecordingTitle": "吊坠录音中",
+    "pendantRecordingNote": "你的吊坠会自行录音。应用打开时，录音会同步到手机。",
+    "pendantSyncingRecordings": "正在从吊坠同步录音…",
+    "pendantMinutesStored": "~{minutes} 分钟已存储",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "吊坠存储空间即将用尽——请保持应用打开以同步。",
+    "connectRayBanMeta": "连接 Ray-Ban Meta",
+    "raybanMetaSetupDescription": "将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。",
+    "raybanMetaOpenMetaAI": "通过 Meta AI 连接",
+    "raybanMetaWaitingForMetaAI": "在 Meta AI 应用中完成连接，然后返回此处。",
+    "raybanMetaCheckAgain": "再次检查",
+    "raybanMetaAllowCamera": "允许在眼镜上使用摄像头",
+    "raybanMetaCameraExplanation": "Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。",
+    "raybanMetaSkipForNow": "暂时跳过",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta 纯音频模式",
+    "raybanMetaAudioOnlyExplanation": "此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。",
+    "raybanMetaMusicPauseNote": "使用眼镜麦克风时，您手机上的音乐将暂停。",
+    "raybanMetaContinue": "继续",
+    "raybanMetaCapturePhoto": "拍摄照片",
+    "raybanMetaPhotoRequested": "已请求拍照 — 照片将显示在您的对话中。",
+    "raybanMetaMicrophoneReady": "麦克风已就绪",
+    "raybanMetaImageCaptureReady": "图像采集已就绪",
+    "raybanMetaImageCaptureUnavailable": "在纯音频模式下不可用",
+    "raybanMetaCamera": "摄像头",
+    "errorConnectingRayBanMeta": "连接 Ray-Ban Meta 时出错：{error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

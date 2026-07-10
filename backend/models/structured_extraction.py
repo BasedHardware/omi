@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,11 +18,31 @@ class ExtractedActionItem(BaseModel):
 class ActionItemsExtraction(BaseModel):
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default=[],
+        default_factory=list,
     )
 
     def to_action_items(self) -> List[ActionItem]:
         return [item.to_action_item() for item in self.action_items]
+
+
+class ConversationStructureExtraction(BaseModel):
+    title: str = Field(description="A title/name for this conversation", default='')
+    overview: str = Field(
+        description="A brief overview of the conversation, highlighting the key details from it",
+        default='',
+    )
+    emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
+    category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
+
+    @field_validator('category', mode='before')
+    @classmethod
+    def set_category_default_on_error(cls, v: Any) -> CategoryEnum:
+        if isinstance(v, CategoryEnum):
+            return v
+        try:
+            return CategoryEnum(v)
+        except ValueError:
+            return CategoryEnum.other
 
 
 class ExtractedEvent(BaseModel):
@@ -58,16 +78,16 @@ class StructuredExtraction(BaseModel):
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default=[],
+        default_factory=list,
     )
     events: List[ExtractedEvent] = Field(
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
-        default=[],
+        default_factory=list,
     )
 
     @field_validator('category', mode='before')
     @classmethod
-    def set_category_default_on_error(cls, v: any) -> 'CategoryEnum':
+    def set_category_default_on_error(cls, v: Any) -> CategoryEnum:
         if isinstance(v, CategoryEnum):
             return v
         try:

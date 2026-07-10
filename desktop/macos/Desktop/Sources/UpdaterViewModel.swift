@@ -36,6 +36,321 @@ enum UpdateChannel: String, CaseIterable {
 
 private let kUpdateChannelKey = "update_channel"
 
+enum UpdateFailureReason: String {
+  case appcastRetrieval = "appcast_retrieval"
+  case download = "download"
+  case signature = "signature"
+  case readOnlyLocation = "read_only_location"
+  case downloadsLocation = "downloads_location"
+  case temporaryLocation = "temporary_location"
+  case installerLaunch = "installer_launch"
+  case network = "network"
+  case noUpdate = "no_update"
+  case unknown = "unknown"
+}
+
+struct UpdateFailureDiagnostics: Equatable {
+  let reason: UpdateFailureReason
+  let message: String
+  let domain: String
+  let code: Int
+  let underlyingDomain: String?
+  let underlyingCode: Int?
+  let errorChainDomains: [String]
+  let errorChainCodes: [Int]
+  let nsurlErrorCode: Int?
+  let failingURLHost: String?
+  let failingURLPath: String?
+  let updateChannel: String
+  let launchLocationBucket: String
+  let sourceAppVersion: String
+  let sourceAppBuild: String
+  let appcastURLHost: String?
+  let appcastURLPath: String?
+
+  var isRecoverableLaunchLocation: Bool {
+    switch reason {
+    case .readOnlyLocation, .downloadsLocation, .temporaryLocation:
+      return true
+    default:
+      return false
+    }
+  }
+
+  var userMessage: String {
+    if isRecoverableLaunchLocation {
+      return
+        "Omi cannot update from its current location. Move it to Applications, reopen it, then check again."
+    }
+
+    switch reason {
+    case .appcastRetrieval:
+      return
+        "Omi could not retrieve update information. You can try again or download the latest version manually."
+    case .download:
+      return
+        "Omi found an update but could not download it. You can try again or download the latest version manually."
+    case .signature:
+      return "Omi could not verify the downloaded update. Download the latest version manually."
+    case .network:
+      return
+        "Omi could not reach the update server. Check your connection or download the latest version manually."
+    case .installerLaunch:
+      return
+        "Omi downloaded an update but could not start the installer. Try again or download the latest version manually."
+    case .noUpdate:
+      return "Omi is up to date."
+    case .unknown:
+      return
+        "Omi could not complete the update check. You can try again or download the latest version manually."
+    case .readOnlyLocation, .downloadsLocation, .temporaryLocation:
+      return
+        "Omi cannot update from its current location. Move it to Applications, reopen it, then check again."
+    }
+  }
+
+  var analyticsProperties: [String: Any] {
+    let telemetryMessage = message.isEmpty ? "\(domain) \(code)" : message
+    var properties: [String: Any] = [
+      // Emit the human-readable message under "error" so the daily report's
+      // error_or_message column is populated (previously blank on Update Check Failed).
+      "error": telemetryMessage,
+      "phase": reason.rawValue,
+      "update_failure_message": telemetryMessage,
+      "update_failure_phase": reason.rawValue,
+      "update_failure_reason": reason.rawValue,
+      "update_failure_domain": domain,
+      "update_failure_code": code,
+      "update_channel": updateChannel,
+      "launch_location_bucket": launchLocationBucket,
+      "source_app_version": sourceAppVersion,
+      "source_app_build": sourceAppBuild,
+      "error_chain_domains": errorChainDomains,
+      "error_chain_codes": errorChainCodes,
+    ]
+
+    if let underlyingDomain {
+      properties["underlying_domain"] = underlyingDomain
+    }
+    if let underlyingCode {
+      properties["underlying_code"] = underlyingCode
+    }
+    if let nsurlErrorCode {
+      properties["nsurl_error_code"] = nsurlErrorCode
+    }
+    if let failingURLHost {
+      properties["failing_url_host"] = failingURLHost
+    }
+    if let failingURLPath {
+      properties["failing_url_path"] = failingURLPath
+    }
+    if let appcastURLHost {
+      properties["appcast_url_host"] = appcastURLHost
+    }
+    if let appcastURLPath {
+      properties["appcast_url_path"] = appcastURLPath
+    }
+
+    return properties
+  }
+
+  static func classify(
+    error: NSError,
+    updateChannel: String,
+    bundlePath: String = Bundle.main.bundlePath,
+    sourceAppVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+      ?? "unknown",
+    sourceAppBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+    appcastURL: URL? = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL")
+      .flatMap({ ($0 as? String).flatMap(URL.init(string:)) })
+  ) -> UpdateFailureDiagnostics {
+    let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+    let chain = errorChain(from: error)
+    let nsurlError = chain.first { $0.domain == NSURLErrorDomain }
+    let failingURL = failingURL(in: chain)
+    let message = error.localizedDescription
+    let bucket = launchLocationBucket(for: bundlePath)
+
+    return UpdateFailureDiagnostics(
+      reason: reason(
+        for: error,
+        errorChain: chain,
+        message: message.lowercased(),
+        bucket: bucket
+      ),
+      message: message,
+      domain: error.domain,
+      code: error.code,
+      underlyingDomain: underlying?.domain,
+      underlyingCode: underlying?.code,
+      errorChainDomains: chain.map(\.domain),
+      errorChainCodes: chain.map(\.code),
+      nsurlErrorCode: nsurlError?.code,
+      failingURLHost: failingURL?.host,
+      failingURLPath: failingURL?.path,
+      updateChannel: updateChannel,
+      launchLocationBucket: bucket,
+      sourceAppVersion: sourceAppVersion,
+      sourceAppBuild: sourceAppBuild,
+      appcastURLHost: appcastURL?.host,
+      appcastURLPath: appcastURL?.path
+    )
+  }
+
+  static func launchLocationBucket(for bundlePath: String) -> String {
+    let path = bundlePath.lowercased()
+
+    if path.hasPrefix("/volumes/") {
+      return "dmg_mounted"
+    }
+    if path.contains("/downloads/") {
+      return "downloads_folder"
+    }
+    if path.hasPrefix("/private/var/folders/") || path.hasPrefix("/tmp/")
+      || path.hasPrefix("/private/tmp/")
+    {
+      return "temporary_location"
+    }
+    if path.hasPrefix("/applications/") {
+      return "applications_system"
+    }
+    if path.contains("/applications/") {
+      return "applications_user"
+    }
+
+    return "other"
+  }
+
+  private static func reason(
+    for error: NSError,
+    errorChain: [NSError],
+    message: String,
+    bucket: String
+  ) -> UpdateFailureReason {
+    if error.domain == SUSparkleErrorDomain && error.code == 1001 {
+      return .noUpdate
+    }
+    if message.contains("read-only") {
+      return .readOnlyLocation
+    }
+    if message.contains("location it was downloaded to") || bucket == "downloads_folder" {
+      return .downloadsLocation
+    }
+    if message.contains("temporary location") || bucket == "temporary_location"
+      || bucket == "dmg_mounted"
+    {
+      return .temporaryLocation
+    }
+    if error.domain == SUSparkleErrorDomain && error.code == 4005 {
+      return .installerLaunch
+    }
+    if errorChain.contains(where: { $0.domain == NSURLErrorDomain }) {
+      return .network
+    }
+    if message.contains("retrieving update information") || message.contains("appcast") {
+      return .appcastRetrieval
+    }
+    if message.contains("downloading the update") || message.contains("download") {
+      return .download
+    }
+    if message.contains("signature") || message.contains("verify") || message.contains("ed25519") {
+      return .signature
+    }
+
+    return .unknown
+  }
+
+  private static func errorChain(from error: NSError) -> [NSError] {
+    var chain: [NSError] = []
+    var current: NSError? = error
+    var seen = Set<ObjectIdentifier>()
+
+    while let error = current {
+      let identifier = ObjectIdentifier(error)
+      guard !seen.contains(identifier) else { break }
+      seen.insert(identifier)
+      chain.append(error)
+      current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+
+    return chain
+  }
+
+  private static func failingURL(in errorChain: [NSError]) -> URL? {
+    for error in errorChain {
+      if let url = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL {
+        return url
+      }
+      if let urlString = error.userInfo[NSURLErrorFailingURLStringErrorKey] as? String,
+        let url = URL(string: urlString)
+      {
+        return url
+      }
+    }
+    return nil
+  }
+}
+
+struct UpdateAnalyticsContext {
+  let sourceAppVersion: String
+  let sourceAppBuild: String
+  let updateChannel: String
+  let appcastURLHost: String?
+  let appcastURLPath: String?
+
+  var properties: [String: Any] {
+    var properties: [String: Any] = [
+      "source_app_version": sourceAppVersion,
+      "source_app_build": sourceAppBuild,
+      "update_channel": updateChannel,
+    ]
+    if let appcastURLHost {
+      properties["appcast_url_host"] = appcastURLHost
+    }
+    if let appcastURLPath {
+      properties["appcast_url_path"] = appcastURLPath
+    }
+    return properties
+  }
+
+  static func current(updateChannel: String) -> UpdateAnalyticsContext {
+    let appcastURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL")
+      .flatMap { ($0 as? String).flatMap(URL.init(string:)) }
+
+    return UpdateAnalyticsContext(
+      sourceAppVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown",
+      sourceAppBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown",
+      updateChannel: updateChannel,
+      appcastURLHost: appcastURL?.host,
+      appcastURLPath: appcastURL?.path
+    )
+  }
+}
+
+struct UpdateItemAnalytics {
+  let targetVersion: String
+  let targetBuild: String
+  let itemChannel: String
+
+  var properties: [String: Any] {
+    [
+      "target_version": targetVersion,
+      "target_build": targetBuild,
+      "item_channel": itemChannel,
+    ]
+  }
+
+  static func from(item: SUAppcastItem) -> UpdateItemAnalytics {
+    UpdateItemAnalytics(
+      targetVersion: item.displayVersionString,
+      targetBuild: item.versionString,
+      itemChannel: (item.channel?.isEmpty == false) ? item.channel! : "stable"
+    )
+  }
+}
+
 /// Delegate to track Sparkle update events for analytics
 final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
@@ -71,17 +386,27 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     Task { @MainActor in
       self.viewModel?.latestStableBuildNumber = bestStableBuild
       self.viewModel?.latestStableVersionString = bestStableVersion
+      self.viewModel?.lastUpdateFailure = nil
     }
   }
 
   /// Called when Sparkle finds a valid update
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
     let version = item.displayVersionString
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Found update v\(version)")
     Task { @MainActor in
-      AnalyticsManager.shared.updateAvailable(version: version)
+      AnalyticsManager.shared.updateAvailable(
+        version: version,
+        context: context,
+        item: itemAnalytics
+      )
       self.viewModel?.updateAvailable = true
       self.viewModel?.availableVersion = version
+      self.viewModel?.lastUpdateFailure = nil
     }
   }
 
@@ -90,6 +415,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     logSync("Sparkle: No update available")
     Task { @MainActor in
       self.viewModel?.updateAvailable = false
+      self.viewModel?.lastUpdateFailure = nil
     }
   }
 
@@ -99,11 +425,15 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
     let message = error.localizedDescription
     let nsError = error as NSError
-    let isUpToDate =
-      nsError.domain == SUSparkleErrorDomain
-      && nsError.code == 1001 /* SUNoUpdateError */
-    if isUpToDate {
+    let diagnostics = UpdateFailureDiagnostics.classify(
+      error: nsError,
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    if diagnostics.reason == .noUpdate {
       logSync("Sparkle: Already up to date")
+      Task { @MainActor in
+        self.viewModel?.lastUpdateFailure = nil
+      }
     } else {
       logSync(
         "Sparkle: Update check failed - \(message) [domain=\(nsError.domain) code=\(nsError.code)]")
@@ -121,6 +451,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       let isInstallationError = nsError.domain == SUSparkleErrorDomain && nsError.code == 4005
       if isInstallationError {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
+      }
+
+      Task { @MainActor in
+        AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        self.viewModel?.lastUpdateFailure = diagnostics
       }
     }
   }
@@ -181,14 +516,25 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Called when an update will be installed (app may terminate immediately after)
   func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
     let version = item.displayVersionString
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Installing update v\(version)")
     let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
-    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
+    let attempt = UpdateRelaunchWindowPolicy.markPendingRelaunch(
+      restoreMainWindow: restoreMainWindow,
+      sourceVersion: context.sourceAppVersion,
+      sourceBuild: context.sourceAppBuild,
+      targetVersion: itemAnalytics.targetVersion,
+      targetBuild: itemAnalytics.targetBuild,
+      channel: context.updateChannel
+    )
     logSync(
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
     Task { @MainActor in
-      AnalyticsManager.shared.updateInstalled(version: version)
+      AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
       self.viewModel?.updateAvailable = false
     }
   }
@@ -377,6 +723,9 @@ final class UpdaterViewModel: ObservableObject {
 
   /// Version string of the available update
   @Published var availableVersion: String = ""
+
+  /// Last non-successful Sparkle update failure, if one needs user recovery.
+  @Published var lastUpdateFailure: UpdateFailureDiagnostics?
 
   /// Latest stable build number from the appcast (for downgrade detection)
   @Published var latestStableBuildNumber: Int?

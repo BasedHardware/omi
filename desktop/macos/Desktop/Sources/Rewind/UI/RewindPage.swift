@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -11,6 +12,8 @@ struct RewindPage: View {
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
     @State private var isLoadingFrame = false
+    @State private var frameLoadTask: Task<Void, Never>?
+    @State private var frameLoadRequestID = UUID()
     @State private var showDatePicker = false
 
     @State private var searchViewMode: SearchViewMode? = nil
@@ -173,7 +176,7 @@ struct RewindPage: View {
                 // First load or current screenshot deleted — start at newest (last index, ASC order)
                 currentIndex = newScreenshots.count - 1
                 selectedGroupIndex = 0
-                Task { await loadCurrentFrame() }
+                scheduleLoadCurrentFrame()
             }
         }
         .onChange(of: viewModel.activeSearchQuery) { oldQuery, newQuery in
@@ -186,6 +189,11 @@ struct RewindPage: View {
             if newQuery == nil {
                 searchViewMode = nil
                 selectedGroupIndex = 0
+            }
+            invalidatePendingFrameLoad()
+            if searchViewMode != .results && !activeScreenshots.isEmpty {
+                currentIndex = min(currentIndex, activeScreenshots.count - 1)
+                scheduleLoadCurrentFrame()
             }
         }
         // Global keyboard handlers
@@ -347,11 +355,7 @@ struct RewindPage: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Open Settings FIRST, then request permissions after a delay
-            ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                ScreenCaptureService.requestAllScreenCapturePermissions()
-            }
+            ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             return
         }
 
@@ -436,7 +440,7 @@ struct RewindPage: View {
                         searchViewMode = .results
                         if !viewModel.screenshots.isEmpty {
                             currentIndex = 0
-                            Task { await loadCurrentFrame() }
+                            scheduleLoadCurrentFrame()
                         }
                     } label: {
                         Image(systemName: "list.bullet")
@@ -452,9 +456,9 @@ struct RewindPage: View {
                     Button {
                         if searchViewMode != .timeline && !viewModel.screenshots.isEmpty {
                             currentIndex = 0
-                            Task { await loadCurrentFrame() }
                         }
                         searchViewMode = .timeline
+                        scheduleLoadCurrentFrame()
                     } label: {
                         Image(systemName: "timeline.selection")
                             .scaledFont(size: 11)
@@ -530,7 +534,7 @@ struct RewindPage: View {
                                 selectedGroupIndex = groupIndex
                                 currentIndex = 0
                                 searchViewMode = .timeline
-                                Task { await loadCurrentFrame() }
+                                scheduleLoadCurrentFrame()
                             }
                         )
                         .id(groupIndex)
@@ -539,6 +543,11 @@ struct RewindPage: View {
                 .padding(.vertical, 8)
             }
             .onChange(of: selectedGroupIndex) { _, newIndex in
+                invalidatePendingFrameLoad()
+                if searchViewMode == .timeline && !activeScreenshots.isEmpty {
+                    currentIndex = min(currentIndex, activeScreenshots.count - 1)
+                    scheduleLoadCurrentFrame()
+                }
                 withAnimation {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
@@ -559,6 +568,25 @@ struct RewindPage: View {
             return currentGroupScreenshots
         }
         return viewModel.screenshots
+    }
+
+    private var activeFrameSourceToken: String {
+        let screenshots = activeScreenshots
+        let currentScreenshotID: String
+        if currentIndex < screenshots.count {
+            let screenshot = screenshots[currentIndex]
+            currentScreenshotID = screenshot.id.map(String.init)
+                ?? "\(screenshot.timestamp.timeIntervalSince1970):\(screenshot.videoChunkPath ?? screenshot.imagePath ?? "")"
+        } else {
+            currentScreenshotID = "none"
+        }
+        return [
+            searchViewMode.map(String.init(describing:)) ?? "timeline",
+            viewModel.activeSearchQuery ?? "",
+            String(selectedGroupIndex),
+            String(screenshots.count),
+            currentScreenshotID,
+        ].joined(separator: "|")
     }
 
     // MARK: - Timeline with Search
@@ -789,8 +817,8 @@ struct RewindPage: View {
                     }
                 }
 
-                // Scroll hint
-                Text("scroll to navigate")
+                // Navigation hint
+                Text("scroll or drag to navigate")
                     .scaledFont(size: 9)
                     .foregroundColor(.white.opacity(0.3))
             }
@@ -817,22 +845,50 @@ struct RewindPage: View {
 
     // MARK: - Playback
 
-    private func loadCurrentFrame() async {
+    private func scheduleLoadCurrentFrame() {
+        frameLoadTask?.cancel()
+        frameLoadRequestID = UUID()
+        let requestID = frameLoadRequestID
+        let requestedIndex = currentIndex
+        let sourceToken = activeFrameSourceToken
+        frameLoadTask = Task {
+            await loadCurrentFrame(at: requestedIndex, requestID: requestID, sourceToken: sourceToken)
+        }
+    }
+
+    private func invalidatePendingFrameLoad() {
+        frameLoadTask?.cancel()
+        frameLoadTask = nil
+        frameLoadRequestID = UUID()
+        isLoadingFrame = false
+    }
+
+    private func isCurrentFrameLoad(index: Int, requestID: UUID, sourceToken: String) -> Bool {
+        !Task.isCancelled
+            && frameLoadRequestID == requestID
+            && currentIndex == index
+            && activeFrameSourceToken == sourceToken
+    }
+
+    private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID, sourceToken: String) async {
         let screenshots = activeScreenshots
-        guard currentIndex < screenshots.count else { return }
+        guard requestedIndex < screenshots.count else { return }
 
         isLoadingFrame = true
 
-        // Try to load the current frame
-        if let image = await tryLoadFrame(at: currentIndex) {
+        // Try to load the requested frame. Scrubbing can launch several loads;
+        // only the newest request is allowed to update visible state.
+        if let image = await tryLoadFrame(at: requestedIndex) {
+            guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID, sourceToken: sourceToken) else { return }
             currentImage = image
-            viewModel.selectScreenshot(screenshots[currentIndex])
+            viewModel.selectScreenshot(screenshots[requestedIndex])
             isLoadingFrame = false
             return
         }
 
         // Frame failed to load (likely in an unfinalized video chunk).
         // Do NOT move currentIndex — keep the user's position and show the last valid image.
+        guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID, sourceToken: sourceToken) else { return }
         isLoadingFrame = false
     }
 
@@ -886,7 +942,7 @@ struct RewindPage: View {
         guard newIndex != currentIndex else { return }
 
         currentIndex = newIndex
-        Task { await loadCurrentFrame() }
+        scheduleLoadCurrentFrame()
     }
 
     private func nextFrame() {
@@ -968,11 +1024,7 @@ struct RewindPage: View {
                     // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
                     screenAnalysisEnabled = true
                     AssistantSettings.shared.screenAnalysisEnabled = true
-                    // Open Settings FIRST, then request permissions after a delay
-                    ScreenCaptureService.openScreenRecordingPreferences()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                    }
+                    ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 } label: {
                     Text("Grant Permission")
                         .scaledFont(size: 13, weight: .semibold)
@@ -1831,7 +1883,9 @@ extension View {
 }
 
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindPage()
         .frame(width: 1000, height: 700)
 }
+#endif

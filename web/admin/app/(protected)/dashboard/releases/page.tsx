@@ -12,6 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  desktopReleaseLifecycleLabel,
+  type DesktopReleaseChannel,
+  type DesktopReleaseLifecycle,
+} from "@/lib/desktop-release-lifecycle";
 
 interface ReleaseRow {
   version: string;
@@ -25,6 +30,15 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
+  qualified_beta: boolean;
+  qualified_at: string | null;
+  qualification_evidence_url: string | null;
+  qualification_source: "canonical" | "legacy";
+  stable_candidate: boolean;
+  stable_candidate_at: string | null;
+  stable_candidate_by: string | null;
+  lifecycle_state: DesktopReleaseLifecycle;
+  channel: DesktopReleaseChannel;
 }
 
 interface ReleasesResponse {
@@ -53,14 +67,19 @@ function CrashRateCell({ row }: { row: ReleaseRow }) {
   }
   const pct = row.crash_rate * 100;
   const color =
-    pct >= 2 ? "text-red-500" : pct >= 0.5 ? "text-amber-500" : "text-emerald-500";
+    pct >= 2
+      ? "text-red-500"
+      : pct >= 0.5
+        ? "text-amber-500"
+        : "text-emerald-500";
   return (
     <div className="flex flex-col">
       <span className={cn("font-mono font-semibold", color)}>
         {pct.toFixed(2)}%
       </span>
       <span className="text-[11px] text-muted-foreground font-mono">
-        {row.crash_count?.toLocaleString()} / {row.session_count?.toLocaleString()} sessions
+        {row.crash_count?.toLocaleString()} /{" "}
+        {row.session_count?.toLocaleString()} sessions
       </span>
     </div>
   );
@@ -78,7 +97,7 @@ function RatingBadge({ rating }: { rating: number | null }) {
     <span
       className={cn(
         "inline-flex items-center justify-center rounded-md border px-2.5 py-1 font-mono font-bold text-base",
-        color
+        color,
       )}
     >
       {rating.toFixed(1)}
@@ -97,7 +116,9 @@ function FeedbackCell({ row }: { row: ReleaseRow }) {
       {fb > 0 && (
         <span className="text-xs">
           <span className="font-semibold">{fb}</span>{" "}
-          <span className="text-muted-foreground">feedback{fb !== 1 ? "s" : ""}</span>
+          <span className="text-muted-foreground">
+            feedback{fb !== 1 ? "s" : ""}
+          </span>
         </span>
       )}
       {broken > 0 && (
@@ -110,12 +131,57 @@ function FeedbackCell({ row }: { row: ReleaseRow }) {
   );
 }
 
+function LifecycleCell({ row }: { row: ReleaseRow }) {
+  const lifecycleLabel = desktopReleaseLifecycleLabel(row.lifecycle_state);
+  if (row.lifecycle_state === "stable") {
+    return (
+      <span className="text-xs font-medium text-sky-500">{lifecycleLabel}</span>
+    );
+  }
+  if (row.lifecycle_state === "stable_candidate") {
+    const label = row.stable_candidate_at
+      ? formatDate(row.stable_candidate_at)
+      : "recently";
+    return (
+      <span
+        className="text-xs font-medium text-amber-500"
+        title={row.stable_candidate_by ?? undefined}
+      >
+        {lifecycleLabel} {label}
+      </span>
+    );
+  }
+  if (row.lifecycle_state === "build_candidate") {
+    return (
+      <span className="text-xs text-muted-foreground">{lifecycleLabel}</span>
+    );
+  }
+  const label = row.qualified_at ? formatDate(row.qualified_at) : "recently";
+  if (row.qualification_evidence_url) {
+    return (
+      <a
+        href={row.qualification_evidence_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs font-medium text-emerald-500 hover:underline"
+      >
+        {lifecycleLabel} {label}
+      </a>
+    );
+  }
+  return (
+    <span className="text-xs font-medium text-emerald-500">
+      {lifecycleLabel} {label}
+    </span>
+  );
+}
+
 export default function ReleasesPage() {
   const { token } = useAuthToken();
   const { data, error, isLoading } = useSWR<ReleasesResponse>(
     token ? ["/api/omi/releases", token] : null,
     authenticatedFetcher,
-    { revalidateOnFocus: false, refreshInterval: 5 * 60 * 1000 }
+    { revalidateOnFocus: false, refreshInterval: 5 * 60 * 1000 },
   );
 
   if (isLoading) {
@@ -138,10 +204,28 @@ export default function ReleasesPage() {
   }
 
   const releases = data?.releases ?? [];
+  const newestStableIndex = releases.findIndex(
+    (row) => row.channel === "stable",
+  );
+  const deployableCandidates =
+    newestStableIndex >= 0 ? releases.slice(0, newestStableIndex) : releases;
+  const newestStableCandidate = deployableCandidates.find(
+    (row) => row.stable_candidate && row.lifecycle_state === "stable_candidate",
+  );
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Desktop Releases</h1>
+
+      {newestStableCandidate && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600">
+          Stable candidate ready for explicit promotion: v
+          {newestStableCandidate.version}
+          {newestStableCandidate.stable_candidate_at
+            ? `, nominated ${formatDate(newestStableCandidate.stable_candidate_at)}`
+            : ""}
+        </div>
+      )}
 
       {data?.partial && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
@@ -163,6 +247,7 @@ export default function ReleasesPage() {
               <TableHead className="w-[140px]">Crash Rate</TableHead>
               <TableHead className="w-[120px]">Issues</TableHead>
               <TableHead className="w-[60px] text-center">Rating</TableHead>
+              <TableHead className="w-[160px]">Lifecycle</TableHead>
               <TableHead>Summary</TableHead>
             </TableRow>
           </TableHeader>
@@ -170,7 +255,7 @@ export default function ReleasesPage() {
             {releases.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No releases found.
@@ -202,8 +287,13 @@ export default function ReleasesPage() {
                 <TableCell className="text-center">
                   <RatingBadge rating={r.rating} />
                 </TableCell>
+                <TableCell>
+                  <LifecycleCell row={r} />
+                </TableCell>
                 <TableCell className="text-sm max-w-sm">
-                  {r.summary || <span className="text-muted-foreground">—</span>}
+                  {r.summary || (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

@@ -2,12 +2,7 @@
 // Receives screenshot metadata + embeddings from the desktop app,
 // writes metadata to Firestore and embeddings to Pinecone ns3.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::screen_activity::{ScreenActivitySyncRequest, ScreenActivitySyncResponse};
@@ -21,11 +16,17 @@ async fn sync_screen_activity(
 ) -> Result<Json<ScreenActivitySyncResponse>, (StatusCode, String)> {
     let user: AuthUser = user.into();
     if request.rows.len() > 100 {
-        return Err((StatusCode::BAD_REQUEST, "Maximum 100 rows per batch".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Maximum 100 rows per batch".to_string(),
+        ));
     }
 
     if request.rows.is_empty() {
-        return Ok(Json(ScreenActivitySyncResponse { synced: 0, last_id: 0 }));
+        return Ok(Json(ScreenActivitySyncResponse {
+            synced: 0,
+            last_id: 0,
+        }));
     }
 
     let last_id = request.rows.iter().map(|r| r.id).max().unwrap_or(0);
@@ -43,12 +44,16 @@ async fn sync_screen_activity(
         .upsert_screen_activity(&user.uid, &request.rows)
         .await;
 
-    if let Err(e) = &firestore_result {
-        tracing::error!("Screen activity Firestore write failed: {}", e);
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Firestore write failed: {}", e)));
-    }
-
-    let written = firestore_result.unwrap();
+    let written = match firestore_result {
+        Ok(written) => written,
+        Err(e) => {
+            tracing::error!("Screen activity Firestore write failed: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Firestore write failed: {}", e),
+            ));
+        }
+    };
 
     // Upsert embeddings to Pinecone ns3 (fire-and-forget in background)
     let rows_with_embeddings: Vec<_> = request
@@ -81,7 +86,10 @@ async fn sync_screen_activity(
                         );
                         last_err = Some(e);
                         if attempt < 3 {
-                            tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                500 * attempt as u64,
+                            ))
+                            .await;
                         }
                     }
                 }

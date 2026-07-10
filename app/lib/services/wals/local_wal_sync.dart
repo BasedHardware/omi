@@ -14,6 +14,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -638,15 +639,12 @@ class LocalWalSyncImpl implements LocalWalSync {
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
-        final result = await uploadLocalFilesV2(files);
-        SyncRateLimiter.instance.clear();
+        final result = await SyncUploadGate.instance.upload(files);
 
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
           final r = result.completed!;
-          resp.newConversationIds.addAll(
-            r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-          );
+          resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
           resp.updatedConversationIds.addAll(
             r.updatedConversationIds.where(
               (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
@@ -679,11 +677,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         batchesCompleted++;
         // Count WALs no longer needing upload (uploaded or already synced).
         filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
-      } on SyncRateLimitedException catch (e) {
-        // Fair-use throttle. Pause uploads and stop the batch loop — continuing
-        // would just re-hit the wall. WALs stay `miss` (not bumped to retry),
-        // and sync resumes once the cooldown clears.
-        SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+      } on SyncRateLimitedException {
+        // Account-level rate limit. Stop the batch loop without consuming the
+        // WAL retry budget; the global upload gate resumes it after cooldown.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
         for (final wal in batchWals) {
           wal.isSyncing = false;
@@ -770,8 +766,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       } catch (e) {
         wal.status = WalStatus.corrupted;
         print(e.toString());
-        DebugLogManager.logError(
-            e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
+        DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {
+          'walId': wal.id,
+        });
       }
     }
 
@@ -786,14 +783,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     try {
       // Upload only — no poll-to-terminal. Reconciler resolves the job later.
-      final result = await uploadLocalFilesV2([walFile]);
-      SyncRateLimiter.instance.clear();
+      final result = await SyncUploadGate.instance.upload([walFile]);
 
       if (result.completed != null) {
         final r = result.completed!;
-        resp.newConversationIds.addAll(
-          r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-        );
+        resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
         resp.updatedConversationIds.addAll(
           r.updatedConversationIds.where(
             (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
@@ -816,10 +810,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
         listener.onWalUpdated();
       }
-    } on SyncRateLimitedException catch (e) {
-      // Fair-use throttle — pause and leave the WAL `miss`, don't surface as an
-      // error. Resumes when the cooldown clears.
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+    } on SyncRateLimitedException {
+      // Account-level rate limit — leave the WAL pending without consuming its
+      // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
@@ -877,9 +870,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
-      final fetched = await Future.wait(
-        slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))),
-      );
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;

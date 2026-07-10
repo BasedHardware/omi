@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from llm_gateway.gateway.credentials import CredentialContext, is_byok_failure_class
+from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
@@ -25,6 +27,8 @@ from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -47,10 +51,23 @@ class ProviderRegistry:
         return self._providers.get(provider.strip().lower())
 
     async def aclose(self) -> None:
-        for provider in self._providers.values():
-            close = getattr(provider, 'aclose', None)
-            if close is not None:
-                await close()
+        cleanup_tasks = [
+            _close_provider(provider_name, provider)
+            for provider_name, provider in self._providers.items()
+            if getattr(provider, 'aclose', None) is not None
+        ]
+        if cleanup_tasks:
+            await asyncio.gather(*cleanup_tasks)
+
+
+async def _close_provider(provider_name: str, provider: ChatCompletionProvider) -> None:
+    close = getattr(provider, 'aclose', None)
+    if close is None:
+        return
+    try:
+        await close()
+    except Exception:
+        logger.exception('LLM gateway provider cleanup failed: %s', provider_name)
 
 
 async def execute_chat_completion(
@@ -80,12 +97,7 @@ async def execute_chat_completion(
     # When the active route is in shadow/disabled rollout the LKG is already
     # the serving route — there is no separate LKG fallback to try.
     if serving_is_lkg:
-        if last_error is not None:
-            raise last_error
-        raise GatewayProviderFailureError(
-            'provider request failed',
-            failure_class=FailureClass.INVALID_CONFIG,
-        )
+        raise last_error
 
     if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
         try:
@@ -100,12 +112,7 @@ async def execute_chat_completion(
         except GatewayError as exc:
             last_error = exc
 
-    if last_error is not None:
-        raise last_error
-    raise GatewayProviderFailureError(
-        'provider request failed',
-        failure_class=FailureClass.INVALID_CONFIG,
-    )
+    raise last_error
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
@@ -125,6 +132,14 @@ def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
 
 def selected_serving_route_artifact_id(resolved_route: ResolvedRoute) -> str:
     return _select_serving_route(resolved_route).route_artifact_id
+
+
+def selected_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
+    return _select_serving_route(resolved_route)
+
+
+def provider_request_for(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+    return _provider_request(resolved_route, provider_ref)
 
 
 def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
@@ -185,7 +200,7 @@ async def _execute_route(
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             error = _unsupported_provider_error(provider_ref, credential_context)
-        elif route.credential_policy.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
+        elif credential_context.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
             provider_ref.provider
         ):
             error = GatewayCredentialFailureError(
@@ -202,8 +217,13 @@ async def _execute_route(
                 credential_context,
             )
             if error is None:
+                if response is None:
+                    raise GatewayProviderFailureError(
+                        'provider request failed',
+                        failure_class=FailureClass.INVALID_CONFIG,
+                    )
                 return _executor_result(
-                    response,  # type: ignore[arg-type]
+                    response,
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
@@ -239,7 +259,7 @@ async def _attempt_provider(
     for _attempt in range(max_attempts):
         try:
             response = await provider.create_chat_completion(
-                _provider_request(resolved_route, provider_ref),
+                _provider_request(resolved_route, provider_ref, route=route),
                 provider_ref=provider_ref,
                 credentials=credential_context,
                 timeout_ms=route.timeouts.request_ms,
@@ -252,15 +272,62 @@ async def _attempt_provider(
     return None, error
 
 
-def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
-    provider_request = {
+def _provider_request(
+    resolved_route: ResolvedRoute,
+    provider_ref: ProviderRef,
+    *,
+    route: RouteArtifact | None = None,
+) -> dict[str, Any]:
+    route = route or selected_serving_route(resolved_route)
+    provider_request: dict[str, Any] = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
-        'response_format': dict(resolved_route.validated_request.response_format),
         'stream': False,
     }
+    _apply_provider_options(provider_request, route.provider_options)
+    if resolved_route.validated_request.response_format is not None:
+        provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
     return provider_request
+
+
+def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
+    extra_body = provider_options.get('extra_body')
+    if isinstance(extra_body, Mapping):
+        provider_request.update(dict(cast(Mapping[str, Any], extra_body)))
+    for key, value in provider_options.items():
+        if key == 'extra_body':
+            continue
+        if key == 'thinking_budget':
+            _apply_gemini_thinking_budget(provider_request, value)
+            continue
+        provider_request[key] = value
+
+
+def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_budget: Any) -> None:
+    if thinking_budget == 0:
+        provider_request['reasoning_effort'] = 'none'
+        return
+
+    extra_body = provider_request.get('extra_body')
+    if not isinstance(extra_body, dict):
+        extra_body = {}
+        provider_request['extra_body'] = extra_body
+    extra_body_typed = cast(dict[str, Any], extra_body)
+
+    google_options = extra_body_typed.get('google')
+    if not isinstance(google_options, dict):
+        google_options = {}
+        extra_body_typed['google'] = google_options
+    google_options_typed = cast(dict[str, Any], google_options)
+
+    thinking_config = google_options_typed.get('thinking_config')
+    if not isinstance(thinking_config, dict):
+        thinking_config = {}
+        google_options_typed['thinking_config'] = thinking_config
+    thinking_config_typed = cast(dict[str, Any], thinking_config)
+
+    thinking_config_typed['thinking_budget'] = thinking_budget
 
 
 def _executor_result(
@@ -288,6 +355,15 @@ def _executor_result(
 
 
 def _validate_credential_mode(route: RouteArtifact, credential_context: CredentialContext) -> None:
+    if (
+        credential_context.mode == CredentialMode.BYOK
+        and credential_context.source == CredentialSource.SERVICE_FORWARDED_BYOK
+    ):
+        if route.credential_policy.allow_byok_to_omi_paid_fallback:
+            raise GatewayInvalidRouteConfigError(
+                f'route {route.route_artifact_id} must not allow BYOK to Omi-paid fallback'
+            )
+        return
     if route.credential_policy.mode != credential_context.mode:
         raise GatewayInvalidRouteConfigError(
             f'route {route.route_artifact_id} credential mode does not match request context'

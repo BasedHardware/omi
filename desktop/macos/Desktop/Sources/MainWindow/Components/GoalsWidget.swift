@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Goals Widget
 
@@ -935,6 +936,7 @@ private struct GoalHeaderButton: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     GoalsWidget(
         goals: [],
@@ -947,3 +949,4 @@ private struct GoalHeaderButton: View {
     .padding()
     .background(OmiColors.backgroundPrimary)
 }
+#endif

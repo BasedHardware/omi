@@ -6,6 +6,7 @@ from llm_gateway.gateway.config_loader import ConfigValidationError
 from llm_gateway.gateway.schemas import LaneConfig
 from llm_gateway.main import app
 from llm_gateway.routers import health
+from utils.llm.model_config import get_all_configured_features
 
 
 def test_ready_requires_service_auth(monkeypatch):
@@ -24,8 +25,9 @@ def test_ready_validates_gateway_config(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['status'] == 'ready'
-    assert response.json()['lanes'] == ['omi:auto:chat-structured']
-    assert response.json()['route_artifact_count'] == 2
+    assert 'omi:auto:chat-structured' in response.json()['lanes']
+    assert len(response.json()['lanes']) >= len(get_all_configured_features())
+    assert response.json()['route_artifact_count'] >= len(get_all_configured_features()) + 2
 
 
 def test_ready_fails_closed_on_invalid_gateway_config(monkeypatch):

@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
+from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+from database._client import db
 import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 
@@ -23,19 +25,40 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
+from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
-from utils.retrieval.hybrid import rrf_rerank
-from dependencies import get_uid_from_mcp_api_key, get_current_user_id
-from utils.other.endpoints import with_rate_limit
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
+from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
+from dependencies import (
+    get_uid_from_mcp_api_key,
+    get_current_user_id,
+    get_mcp_memory_default_memory_read_context,
+    get_mcp_memory_default_memory_write_context,
+)
+from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    guard_legacy_memory_write,
+    read_default_read_rollout,
+)
+from utils.memory.product_authorization import (
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
+)
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
+    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    search_default_mcp_memories_vector,
 )
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
@@ -45,6 +68,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class McpStatusResponse(BaseModel):
+    status: str
+
+
+class McpOauthGrantsResponse(BaseModel):
+    grants: List[Dict[str, Any]] = []
+
+
+class McpScreenActivityRow(BaseModel):
+    id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    app_name: Optional[str] = None
+    window_title: Optional[str] = None
+    ocr_text: Optional[str] = None
+
+
+class McpScreenActivityAppSummary(BaseModel):
+    count: int = 0
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    window_titles: List[str] = []
+
+
+class McpScreenActivitySummaryResponse(BaseModel):
+    apps: Dict[str, McpScreenActivityAppSummary] = {}
+    total_screenshots: int = 0
 
 
 @router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
@@ -67,7 +118,7 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     return
 
 
-@router.get("/v1/mcp/oauth/grants", tags=["mcp"])
+@router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
 def get_oauth_grants(uid: str = Depends(get_current_user_id)):
     return {"grants": mcp_oauth_db.list_user_grants(uid)}
 
@@ -80,46 +131,93 @@ def revoke_oauth_grant(grant_id: str, uid: str = Depends(get_current_user_id)):
 
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
-def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
-    # Auto-categorize memories from external sources
+def create_memory(
+    memory: Memory,
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_mcp_memory_default_memory_write_context, "memories:create")
+    ),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+    memory_system = pin_memory_system(uid, db_client=db)
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    memories_db.create_memory(uid, memory_db.model_dump())
-    try:
-        upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
+    memory_service = MemoryService(db_client=db)
+    memory_db = memory_service.create_external_memory(
+        uid,
+        memory_db,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_create",
+        require_canonical_promotion=True,
+    )
+    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 
 def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-    return memory
+    return fetch_memory_dict(uid, memory_id, db_client=db)
 
 
-@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    _validate_mcp_memory(uid, memory_id)
-    memories_db.delete_memory(uid, memory_id)
-    try:
-        delete_memory_vector(uid, memory_id)
-    except Exception:
-        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
+@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
+def delete_memory(
+    memory_id: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system != MemorySystem.CANONICAL:
+        _validate_mcp_memory(uid, memory_id)
+    MemoryService(db_client=db).delete_external_memory(
+        uid,
+        memory_id,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_delete",
+    )
     return {"status": "ok"}
 
 
-@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    memory = _validate_mcp_memory(uid, memory_id)
-    memories_db.edit_memory(uid, memory_id, value)
-    try:
-        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'other'))
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
+@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
+def edit_memory(
+    memory_id: str,
+    value: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+    memory_system = pin_memory_system(uid, db_client=db)
+    _validate_mcp_memory(uid, memory_id)
+    MemoryService(db_client=db).update_external_memory_content(
+        uid,
+        memory_id,
+        value,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_edit",
+    )
     return {"status": "ok"}
 
 
@@ -176,6 +274,14 @@ class CleanerMemory(BaseModel):
     id: str
     content: str
     category: MemoryCategory
+    category_source: Optional[str] = None
+    reviewed: Optional[bool] = None
+    reviewed_source: Optional[str] = None
+    manually_added: Optional[bool] = None
+    manually_added_source: Optional[str] = None
+    memory_default_memory: Optional[bool] = None
+    archive_default_visible: Optional[bool] = None
+    policy: Optional[dict] = None
 
 
 class SearchedMemory(CleanerMemory):
@@ -186,56 +292,44 @@ class SearchedMemory(CleanerMemory):
 def search_memories(
     query: str,
     limit: int = 10,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
 ):
-    logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
-    limit = max(1, min(limit, 20))
-    fetch_limit = min(limit * 3, 60)
-    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
-    if not matches:
-        return []
-    memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
-    scores = {m.get("memory_id"): m.get("score", 0) for m in matches}
-    if not memory_ids:
-        return []
-    docs = {m.get("id"): m for m in memories_db.get_memories_by_ids(uid, memory_ids)}
-
-    # Build candidates in vector-relevance order, excluding rejected / locked / superseded
-    # memories so the brain never returns a fact that is no longer true.
-    candidates = []
-    for mid in memory_ids:
-        m = docs.get(mid)
-        if not m:
-            continue
-        if m.get('user_review') is False or m.get('is_locked', False) or m.get('invalid_at') is not None:
-            continue
-        candidates.append(
-            {
-                "id": m.get("id", ""),
-                "content": m.get("content", ""),
-                "category": m.get("category", "other"),
-                "vector_score": scores.get(mid, 0),
-            }
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail=app_key_grant.observability,
         )
 
-    # Order by semantic score first (RRF uses this as the vector rank), then fuse with
-    # keyword (BM25) ranking so exact-keyword lookups surface reliably.
-    candidates.sort(key=lambda c: c.get("vector_score", 0), reverse=True)
-    reranked = rrf_rerank(query, candidates, limit)
-    return [
-        {
-            "id": c["id"],
-            "content": c["content"],
-            "category": c["category"],
-            "relevance_score": round(c.get("vector_score", 0), 4),
-        }
-        for c in reranked
-    ]
+    uid = auth_context.uid
+    logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
+    limit = max(1, min(limit, 20))
+    memory_system = pin_memory_system(uid, db_client=db)
+    memory_service = MemoryService(db_client=db)
+
+    if memory_system == MemorySystem.CANONICAL:
+        return memory_service.search_mcp(uid, query, limit=limit)
+
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
+    vector_search_results = search_default_mcp_memories_vector(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=db,
+        rollout_decision=memory_rollout,
+    )
+    if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
+        return vector_search_results.memories
+    if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        return []
+
+    return memory_service.search_mcp(uid, query, limit=limit)
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
     uid: str = Depends(get_uid_from_mcp_api_key),
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -261,13 +355,70 @@ def get_memories(
             status_code=400,
             detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
         )
-
     category_list = []
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+
+    memory_system = pin_memory_system(uid, db_client=db)
+
+    # Fail closed: authorize memory read before any system branch, matching
+    # the search route. Legacy keys without persisted memories.read scope
+    # cannot list canonical memories.
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail=app_key_grant.observability,
+        )
+
+    if memory_system == MemorySystem.CANONICAL:
+        # Over-fetch then apply the same filters the legacy path applies, so
+        # canonical callers honoring categories/reviewed/sensitive/sort never
+        # receive memories they explicitly excluded. The fetch lambda returns
+        # raw (unfiltered) batches so collect_filtered_memories can advance by
+        # raw page size — filtering inside the lambda would make short batches
+        # look like end-of-source.
+        filtered = collect_filtered_memories(
+            lambda batch_offset, batch_limit: [
+                m.model_dump(mode='json')
+                for m in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+            ],
+            limit=limit,
+            offset=offset,
+            reviewed=reviewed,
+            manually_added=manually_added,
+            include_activity=include_activity,
+            include_sensitive=include_sensitive,
+            updated_after=parsed_updated_after,
+            sort=sort,
+            categories=[c.value for c in category_list] if category_list else None,
+        )
+        memories = filtered['memories']
+        for memory in memories:
+            if memory.get('is_locked', False):
+                content = memory.get('content', '')
+                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+        return memories
+
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
+    memory_list_results = list_default_mcp_memories(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=db,
+        rollout_decision=memory_rollout,
+        categories=[category.value for category in category_list],
+        reviewed=reviewed,
+        manually_added=manually_added,
+    )
+    if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
+        return memory_list_results.memories
+    if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        return []
+
     result = collect_filtered_memories(
         lambda batch_offset, batch_limit: memories_db.get_memories(
             uid, batch_limit, batch_offset, [c.value for c in category_list], sort=sort
@@ -409,7 +560,10 @@ def search_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_conversation_by_id(
+    conversation_id: str,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
@@ -482,7 +636,11 @@ def _action_item_write_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/v1/mcp/action-items/search", response_model=List[SimpleActionItem], tags=["mcp"])
-def search_action_items(query: str, limit: int = 10, uid: str = Depends(get_uid_from_mcp_api_key)):
+def search_action_items(
+    query: str,
+    limit: int = 10,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"search_action_items {uid} limit={limit}")
     try:
         return mcp_action_items.search_action_items(uid, query, limit=limit)
@@ -505,7 +663,11 @@ def create_action_item(
 
 
 @router.post("/v1/mcp/action-items/{action_item_id}/complete", response_model=SimpleActionItem, tags=["mcp"])
-def complete_action_item(action_item_id: str, completed: bool = True, uid: str = Depends(get_uid_from_mcp_api_key)):
+def complete_action_item(
+    action_item_id: str,
+    completed: bool = True,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
     try:
         return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
@@ -514,7 +676,11 @@ def complete_action_item(action_item_id: str, completed: bool = True, uid: str =
 
 
 @router.patch("/v1/mcp/action-items/{action_item_id}", response_model=SimpleActionItem, tags=["mcp"])
-def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str = Depends(get_uid_from_mcp_api_key)):
+def update_action_item(
+    action_item_id: str,
+    body: McpUpdateActionItem,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"update_action_item {uid} id={action_item_id}")
     try:
         return mcp_action_items.update_action_item(
@@ -526,8 +692,11 @@ def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str 
         raise _action_item_write_error(e)
 
 
-@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
-def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"], response_model=McpStatusResponse)
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"delete_action_item {uid} id={action_item_id}")
     try:
         mcp_action_items.delete_action_item(uid, action_item_id)
@@ -541,8 +710,11 @@ def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/goals", tags=["mcp"])
-def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_from_mcp_api_key)):
+@router.get("/v1/mcp/goals", tags=["mcp"], response_model=List[Dict[str, Any]])
+def get_goals(
+    include_inactive: bool = False,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     return goals_db.get_all_goals(uid, include_inactive=include_inactive)
 
@@ -561,7 +733,11 @@ class SimpleChatMessage(BaseModel):
 
 
 @router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
-def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_chat_messages(
+    limit: int = 50,
+    offset: int = 0,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -592,7 +768,11 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/screen-activity", tags=["mcp"])
+@router.get(
+    "/v1/mcp/screen-activity",
+    tags=["mcp"],
+    response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
+)
 def get_screen_activity(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -604,7 +784,7 @@ def get_screen_activity(
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     if summary:
         return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 200))
     rows = screen_activity_db.get_screen_activity(
         uid, start_date=start_date, end_date=end_date, app_filter=app, limit=limit
     )
@@ -616,7 +796,7 @@ def get_screen_activity(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/daily-summaries", tags=["mcp"])
+@router.get("/v1/mcp/daily-summaries", tags=["mcp"], response_model=List[Dict[str, Any]])
 def get_daily_summaries(
     limit: int = 30,
     offset: int = 0,

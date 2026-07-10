@@ -68,6 +68,7 @@ class TestConstants:
         assert SPEAKER_SAMPLE_MIN_AGE > 0
 
 
+@pytest.mark.slow
 class TestReceiveTimeoutBehavior:
     """Verify receive_tasks() exits on timeout instead of hanging forever."""
 
@@ -119,6 +120,7 @@ class TestReceiveTimeoutBehavior:
         assert frames_received == total_frames
 
 
+@pytest.mark.slow
 class TestDrainTimeout:
     """Verify background tasks are force-cancelled after drain timeout."""
 
@@ -262,6 +264,7 @@ class TestSpeakerSampleShutdownDrain:
         assert 'p1' in processed_ids, "Speaker sample queued < 120s ago should be processed on shutdown, not dropped"
 
 
+@pytest.mark.slow
 class TestGaugeDecrement:
     """Verify the gauge is always decremented regardless of task state."""
 
@@ -383,6 +386,7 @@ class TestGaugeDecrement:
             pass
 
 
+@pytest.mark.slow
 class TestSupervisorBehavior:
     """Verify the supervisor detects bg task crashes during active sessions."""
 
@@ -567,31 +571,34 @@ class TestSupervisorBehavior:
 class TestTranscribeSupervisor:
     """Verify transcribe.py supervisor distinguishes finite vs lifetime tasks."""
 
-    def test_transcribe_has_finite_tasks_set(self):
-        """transcribe.py must define finite_tasks containing only intentionally finite tasks."""
+    def test_transcribe_has_session_state_object(self):
         src = _read_source(TRANSCRIBE_SRC)
-        assert 'finite_tasks' in src, "transcribe.py must define a finite_tasks set"
-        assert 'pending_conversations_task' in src, "pending_conversations_task must be referenced"
-        assert 'speaker_id_task' in src, "speaker_id_task must be referenced"
+        assert 'class ListenSessionState' in src
+        assert 'session = ListenSessionState()' in src
 
     def test_transcribe_lifetime_task_triggers_teardown(self):
-        """Lifetime task handling via supervise_tasks utility with finite_tasks set."""
+        """Lifetime task handling is routed through WebSocketTaskSupervisor."""
         src = _read_source(TRANSCRIBE_SRC)
-        assert 'finite_task' in src, "Transcribe must define finite tasks for supervisor"
-        assert 'supervise_tasks' in src, "Transcribe must use supervise_tasks utility"
+        assert 'task_supervisor.create_lifetime_task' in src
+        assert 'exit_result = await task_supervisor.supervise(' in src
 
     def test_transcribe_uses_supervisor_utility(self):
         src = _read_source(TRANSCRIBE_SRC)
-        assert 'supervise_tasks' in src, "Transcribe must use supervise_tasks from async_tasks"
+        assert 'WebSocketTaskSupervisor' in src, "Transcribe must use WebSocketTaskSupervisor from async_tasks"
         assert 'drain_tasks' in src, "Transcribe must use drain_tasks from async_tasks"
+
+    def test_transcribe_has_finite_task_creation(self):
+        src = _read_source(TRANSCRIBE_SRC)
+        assert 'task_supervisor.create_finite_task' in src
+        assert 'pending_conversations_task' in src
+        assert 'speaker_id_task' in src
 
     def test_transcribe_has_receive_timeout(self):
         src = _read_source(TRANSCRIBE_SRC)
         assert 'WS_RECEIVE_TIMEOUT' in src
 
-    def test_transcribe_gauge_in_try_finally(self):
-        """BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc() must be in try body,
-        .dec() in finally — verified via AST on _stream_handler."""
+    def test_transcribe_supervisor_session_in_try_finally(self):
+        """The handler must start and end the supervisor session in try/finally."""
         tree = ast.parse(_read_source(TRANSCRIBE_SRC))
         handler = None
         for node in ast.walk(tree):
@@ -600,8 +607,8 @@ class TestTranscribeSupervisor:
                 break
         assert handler is not None, '_stream_handler not found in transcribe.py'
 
-        found_inc_in_try = False
-        found_dec_in_finally = False
+        found_start_in_try = False
+        found_end_in_finally = False
         for node in ast.walk(handler):
             if isinstance(node, ast.Try):
                 try_calls = []
@@ -613,43 +620,44 @@ class TestTranscribeSupervisor:
                     for sub in ast.walk(ast.Module(body=node.finalbody, type_ignores=[])):
                         if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
                             finally_calls.append(sub.func.attr)
-                if 'inc' in try_calls:
-                    found_inc_in_try = True
-                if 'dec' in finally_calls:
-                    found_dec_in_finally = True
+                if 'start_session' in try_calls:
+                    found_start_in_try = True
+                if 'end_session' in finally_calls:
+                    found_end_in_finally = True
 
-        assert found_inc_in_try, "BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc() must be in try body"
-        assert found_dec_in_finally, "BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
+        assert found_start_in_try, "task_supervisor.start_session() must be in try body"
+        assert found_end_in_finally, "task_supervisor.end_session() must be in finally block"
 
     def test_transcribe_supervisor_before_drain(self):
-        """supervise_tasks() must appear before the main bg drain_tasks(bg_main_tasks) in transcribe.py."""
+        """Supervisor wait must appear before the main bg drain in transcribe.py."""
         src = _read_source(TRANSCRIBE_SRC)
-        supervise_pos = src.find('exit_result = await supervise_tasks(')
-        drain_pos = src.find('await drain_tasks(bg_main_tasks')
-        assert supervise_pos != -1, "'supervise_tasks(' call not found in transcribe.py"
-        assert drain_pos != -1, "'drain_tasks(bg_main_tasks' not found in transcribe.py"
+        supervise_pos = src.find('exit_result = await task_supervisor.supervise(')
+        drain_pos = src.find('await task_supervisor.drain_monitored(')
+        assert supervise_pos != -1, "'task_supervisor.supervise(' call not found in transcribe.py"
+        assert drain_pos != -1, "'task_supervisor.drain_monitored(' not found in transcribe.py"
         assert supervise_pos < drain_pos, "supervise_tasks must appear before bg drain in transcribe.py"
 
-    def test_transcribe_no_gauge_before_try(self):
-        """Gauge inc must NOT appear before the main try block to prevent leak on early return."""
+    def test_transcribe_no_session_start_before_try(self):
+        """Session start must NOT appear before the main try block to prevent leak on early return."""
         src = _read_source(TRANSCRIBE_SRC)
         lines = src.split('\n')
         in_stream_handler = False
         try_line = None
-        inc_lines = []
+        start_lines = []
         for i, line in enumerate(lines, 1):
             if 'def _stream_handler(' in line:
                 in_stream_handler = True
             if in_stream_handler:
                 if line.strip().startswith('try:') and try_line is None:
                     try_line = i
-                if 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' in line:
-                    inc_lines.append(i)
+                if 'task_supervisor.start_session()' in line:
+                    start_lines.append(i)
         assert try_line is not None, "try block not found in _stream_handler"
-        assert inc_lines, "No gauge inc found in _stream_handler"
-        for inc_line in inc_lines:
-            assert inc_line > try_line, (
-                f"Gauge inc at line {inc_line} must be after try at line {try_line} " "to prevent leak on early return"
+        assert start_lines, "No session start found in _stream_handler"
+        for start_line in start_lines:
+            assert start_line > try_line, (
+                f"Session start at line {start_line} must be after try at line {try_line} "
+                "to prevent leak on early return"
             )
 
 

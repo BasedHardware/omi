@@ -1,20 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useRecorder, type UseRecorder } from '../hooks/useRecorder'
-import { useChat, type UseChat } from '../hooks/useChat'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRecorder } from '../hooks/useRecorder'
+import { useChat } from '../hooks/useChat'
 import type { CaptureChoice } from '../../../shared/types'
-
-export type { CaptureChoice }
-
-type AppState = {
-  recorder: UseRecorder
-  chat: UseChat
-  pickerOpen: boolean
-  setPickerOpen: (v: boolean) => void
-  /** Begin a recording for the chosen capture mode (from any tab). */
-  startRecording: (choice: CaptureChoice) => void
-}
-
-const Ctx = createContext<AppState | null>(null)
+import { Ctx } from './appState'
 
 /**
  * App-level state shared across every tab: the recorder and chat engines live
@@ -48,10 +36,4 @@ export function AppStateProvider(props: { children: React.ReactNode }): React.JS
       {props.children}
     </Ctx.Provider>
   )
-}
-
-export function useAppState(): AppState {
-  const v = useContext(Ctx)
-  if (!v) throw new Error('useAppState must be used within AppStateProvider')
-  return v
 }

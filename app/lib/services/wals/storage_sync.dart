@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -164,7 +164,8 @@ class StorageSyncImpl implements StorageSync {
       for (int attempt = 0; attempt < 3 && files.isEmpty; attempt++) {
         files = await connection.listStorageFiles();
         Logger.debug(
-            'StorageSync.refreshWalsFromDevice: listFiles attempt ${attempt + 1} returned ${files.length} files');
+          'StorageSync.refreshWalsFromDevice: listFiles attempt ${attempt + 1} returned ${files.length} files',
+        );
         if (files.isEmpty && attempt < 2) {
           await Future.delayed(const Duration(milliseconds: 700));
         }
@@ -311,7 +312,8 @@ class StorageSyncImpl implements StorageSync {
 
         final wal = wals[i];
         Logger.debug(
-            'StorageSync: Downloading file ${i + 1}/${wals.length} (index=${wal.fileNum}, size=${wal.storageTotalBytes})');
+          'StorageSync: Downloading file ${i + 1}/${wals.length} (index=${wal.fileNum}, size=${wal.storageTotalBytes})',
+        );
         bool complete = await _syncSingleFile(wal, progress: progress, fileIndex: i, totalFiles: wals.length);
 
         wal.status = WalStatus.synced;
@@ -393,7 +395,8 @@ class StorageSyncImpl implements StorageSync {
     int totalFiles = 1,
   }) async {
     Logger.debug(
-        'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}');
+      'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}',
+    );
     if (_device == null) return false;
 
     var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
@@ -439,7 +442,8 @@ class StorageSyncImpl implements StorageSync {
         // Single byte = status/end signal (matching existing sdcard_wal_sync pattern)
         if (value.length == 1) {
           Logger.debug(
-              'StorageSync: Status byte: ${value[0]} for file ${wal.fileNum} offset=$offset frames=${bytesData.length}');
+            'StorageSync: Status byte: ${value[0]} for file ${wal.fileNum} offset=$offset frames=${bytesData.length}',
+          );
           if (value[0] == 0) {
             Logger.debug('StorageSync: Ack received (good to go)');
           } else if (value[0] == 3) {
@@ -500,11 +504,13 @@ class StorageSyncImpl implements StorageSync {
             if (wal.storageTotalBytes > 0) {
               double fileProgress = (offset / wal.storageTotalBytes).clamp(0.0, 1.0);
               double overallProgress = (fileIndex + fileProgress) / totalFiles;
-              progress?.onWalSyncedProgress(overallProgress.clamp(0.0, 1.0),
-                  speedKBps: _currentSpeedKBps,
-                  phase: SyncPhase.downloadingFromDevice,
-                  currentFile: fileIndex + 1,
-                  totalFiles: totalFiles);
+              progress?.onWalSyncedProgress(
+                overallProgress.clamp(0.0, 1.0),
+                speedKBps: _currentSpeedKBps,
+                phase: SyncPhase.downloadingFromDevice,
+                currentFile: fileIndex + 1,
+                totalFiles: totalFiles,
+              );
             }
           }
         }
@@ -512,7 +518,8 @@ class StorageSyncImpl implements StorageSync {
         // Check if we've received all expected data (per PR #5905)
         if (offset >= wal.storageTotalBytes) {
           Logger.debug(
-              'StorageSync: File transfer complete: offset=$offset >= totalBytes=${wal.storageTotalBytes}, frames=${bytesData.length} pkts=$packetCount');
+            'StorageSync: File transfer complete: offset=$offset >= totalBytes=${wal.storageTotalBytes}, frames=${bytesData.length} pkts=$packetCount',
+          );
           if (!completer.isCompleted) {
             completer.complete(true);
           }
@@ -528,7 +535,8 @@ class StorageSyncImpl implements StorageSync {
     _storageStream!.onDone(() {
       if (!completer.isCompleted) {
         Logger.debug(
-            'StorageSync: BLE stream closed for file ${wal.fileNum} (offset=$offset/${wal.storageTotalBytes}, frames=${bytesData.length})');
+          'StorageSync: BLE stream closed for file ${wal.fileNum} (offset=$offset/${wal.storageTotalBytes}, frames=${bytesData.length})',
+        );
         completer.complete(true);
       }
     });
@@ -545,13 +553,15 @@ class StorageSyncImpl implements StorageSync {
     await connection.writeToStorage(wal.fileNum, 0x11, offset);
 
     Logger.debug(
-        'StorageSync: Waiting for file ${wal.fileNum} transfer (expecting ${wal.storageTotalBytes} bytes from offset $offset)...');
+      'StorageSync: Waiting for file ${wal.fileNum} transfer (expecting ${wal.storageTotalBytes} bytes from offset $offset)...',
+    );
 
     try {
       await completer.future.timeout(const Duration(minutes: 10));
     } on TimeoutException {
       Logger.debug(
-          'StorageSync: File ${wal.fileNum} OVERALL TIMEOUT. offset=$offset/${wal.storageTotalBytes} frames=${bytesData.length}');
+        'StorageSync: File ${wal.fileNum} OVERALL TIMEOUT. offset=$offset/${wal.storageTotalBytes} frames=${bytesData.length}',
+      );
     } catch (e) {
       Logger.debug('StorageSync: File ${wal.fileNum} ERROR: $e. offset=$offset/${wal.storageTotalBytes}');
     } finally {
@@ -592,7 +602,8 @@ class StorageSyncImpl implements StorageSync {
     }
 
     Logger.debug(
-        'StorageSync: File ${wal.fileNum} synced ($offset bytes, ${bytesData.length} frames, complete=$transferComplete)');
+      'StorageSync: File ${wal.fileNum} synced ($offset bytes, ${bytesData.length} frames, complete=$transferComplete)',
+    );
     return transferComplete;
   }
 

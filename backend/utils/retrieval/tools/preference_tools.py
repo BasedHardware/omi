@@ -5,14 +5,19 @@ Tools for learning and saving user preferences during conversation.
 import contextvars
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional, cast
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 import database.vector_db as vector_db
+from database._client import db
 import logging
 from models.memories import MemoryDB
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +28,35 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
 def _get_uid(config: RunnableConfig) -> str:
     """Extract user ID from config or context variable."""
-    if config and 'configurable' in config:
-        uid = config['configurable'].get('user_id')
-        if uid:
-            return uid
-    ctx = agent_config_context.get()
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg and 'configurable' in cfg:
+        raw_configurable = cfg.get('configurable')
+        if isinstance(raw_configurable, dict):
+            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
+            uid = configurable.get('user_id')
+            if uid:
+                return uid
+    ctx = _agent_config()
     if ctx and 'configurable' in ctx:
-        return ctx['configurable'].get('user_id', '')
+        raw_configurable = ctx.get('configurable')
+        if isinstance(raw_configurable, dict):
+            configurable = cast(Dict[str, Any], raw_configurable)
+            return configurable.get('user_id', '')
     return ''
 
 
 @tool
-def save_user_preference_tool(preference: str, config: RunnableConfig = None) -> str:
+def save_user_preference_tool(preference: str, config: RunnableConfig = None) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """Save a learned user preference or personal detail for future conversations.
 
     Call this when you learn something about the user's preferences, habits, or
@@ -85,7 +105,20 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
-        memory_db.create_memory(uid, memory_data)
+        if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL and canonical_write_enabled(
+            uid, db_client=db
+        ):
+            MemoryService(db_client=db).create_external_memory(
+                uid,
+                MemoryDB.model_validate(memory_data),
+                memory_system=MemorySystem.CANONICAL,
+                consumer="agent_preference",
+                operation="save_user_preference",
+                upsert_vector=False,
+                require_canonical_promotion=True,
+            )
+        else:
+            memory_db.create_memory(uid, memory_data)
         logger.info(f"Saved user preference: {preference[:80]}")
         return f"Preference saved: {preference}"
     except Exception as e:

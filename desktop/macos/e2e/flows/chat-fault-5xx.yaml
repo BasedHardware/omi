@@ -1,0 +1,60 @@
+version: 2
+name: chat-fault-5xx
+tier: fault
+description: Main chat surfaces a structured error when the Python backend returns HTTP 5xx (omi-fault-inject)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/scripts/omi-fault-inject.sh
+preconditions:
+  - automation_bridge_ready
+  - fault_backend_inject
+
+steps:
+  - id: S1
+    name: Reset main chat for flow isolation
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
+  - id: S2
+    name: Navigate to Chat
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 2
+
+  - id: S3
+    name: Send chat query against fault backend
+    bridge.action:
+      name: ask_main_chat
+      params:
+        query: "Trigger backend fault [[MARKER:chat-fault-5xx]]"
+    expect:
+      result.detail.sent: "Trigger backend fault [[MARKER:chat-fault-5xx]]"
+
+  - id: S4
+    name: Wait for chat to settle after backend 5xx
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "30000"
+        pollMs: "500"
+
+  - id: S5
+    name: Assert surfaced error (not silent no-op)
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "8"
+    expect:
+      result.detail.has_error: "true"
+
+  - id: S6
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

@@ -38,9 +38,9 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
-    def dict(self, **kwargs):
+    def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
-        return super().dict(exclude=exclude_fields, **kwargs)
+        return super().model_dump(exclude=exclude_fields, **kwargs)
 
 
 class ChartDataPoint(BaseModel):
@@ -98,6 +98,20 @@ class Message(BaseModel):
             elif plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
         return data
+
+    @classmethod
+    def deserialize_many_safe(cls, records, on_error=None) -> List['Message']:
+        """Build Message objects from raw stored records, skipping any that fail
+        validation so one malformed or legacy chat message cannot 500 a whole history
+        load. on_error(record, exception), when provided, is called for each skip."""
+        parsed: List['Message'] = []
+        for record in records:
+            try:
+                parsed.append(cls(**record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the history
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
 
     @staticmethod
     def get_messages_as_string(
@@ -199,6 +213,14 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+
+
+class RateMessageRequest(BaseModel):
+    rating: Optional[int] = None
+
+
+class ShareChatMessagesRequest(BaseModel):
+    message_ids: list[str] = []
 
 
 class ChatSession(BaseModel):

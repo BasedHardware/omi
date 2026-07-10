@@ -26,6 +26,7 @@ Options (via environment variables):
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
 Required files:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -103,6 +104,18 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
+macos_copy_tree() {
+    local src="$1"
+    local dest="$2"
+    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
+        ditto --norsrc "$src" "$dest"
+    elif [ "$(uname -s)" = "Darwin" ]; then
+        cp -R -X "$src" "$dest"
+    else
+        cp -R "$src" "$dest"
+    fi
+}
+
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
 # OMI_DEV_DIR (explicit overrides always win; the primary checkout keeps "Omi Dev" + 10201).
@@ -110,10 +123,22 @@ source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
 BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
 
+# Serialize same-worktree builds only (shared Desktop/.build + build/$APP_NAME.app).
+# Cross-worktree ./run.sh must not block each other. Hold through install/seed/open,
+# then release before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported
+# (/Applications/$APP_NAME.app is machine-global and not cross-locked).
+source "$SCRIPT_DIR/scripts/run-sh-build-lock.sh"
+omi_run_sh_acquire_build_lock "another ./run.sh in this worktree" 600 || exit 1
+# Temporary until `trap cleanup EXIT` below chains release into cleanup().
+trap 'omi_run_sh_release_build_lock' EXIT INT TERM
+
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 source "$SCRIPT_DIR/scripts/app-config.sh"
-derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}"
+derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
+LOCAL_PROFILE=false
+[ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
@@ -122,9 +147,43 @@ APP_PATH="/Applications/$APP_NAME.app"
 # Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
 # copy is silently skipped → app shows "AI components missing".
 AGENT_DIR="$SCRIPT_DIR/agent"
+AGENT_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/agent-node_modules"
+PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extension-node_modules"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+if [ "$LOCAL_PROFILE" = true ]; then
+    if [ "$BUNDLE_ID" = "com.omi.desktop-dev" ] || { [ "$IS_NAMED_BUNDLE" = false ] && [ "$APP_NAME" = "Omi Dev" ]; }; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 cannot target Omi Dev (com.omi.desktop-dev)."
+        echo "       Local profile would overwrite Omi Dev auth/state/binary. Use a named omi- bundle instead:"
+        echo "         DESKTOP_APP_NAME=omi-memory make desktop-run-local"
+        echo "       or:  cd desktop/macos && OMI_APP_NAME=omi-memory OMI_DESKTOP_LOCAL_PROFILE=1 OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 ./run.sh"
+        exit 1
+    fi
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        case "$APP_NAME" in
+            omi-*|Omi-*) ;;
+            *)
+                echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 with OMI_APP_NAME requires an omi- prefixed bundle (got OMI_APP_NAME='$APP_NAME')"
+                exit 1
+                ;;
+        esac
+        export OMI_LOCAL_PROFILE_STORAGE_NAME="${OMI_LOCAL_PROFILE_STORAGE_NAME:-$APP_NAME}"
+    else
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 requires an omi- prefixed named bundle (OMI_APP_NAME or DESKTOP_APP_NAME)"
+        exit 1
+    fi
+    if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+        echo "ERROR: Omi Dev local harness requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1; start the harness with make dev-up first"
+        exit 1
+    fi
+    case "${OMI_DESKTOP_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_DESKTOP_API_URL must be localhost for Omi Dev local harness"; exit 1 ;; esac
+    case "${OMI_PYTHON_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_PYTHON_API_URL must be localhost for Omi Dev local harness"; exit 1 ;; esac
+    if [ "${FIREBASE_PROJECT_ID:-}" != "demo-omi-local" ] || [ "${FIREBASE_AUTH_PROJECT_ID:-demo-omi-local}" != "demo-omi-local" ]; then
+        echo "ERROR: Omi Dev local harness must use Firebase project demo-omi-local"
+        exit 1
+    fi
+fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
@@ -141,6 +200,10 @@ AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
+    # Release the build lock if still held (early exit before install, or if
+    # the post-install release was skipped). Chained here because
+    # `trap cleanup EXIT` overwrites the earlier lock-only trap.
+    omi_run_sh_release_build_lock
     if [ -n "$AUTH_CACHE" ]; then
         rm -f "$AUTH_CACHE"
     fi
@@ -167,8 +230,10 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
 # Kill only THIS instance's old Rust backend (tracked via pidfile) — never other
-# worktrees' backends. (Previously `pkill -f omi-desktop-backend` killed every agent's.)
-if [ -f "$OMI_DEV_DIR/rust-backend.pid" ]; then
+# worktrees' backends. Skip when the dev harness owns the backend process.
+if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
+    substep "Keeping harness desktop-backend (OMI_HARNESS_INSTANCE=${OMI_HARNESS_INSTANCE})"
+elif [ -f "$OMI_DEV_DIR/rust-backend.pid" ]; then
     OLD_BACKEND_PID="$(cat "$OMI_DEV_DIR/rust-backend.pid" 2>/dev/null)"
     if [ -n "$OLD_BACKEND_PID" ] && kill -0 "$OLD_BACKEND_PID" 2>/dev/null; then
         substep "Killing our old backend (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
@@ -204,6 +269,7 @@ done
 find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
 # Kill stale app bundles from other repo clones (e.g. ~/omi-desktop/)
 # These confuse LaunchServices and get launched instead of the /Applications copy.
+# Set OMI_SKIP_STALE_BUNDLE_SCAN=1 to skip the $HOME walk (can take minutes on large home dirs).
 if [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" = "1" ]; then
     substep "Skipping stale clone scan (OMI_SKIP_STALE_BUNDLE_SCAN=1)"
 else
@@ -240,6 +306,9 @@ fi
 # ─── Load .env and credentials ─────────────────────────────────────────
 cd "$BACKEND_DIR"
 
+if [ "$LOCAL_PROFILE" = true ]; then
+    substep "Omi Dev local harness: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
+else
 # Copy .env if not present — try sibling dirs, then scaffold from .env.example
 if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
     cp "../../backend/.env" ".env"
@@ -305,6 +374,7 @@ fi
 if [ -f "$CREDS_PATH" ]; then
     export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
 fi
+fi # end non-local profile .env/credential bootstrap
 
 # Validate FIREBASE_PROJECT_ID (required unless yolo mode — no local backend)
 if [ -z "$FIREBASE_PROJECT_ID" ] && [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
@@ -363,17 +433,53 @@ else
     substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
 fi
 
-# Check if another SwiftPM instance is running (will block our build)
-SWIFTPM_PID=$(pgrep -f "swiftpm-workspace-state|swift-build|swift-package" 2>/dev/null | head -1)
-if [ -n "$SWIFTPM_PID" ]; then
-    step "Waiting for other SwiftPM instance (PID: $SWIFTPM_PID) to finish..."
-    while kill -0 "$SWIFTPM_PID" 2>/dev/null; do
-        sleep 1
+# Wait only for SwiftPM instances building THIS checkout. Parallel worktrees
+# have their own .build scratch dirs and SwiftPM locks its shared caches, so
+# other worktrees' builds (including SourceKit-LSP indexing builds, which
+# respawn continuously and would starve a global wait forever) don't block us.
+while true; do
+    SWIFTPM_BLOCKING=""
+    for _pid in $(pgrep -f "swift-build|swift-package" 2>/dev/null); do
+        # SourceKit-LSP indexing builds use their own scratch dir
+        # (.build/index-build) and respawn continuously — never wait on them.
+        if ps -p "$_pid" -o command= 2>/dev/null | grep -q "prepare-for-indexing\|index-build"; then
+            continue
+        fi
+        _pcwd=$(lsof -a -p "$_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        case "$_pcwd" in
+            "$SCRIPT_DIR"*) SWIFTPM_BLOCKING="$_pid"; break ;;
+        esac
     done
-fi
+    if [ -z "$SWIFTPM_BLOCKING" ]; then
+        break
+    fi
+    step "Waiting for this checkout's SwiftPM instance (pid $SWIFTPM_BLOCKING) to finish..."
+    sleep 2
+done
 
 step "Preparing agent runtime..."
-"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --local-node
+"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
+
+step "Generating tool surfaces..."
+(
+  cd agent
+  NODE_BIN=""
+  for candidate in \
+    "../Desktop/Sources/Resources/node" \
+    "/opt/homebrew/opt/node@22/bin/node" \
+    "/usr/local/opt/node@22/bin/node" \
+    "$(command -v node 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$NODE_BIN" ]]; then
+    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
+    exit 1
+  fi
+  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
+)
 
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
@@ -386,6 +492,8 @@ xcrun swift build -c debug --package-path Desktop
 auth_debug "AFTER swift build: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Creating app bundle..."
+substep "Removing prior bundle (if any)"
+rm -rf "$APP_BUNDLE"
 substep "Creating directories"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
@@ -425,11 +533,13 @@ fi
 WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
 if [ -f "$WEBP_LIB" ]; then
     substep "Bundling libwebp"
-    cp "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+    mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+    rm -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+    cp -f "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
     # Find libsharpyuv (libwebp dependency)
     SHARPYUV_LIB="$(dirname "$WEBP_LIB")/libsharpyuv.0.dylib"
     if [ -f "$SHARPYUV_LIB" ]; then
-        cp "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+        cp -f "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
         install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
     fi
     install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
@@ -447,7 +557,9 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 substep "Copying GoogleService-Info.plist"
-if [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
+if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
+    cp -f Desktop/Sources/GoogleService-Info-Local.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+elif [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
     cp -f Desktop/Sources/GoogleService-Info-Dev.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
 else
     cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
@@ -458,17 +570,21 @@ fi
 RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
-    cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+    macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
 substep "Copying agent"
 if [ -d "$AGENT_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
-    cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
+    macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
+    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -485,12 +601,37 @@ if [ -d "$PI_MONO_EXT_DIR" ]; then
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
 
 substep "Copying .env.app"
+if [ "$LOCAL_PROFILE" = true ]; then
+    EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
+    : > "$APP_BUNDLE/Contents/Resources/.env"
+    {
+        echo "OMI_DESKTOP_LOCAL_PROFILE=1"
+        echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
+        echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
+        echo "OMI_LOCAL_PROFILE_STORAGE_NAME=${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi}"
+        echo "OMI_LOCAL_AUTH_USER=$OMI_LOCAL_AUTH_USER"
+        echo "OMI_LOCAL_AUTH_EMAIL=$OMI_LOCAL_AUTH_EMAIL"
+        echo "OMI_LOCAL_AUTH_PASSWORD=$OMI_LOCAL_AUTH_PASSWORD"
+        echo "OMI_LOCAL_AUTH_DISPLAY_NAME=$OMI_LOCAL_AUTH_DISPLAY_NAME"
+        echo "FIREBASE_AUTH_EMULATOR_HOST=$FIREBASE_AUTH_EMULATOR_HOST"
+        echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+        echo "FIREBASE_AUTH_PROJECT_ID=${FIREBASE_AUTH_PROJECT_ID:-$FIREBASE_PROJECT_ID}"
+        echo "FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID:-(default)}"
+        echo "FIREBASE_API_KEY=$FIREBASE_API_KEY"
+    } >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Omi Dev local harness .env contains localhost endpoints/Auth emulator bootstrap only"
+else
 if [ -f ".env.app.dev" ]; then
     cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
 elif [ -f ".env.app" ]; then
@@ -540,6 +681,7 @@ else
     echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
+fi # end non-local .env.app merge
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
@@ -564,6 +706,9 @@ fi
 
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
+step "Preparing bundled native dependencies..."
+"$(dirname "$0")/scripts/prepare-desktop-bundle-native-deps.sh" "$APP_BUNDLE"
+
 step "Removing extended attributes (xattr -cr)..."
 # SwiftPM copies some dylibs (libsharpyuv, libwebp) with read-only perms,
 # which makes `xattr -cr` fail with EACCES. Make the bundle writable first.
@@ -580,6 +725,10 @@ if [ -z "$SIGN_IDENTITY" ]; then
     SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
     if [ -z "$SIGN_IDENTITY" ]; then
         SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+        SIGN_IDENTITY="-"
+        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
 fi
 
@@ -657,12 +806,18 @@ else
     echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
     echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
     echo ""
+    echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+    echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
+    echo ""
     exit 1
 fi
 
 step "Removing quarantine attributes..."
 chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
+
+step "Auditing app bundle dependencies..."
+"$(dirname "$0")/scripts/audit-desktop-bundle-deps.sh" "$APP_BUNDLE"
 
 step "Installing to /Applications/..."
 # Install to /Applications/ so "Quit & Reopen" (after granting screen recording
@@ -691,7 +846,11 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
         if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+            # Pass the just-installed app path so seed can resolve Team ID and
+            # clear any prior CLI-written Keychain item (apple-tool: partition).
+            # Tokens are seeded into UserDefaults; the app migrates them into
+            # Keychain on launch with the correct teamid: partition (no prompt).
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
                 auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
             else
                 echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
@@ -748,6 +907,12 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
+
+# Launch finished — free this worktree's lock so other checkouts (and a later
+# rebuild here) are not blocked by the long-running wait below. Kept through
+# open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
+omi_run_sh_release_build_lock
+substep "Released per-worktree build lock"
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

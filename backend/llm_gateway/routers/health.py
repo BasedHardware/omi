@@ -9,12 +9,12 @@ router = APIRouter()
 
 
 @router.get('/health')
-def get_health():
+def get_health() -> dict[str, str]:
     return {'status': 'healthy'}
 
 
 @router.get('/ready')
-def get_ready(caller: ServiceAuthDependency):
+def get_ready(caller: ServiceAuthDependency) -> dict[str, object]:
     try:
         config = get_gateway_config()
     except (ConfigValidationError, ValidationError) as exc:

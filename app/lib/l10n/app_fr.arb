@@ -1,5 +1,6 @@
 {
     "@@locale": "fr",
+    "sessionExpiredSignInAgain": "La session a expiré — reconnectez-vous.",
     "appTitle": "Omi",
     "conversationTab": "Conversation",
     "transcriptTab": "Transcription",
@@ -3089,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait.",
     "transcribeLaterTitle": "Transcrire plus tard",
     "transcribeLaterDescription": "Enregistrez l'audio maintenant et transcrivez-le à la demande plutôt qu'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.",
-    "transcribeLaterNote": "Compatible avec les appareils Omi pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
+    "transcribeLaterNote": "Compatible avec les appareils Omi et Limitless pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
     "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement.",
     "unmute": "Réactiver le son",
     "newRecording": "Nouvel enregistrement",
@@ -3099,6 +3100,12 @@
     "captureModeLiveDescription": "Transcrivez en temps réel pendant que vous parlez.",
     "captureModeLaterDescription": "Enregistrez l'audio maintenant et transcrivez quand vous voulez.",
     "backgroundModeUnavailable": "Le mode arrière-plan n’est pas disponible, car aucun appareil compatible n’est connecté. Connectez un appareil Omi, OpenGlass ou Friend Pendant pour utiliser cette fonctionnalité.",
+    "memoryThisDevice": "Cet appareil",
+    "memoryThisIphone": "Cet iPhone",
+    "memoryThisPhone": "Ce téléphone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Comment utiliser Omi",
     "deviceOnboardingTranscriptionTitle": "Parlez à votre Omi",
     "deviceOnboardingTranscriptionSubtitle": "Dites quelques mots et regardez-les apparaître en temps réel",
@@ -3132,5 +3139,44 @@
     "deviceOnboardingIntroSubtitle": "Un tour rapide et pratique de tout ce que votre Omi peut faire.",
     "deviceOnboardingIntroDuration": "Environ 1 minute",
     "jumpToLatestMessage": "Aller au dernier message",
-    "latest": "Récent"
+    "latest": "Récent",
+    "flashFirmware": "Flasher le firmware",
+    "pendantRecordingTitle": "Enregistrement sur le pendentif",
+    "pendantRecordingNote": "Votre pendentif enregistre de manière autonome. Les enregistrements se synchronisent avec votre téléphone lorsque l'application est ouverte.",
+    "pendantSyncingRecordings": "Synchronisation des enregistrements depuis votre pendentif…",
+    "pendantMinutesStored": "~{minutes} min stockées",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Le stockage du pendentif est presque plein — gardez l'application ouverte pour synchroniser.",
+    "connectRayBanMeta": "Connecter les Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Utilisez vos lunettes Ray-Ban Meta comme appareil de capture Omi pour vos conversations et le contexte visuel. Omi ouvrira l'application Meta AI pour associer vos lunettes.",
+    "raybanMetaOpenMetaAI": "Se connecter via Meta AI",
+    "raybanMetaWaitingForMetaAI": "Terminez la connexion dans l'application Meta AI, puis revenez ici.",
+    "raybanMetaCheckAgain": "Vérifier à nouveau",
+    "raybanMetaAllowCamera": "Autoriser la caméra des lunettes",
+    "raybanMetaCameraExplanation": "Omi utilise la caméra de vos lunettes pour ajouter des photos à vos conversations. Vous pouvez ignorer cette étape et utiliser uniquement l'audio.",
+    "raybanMetaSkipForNow": "Ignorer pour l'instant",
+    "raybanMetaAudioOnlyTitle": "Mode audio uniquement des Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Cette version d'Omi peut utiliser le microphone de vos lunettes via Bluetooth. La capture de photos nécessite la version développeur Meta d'Omi.",
+    "raybanMetaMusicPauseNote": "La musique sur votre téléphone se met en pause pendant l'utilisation du microphone des lunettes.",
+    "raybanMetaContinue": "Continuer",
+    "raybanMetaCapturePhoto": "Prendre une photo",
+    "raybanMetaPhotoRequested": "Photo demandée — elle apparaîtra dans votre conversation.",
+    "raybanMetaMicrophoneReady": "Microphone prêt",
+    "raybanMetaImageCaptureReady": "Capture d'image prête",
+    "raybanMetaImageCaptureUnavailable": "Indisponible en mode audio uniquement",
+    "raybanMetaCamera": "Caméra",
+    "errorConnectingRayBanMeta": "Erreur de connexion aux Ray-Ban Meta : {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -1,0 +1,8 @@
+{
+  "version": "0.12.21",
+  "date": "2026-07-05",
+  "changes": [
+    "Fixed push-to-talk silently dropping a tap too short to capture audio; it now shows a hint to hold longer",
+    "Fixed the too-short push-to-talk hint not appearing on Macs with a notch (the notch-island control bar)"
+  ]
+}

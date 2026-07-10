@@ -52,10 +52,7 @@ void main() {
 
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
-      final frame = WalFrame(
-        payload: [0xAA, 0xBB],
-        syncKey: FrameSyncKey([1]),
-      );
+      final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
       sync.onFrameCaptured(frame);
 
@@ -67,10 +64,7 @@ void main() {
 
     test('preserves insertion order for multiple frames', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: [i],
-          syncKey: FrameSyncKey([i]),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
 
       expect(sync.testFrames.length, 5);
@@ -117,7 +111,8 @@ void main() {
 
       sync.markFrameSynced(key); // marks index 2
       sync.markFrameSynced(
-          key); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
+        key,
+      ); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
 
       // Actually: markFrameSynced scans backward and breaks on FIRST syncKey match,
       // regardless of synced status. So second call marks index 2 again (already true).
@@ -161,10 +156,7 @@ void main() {
 
     test('correctly matches phone-mic-style 1-byte index keys', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       sync.markFrameSynced(FrameSyncKey.fromIndex(3));
@@ -330,10 +322,7 @@ void main() {
     test('phone mic frames with wrapping index keys', () {
       // Simulate phone mic producing 256+ frames (index wraps at 255)
       for (int i = 0; i < 260; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i & 0xFF),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i & 0xFF), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       expect(sync.testFrames.length, 260);
@@ -375,10 +364,7 @@ void main() {
 
       // BleDeviceSource strips header
       final payload = blePacket.sublist(3); // [0xAA, 0xBB, 0xCC]
-      final frame = WalFrame(
-        payload: payload,
-        syncKey: FrameSyncKey.fromBleHeader(blePacket),
-      );
+      final frame = WalFrame(payload: payload, syncKey: FrameSyncKey.fromBleHeader(blePacket));
 
       // _chunk stores payload only
       final chunk = [frame].map((f) => f.payload).toList();

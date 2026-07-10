@@ -8,14 +8,20 @@ class RecurringTaskScheduler {
     static let shared = RecurringTaskScheduler()
 
     private var timer: Timer?
-    private let coordinator: TaskChatCoordinator
+    private var coordinator: TaskChatCoordinator?
 
-    private init() {
-        let provider = ChatProvider()
-        coordinator = TaskChatCoordinator(chatProvider: provider)
+    private init() {}
+
+    /// Wire the canonical coordinator from `ViewModelContainer` before `start()`.
+    func configure(taskChatCoordinator: TaskChatCoordinator) {
+        coordinator = taskChatCoordinator
     }
 
     func start() {
+        guard coordinator != nil else {
+            log("RecurringTaskScheduler: taskChatCoordinator not configured — skipping start")
+            return
+        }
         guard timer == nil else { return }
         log("RecurringTaskScheduler: Starting (60s interval)")
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -34,6 +40,7 @@ class RecurringTaskScheduler {
     }
 
     private func checkDueTasks() async {
+        guard let coordinator else { return }
         guard AuthState.shared.isSignedIn else { return }
         guard TaskAgentSettings.shared.isChatEnabled else { return }
 

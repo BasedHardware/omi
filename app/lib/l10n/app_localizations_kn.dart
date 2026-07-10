@@ -9,6 +9,9 @@ class AppLocalizationsKn extends AppLocalizations {
   AppLocalizationsKn([String locale = 'kn']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.';
+
+  @override
   String get appTitle => 'ಓಮಿ';
 
   @override
@@ -9371,7 +9374,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9397,6 +9400,24 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String get memoryThisDevice => 'ಈ ಸಾಧನ';
+
+  @override
+  String get memoryThisIphone => 'ಈ iPhone';
+
+  @override
+  String get memoryThisPhone => 'ಈ ಫೋನ್';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 
   @override
   String get deviceTutorial => 'Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು';
@@ -9499,4 +9520,88 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get latest => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get flashFirmware => 'ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ';
+
+  @override
+  String get pendantRecordingTitle => 'ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get pendantRecordingNote =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.';
+
+  @override
+  String get pendantSyncingRecordings => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'ಸಂವಾದಗಳು ಮತ್ತು ದೃಶ್ಯ ಸನ್ನಿವೇಶಕ್ಕಾಗಿ ನಿಮ್ಮ Ray-Ban Meta ಕನ್ನಡಕವನ್ನು ನಿಮ್ಮ Omi ಸೆರೆಹಿಡಿಯುವ ಸಾಧನವಾಗಿ ಬಳಸಿ. ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಲಿಂಕ್ ಮಾಡಲು Omi Meta AI ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತೆರೆಯುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI ಮೂಲಕ ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ ಇಲ್ಲಿಗೆ ಹಿಂತಿರುಗಿ.';
+
+  @override
+  String get raybanMetaCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String get raybanMetaAllowCamera => 'ಕನ್ನಡಕದಲ್ಲಿ ಕ್ಯಾಮೆರಾವನ್ನು ಅನುಮತಿಸಿ';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'ನಿಮ್ಮ ಸಂವಾದಗಳಿಗೆ ಫೋಟೋಗಳನ್ನು ಸೇರಿಸಲು Omi ನಿಮ್ಮ ಕನ್ನಡಕದ ಕ್ಯಾಮೆರಾವನ್ನು ಬಳಸುತ್ತದೆ. ನೀವು ಇದನ್ನು ಬಿಟ್ಟುಬಿಟ್ಟು ಕೇವಲ ಆಡಿಯೊವನ್ನು ಬಳಸಬಹುದು.';
+
+  @override
+  String get raybanMetaSkipForNow => 'ಸದ್ಯಕ್ಕೆ ಬಿಟ್ಟುಬಿಡಿ';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi ನ ಈ ಆವೃತ್ತಿಯು ಬ್ಲೂಟೂತ್ ಮೂಲಕ ನಿಮ್ಮ ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಅನ್ನು ಬಳಸಬಹುದು. ಫೋಟೋ ಸೆರೆಹಿಡಿಯಲು Omi ನ Meta ಡೆವಲಪರ್ ಬಿಲ್ಡ್ ಅಗತ್ಯವಿದೆ.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಬಳಕೆಯಲ್ಲಿರುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿನ ಸಂಗೀತವು ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaContinue => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get raybanMetaCapturePhoto => 'ಫೋಟೋ ಸೆರೆಹಿಡಿಯಿರಿ';
+
+  @override
+  String get raybanMetaPhotoRequested => 'ಫೋಟೋ ವಿನಂತಿಸಲಾಗಿದೆ — ಇದು ನಿಮ್ಮ ಸಂವಾದದಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'ಮೈಕ್ರೋಫೋನ್ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'ಚಿತ್ರ ಸೆರೆಹಿಡಿಯುವಿಕೆ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get raybanMetaCamera => 'ಕ್ಯಾಮೆರಾ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: $error';
+  }
 }

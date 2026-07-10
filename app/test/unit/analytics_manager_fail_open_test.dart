@@ -46,6 +46,16 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 
+  test('page opens register context for native interaction events', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().pageOpened('Settings');
+
+    expect(adapter.interactionContexts, [const _InteractionContext(screenName: 'Settings', target: 'screen')]);
+  });
+
   test('track retries adapter failures without throwing through the caller', () async {
     final adapter = _FakeAnalyticsAdapter(trackFailuresBeforeSuccess: 1);
     AnalyticsManager.configure(adapter);
@@ -91,6 +101,7 @@ class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   final bool hangInit;
   int trackFailuresBeforeSuccess;
   final List<_RecordedEvent> events = [];
+  final List<_InteractionContext> interactionContexts = [];
   bool _initialized = false;
 
   @override
@@ -120,6 +131,11 @@ class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   }
 
   @override
+  void setInteractionContext({String? screenName, required String target}) {
+    interactionContexts.add(_InteractionContext(screenName: screenName, target: target));
+  }
+
+  @override
   void enable() {}
 
   @override
@@ -134,4 +150,18 @@ class _RecordedEvent {
 
   final String eventName;
   final Map<String, Object> properties;
+}
+
+class _InteractionContext {
+  const _InteractionContext({required this.screenName, required this.target});
+
+  final String? screenName;
+  final String target;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _InteractionContext && other.screenName == screenName && other.target == target;
+
+  @override
+  int get hashCode => Object.hash(screenName, target);
 }

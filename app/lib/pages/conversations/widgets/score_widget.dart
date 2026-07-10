@@ -441,8 +441,11 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                   AnimatedRotation(
                     turns: _isExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child:
-                        Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withValues(alpha: 0.4), size: 24),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      size: 24,
+                    ),
                   ),
                 ],
               ),

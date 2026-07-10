@@ -6,6 +6,15 @@ from typing import Any, Dict, List, Optional
 import anthropic
 import httpx
 from cachetools import TTLCache
+
+try:
+    from langchain_core.callbacks import BaseCallbackHandler
+except ImportError:
+
+    class BaseCallbackHandler:
+        pass
+
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -13,6 +22,7 @@ import tiktoken
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key, get_byok_custom_provider
+from utils.llm.byok_errors import handle_llm_error
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
@@ -49,12 +59,126 @@ from utils.llm.providers import (
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )
+
+try:
+    from utils.llm.providers import get_or_create_omi_gateway_llm
+except ImportError as exc:
+    if exc.name != 'utils.llm.providers' and 'get_or_create_omi_gateway_llm' not in str(exc):
+        raise
+
+    def get_or_create_omi_gateway_llm(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway LangChain client is unavailable')
+
+
+try:
+    from utils.llm.gateway_client import (
+        BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        feature_auto_lane_id,
+        raise_if_gateway_feature_mode_blocks_direct_model_surface,
+        should_route_features_through_gateway,
+    )
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_client':
+        raise
+
+    BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+    CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+
+    def feature_auto_lane_id(feature: str) -> str:
+        return f"omi:auto:{feature.replace('_', '-')}"
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
+    def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
+        return None
+
+
+try:
+    from utils.llm.gateway_observability import record_direct_exception_surface
+except ImportError:
+
+    def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged') -> None:
+        return None
+
+
+try:
+    from utils.llm.gateway_byok import get_or_create_omi_gateway_llm_for_byok
+except ImportError:
+
+    def get_or_create_omi_gateway_llm_for_byok(*_args, **_kwargs):
+        raise RuntimeError('BYOK gateway LangChain client is unavailable')
+
+
+try:
+    from utils.llm.gateway_anthropic import get_gateway_first_anthropic_client
+except ImportError:
+
+    def get_gateway_first_anthropic_client(*, legacy_client, agent_model):
+        return legacy_client
+
+
+try:
+    from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_shadow':
+        raise
+
+    def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
+        return legacy_model
+
+
+try:
+    from utils.llm.gateway_serving import wrap_gateway_with_legacy_fallback
+except ImportError:
+    # Stubbed/isolated test environments may lack langchain_core submodules.
+    def wrap_gateway_with_legacy_fallback(*, gateway_model, **_kwargs):
+        return gateway_model
+
+
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
 
 _usage_callback = get_usage_callback()
 _GEMINI_OPENAI_BASE_URL = GEMINI_OPENAI_BASE_URL
+
+
+class _LLMErrorCallback(BaseCallbackHandler):
+    """LangChain callback that tags provider errors with platform/BYOK source."""
+
+    def __init__(self, provider: str, model: str = '', feature: str = ''):
+        self.provider = provider
+        self.model = model
+        self.feature = feature
+
+    def on_llm_error(self, error: BaseException, **kwargs) -> None:
+        if isinstance(error, Exception):
+            handle_llm_error(error, self.provider, feature=self.feature, model=self.model)
+
+
+_llm_error_callbacks = {}
+
+
+def _get_llm_error_callback(provider: str, model: str = '', feature: str = '') -> _LLMErrorCallback:
+    key = (provider, model, feature)
+    if key not in _llm_error_callbacks:
+        _llm_error_callbacks[key] = _LLMErrorCallback(provider, model=model, feature=feature)
+    return _llm_error_callbacks[key]
+
+
+def _with_llm_callbacks(kwargs: Dict[str, Any], provider: str, model: str = '', feature: str = '') -> Dict[str, Any]:
+    result = dict(kwargs)
+    callbacks = list(result.get('callbacks') or [])
+    if _usage_callback not in callbacks:
+        callbacks.append(_usage_callback)
+    error_callback = _get_llm_error_callback(provider, model=model, feature=feature)
+    if error_callback not in callbacks:
+        callbacks.append(error_callback)
+    result['callbacks'] = callbacks
+    return result
+
 
 # ---------------------------------------------------------------------------
 # BYOK (Bring Your Own Key)
@@ -77,8 +201,18 @@ class _AnthropicClientProxy:
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
         if byok:
-            return _cached_anthropic(byok)
-        return self._default
+            legacy = _cached_anthropic(byok)
+            if should_route_features_through_gateway():
+                return get_gateway_first_anthropic_client(
+                    legacy_client=legacy,
+                    agent_model=ANTHROPIC_AGENT_MODEL,
+                    byok_api_key=byok,
+                )
+            return legacy
+        return get_gateway_first_anthropic_client(
+            legacy_client=self._default,
+            agent_model=ANTHROPIC_AGENT_MODEL,
+        )
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
@@ -88,6 +222,7 @@ class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
     __slots__ = ('_model', '_default', '_ctor_kwargs')
+    _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
     def __init__(self, model: str, default: OpenAIEmbeddings, ctor_kwargs: Dict[str, Any]):
         object.__setattr__(self, '_model', model)
@@ -120,6 +255,12 @@ class _OpenAIEmbeddingsProxy:
                 'invalid_api_key',
                 'incorrect api key',
                 'invalid api key',
+                'model_not_found',
+                'does not have access to model',
+                'permissiondeniederror',
+                'permission denied',
+                '403 forbidden',
+                'error code: 403',
                 'rate_limit',
                 ' 429',
                 ' 401',
@@ -131,9 +272,11 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_query(text)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_query(text)
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_query(text)
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -141,13 +284,47 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_documents(texts)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_documents(texts)
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_documents(texts)
             raise
 
     def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
+        inst = self._resolve()
+        attr = getattr(inst, name)
+        if name not in self._METHODS_TO_WRAP or not callable(attr):
+            return attr
+        if name.startswith('a'):
+
+            async def _wrapped_async(*args, **kwargs):
+                try:
+                    return await attr(*args, **kwargs)
+                except Exception as e:
+                    if inst is not self._default:
+                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        if self._is_key_failure(e):
+                            logger.warning(
+                                "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                            )
+                            return await getattr(self._default, name)(*args, **kwargs)
+                    raise
+
+            return _wrapped_async
+
+        def _wrapped(*args, **kwargs):
+            try:
+                return attr(*args, **kwargs)
+            except Exception as e:
+                if inst is not self._default:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    if self._is_key_failure(e):
+                        logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                        return getattr(self._default, name)(*args, **kwargs)
+                raise
+
+        return _wrapped
 
 
 _BYOK_CACHE_MAX_SIZE = 256
@@ -184,7 +361,10 @@ def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
-    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'request_timeout': 120, 'max_retries': 1}
+    callback_provider = _effective_byok_provider(model, provider)
+    kwargs: Dict[str, Any] = _with_llm_callbacks(
+        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
+    )
     if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
@@ -240,6 +420,7 @@ def get_anthropic_client() -> anthropic.AsyncAnthropic:
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
     """Explicit factory; equivalent to using the module-level proxies."""
+    kwargs = _with_llm_callbacks(kwargs, 'openai', model=model)
     byok = get_byok_key('openai')
     if byok:
         return _cached_openai_chat(model, byok, kwargs)
@@ -283,11 +464,13 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     providers. Returns a BaseChatModel. For Anthropic/Perplexity, use
     get_model(feature) to get the model string and the provider-specific client.
     """
-    if is_anthropic_only_feature(feature):
+    gateway_feature_mode = should_route_features_through_gateway()
+
+    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if is_perplexity_only_feature(feature):
+    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
@@ -309,11 +492,11 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
 
     model, provider = _get_model_config(feature)
 
-    if provider == 'anthropic':
+    if provider == 'anthropic' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
         )
-    if provider == 'perplexity':
+    if provider == 'perplexity' and not gateway_feature_mode:
         raise ValueError(
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
@@ -339,17 +522,79 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
 
-    if byok_key:
+    if byok_key and gateway_feature_mode:
+        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        if byok_client is None:
+            raise RuntimeError(f'BYOK is not supported for feature={feature} provider={provider}')
+        gateway_model = get_or_create_omi_gateway_llm_for_byok(
+            feature_auto_lane_id(feature),
+            provider=_effective_byok_provider(model, provider),
+            api_key=byok_key,
+            streaming=streaming,
+        )
+        result = wrap_gateway_with_legacy_fallback(
+            feature=feature,
+            gateway_model=gateway_model,
+            legacy_model=byok_client,
+        )
+    elif byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
         result = (
             byok_client
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
+    elif gateway_feature_mode:
+        gateway_model = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
+        if provider in {'anthropic', 'perplexity'}:
+            # No OpenAI-compatible LangChain legacy client for these providers.
+            result = gateway_model
+        else:
+            legacy_model = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
+            result = wrap_gateway_with_legacy_fallback(
+                feature=feature,
+                gateway_model=gateway_model,
+                legacy_model=legacy_model,
+            )
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 
+    result = maybe_wrap_dev_gateway_shadow(
+        feature=feature,
+        model=model,
+        provider=provider,
+        streaming=streaming,
+        legacy_model=result,
+    )
+
     if cache_key and supports_prompt_cache(model):
+        return result.bind(prompt_cache_key=cache_key)
+    return result
+
+
+def get_llm_gateway_chat_structured(
+    streaming: bool = False,
+    cache_key: Optional[str] = None,
+    request_timeout: float | None = None,
+) -> BaseChatModel:
+    """Return the gateway chat-structured lane as a LangChain chat model.
+
+    Use this for shadow/eval comparisons that must preserve the existing
+    LangChain prompt and parser chain shape. Live feature routing should still
+    go through ``get_llm(feature)`` until an explicit rollout promotes the
+    gateway provider for that feature.
+    """
+
+    result = get_or_create_omi_gateway_llm(
+        CHAT_STRUCTURED_AUTO_LANE_ID,
+        streaming,
+        options={
+            'request_timeout': (
+                request_timeout if request_timeout is not None else BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
+            )
+        },
+    )
+    if cache_key:
         return result.bind(prompt_cache_key=cache_key)
     return result
 
@@ -414,6 +659,8 @@ def num_tokens_from_string(string: str) -> int:
 
 
 def generate_embedding(content: str) -> List[float]:
+    if should_route_features_through_gateway():
+        record_direct_exception_surface(surface='openai_embeddings', reason='out_of_scope')
     return embeddings.embed_documents([content])[0]
 
 
@@ -426,6 +673,8 @@ def gemini_embed_query(text: str) -> List[float]:
     Prefers the per-request BYOK Gemini key; falls back to the process-wide
     env key so non-BYOK callers behave exactly as before.
     """
+    if should_route_features_through_gateway():
+        record_direct_exception_surface(surface='gemini_screen_activity_query_embedding', reason='out_of_scope')
     api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
     url = 'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent'
     payload = {

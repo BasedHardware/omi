@@ -9,6 +9,7 @@ The handler now catches it and returns HTTP 400. These tests mount the conversat
 import os
 import sys
 from datetime import datetime, timezone
+from enum import Enum
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -156,6 +157,37 @@ _request_validation.NonNegativeOffset = int
 _request_validation.PositiveLimit = int
 _register_module('utils.request_validation', _request_validation)
 
+_utils_memory_pkg = ModuleType('utils.memory')
+_utils_memory_pkg.__path__ = []
+_register_module('utils.memory', _utils_memory_pkg)
+
+_memory_service_stub = ModuleType('utils.memory.memory_service')
+setattr(_memory_service_stub, 'MemoryService', MagicMock())
+_register_module('utils.memory.memory_service', _memory_service_stub)
+
+
+class _MemorySystem(str, Enum):
+    LEGACY = 'legacy'
+    CANONICAL = 'canonical'
+
+
+_memory_system_stub = ModuleType('utils.memory.memory_system')
+setattr(_memory_system_stub, 'MemorySystem', _MemorySystem)
+_register_module('utils.memory.memory_system', _memory_system_stub)
+
+_canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
+setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
+_register_module('utils.memory.canonical_activation', _canonical_activation_stub)
+
+_surface_routing_stub = ModuleType('utils.memory.surface_routing')
+setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
+_register_module('utils.memory.surface_routing', _surface_routing_stub)
+
+_apps_stub = ModuleType('utils.apps')
+setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
+setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
+_register_module('utils.apps', _apps_stub)
+
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from models.conversation import Conversation  # noqa: E402
@@ -192,7 +224,9 @@ def test_bad_end_date_returns_400_not_500():
 
 
 def test_valid_date_is_accepted_and_calls_search():
-    with patch.object(conv, 'search_conversations', return_value={'conversations': []}) as mock_search:
+    with patch.object(
+        conv, 'search_conversations', return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
+    ) as mock_search:
         client = _client()
         resp = client.post(
             '/v1/conversations/search',
@@ -205,7 +239,11 @@ def test_valid_date_is_accepted_and_calls_search():
 def test_named_speaker_is_validated_and_forwarded():
     with (
         patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}) as mock_get_person,
-        patch.object(conv, 'search_conversations', return_value={'items': []}) as mock_search,
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ) as mock_search,
     ):
         client = _client()
         resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1'})
@@ -227,7 +265,11 @@ def test_unknown_speaker_returns_404():
 def test_user_speaker_does_not_require_person_record():
     with (
         patch.object(conv.users_db, 'get_person') as mock_get_person,
-        patch.object(conv, 'search_conversations', return_value={'items': []}) as mock_search,
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ) as mock_search,
     ):
         client = _client()
         resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'user'})

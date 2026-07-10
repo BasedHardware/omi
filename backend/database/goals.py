@@ -4,7 +4,7 @@ Stores user goals in Firestore under users/{uid}/goals collection.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -16,12 +16,30 @@ goal_history_collection = 'goal_history'
 users_collection = 'users'
 
 
-def _goal_dict(doc) -> Dict[str, Any]:
+def _goal_dict(doc: Any) -> Dict[str, Any]:
     """Convert a Firestore document to a goal dict, ensuring 'id' is always present."""
-    data = doc.to_dict() or {}
+    raw: object = doc.to_dict()
+    data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     if not data.get('id'):
         data['id'] = doc.id
     return data
+
+
+def _coerce_created_at(value: Any) -> datetime:
+    """Coerce a created_at value to a timezone-aware datetime for safe sorting.
+
+    Goals normally carry a timezone-aware datetime, but a missing field or a legacy/manual ISO-string
+    value would mix types in a comparison and raise TypeError. Anything that is not a datetime
+    (missing, falsy, or a string) maps to datetime.min so it sorts first instead of crashing; naive
+    datetimes are normalized to UTC.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _goal_created_at_sort_key(goal: Dict[str, Any]) -> datetime:
+    return _coerce_created_at(goal.get('created_at'))
 
 
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
@@ -47,9 +65,12 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     docs = list(query.stream())
 
-    # Sort in Python instead of Firestore (avoids composite index requirement)
+    # Sort in Python instead of Firestore (avoids composite index requirement). The sort key always
+    # returns a timezone-aware datetime, because a missing, falsy, or non-datetime created_at (e.g. a
+    # legacy ISO string) would otherwise mix types in the comparison and raise TypeError, crashing the
+    # whole list.
     goals = [_goal_dict(doc) for doc in docs]
-    goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
+    goals.sort(key=_goal_created_at_sort_key, reverse=False)
 
     return goals
 
@@ -66,7 +87,7 @@ def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 4) -> Dict
     if len(active_goals) >= max_goals:
         # Sort by created_at and deactivate oldest
         active_goals_data = [(doc, doc.to_dict().get('created_at')) for doc in active_goals]
-        active_goals_data.sort(key=lambda x: x[1] if x[1] else datetime.min.replace(tzinfo=timezone.utc))
+        active_goals_data.sort(key=lambda x: _coerce_created_at(x[1]))
         oldest_doc = active_goals_data[0][0]
         oldest_doc.reference.update({'is_active': False, 'ended_at': datetime.now(timezone.utc)})
 
@@ -138,7 +159,11 @@ def get_goal_history(uid: str, goal_id: str, days: int = 30) -> List[Dict[str, A
     history_ref = goal_ref.collection(goal_history_collection)
 
     query = history_ref.order_by('date', direction=firestore.Query.DESCENDING).limit(days)
-    history = [doc.to_dict() for doc in query.stream()]
+    history: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        raw_hist: object = doc.to_dict()
+        if isinstance(raw_hist, dict):
+            history.append(cast(Dict[str, Any], raw_hist))
 
     return history
 

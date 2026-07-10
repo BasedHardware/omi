@@ -1,5 +1,6 @@
 {
     "@@locale": "hu",
+    "sessionExpiredSignInAgain": "A munkamenet lejárt — jelentkezz be újra.",
     "appTitle": "Omi",
     "conversationTab": "Beszélgetés",
     "transcriptTab": "Átirat",
@@ -3150,7 +3151,7 @@
     "syncCustomSttWarningMessage": "Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.",
     "transcribeLaterTitle": "Átírás később",
     "transcribeLaterDescription": "Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.",
-    "transcribeLaterNote": "Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.",
+    "transcribeLaterNote": "Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.",
     "transcribeLaterStorageFull": "Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.",
     "unmute": "Némítás feloldása",
     "newRecording": "Új felvétel",
@@ -3160,6 +3161,12 @@
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
     "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
     "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.",
+    "memoryThisDevice": "Ez az eszköz",
+    "memoryThisIphone": "Ez az iPhone",
+    "memoryThisPhone": "Ez a telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Az Omi használata",
     "deviceOnboardingTranscriptionTitle": "Beszélj az Omihoz",
     "deviceOnboardingTranscriptionSubtitle": "Mondj néhány szót, és nézd, ahogy valós időben megjelennek",
@@ -3193,5 +3200,44 @@
     "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
     "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
     "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
-    "latest": "Legújabb"
+    "latest": "Legújabb",
+    "flashFirmware": "Firmware flashelése",
+    "pendantRecordingTitle": "Felvétel a medálon",
+    "pendantRecordingNote": "A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.",
+    "pendantSyncingRecordings": "Felvételek szinkronizálása a medálodról…",
+    "pendantMinutesStored": "~{minutes} perc tárolva",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.",
+    "connectRayBanMeta": "Ray-Ban Meta csatlakoztatása",
+    "raybanMetaSetupDescription": "Használja a Ray-Ban Meta szemüvegét Omi rögzítőeszközként beszélgetésekhez és vizuális kontextushoz. Az Omi megnyitja a Meta AI alkalmazást a szemüveg összekapcsolásához.",
+    "raybanMetaOpenMetaAI": "Csatlakozás a Meta AI-n keresztül",
+    "raybanMetaWaitingForMetaAI": "Fejezze be a csatlakozást a Meta AI alkalmazásban, majd térjen vissza ide.",
+    "raybanMetaCheckAgain": "Ellenőrzés újra",
+    "raybanMetaAllowCamera": "Kamera engedélyezése a szemüvegen",
+    "raybanMetaCameraExplanation": "Az Omi a szemüveg kameráját használja fényképek hozzáadásához a beszélgetésekhez. Ezt kihagyhatja, és csak hangot használhat.",
+    "raybanMetaSkipForNow": "Kihagyás egyelőre",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta csak hang mód",
+    "raybanMetaAudioOnlyExplanation": "Az Omi ezen verziója Bluetooth-on keresztül tudja használni a szemüveg mikrofonját. A fényképek rögzítéséhez az Omi Meta fejlesztői változata szükséges.",
+    "raybanMetaMusicPauseNote": "A telefonon lévő zene szünetel, amíg a szemüveg mikrofonja használatban van.",
+    "raybanMetaContinue": "Folytatás",
+    "raybanMetaCapturePhoto": "Fénykép készítése",
+    "raybanMetaPhotoRequested": "Fénykép kérve — meg fog jelenni a beszélgetésében.",
+    "raybanMetaMicrophoneReady": "Mikrofon készen áll",
+    "raybanMetaImageCaptureReady": "Képrögzítés készen áll",
+    "raybanMetaImageCaptureUnavailable": "Nem érhető el csak hang módban",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Hiba a Ray-Ban Meta csatlakoztatásakor: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

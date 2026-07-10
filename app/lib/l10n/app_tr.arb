@@ -1,5 +1,6 @@
 {
     "@@locale": "tr",
+    "sessionExpiredSignInAgain": "Oturumun süresi doldu — tekrar giriş yapın.",
     "appTitle": "Omi",
     "conversationTab": "Konuşma",
     "transcriptTab": "Transkript",
@@ -3089,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.",
     "transcribeLaterTitle": "Sonradan Transkribe Et",
     "transcribeLaterDescription": "Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.",
-    "transcribeLaterNote": "Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
+    "transcribeLaterNote": "Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
     "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.",
     "unmute": "Sesi aç",
     "newRecording": "Yeni kayıt",
@@ -3099,6 +3100,12 @@
     "captureModeLiveDescription": "Siz konuşurken gerçek zamanlı olarak yazıya dökün.",
     "captureModeLaterDescription": "Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.",
     "backgroundModeUnavailable": "Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.",
+    "memoryThisDevice": "Bu cihaz",
+    "memoryThisIphone": "Bu iPhone",
+    "memoryThisPhone": "Bu telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "Omi Nasıl Kullanılır",
     "deviceOnboardingTranscriptionTitle": "Omi'nize Konuşun",
     "deviceOnboardingTranscriptionSubtitle": "Birkaç kelime söyleyin ve gerçek zamanlı olarak göründüklerini izleyin",
@@ -3132,5 +3139,44 @@
     "deviceOnboardingIntroSubtitle": "Omi'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.",
     "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika",
     "jumpToLatestMessage": "En son mesaja git",
-    "latest": "En son"
+    "latest": "En son",
+    "flashFirmware": "Donanım Yazılımını Yükle",
+    "pendantRecordingTitle": "Pendant'ta kayıt yapılıyor",
+    "pendantRecordingNote": "Pendant'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.",
+    "pendantSyncingRecordings": "Pendant'ından kayıtlar eşitleniyor…",
+    "pendantMinutesStored": "~{minutes} dk kayıtlı",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pendant'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.",
+    "connectRayBanMeta": "Ray-Ban Meta'yı Bağla",
+    "raybanMetaSetupDescription": "Ray-Ban Meta gözlüğünüzü konuşmalar ve görsel bağlam için Omi kayıt cihazınız olarak kullanın. Omi, gözlüğünüzü bağlamak için Meta AI uygulamasını açacaktır.",
+    "raybanMetaOpenMetaAI": "Meta AI ile bağlan",
+    "raybanMetaWaitingForMetaAI": "Bağlantıyı Meta AI uygulamasında tamamlayın, ardından buraya geri dönün.",
+    "raybanMetaCheckAgain": "Tekrar Kontrol Et",
+    "raybanMetaAllowCamera": "Gözlükte Kameraya İzin Ver",
+    "raybanMetaCameraExplanation": "Omi, konuşmalarınıza fotoğraf eklemek için gözlüğünüzün kamerasını kullanır. Bunu atlayıp yalnızca sesi kullanabilirsiniz.",
+    "raybanMetaSkipForNow": "Şimdilik Atla",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta yalnızca ses modu",
+    "raybanMetaAudioOnlyExplanation": "Omi'nin bu sürümü gözlüğünüzün mikrofonunu Bluetooth üzerinden kullanabilir. Fotoğraf çekimi için Omi'nin Meta geliştirici sürümü gerekir.",
+    "raybanMetaMusicPauseNote": "Gözlüğün mikrofonu kullanılırken telefonunuzdaki müzik duraklatılır.",
+    "raybanMetaContinue": "Devam Et",
+    "raybanMetaCapturePhoto": "Fotoğraf Çek",
+    "raybanMetaPhotoRequested": "Fotoğraf istendi — konuşmanızda görünecektir.",
+    "raybanMetaMicrophoneReady": "Mikrofon hazır",
+    "raybanMetaImageCaptureReady": "Görüntü yakalama hazır",
+    "raybanMetaImageCaptureUnavailable": "Yalnızca ses modunda kullanılamaz",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta'ya bağlanırken hata: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

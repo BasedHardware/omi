@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { legacyPermissionPolicy } from "../legacy-permission-policy.js";
+import { resolveAcpPermission, resolveExternalAcpPermission } from "../runtime/desktop-tool-policy.js";
 import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
@@ -22,6 +22,11 @@ import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } 
 type ResponseHandler = {
   resolve: (result: unknown) => void;
   reject: (err: Error) => void;
+};
+
+type PendingToolActivity = {
+  id: string;
+  name: string;
 };
 
 /**
@@ -411,15 +416,22 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   ): Promise<AdapterAttemptResult> {
     const adapterSessionId = context.binding.adapterNativeSessionId;
     let fullText = "";
-    const pendingTools: string[] = [];
+    const pendingTools: PendingToolActivity[] = [];
+    let syntheticToolIdCounter = 0;
     const previousHandler = this.notificationHandler;
     let lastProgressAt = Date.now();
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params);
       if (signal.aborted || method !== "session/update") return;
-      const didProgress = this.translateSessionUpdate(params as Record<string, unknown>, pendingTools, sink, (text) => {
-        fullText += text;
-      });
+      const didProgress = this.translateSessionUpdate(
+        params as Record<string, unknown>,
+        pendingTools,
+        () => `acp-tool-${++syntheticToolIdCounter}`,
+        sink,
+        (text) => {
+          fullText += text;
+        }
+      );
       if (didProgress) {
         lastProgressAt = Date.now();
       }
@@ -524,14 +536,14 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   }
 
   async closeBinding(_binding: AdapterBindingHandle): Promise<void> {
-    // ACP exposes no explicit close primitive in the compatibility protocol.
+    // ACP exposes no explicit close primitive.
   }
 
   /**
    * OpenClaw (and any adapter configured with {@code sessionMcpServersMode:
    * "empty"}) strips per-session MCP servers before creating a session, so the
    * adapter-effective MCP set is always empty. Returning `[]` here lets the
-   * kernel's binding-compatibility hash reflect what the adapter actually saw,
+   * kernel's binding hash reflect what the adapter actually saw,
    * preventing spurious binding replacements when a request-scoped env var
    * (e.g. OMI_QUERY_MODE) changes in the raw input.
    */
@@ -584,8 +596,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
       const decision = this.adapterId === "acp"
-        ? legacyPermissionPolicy.resolveAcpPermission({ requestId: id, options })
-        : legacyPermissionPolicy.resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
+        ? resolveAcpPermission({ requestId: id, options })
+        : resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
       this.log(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
       if ("acpError" in decision) {
         this.stdinWriter?.(JSON.stringify({
@@ -632,7 +644,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   private translateSessionUpdate(
     params: Record<string, unknown>,
-    pendingTools: string[],
+    pendingTools: PendingToolActivity[],
+    nextSyntheticToolId: () => string,
     sink: AdapterEventSink,
     onText: (text: string) => void
   ): boolean {
@@ -648,8 +661,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         const content = update.content as { type: string; text?: string } | undefined;
         const text = content?.text ?? "";
         if (!text) return false;
-        for (const name of pendingTools.splice(0)) {
-          sink({ type: "tool_activity", name, status: "completed" });
+        for (const tool of pendingTools.splice(0)) {
+          sink({ type: "tool_activity", name: tool.name, status: "completed", toolUseId: tool.id });
         }
         onText(text);
         sink({ type: "text_delta", text });
@@ -667,11 +680,13 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       }
 
       case "tool_call": {
-        const toolCallId = (update.toolCallId as string) ?? "";
+        const toolCallId = this.resolveToolCallStartId(update, nextSyntheticToolId);
         const title = this.toolTitle(update);
         const status = (update.status as string) ?? "pending";
         if (status === "pending" || status === "in_progress") {
-          pendingTools.push(title);
+          if (!pendingTools.some((tool) => tool.id === toolCallId)) {
+            pendingTools.push({ id: toolCallId, name: title });
+          }
           const rawInput = update.rawInput as Record<string, unknown> | undefined;
           sink({
             type: "tool_activity",
@@ -686,18 +701,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       }
 
       case "tool_call_update": {
-        const toolCallId = (update.toolCallId as string) ?? "";
         const status = (update.status as string) ?? "";
         const title = this.toolTitle(update);
         if (status !== "completed" && status !== "failed" && status !== "cancelled") {
           return false;
         }
-        const idx = pendingTools.indexOf(title);
+        const toolCallId = this.resolveToolCallUpdateId(update, pendingTools, nextSyntheticToolId);
+        const idx = pendingTools.findIndex((tool) => tool.id === toolCallId);
         if (idx >= 0) pendingTools.splice(idx, 1);
         sink({
           type: "tool_activity",
           name: title,
-          status: "completed",
+          status: status === "completed" ? "completed" : "failed",
           toolUseId: toolCallId,
         });
 
@@ -735,6 +750,29 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.log(`Unknown session update type: ${sessionUpdate}`);
         return false;
     }
+  }
+
+  private resolveToolCallStartId(
+    update: Record<string, unknown>,
+    nextSyntheticToolId: () => string
+  ): string {
+    const explicitId = typeof update.toolCallId === "string" ? update.toolCallId.trim() : "";
+    if (explicitId) return explicitId;
+    return nextSyntheticToolId();
+  }
+
+  private resolveToolCallUpdateId(
+    update: Record<string, unknown>,
+    pendingTools: PendingToolActivity[],
+    nextSyntheticToolId: () => string
+  ): string {
+    const explicitId = typeof update.toolCallId === "string" ? update.toolCallId.trim() : "";
+    if (explicitId) return explicitId;
+
+    const title = this.toolTitle(update);
+    const existing = pendingTools.find((tool) => tool.name === title);
+    if (existing) return existing.id;
+    return nextSyntheticToolId();
   }
 
   private toolTitle(update: Record<string, unknown>): string {

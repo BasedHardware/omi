@@ -15,10 +15,10 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboa
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
-  // When true (e.g. re-opened from Settings → Device Tutorial after completing
-  // it once), the flow is dismissible: a back arrow is shown and the system back
-  // gesture works. The forced first-run (auto-triggered on device connect) leaves
-  // this false so the tutorial stays non-skippable.
+  // True when re-opened from Settings → Device Tutorial. The flow is always
+  // dismissible (a hardware/BLE hiccup mid-tutorial must never soft-lock the
+  // app); leaving on the first run persists completion so it doesn't re-fire,
+  // and the tutorial stays reachable from device settings.
   final bool allowExit;
 
   const InteractiveDeviceOnboardingWrapper({super.key, this.allowExit = false});
@@ -101,12 +101,28 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     Navigator.of(context).pop();
   }
 
+  /// Leave the tutorial from any point. Persists completion so the forced
+  /// first-run never re-fires (redo anytime via Settings → Device Tutorial);
+  /// dispose() records the abandoned step for analytics.
+  void _skipOnboarding() {
+    SharedPreferencesUtil().deviceOnboardingCompleted = true;
+    updateUserOnboardingState(deviceOnboardingCompleted: true);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: _onboardingProvider,
       child: PopScope(
-        canPop: widget.allowExit,
+        // Intercept system back so leaving mid-tutorial persists completion —
+        // otherwise the forced flow re-fires on next launch. _completeOnboarding
+        // and _skipOnboarding pop directly (didPop == true) and skip this path.
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _skipOnboarding();
+        },
         child: Scaffold(
           backgroundColor: Colors.transparent,
           body: Container(
@@ -123,25 +139,23 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
                 child: _showIntro
                     ? OnboardingIntroScreen(
                         key: const ValueKey('intro'),
-                        allowExit: widget.allowExit,
                         onStart: _startTutorial,
+                        onSkip: _skipOnboarding,
                       )
                     : Column(
                         key: const ValueKey('steps'),
                         children: [
-                          // Back affordance only when the flow is dismissible (re-opened
-                          // from Settings); reserves a small top gap otherwise.
+                          // Always dismissible: a stuck step (e.g. the mic-test
+                          // waiting on a response) must never trap the user.
                           SizedBox(
-                            height: widget.allowExit ? 48 : 16,
-                            child: widget.allowExit
-                                ? Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                                      onPressed: () => Navigator.of(context).maybePop(),
-                                    ),
-                                  )
-                                : null,
+                            height: 48,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: IconButton(
+                                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                                onPressed: _skipOnboarding,
+                              ),
+                            ),
                           ),
                           // Persistent progress indicator — stays fixed and animates the
                           // active dot in place while only the content below transitions.

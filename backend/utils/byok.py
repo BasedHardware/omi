@@ -18,10 +18,9 @@ import ipaddress
 import logging
 import socket
 import threading
-import time
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 from cachetools import TTLCache
@@ -41,11 +40,11 @@ logger = logging.getLogger('byok')
 # ---------------------------------------------------------------------------
 _BYOK_STATE_CACHE_MAX = 1024
 _BYOK_STATE_CACHE_TTL = 30  # seconds
-_byok_state_cache: TTLCache = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
+_byok_state_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
 _byok_state_cache_lock = threading.Lock()
 
 
-def get_cached_byok_state(uid: str) -> dict:
+def get_cached_byok_state(uid: str) -> Dict[str, Any]:
     """Return BYOK state for *uid*, hitting Firestore at most once per TTL window."""
     with _byok_state_cache_lock:
         cached = _byok_state_cache.get(uid)
@@ -90,6 +89,7 @@ BYOK_CUSTOM_CONFIG_HEADERS = {
 # Keys for the current request, if the client supplied them.
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
+_byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -102,6 +102,16 @@ def get_byok_key(provider: str) -> Optional[str]:
     if keys is None:
         return None
     return keys.get(provider)
+
+
+def get_byok_uid() -> Optional[str]:
+    """Return the authenticated uid for the current request, when known."""
+    return _byok_uid_ctx.get()
+
+
+def set_byok_uid(uid: Optional[str]) -> None:
+    """Attach the authenticated uid to the current request context."""
+    _byok_uid_ctx.set(uid)
 
 
 def has_byok_keys() -> bool:
@@ -250,7 +260,7 @@ class BYOKMiddleware(BaseHTTPMiddleware):
     ``extract_byok_from_websocket`` + ``set_byok_keys`` manually.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Any]]) -> Any:
         keys: Dict[str, str] = {}
         for provider, header in BYOK_HEADERS.items():
             value = request.headers.get(header)
@@ -261,10 +271,12 @@ class BYOKMiddleware(BaseHTTPMiddleware):
             if value:
                 keys[field] = value
         token = _byok_ctx.set(keys)
+        uid_token = _byok_uid_ctx.set(None)
         try:
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
+            _byok_uid_ctx.reset(uid_token)
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +357,7 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
+    set_byok_uid(uid)
 
 
 def validate_byok_websocket(uid: str) -> Optional[str]:
@@ -357,4 +370,6 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
     error = _check_byok_validity(uid)
     if error:
         logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+    else:
+        set_byok_uid(uid)
     return error

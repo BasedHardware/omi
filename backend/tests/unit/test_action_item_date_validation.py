@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -50,8 +52,18 @@ def _stub_module(name):
 
 
 def _stub_package(name):
-    mod = _stub_module(name)
+    # Always replace package modules with fresh stubs after the sys.modules
+    # snapshot. Reusing an already-imported real package and mutating
+    # ``__path__`` would alter the snapshotted object itself, so restoring the
+    # sys.modules entry later would still leave the original package corrupted.
+    mod = types.ModuleType(name)
     mod.__path__ = []
+    sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 
@@ -71,7 +83,58 @@ def _load_module_from_file(module_name, file_path):
 
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies
+#
+# Snapshot touched modules first so the stubs installed below do not leak into
+# other test files during bulk ``pytest tests/unit/`` collection (issue #8661).
+# They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
+_SYS_MODULE_NAMES = [
+    "firebase_admin",
+    "firebase_admin.firestore",
+    "firebase_admin.auth",
+    "firebase_admin.messaging",
+    "firebase_admin.credentials",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.firestore_v1.base_query",
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.transport.requests",
+    "google.cloud.storage",
+    "opuslib",
+    "sentry_sdk",
+    "database",
+    "database._client",
+    "database.redis_db",
+    "database.auth",
+    "database.action_items",
+    "database.notifications",
+    "utils",
+    "utils.notifications",
+    "utils.byok",
+    "utils.llm",
+    "utils.llm.gateway_client",
+    "utils.llm.gateway_observability",
+    "utils.llm.clients",
+    "utils.llm.conversation_folder",
+    "utils.llm.conversation_processing",
+    "utils.retrieval",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools.action_item_tools",
+    "utils.retrieval.agentic",
+    "utils.conversations",
+    "utils.conversations.render",
+    "langchain_core",
+    "langchain_core.tools",
+    "langchain_core.runnables",
+    "langchain_core.output_parsers",
+    "langchain_core.prompts",
+    "models",
+    "models.conversation",
+    "models.app",
+]
+_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
+
 for importable_mod_name in [
     "google.auth",
     "google.auth.transport",
@@ -137,8 +200,15 @@ if "utils.byok" not in sys.modules:
 
 if "utils.llm.gateway_client" not in sys.modules:
     gateway_mod = _stub_module("utils.llm.gateway_client")
-    gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
-    gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+else:
+    gateway_mod = sys.modules["utils.llm.gateway_client"]
+gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+gateway_mod.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+
+if "utils.llm.gateway_observability" not in sys.modules:
+    gateway_observability_mod = _stub_module("utils.llm.gateway_observability")
+    gateway_observability_mod.record_gateway_shadow_comparison = MagicMock()
 
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
@@ -207,6 +277,7 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 
 # Stub utils.llm.conversation_folder (conversation_processing imports from it after a recent refactor)
 conv_folder_stub = _stub_module("utils.llm.conversation_folder")
@@ -227,6 +298,16 @@ action_item_tools = _load_module_from_file(
 )
 create_action_item_tool = action_item_tools.create_action_item_tool
 update_action_item_tool = action_item_tools.update_action_item_tool
+
+conversation_processing = _load_module_from_file(
+    "utils.llm.conversation_processing",
+    BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
+)
+
+# Restore sys.modules now that the modules under test are imported and bound to
+# their stubbed dependencies. Tests below patch those module objects directly.
+restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):
@@ -424,12 +505,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_prompt_contains_current_time_and_staleness_rule(self):
         """The extraction prompt source should contain current_time and staleness logic."""
-        # Load conversation_processing to inspect source
-        conv_proc = _load_module_from_file(
-            "utils.llm.conversation_processing",
-            BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-        )
-        source = inspect.getsource(conv_proc.extract_action_items)
+        source = inspect.getsource(conversation_processing.extract_action_items)
         assert 'current_time' in source, "extract_action_items must pass current_time"
         assert '7 days' in source or 'HISTORICAL' in source, "must contain staleness rule"
 
@@ -451,12 +527,7 @@ class TestExtractActionItemsPostValidation:
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
 
-        conv_proc = sys.modules.get("utils.llm.conversation_processing")
-        if conv_proc is None:
-            conv_proc = _load_module_from_file(
-                "utils.llm.conversation_processing",
-                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-            )
+        conv_proc = conversation_processing
 
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
@@ -493,12 +564,7 @@ class TestExtractActionItemsPostValidation:
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
 
-        conv_proc = sys.modules.get("utils.llm.conversation_processing")
-        if conv_proc is None:
-            conv_proc = _load_module_from_file(
-                "utils.llm.conversation_processing",
-                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-            )
+        conv_proc = conversation_processing
 
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
@@ -537,12 +603,7 @@ class TestExtractActionItemsPostValidation:
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
 
-        conv_proc = sys.modules.get("utils.llm.conversation_processing")
-        if conv_proc is None:
-            conv_proc = _load_module_from_file(
-                "utils.llm.conversation_processing",
-                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-            )
+        conv_proc = conversation_processing
 
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
@@ -581,12 +642,7 @@ class TestExtractActionItemsPostValidation:
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
 
-        conv_proc = sys.modules.get("utils.llm.conversation_processing")
-        if conv_proc is None:
-            conv_proc = _load_module_from_file(
-                "utils.llm.conversation_processing",
-                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-            )
+        conv_proc = conversation_processing
 
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm
@@ -631,12 +687,7 @@ class TestActionItemTimezoneConversion:
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
 
-        conv_proc = sys.modules.get("utils.llm.conversation_processing")
-        if conv_proc is None:
-            conv_proc = _load_module_from_file(
-                "utils.llm.conversation_processing",
-                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-            )
+        conv_proc = conversation_processing
 
         mock_llm = MagicMock()
         mock_llm.bind.return_value = mock_llm

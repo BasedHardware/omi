@@ -2,8 +2,11 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -37,8 +40,27 @@ def get_omi_product_info_tool(query: str) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
-    # Get GitHub docs content
-    context = get_github_docs_content()
+    # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
+    # soft with an "Error: ..." string like the other retrieval tools instead of letting the
+    # exception escape into the agent loop.
+    try:
+        context = get_github_docs_content()
+    except Exception as e:
+        logger.warning(f"get_omi_product_info_tool - failed to fetch product docs: {e}")
+        return (
+            "Error: the Omi product documentation could not be retrieved right now. Tell the user "
+            "that product information is temporarily unavailable and to try again in a little while."
+        )
+
+    if not context:
+        # An empty result (e.g. the GitHub API returned non-200) would otherwise produce a docs
+        # string with no real content, which misleads the model into answering from nothing. Log it
+        # so a silent "no docs" state is diagnosable in prod, not only visible to the user.
+        logger.warning("get_omi_product_info_tool - product docs fetch returned no content")
+        return (
+            "No Omi product documentation is available right now. Tell the user that product "
+            "information is temporarily unavailable and to try again in a little while."
+        )
 
     # Format context as a comprehensive documentation string
     context_str = 'Omi/Friend Product Documentation:\n\n'

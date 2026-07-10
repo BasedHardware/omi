@@ -7,11 +7,14 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: gcr.io/based-hardware/backend
+  repository: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
+
+gcpProjectId: ""
+runtimeGcpProjectId: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -79,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: DESKTOP_UPDATE_POINTERS_MODE
+    value: "primary"
+  - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
+    value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
   - name: GEMINI_API_KEY
@@ -98,13 +105,18 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
-  - name: OMI_LLM_GATEWAY_URL
-    value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
-  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: OMI_ENV_STAGE
+    value: "prod"
+  - name: MEMORY_MODE
+    value: "off"
+  - name: MEMORY_ENABLED_USERS
+    value: ""
+  - name: MEMORY_V3_GET_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -160,6 +172,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
+  - name: GOOGLE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GOOGLE_CLIENT_ID
+  - name: GOOGLE_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GOOGLE_CLIENT_SECRET
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
@@ -169,6 +191,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_APPLICATION_CREDENTIALS
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
   - name: HOSTED_PUSHER_API_URL
     value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
@@ -232,6 +259,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: MEMORY_TYPESENSE_COLLECTION
+    value: "canonical_memory_atoms"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL
@@ -252,7 +281,7 @@ env:
         name: prod-omi-backend-secrets
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
+    value: ""
   - name: CONVERSATION_SUMMARIZED_APP_IDS
     valueFrom:
       secretKeyRef:
@@ -408,6 +437,26 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+  - name: MCP_OAUTH_CLAUDE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_ID
+  - name: MCP_OAUTH_CLAUDE_CLIENT_NAME
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+  - name: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+  - name: MCP_OAUTH_CLIENTS_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLIENTS_JSON
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

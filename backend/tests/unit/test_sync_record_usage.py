@@ -20,6 +20,12 @@ def _read_sync_source():
         return f.read()
 
 
+def _read_pipeline_source():
+    pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+    with open(pipeline_path, encoding='utf-8') as f:
+        return f.read()
+
+
 def _extract_function_body(source, func_name):
     """Extract the body of a function from source code."""
     pattern = rf'(async\s+)?def {re.escape(func_name)}\('
@@ -121,7 +127,7 @@ class TestV1RecordUsage:
 class TestV2RecordUsage:
     @staticmethod
     def _get_v2_body():
-        return _extract_function_body(_read_sync_source(), '_run_full_pipeline_background_async')
+        return _extract_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
 
     def test_record_usage_called_in_v2(self):
         body = self._get_v2_body()

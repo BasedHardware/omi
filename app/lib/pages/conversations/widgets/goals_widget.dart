@@ -264,8 +264,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(context.l10n.icon,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                      Text(
+                        context.l10n.icon,
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                      ),
                       const SizedBox(height: 8),
                       SizedBox(
                         height: 44,
@@ -308,8 +310,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.l10n.goalTitle,
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                    Text(
+                      context.l10n.goalTitle,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,

@@ -9,6 +9,9 @@ class AppLocalizationsBe extends AppLocalizations {
   AppLocalizationsBe([String locale = 'be']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сеанс скончыўся — увайдзіце зноў.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9368,7 +9371,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пакуль працуе з прыладамі Omi. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9394,6 +9397,24 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Прыпынена — аўдыя не запісваецца';
+
+  @override
+  String get memoryThisDevice => 'Гэта прылада';
+
+  @override
+  String get memoryThisIphone => 'Гэты iPhone';
+
+  @override
+  String get memoryThisPhone => 'Гэты тэлефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 
   @override
   String get deviceTutorial => 'Як карыстацца Omi';
@@ -9498,4 +9519,89 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get latest => 'Апошні';
+
+  @override
+  String get flashFirmware => 'Усталяваць прашыўку';
+
+  @override
+  String get pendantRecordingTitle => 'Запіс на кулоне';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ваш кулон запісвае самастойна. Запісы сінхранізуюцца з тэлефонам, пакуль праграма адкрыта.';
+
+  @override
+  String get pendantSyncingRecordings => 'Сінхранізацыя запісаў з вашага кулона…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes хв захавана';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі.';
+
+  @override
+  String get connectRayBanMeta => 'Падключыць Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Выкарыстоўвайце свае акуляры Ray-Ban Meta ў якасці прылады захопу Omi для размоў і візуальнага кантэксту. Omi адкрые праграму Meta AI, каб звязаць вашы акуляры.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Падключыцца праз Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завяршыце падключэнне ў праграме Meta AI, а потым вярніцеся сюды.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Праверыць зноў';
+
+  @override
+  String get raybanMetaAllowCamera => 'Дазволіць камеру на акулярах';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi выкарыстоўвае камеру вашых акуляраў, каб дадаваць фота ў вашы размовы. Вы можаце прапусціць гэта і выкарыстоўваць толькі гук.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Прапусціць пакуль';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Рэжым толькі гук для Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Гэтая версія Omi можа выкарыстоўваць мікрафон вашых акуляраў праз Bluetooth. Захоп фота патрабуе версіі распрацоўшчыка Omi ад Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Музыка на вашым тэлефоне прыпыняецца, пакуль выкарыстоўваецца мікрафон акуляраў.';
+
+  @override
+  String get raybanMetaContinue => 'Працягнуць';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Зрабіць фота';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Фота запытана — яно з\'явіцца ў вашай размове.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Мікрафон гатовы';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Захоп выявы гатовы';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Недаступна ў рэжыме толькі гук';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Памылка падключэння да Ray-Ban Meta: $error';
+  }
 }

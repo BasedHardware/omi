@@ -161,11 +161,14 @@ pydeck==0.9.1
 pydub==0.25.1
 Pygments==2.20.0
 PyJWT==2.12.0
+pyright==1.1.403
 pynndescent==0.5.13
 PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
+pytest-asyncio==1.4.0
+pytest-xdist==3.8.0
 python-multipart==0.0.27
 python-slugify==8.0.4
 python-ulid==3.0.0
@@ -215,7 +218,7 @@ umap-learn==0.5.6
 uritemplate==4.1.1
 urllib3==2.7.0
 uvicorn==0.30.5
-uvloop==0.20.0
+uvloop==0.20.0; sys_platform != "win32"
 watchdog==4.0.2
 watchfiles==0.22.0
 wcwidth==0.2.13

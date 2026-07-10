@@ -1,5 +1,6 @@
 {
     "@@locale": "th",
+    "sessionExpiredSignInAgain": "เซสชันหมดอายุ — ลงชื่อเข้าใช้อีกครั้ง",
     "appTitle": "Omi",
     "conversationTab": "บทสนทนา",
     "transcriptTab": "บันทึกเสียง",
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ",
     "transcribeLaterTitle": "ถอดเสียงภายหลัง",
     "transcribeLaterDescription": "บันทึกเสียงไว้ก่อนแล้วค่อยถอดเสียงเมื่อต้องการ แทนที่จะถอดแบบเรียลไทม์ ไฟล์บันทึกจะถูกเก็บไว้ในเครื่องของคุณ จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา",
-    "transcribeLaterNote": "ขณะนี้รองรับเฉพาะอุปกรณ์ Omi เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด",
+    "transcribeLaterNote": "ขณะนี้รองรับอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด",
     "transcribeLaterStorageFull": "พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ",
     "unmute": "เปิดเสียง",
     "newRecording": "การบันทึกใหม่",
@@ -3064,6 +3065,12 @@
     "captureModeLiveDescription": "ถอดเสียงแบบเรียลไทม์ขณะที่คุณพูด",
     "captureModeLaterDescription": "บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ",
     "backgroundModeUnavailable": "โหมดพื้นหลังไม่พร้อมใช้งานเนื่องจากไม่มีอุปกรณ์ที่รองรับเชื่อมต่ออยู่ เชื่อมต่ออุปกรณ์ Omi, OpenGlass หรือ Friend Pendant เพื่อใช้ฟีเจอร์นี้",
+    "memoryThisDevice": "อุปกรณ์นี้",
+    "memoryThisIphone": "iPhone เครื่องนี้",
+    "memoryThisPhone": "โทรศัพท์เครื่องนี้",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
     "deviceTutorial": "วิธีใช้ Omi",
     "deviceOnboardingTranscriptionTitle": "พูดใส่ Omi ของคุณ",
     "deviceOnboardingTranscriptionSubtitle": "พูดสักสองสามคำแล้วดูข้อความปรากฏแบบเรียลไทม์",
@@ -3097,5 +3104,44 @@
     "deviceOnboardingIntroSubtitle": "ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้",
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
-    "latest": "ล่าสุด"
+    "latest": "ล่าสุด",
+    "flashFirmware": "แฟลชเฟิร์มแวร์",
+    "pendantRecordingTitle": "กำลังบันทึกบนจี้",
+    "pendantRecordingNote": "จี้ของคุณกำลังบันทึกด้วยตัวเอง การบันทึกจะซิงค์ไปยังโทรศัพท์ของคุณขณะที่เปิดแอปอยู่",
+    "pendantSyncingRecordings": "กำลังซิงค์การบันทึกจากจี้ของคุณ…",
+    "pendantMinutesStored": "~{minutes} นาทีที่จัดเก็บไว้",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "พื้นที่จัดเก็บของจี้ใกล้เต็มแล้ว — เปิดแอปค้างไว้เพื่อซิงค์",
+    "connectRayBanMeta": "เชื่อมต่อ Ray-Ban Meta",
+    "raybanMetaSetupDescription": "ใช้แว่นตา Ray-Ban Meta ของคุณเป็นอุปกรณ์บันทึกของ Omi สำหรับการสนทนาและบริบทเชิงภาพ Omi จะเปิดแอป Meta AI เพื่อเชื่อมโยงแว่นตาของคุณ",
+    "raybanMetaOpenMetaAI": "เชื่อมต่อผ่าน Meta AI",
+    "raybanMetaWaitingForMetaAI": "เชื่อมต่อให้เสร็จในแอป Meta AI แล้วกลับมาที่นี่",
+    "raybanMetaCheckAgain": "ตรวจสอบอีกครั้ง",
+    "raybanMetaAllowCamera": "อนุญาตกล้องบนแว่นตา",
+    "raybanMetaCameraExplanation": "Omi ใช้กล้องของแว่นตาเพื่อเพิ่มรูปภาพลงในการสนทนาของคุณ คุณสามารถข้ามขั้นตอนนี้และใช้เฉพาะเสียงได้",
+    "raybanMetaSkipForNow": "ข้ามไปก่อน",
+    "raybanMetaAudioOnlyTitle": "โหมดเสียงอย่างเดียวของ Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Omi เวอร์ชันนี้สามารถใช้ไมโครโฟนของแว่นตาผ่าน Bluetooth ได้ การถ่ายภาพต้องใช้ Omi เวอร์ชันนักพัฒนาของ Meta",
+    "raybanMetaMusicPauseNote": "เพลงบนโทรศัพท์ของคุณจะหยุดชั่วคราวขณะที่กำลังใช้ไมโครโฟนของแว่นตา",
+    "raybanMetaContinue": "ดำเนินการต่อ",
+    "raybanMetaCapturePhoto": "ถ่ายรูป",
+    "raybanMetaPhotoRequested": "ขอถ่ายรูปแล้ว — รูปจะปรากฏในการสนทนาของคุณ",
+    "raybanMetaMicrophoneReady": "ไมโครโฟนพร้อมแล้ว",
+    "raybanMetaImageCaptureReady": "การถ่ายภาพพร้อมแล้ว",
+    "raybanMetaImageCaptureUnavailable": "ไม่พร้อมใช้งานในโหมดเสียงอย่างเดียว",
+    "raybanMetaCamera": "กล้อง",
+    "errorConnectingRayBanMeta": "เกิดข้อผิดพลาดในการเชื่อมต่อกับ Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

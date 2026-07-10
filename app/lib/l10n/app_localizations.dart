@@ -189,6 +189,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// Message shown after an expired authenticated session returns the user to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired — sign in again.'**
+  String get sessionExpiredSignInAgain;
+
   /// The app title displayed in various places
   ///
   /// In en, this message translates to:
@@ -17406,7 +17412,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17456,6 +17462,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
+
+  /// Filter chip and provenance label for the current device
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get memoryThisDevice;
+
+  /// Provenance label when capture device is this iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone'**
+  String get memoryThisIphone;
+
+  /// Provenance label when capture device is this Android phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get memoryThisPhone;
+
+  /// Provenance label for a Mac capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Mac'**
+  String get memoryProvenanceMac;
+
+  /// Provenance label for an iPhone capture device
+  ///
+  /// In en, this message translates to:
+  /// **'iPhone'**
+  String get memoryProvenanceIphone;
+
+  /// Provenance label for an Android capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Android'**
+  String get memoryProvenanceAndroid;
 
   /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
   ///
@@ -17660,6 +17702,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Latest'**
   String get latest;
+
+  /// Button on the manual firmware flash page (developer settings)
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Firmware'**
+  String get flashFirmware;
+
+  /// No description provided for @pendantRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording on Pendant'**
+  String get pendantRecordingTitle;
+
+  /// No description provided for @pendantRecordingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is recording on its own. Recordings sync to your phone while the app is open.'**
+  String get pendantRecordingNote;
+
+  /// No description provided for @pendantSyncingRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing recordings from your pendant…'**
+  String get pendantSyncingRecordings;
+
+  /// No description provided for @pendantMinutesStored.
+  ///
+  /// In en, this message translates to:
+  /// **'~{minutes} min stored'**
+  String pendantMinutesStored(int minutes);
+
+  /// No description provided for @pendantStorageAlmostFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant storage is almost full — keep the app open to sync.'**
+  String get pendantStorageAlmostFull;
+
+  /// No description provided for @connectRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Ray-Ban Meta'**
+  String get connectRayBanMeta;
+
+  /// No description provided for @raybanMetaSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.'**
+  String get raybanMetaSetupDescription;
+
+  /// No description provided for @raybanMetaOpenMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through Meta AI'**
+  String get raybanMetaOpenMetaAI;
+
+  /// No description provided for @raybanMetaWaitingForMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish connecting in the Meta AI app, then come back here.'**
+  String get raybanMetaWaitingForMetaAI;
+
+  /// No description provided for @raybanMetaCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get raybanMetaCheckAgain;
+
+  /// No description provided for @raybanMetaAllowCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Camera on Glasses'**
+  String get raybanMetaAllowCamera;
+
+  /// No description provided for @raybanMetaCameraExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.'**
+  String get raybanMetaCameraExplanation;
+
+  /// No description provided for @raybanMetaSkipForNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get raybanMetaSkipForNow;
+
+  /// No description provided for @raybanMetaAudioOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ray-Ban Meta audio-only mode'**
+  String get raybanMetaAudioOnlyTitle;
+
+  /// No description provided for @raybanMetaAudioOnlyExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.'**
+  String get raybanMetaAudioOnlyExplanation;
+
+  /// No description provided for @raybanMetaMusicPauseNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Music on your phone pauses while the glasses microphone is in use.'**
+  String get raybanMetaMusicPauseNote;
+
+  /// No description provided for @raybanMetaContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get raybanMetaContinue;
+
+  /// No description provided for @raybanMetaCapturePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture Photo'**
+  String get raybanMetaCapturePhoto;
+
+  /// No description provided for @raybanMetaPhotoRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo requested — it will appear in your conversation.'**
+  String get raybanMetaPhotoRequested;
+
+  /// No description provided for @raybanMetaMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone ready'**
+  String get raybanMetaMicrophoneReady;
+
+  /// No description provided for @raybanMetaImageCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Image capture ready'**
+  String get raybanMetaImageCaptureReady;
+
+  /// No description provided for @raybanMetaImageCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable in audio-only mode'**
+  String get raybanMetaImageCaptureUnavailable;
+
+  /// No description provided for @raybanMetaCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get raybanMetaCamera;
+
+  /// No description provided for @errorConnectingRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Ray-Ban Meta: {error}'**
+  String errorConnectingRayBanMeta(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

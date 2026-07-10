@@ -15,37 +15,67 @@ os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 os.environ.setdefault("PARAKEET_GC_INTERVAL", "3")
 os.environ.setdefault("PARAKEET_GPU_POLL_TIMEOUT", "0.01")
 
-_torch = MagicMock()
-_torch.cuda.is_available.return_value = False
-_torch.cuda.memory_allocated.return_value = 0
-_torch_props = MagicMock()
-_torch_props.total_memory = 16 * 1024**3
-_torch.cuda.get_device_properties.return_value = _torch_props
-_torch.cuda.empty_cache = MagicMock()
-_torch.inference_mode = lambda: (lambda fn: fn)
-_torch.compile = lambda m: m
-_torch.backends.cudnn = MagicMock()
-sys.modules["torch"] = _torch
+_PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
+if _PARAKEET_DIR not in sys.path:
+    sys.path.insert(0, _PARAKEET_DIR)
 
-_nemo_asr = MagicMock()
-_nemo = MagicMock()
-_nemo.collections.asr = _nemo_asr
-sys.modules["nemo"] = _nemo
-sys.modules["nemo.collections"] = _nemo.collections
-sys.modules["nemo.collections.asr"] = _nemo_asr
+from testing.import_isolation import load_module_fresh, stub_modules
 
-_pyannote = MagicMock()
-_pyannote_audio = MagicMock()
-_pyannote_audio_core = MagicMock()
-_pyannote_audio_core_model = MagicMock()
-sys.modules.setdefault("pyannote", _pyannote)
-sys.modules.setdefault("pyannote.audio", _pyannote_audio)
-sys.modules.setdefault("pyannote.audio.core", _pyannote_audio_core)
-sys.modules.setdefault("pyannote.audio.core.model", _pyannote_audio_core_model)
+_GPU_WORKER_PATH = os.path.join(_PARAKEET_DIR, "gpu_worker.py")
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
-from gpu_worker import GPUWorker, WorkItem, WorkType, AudioDurationExceededError, _safe_set_result, _safe_set_exception
+@pytest.fixture(scope="module", autouse=True)
+def _gpu_worker_module():
+    """Load gpu_worker fresh against stubbed torch/nemo/pyannote chains.
+
+    torch/nemo/pyannote are not installed in the test environment, so fake modules
+    must be active in ``sys.modules`` before ``gpu_worker`` is exec'd (it binds
+    ``torch`` at import). ``stub_modules`` keeps the fakes active for the whole
+    module and evicts them (and the freshly-loaded ``gpu_worker``) on teardown,
+    so nothing leaks to later test files.
+    """
+    _torch = MagicMock()
+    _torch.cuda.is_available.return_value = False
+    _torch.cuda.memory_allocated.return_value = 0
+    _torch_props = MagicMock()
+    _torch_props.total_memory = 16 * 1024**3
+    _torch.cuda.get_device_properties.return_value = _torch_props
+    _torch.cuda.empty_cache = MagicMock()
+    _torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+    _torch.inference_mode = lambda: (lambda fn: fn)
+    _torch.compile = lambda m: m
+    _torch.backends.cudnn = MagicMock()
+
+    _nemo_asr = MagicMock()
+    _nemo = MagicMock()
+    _nemo.collections.asr = _nemo_asr
+
+    _pyannote = MagicMock()
+    _pyannote_audio = MagicMock()
+    _pyannote_audio_core = MagicMock()
+    _pyannote_audio_core_model = MagicMock()
+
+    fakes = {
+        "torch": _torch,
+        "nemo": _nemo,
+        "nemo.collections": _nemo.collections,
+        "nemo.collections.asr": _nemo_asr,
+        "pyannote": _pyannote,
+        "pyannote.audio": _pyannote_audio,
+        "pyannote.audio.core": _pyannote_audio_core,
+        "pyannote.audio.core.model": _pyannote_audio_core_model,
+    }
+    with stub_modules(fakes):
+        gw = load_module_fresh("gpu_worker", _GPU_WORKER_PATH)
+        g = globals()
+        g["GPUWorker"] = gw.GPUWorker
+        g["WorkItem"] = gw.WorkItem
+        g["WorkType"] = gw.WorkType
+        g["AudioDurationExceededError"] = gw.AudioDurationExceededError
+        g["_safe_set_result"] = gw._safe_set_result
+        g["_safe_set_exception"] = gw._safe_set_exception
+        g["_torch"] = _torch
+        yield gw
 
 
 def _get_nemo_asr():
@@ -202,18 +232,17 @@ class TestGPUWorkerQueueFull:
 
     def test_sync_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
-        for _ in range(512):
-            try:
-                worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}))
-            except queue.Full:
-                break
+        worker._queue = MagicMock()
+        worker._queue.put.side_effect = queue.Full
 
         with pytest.raises(RuntimeError, match="GPU queue full"):
             worker.submit_sync({"audio_paths": ["/tmp/a.wav"]}, timeout=0.1)
 
     def test_async_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
         for _ in range(512):
             try:
@@ -900,4 +929,92 @@ class TestDurationGuardBoundary:
             worker._get_audio_duration_sec = MagicMock(return_value=60.01)
             with pytest.raises(AudioDurationExceededError):
                 worker._batch_transcribe({"audio_paths": ["/tmp/over.wav"], "timestamps": True, "batch_size": 1})
+            worker.stop()
+
+
+class TestMemGetInfoGuard:
+
+    def test_mem_get_info_not_called_when_cuda_unavailable(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = False
+        torch_mod.cuda.mem_get_info.reset_mock()
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_not_called()
+        assert worker._vram_total_mb == 0.0
+        assert worker._vram_baseline_mb == 0.0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+    def test_mem_get_info_called_when_cuda_available(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.mem_get_info.reset_mock()
+        torch_mod.cuda.mem_get_info.return_value = (10 * 1024**3, 22 * 1024**3)
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_called_once()
+        assert worker._vram_total_mb > 0
+        assert worker._vram_baseline_mb > 0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+
+class TestDurationPassthroughInGPUWorker:
+
+    def test_durations_from_batcher_used_instead_of_file_probe(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                    "durations": [100.0],
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_not_called()
+            worker.stop()
+
+    def test_file_probe_fallback_when_no_durations(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_called()
             worker.stop()

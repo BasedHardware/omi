@@ -192,6 +192,7 @@ sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
+sys.modules["utils.llm.clients"].get_llm = MagicMock()
 sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
@@ -204,6 +205,7 @@ _proactive_mod.generate_notification = MagicMock(return_value="")
 _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
+_proactive_mod.Record = MagicMock
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]
@@ -308,6 +310,45 @@ class TestAsyncTriggerRealtimeAudioBytes:
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
 
         assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_audio_url_with_existing_query_string_uses_ampersand(self):
+        """A webhook_url that already carries a query string must not get a second '?'."""
+        app = _make_app("a1", "https://example.com/hook?token=abc", triggers_audio=True)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
+            await app_integrations.trigger_realtime_audio_bytes("uid-1", 16000, bytearray(b'\x00' * 10))
+
+        assert mock_client.post.call_count == 1
+        called_url = mock_client.post.call_args[0][0]
+        # Exactly one '?' (the original delimiter); sample_rate is joined with '&'.
+        assert called_url == "https://example.com/hook?token=abc&sample_rate=16000&uid=uid-1"
+        assert called_url.count("?") == 1
+
+    @pytest.mark.asyncio
+    async def test_audio_url_without_query_string_uses_question_mark(self):
+        """A webhook_url with no query string still gets a leading '?'."""
+        app = _make_app("a1", "https://example.com/hook", triggers_audio=True)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
+            await app_integrations.trigger_realtime_audio_bytes("uid-1", 16000, bytearray(b'\x00' * 10))
+
+        called_url = mock_client.post.call_args[0][0]
+        assert called_url == "https://example.com/hook?sample_rate=16000&uid=uid-1"
 
     @pytest.mark.asyncio
     async def test_one_failure_doesnt_cancel_others(self):

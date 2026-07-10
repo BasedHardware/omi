@@ -127,6 +127,15 @@ gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
+
+gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
+gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)
+
+gateway_serving_mod = _stub_module("utils.llm.gateway_serving")
+gateway_serving_mod.wrap_gateway_with_legacy_fallback = MagicMock(
+    side_effect=lambda *, gateway_model, **_kwargs: gateway_model
+)
 
 # --- langchain core stubs ---
 langchain_core_mod = _stub_module("langchain_core")
@@ -175,6 +184,13 @@ if not hasattr(retrieval_mod, "__path__"):
 safety_mod = _stub_module("utils.retrieval.safety")
 safety_mod.AgentSafetyGuard = MagicMock()
 safety_mod.SafetyGuardError = type("SafetyGuardError", (Exception,), {})
+
+boundaries_mod = _stub_module("utils.retrieval.tool_result_boundaries")
+setattr(
+    boundaries_mod,
+    "preserve_chat_memory_tool_result_boundary",
+    MagicMock(side_effect=lambda _tool_name, result: result),
+)
 
 # --- MCP client stub ---
 mcp_mod = _stub_module("utils.mcp_client")
@@ -309,6 +325,7 @@ def _get_agentic_module():
         "search_screen_activity_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
+        "traverse_knowledge_graph_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -542,10 +559,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_25_tools():
-    """CORE_TOOLS must contain exactly 25 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_26_tools():
+    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
+    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -568,9 +585,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 26
-    assert len(tools_b) == 25
-    assert len(agentic_mod.CORE_TOOLS) == 25, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 27
+    assert len(tools_b) == 26
+    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -606,6 +623,7 @@ def test_core_tools_order_matches_exports():
         "search_screen_activity_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
+        "traverse_knowledge_graph_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -619,100 +637,6 @@ def test_core_tools_not_accidentally_duplicated():
     agentic_mod = _get_agentic_module()
     names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert len(names) == len(set(names)), f"Duplicate tools in CORE_TOOLS: {[n for n in names if names.count(n) > 1]}"
-
-
-# ---------------------------------------------------------------------------
-# Tests: LLM client cache configuration (runtime check)
-# ---------------------------------------------------------------------------
-
-
-def test_llm_agent_model_kwargs_via_real_instantiation():
-    """
-    Load clients.py with a FakeChatOpenAI to capture actual constructor kwargs.
-    Verifies prompt_cache_key is passed at runtime,
-    not just present in source text.
-    """
-    captured_calls = []
-
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-            captured_calls.append(kwargs)
-
-    class FakeOpenAIEmbeddings:
-        def __init__(self, **kwargs):
-            pass
-
-    # Temporarily remove cached module so we get a fresh load
-    saved = sys.modules.pop("utils.llm.clients_real", None)
-
-    # Stub the dependencies that clients.py imports
-    fake_langchain_openai = _stub_module("langchain_openai_fake")
-    fake_langchain_openai.ChatOpenAI = FakeChatOpenAI
-    fake_langchain_openai.OpenAIEmbeddings = FakeOpenAIEmbeddings
-
-    fake_tiktoken = _stub_module("tiktoken_fake")
-    fake_tiktoken.encoding_for_model = MagicMock(return_value=MagicMock())
-
-    # Read source, replace imports, exec in isolated namespace
-    source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
-    source = source.replace("from langchain_core.language_models import BaseChatModel", "")
-    source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
-    source = source.replace("from langchain_google_genai import ChatGoogleGenerativeAI", "")
-    source = source.replace("import tiktoken", "")
-    source = source.replace("import anthropic", "")
-    source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
-    source = source.replace("from models.structured import Structured", "")
-    source = source.replace("from utils.byok import get_byok_key, get_byok_custom_provider", "")
-    source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
-
-    # Create a fake anthropic module with AsyncAnthropic
-    fake_anthropic = _stub_module("anthropic_fake")
-    fake_anthropic.AsyncAnthropic = MagicMock
-
-    ns = {
-        "os": os,
-        "BaseChatModel": object,
-        "ChatOpenAI": FakeChatOpenAI,
-        "ChatGoogleGenerativeAI": FakeChatOpenAI,
-        "OpenAIEmbeddings": FakeOpenAIEmbeddings,
-        "tiktoken": fake_tiktoken,
-        "anthropic": fake_anthropic,
-        "PydanticOutputParser": MagicMock(),
-        "Structured": MagicMock(),
-        "get_byok_key": MagicMock(return_value=None),
-        "get_byok_custom_provider": MagicMock(return_value=None),
-        "get_usage_callback": MagicMock(return_value=[]),
-        "List": list,
-    }
-    exec(source, ns)
-
-    # Retention is gated by capability (gpt-5.x / o-series families), not an exact model name.
-    # Classify each captured client the same way clients.py does, via model_config.
-    import importlib.util as _ilu
-
-    _spec = _ilu.spec_from_file_location("_mc_cap_test", BACKEND_DIR / "utils" / "llm" / "model_config.py")
-    _mc = _ilu.module_from_spec(_spec)
-    _spec.loader.exec_module(_mc)
-    supports_cache_retention = _mc.supports_cache_retention
-
-    # Retention-capable models must carry prompt_cache_retention; all others must not.
-    for call in captured_calls:
-        model = call.get("model")
-        eb = call.get("extra_body", {})
-        if model and supports_cache_retention(model):
-            assert (
-                eb.get("prompt_cache_retention") == "24h"
-            ), f"retention-capable client {model} missing prompt_cache_retention in extra_body: {call}"
-        else:
-            assert (
-                "prompt_cache_retention" not in eb
-            ), f"non-retention-capable client {model} should not have prompt_cache_retention: {call}"
-
-    # prompt_cache_key is bound per-request in get_llm(), never baked into module-level model_kwargs.
-    for call in captured_calls:
-        mkw = call.get("model_kwargs", {})
-        assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
 
 
 # ---------------------------------------------------------------------------

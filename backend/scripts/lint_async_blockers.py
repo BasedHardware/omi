@@ -29,23 +29,23 @@ class AsyncBlockerVisitor(ast.NodeVisitor):
 
     def __init__(self, filepath: str):
         self.filepath = filepath
-        self.violations = []
+        self.violations: list[tuple[int, str]] = []
         self._in_async = False
         self._thread_join_lines: list[int] = []
 
-    def visit_AsyncFunctionDef(self, node):
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         old = self._in_async
         self._in_async = True
         self.generic_visit(node)
         self._in_async = old
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         old = self._in_async
         self._in_async = False
         self.generic_visit(node)
         self._in_async = old
 
-    def visit_Call(self, node):
+    def visit_Call(self, node: ast.Call) -> None:
         if self._in_async:
             call_str = _get_call_name(node)
             if call_str:
@@ -96,7 +96,7 @@ def _get_call_name(node: ast.Call) -> str:
     return ''
 
 
-def scan_file(filepath: Path) -> list:
+def scan_file(filepath: Path) -> list[tuple[int, str]]:
     try:
         source = filepath.read_text(encoding='utf-8')
         tree = ast.parse(source, filename=str(filepath))
@@ -108,13 +108,13 @@ def scan_file(filepath: Path) -> list:
     return visitor.violations
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description='Detect blocking I/O in async Python code')
     parser.add_argument('paths', nargs='*', default=['.'], help='Files or directories to scan')
     parser.add_argument('--strict', action='store_true', help='Treat all violations as errors')
     args = parser.parse_args()
 
-    all_violations = []
+    all_violations: list[tuple[Path, int, str]] = []
 
     for path_str in args.paths:
         path = Path(path_str)

@@ -224,15 +224,22 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
             if app.uid is not None:
                 if app.uid != uid:
-                    record_app_usage(
+                    await run_blocking(
+                        db_executor,
+                        record_app_usage,
                         uid,
                         app.id,
                         UsageHistoryType.memory_created_external_integration,
                         conversation_id=conversation.id,
                     )
             else:
-                record_app_usage(
-                    uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
+                    uid,
+                    app.id,
+                    UsageHistoryType.memory_created_external_integration,
+                    conversation_id=conversation.id,
                 )
 
             try:
@@ -254,7 +261,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_app_message(message, key, uid, conversation.id))
+        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid, conversation.id))
     return messages
 
 
@@ -632,7 +639,10 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         url = app.external_integration.webhook_url
-        url += f'?sample_rate={sample_rate}&uid={uid}'
+        # The configured webhook_url may already carry a query string (auth token,
+        # routing param), so pick the right separator instead of always using '?'.
+        separator = '&' if '?' in url else '?'
+        url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
@@ -702,7 +712,7 @@ async def _async_trigger_realtime_integrations(
         if mentor_results:
             messages = []
             for key, message in mentor_results.items():
-                messages.append(add_app_message(message, key, uid))
+                messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
             return messages
         return {}
 
@@ -793,7 +803,7 @@ async def _async_trigger_realtime_integrations(
     for key, message in all_results.items():
         if not message:
             continue
-        messages.append(add_app_message(message, key, uid))
+        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
 
     return messages
 
@@ -802,7 +812,7 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
-        app_id=app_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

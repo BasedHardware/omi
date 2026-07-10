@@ -171,12 +171,14 @@ impl App {
 
     /// Check if app has external integration
     pub fn works_externally(&self) -> bool {
-        self.capabilities.contains(&"external_integration".to_string())
+        self.capabilities
+            .contains(&"external_integration".to_string())
     }
 
     /// Check if app can send proactive notifications
     pub fn has_proactive_notifications(&self) -> bool {
-        self.capabilities.contains(&"proactive_notification".to_string())
+        self.capabilities
+            .contains(&"proactive_notification".to_string())
     }
 }
 

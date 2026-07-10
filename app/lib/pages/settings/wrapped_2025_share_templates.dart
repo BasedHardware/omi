@@ -666,8 +666,10 @@ class MovieRecsShareTemplate extends StatelessWidget {
           Container(
             width: 50,
             height: 50,
-            decoration:
-                BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Center(
               child: Text(
                 '#${index + 1}',
@@ -859,8 +861,9 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              gradient:
-                  LinearGradient(colors: [Colors.white.withValues(alpha: 0.3), Colors.white.withValues(alpha: 0.1)]),
+              gradient: LinearGradient(
+                colors: [Colors.white.withValues(alpha: 0.3), Colors.white.withValues(alpha: 0.1)],
+              ),
               shape: BoxShape.circle,
             ),
             child: Center(
