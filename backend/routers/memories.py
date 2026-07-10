@@ -41,7 +41,7 @@ from utils.memory.memory_api_contract import (
 )
 from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response
 from utils.memory.memory_system import MemorySystem
-from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError
+from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device_from_request
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
@@ -343,7 +343,14 @@ async def create_memory(
     # everything into "Manual". manually_added tracks human entry, so derive it
     # from the category rather than forcing it True for every API caller.
     manually_added = memory.category == MemoryCategory.manual
-    memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
+    device_context = resolve_client_device_from_request(request)
+    memory_db = MemoryDB.from_memory(
+        memory,
+        uid,
+        None,
+        manually_added,
+        client_device_id=device_context.client_device_id,
+    )
 
     # Old desktop builds fan out one create per indexed local file during
     # onboarding (up to 2800 path facts). Acknowledge without persisting:
@@ -457,9 +464,16 @@ async def create_memories_batch(
     # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
+    device_context = resolve_client_device_from_request(request_context)
     for memory in accepted_memories:
         manually_added = memory.category == MemoryCategory.manual
-        memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
+        memory_db = MemoryDB.from_memory(
+            memory,
+            uid,
+            None,
+            manually_added,
+            client_device_id=device_context.client_device_id,
+        )
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True

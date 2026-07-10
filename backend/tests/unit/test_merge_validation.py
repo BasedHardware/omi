@@ -184,6 +184,30 @@ def _conv(conv_id="c1", started=None, finished=None, status="completed", locked=
     }
 
 
+class TestMergedDeviceProvenance:
+    def test_retains_provenance_when_all_sources_agree(self, merge):
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+            ]
+        ) == ("ios_a1b2c3d4", "ios")
+
+    def test_drops_provenance_for_mixed_or_unknown_sources(self, merge):
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": "macos_deadbeef", "client_platform": "macos"},
+            ]
+        ) == (None, None)
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": None, "client_platform": None},
+            ]
+        ) == (None, None)
+
+
 class TestValidateGateChecks:
     def test_rejects_single_conversation(self, merge):
         ok, err, warn = merge.validate_merge_compatibility([_conv("c1")])

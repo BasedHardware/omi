@@ -39,6 +39,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         onboarding_mode=False,
         call_id=None,
         client_conversation_id=None,
+        client_device_context=None,
     ):
         captured.update(
             {
@@ -55,6 +56,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "onboarding_mode": onboarding_mode,
                 "call_id": call_id,
                 "client_conversation_id": client_conversation_id,
+                "client_device_id": getattr(client_device_context, "client_device_id", None),
+                "client_platform": getattr(client_device_context, "platform", None),
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -66,7 +69,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e"
     ) as websocket:
-        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token", "device_id_hash": "a1b2c3d4"}))
         auth_response = websocket.receive_json()
         assert auth_response == {"type": "auth_response", "success": True}
         ready = websocket.receive_json()
@@ -82,6 +85,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     assert captured["conversation_timeout"] == 1
     assert captured["source"] == "e2e"
     assert captured["custom_stt_mode"] == "enabled"
+    assert captured["client_device_id"] == "web_a1b2c3d4"
+    assert captured["client_platform"] == "web"
 
 
 def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(client, auth_headers, test_uid):
