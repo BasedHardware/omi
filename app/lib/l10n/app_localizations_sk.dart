@@ -9,6 +9,9 @@ class AppLocalizationsSk extends AppLocalizations {
   AppLocalizationsSk([String locale = 'sk']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Platnosť relácie vypršala — prihláste sa znova.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -7756,6 +7759,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get viewAll => 'Zobraziť všetko';
 
   @override
+  String get expand => 'Rozbaliť';
+
+  @override
   String get addTask => 'Pridať úlohu';
 
   @override
@@ -9329,7 +9335,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.';
+      'Zatiaľ funguje so zariadeniami Omi a Limitless. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9355,4 +9361,208 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
+
+  @override
+  String get memoryThisDevice => 'Toto zariadenie';
+
+  @override
+  String get memoryThisIphone => 'Tento iPhone';
+
+  @override
+  String get memoryThisPhone => 'Tento telefón';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Ako používať Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Hovorte do svojho Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Povedzte pár slov a sledujte, ako sa zobrazia v reálnom čase';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Výborne!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Začnite hovoriť...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Spýtajte sa Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Stlačte tlačidlo raz, položte otázku a po dokončení stlačte znova';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Spracúva sa vaša otázka...';
+
+  @override
+  String get deviceOnboardingListening => 'Počúvam...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Vypnutie';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Zapnutie';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Podržte tlačidlo 3 sekundy';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Stlačením tlačidla ho znova zapnete';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pevne držte tlačidlo, kým svetlo nezhasne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Pripojené';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Pripojené!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Odpojené';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Vypína sa...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Prispôsobiť dvojité ťuknutie';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Ukončiť konverzáciu';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Uložiť a ukončiť aktuálnu konverzáciu';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Stlmiť / Zrušiť stlmenie';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Zapnúť alebo vypnúť mikrofón';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Označiť prebiehajúcu konverzáciu hviezdičkou';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Označiť konverzáciu ako dôležitú';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To bolo jedno ťuknutie – skúste ťuknúť dvakrát rýchlo za sebou!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Skúste to hneď! Dvakrát ťuknite na svoje Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Pokračovať';
+
+  @override
+  String get deviceOnboardingFinish => 'Dokončiť';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Spoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rýchla praktická prehliadka všetkého, čo váš Omi dokáže.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
+
+  @override
+  String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';
+
+  @override
+  String get latest => 'Najnovšia';
+
+  @override
+  String get flashFirmware => 'Nahrať firmvér';
+
+  @override
+  String get pendantRecordingTitle => 'Nahrávanie na prívesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Váš prívesok nahráva samostatne. Nahrávky sa synchronizujú s telefónom, kým je aplikácia otvorená.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronizácia nahrávok z prívesku…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min uložené';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Úložisko prívesku je takmer plné — nechajte aplikáciu otvorenú, aby prebehla synchronizácia.';
+
+  @override
+  String get connectRayBanMeta => 'Pripojiť Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Používajte svoje okuliare Ray-Ban Meta ako zariadenie na zaznamenávanie Omi pre konverzácie a vizuálny kontext. Omi otvorí aplikáciu Meta AI, aby prepojila vaše okuliare.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Pripojiť cez Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Dokončite pripájanie v aplikácii Meta AI a potom sa vráťte sem.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Skontrolovať znova';
+
+  @override
+  String get raybanMetaAllowCamera => 'Povoliť kameru na okuliaroch';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi používa kameru vašich okuliarov na pridávanie fotografií do vašich konverzácií. Tento krok môžete preskočiť a používať iba zvuk.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Zatiaľ preskočiť';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Režim iba zvuk Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Táto verzia Omi môže používať mikrofón vašich okuliarov cez Bluetooth. Snímanie fotografií vyžaduje verziu Omi pre vývojárov Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Hudba vo vašom telefóne sa pozastaví, kým sa používa mikrofón okuliarov.';
+
+  @override
+  String get raybanMetaContinue => 'Pokračovať';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Nasnímať fotografiu';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotografia vyžiadaná — zobrazí sa vo vašej konverzácii.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofón pripravený';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Snímanie obrázkov pripravené';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nedostupné v režime iba zvuk';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Chyba pri pripájaní k Ray-Ban Meta: $error';
+  }
 }

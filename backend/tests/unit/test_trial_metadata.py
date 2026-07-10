@@ -16,6 +16,7 @@ Validates:
 import os
 import time
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -120,7 +121,7 @@ def _get_trial_metadata_fn():
     tls_line = [l for l in source.split('\n') if l.startswith('TRIAL_LENGTH_SECONDS')][0]
     cutoff_line = [l for l in source.split('\n') if l.startswith('NEO_DESKTOP_GRANDFATHER_CUTOFF')][0]
 
-    namespace = {
+    namespace: dict[str, Any] = {
         'PlanType': PlanType,
         'TrialMetadata': TrialMetadata,
         'time': time,
@@ -146,6 +147,10 @@ def _get_trial_metadata_fn():
         return False
 
     namespace['plan_grants_desktop'] = _plan_grants_desktop_stub
+    # _get_user wraps firebase_auth.get_user — subscription.py extracts it
+    # into a module-level helper for type safety. cast is used for type narrowing.
+    namespace['_get_user'] = lambda uid: namespace['firebase_auth'].get_user(uid)
+    namespace['cast'] = cast
     # Execute TRIAL_LENGTH_SECONDS
     exec(compile(tls_line, '<subscription.py>', 'exec'), namespace)
     # Execute TRIAL_FEATURES

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require desktop user-facing PRs to add an unreleased changelog entry."""
+"""Require desktop user-facing PRs to add an unreleased changelog fragment."""
 
 from __future__ import annotations
 
@@ -7,16 +7,19 @@ import argparse
 import json
 import subprocess
 import sys
-from collections import Counter
-from pathlib import Path
 
 
-CHANGELOG_PATH = Path("desktop/macos/CHANGELOG.json")
+UNRELEASED_CHANGELOG_PREFIX = "desktop/macos/changelog/unreleased/"
+CHANGELOG_PREFIX = "desktop/macos/changelog/"
 DESKTOP_PREFIX = "desktop/macos/"
 EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
 }
+# Server-side Rust backend changes are internal reliability work, not user-facing app notes.
+EXEMPT_DESKTOP_PATH_PREFIXES = (
+    "desktop/macos/Backend-Rust/",
+)
 
 
 def run_git(args: list[str]) -> str:
@@ -28,35 +31,54 @@ def changed_files(base_ref: str, head_ref: str) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
+def added_files(base_ref: str, head_ref: str) -> list[str]:
+    output = run_git(["diff", "--name-status", "--diff-filter=A", f"{base_ref}...{head_ref}"])
+    return [line.split("\t", 1)[1] for line in output.splitlines() if line.startswith("A\t")]
+
+
 def is_desktop_change_requiring_changelog(path: str) -> bool:
     if not path.startswith(DESKTOP_PREFIX):
         return False
     if path in EXEMPT_DESKTOP_PATHS:
         return False
+    if path.startswith(CHANGELOG_PREFIX):
+        return False
+    if any(path.startswith(prefix) for prefix in EXEMPT_DESKTOP_PATH_PREFIXES):
+        return False
     return True
 
 
-def unreleased_entries(ref: str) -> list[str]:
+def validate_unreleased_fragment(head_ref: str, path: str) -> None:
     try:
-        raw = run_git(["show", f"{ref}:{CHANGELOG_PATH}"])
+        raw = run_git(["show", f"{head_ref}:{path}"])
     except subprocess.CalledProcessError:
-        return []
+        raise SystemExit(f"FAIL: could not read changelog fragment {path} at {head_ref}")
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"FAIL: {CHANGELOG_PATH} is not valid JSON at {ref}: {exc}") from exc
+        raise SystemExit(f"FAIL: {path} is not valid JSON at {head_ref}: {exc}") from exc
 
-    unreleased = data.get("unreleased", [])
-    if not isinstance(unreleased, list):
-        raise SystemExit(f"FAIL: {CHANGELOG_PATH} field 'unreleased' must be a list")
-    return [entry for entry in unreleased if isinstance(entry, str) and entry.strip()]
+    if not isinstance(data, dict):
+        raise SystemExit(f"FAIL: {path} must contain a JSON object")
+
+    if isinstance(data.get("change"), str) and data["change"].strip():
+        return
+    if isinstance(data.get("changes"), list) and any(isinstance(entry, str) and entry.strip() for entry in data["changes"]):
+        return
+
+    raise SystemExit(f"FAIL: {path} must contain a non-empty 'change' string or 'changes' list")
 
 
-def has_new_unreleased_entry(base_ref: str, head_ref: str) -> bool:
-    before = Counter(unreleased_entries(base_ref))
-    after = Counter(unreleased_entries(head_ref))
-    return bool(after - before)
+def has_new_unreleased_fragment(base_ref: str, head_ref: str) -> bool:
+    fragment_paths = [
+        path
+        for path in added_files(base_ref, head_ref)
+        if path.startswith(UNRELEASED_CHANGELOG_PREFIX) and path.endswith(".json")
+    ]
+    for path in fragment_paths:
+        validate_unreleased_fragment(head_ref, path)
+    return bool(fragment_paths)
 
 
 def main() -> int:
@@ -81,19 +103,19 @@ def main() -> int:
         print("No desktop changes require a changelog entry.")
         return 0
 
-    if has_new_unreleased_entry(args.base, args.head):
-        print("Desktop changelog entry found.")
+    if has_new_unreleased_fragment(args.base, args.head):
+        print("Desktop changelog fragment found.")
         return 0
 
-    print("FAIL: desktop changes require an unreleased changelog entry.", file=sys.stderr)
+    print("FAIL: desktop changes require an unreleased changelog fragment.", file=sys.stderr)
     print("", file=sys.stderr)
     print("Changed desktop files:", file=sys.stderr)
     for path in requiring_changelog:
         print(f"  - {path}", file=sys.stderr)
     print("", file=sys.stderr)
     print(
-        "Add a one-line user-facing entry to desktop/macos/CHANGELOG.json under "
-        "'unreleased', or label the PR no-changelog-needed for internal-only changes.",
+        "Add a one-line user-facing JSON fragment under desktop/macos/changelog/unreleased/, "
+        "or label the PR no-changelog-needed for internal-only changes.",
         file=sys.stderr,
     )
     return 1

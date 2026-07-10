@@ -5,12 +5,20 @@ Stores and queries LLM token usage by feature in Firestore.
 Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, output_tokens}}}
 """
 
+import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
 from ._client import db
+
+transactional = getattr(firestore, 'transactional', lambda fn: fn)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
 def record_llm_usage(
@@ -19,7 +27,7 @@ def record_llm_usage(
     model: str,
     input_tokens: int,
     output_tokens: int,
-):
+) -> None:
     """
     Record LLM token usage for a user and feature.
 
@@ -44,7 +52,7 @@ def record_llm_usage(
     # Use nested field paths for atomic increments
     # Structure: {feature}.{model}.{input_tokens|output_tokens}
     # Firestore doesn't allow '.', '/', '[', ']', '*', '`', '~' in field names
-    if not isinstance(model, str) or not model:
+    if not model:
         model = "unknown"
 
     safe_model = (
@@ -57,7 +65,7 @@ def record_llm_usage(
         .replace("`", "_")
     )
 
-    update_data = {
+    update_data: Dict[str, Any] = {
         f"{feature}.{safe_model}.input_tokens": firestore.Increment(input_tokens),
         f"{feature}.{safe_model}.output_tokens": firestore.Increment(output_tokens),
         f"{feature}.{safe_model}.call_count": firestore.Increment(1),
@@ -68,7 +76,71 @@ def record_llm_usage(
     usage_ref.set(update_data, merge=True)
 
 
-def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict:
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _record_chat_quota_question_transaction(
+    transaction: Any,
+    usage_ref: Any,
+    event_ref: Any,
+    event_data: Dict[str, Any],
+    doc_id: str,
+) -> bool:
+    event_snapshot = event_ref.get(transaction=transaction)
+    if getattr(event_snapshot, "exists", False):
+        return False
+
+    now = datetime.now(timezone.utc)
+    transaction.set(event_ref, event_data)
+    transaction.set(
+        usage_ref,
+        {
+            'backend_chat.quota_questions': firestore.Increment(1),
+            'date': doc_id,
+            'last_updated': now,
+        },
+        merge=True,
+    )
+    return True
+
+
+def record_chat_quota_question(
+    uid: str,
+    idempotency_key: str,
+    source: str,
+    message_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    platform: Optional[str] = None,
+) -> bool:
+    """Record one accepted visible backend chat question exactly once.
+
+    This is the product-boundary quota counter for mobile/backend chat. It is
+    intentionally separate from ``chat.*.call_count``, which is LLM telemetry
+    and can vary with implementation details.
+    """
+    if not idempotency_key:
+        raise ValueError('idempotency_key is required')
+
+    now = datetime.now(timezone.utc)
+    doc_id = now.strftime('%Y-%m-%d')
+    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+
+    user_ref = db.collection('users').document(uid)
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
+    event_data: Dict[str, Any] = {
+        'idempotency_key': idempotency_key,
+        'source': source,
+        'message_id': message_id,
+        'chat_session_id': chat_session_id,
+        'platform': platform,
+        'created_at': now,
+        'date': doc_id,
+    }
+
+    transaction = db.transaction()
+    return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id)
+
+
+def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
     """
     Get LLM usage for a specific day.
 
@@ -87,12 +159,33 @@ def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict:
     usage_ref = user_ref.collection("llm_usage").document(doc_id)
 
     doc = usage_ref.get()
-    if doc.exists:
-        return doc.to_dict()
+    if getattr(doc, "exists", False):
+        return _typed_doc(doc)
     return {}
 
 
-def get_usage_summary(uid: str, days: int = 30) -> Dict:
+def _aggregate_summary(data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
+    summary: Dict[str, Dict[str, int]] = {}
+    for feature, models in data.items():
+        if feature in ("last_updated",):
+            continue
+        if not isinstance(models, dict):
+            continue
+
+        if feature not in summary:
+            summary[feature] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
+
+        models_dict: Dict[str, Any] = cast(Dict[str, Any], models)
+        for _, tokens in models_dict.items():
+            if isinstance(tokens, dict):
+                token_dict: Dict[str, Any] = cast(Dict[str, Any], tokens)
+                summary[feature]["input_tokens"] += int(token_dict.get("input_tokens", 0) or 0)
+                summary[feature]["output_tokens"] += int(token_dict.get("output_tokens", 0) or 0)
+                summary[feature]["call_count"] += int(token_dict.get("call_count", 0) or 0)
+    return summary
+
+
+def get_usage_summary(uid: str, days: int = 30) -> Dict[str, Dict[str, int]]:
     """
     Get aggregated LLM usage summary for the last N days.
 
@@ -116,40 +209,20 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict:
     summary: Dict[str, Dict[str, int]] = {}
 
     for doc in docs:
-        data = doc.to_dict()
-        for feature, models in data.items():
-            if feature in ("last_updated",):
-                continue
-            if not isinstance(models, dict):
-                continue
-
+        data = _typed_doc(doc)
+        partial = _aggregate_summary(data)
+        for feature, tokens in partial.items():
             if feature not in summary:
                 summary[feature] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
-
-            for model, tokens in models.items():
-                if isinstance(tokens, dict):
-                    summary[feature]["input_tokens"] += tokens.get("input_tokens", 0)
-                    summary[feature]["output_tokens"] += tokens.get("output_tokens", 0)
-                    summary[feature]["call_count"] += tokens.get("call_count", 0)
+            summary[feature]["input_tokens"] += tokens["input_tokens"]
+            summary[feature]["output_tokens"] += tokens["output_tokens"]
+            summary[feature]["call_count"] += tokens["call_count"]
 
     return summary
 
 
-def get_top_features(uid: str, days: int = 30, limit: int = 3) -> List[Dict]:
-    """
-    Get top features by total token usage.
-
-    Args:
-        uid: User ID
-        days: Number of days to aggregate
-        limit: Number of top features to return
-
-    Returns:
-        List of dicts with feature name and total tokens, sorted by usage
-    """
-    summary = get_usage_summary(uid, days)
-
-    features = []
+def _features_from_summary(summary: Dict[str, Dict[str, int]], limit: int) -> List[Dict[str, Any]]:
+    features: List[Dict[str, Any]] = []
     for feature, tokens in summary.items():
         total = tokens.get("input_tokens", 0) + tokens.get("output_tokens", 0)
         features.append(
@@ -166,7 +239,23 @@ def get_top_features(uid: str, days: int = 30, limit: int = 3) -> List[Dict]:
     return features[:limit]
 
 
-def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
+def get_top_features(uid: str, days: int = 30, limit: int = 3) -> List[Dict[str, Any]]:
+    """
+    Get top features by total token usage.
+
+    Args:
+        uid: User ID
+        days: Number of days to aggregate
+        limit: Number of top features to return
+
+    Returns:
+        List of dicts with feature name and total tokens, sorted by usage
+    """
+    summary = get_usage_summary(uid, days)
+    return _features_from_summary(summary, limit)
+
+
+def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict[str, Any]]:
     """
     Get top features across all users by total token usage.
 
@@ -188,37 +277,16 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
     global_summary: Dict[str, Dict[str, int]] = {}
 
     for doc in usage_query.stream():
-        data = doc.to_dict()
-        for feature, models in data.items():
-            if feature in ("last_updated",):
-                continue
-            if not isinstance(models, dict):
-                continue
-
+        data = _typed_doc(doc)
+        partial = _aggregate_summary(data)
+        for feature, tokens in partial.items():
             if feature not in global_summary:
                 global_summary[feature] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
+            global_summary[feature]["input_tokens"] += tokens["input_tokens"]
+            global_summary[feature]["output_tokens"] += tokens["output_tokens"]
+            global_summary[feature]["call_count"] += tokens["call_count"]
 
-            for model, tokens in models.items():
-                if isinstance(tokens, dict):
-                    global_summary[feature]["input_tokens"] += tokens.get("input_tokens", 0)
-                    global_summary[feature]["output_tokens"] += tokens.get("output_tokens", 0)
-                    global_summary[feature]["call_count"] += tokens.get("call_count", 0)
-
-    features = []
-    for feature, tokens in global_summary.items():
-        total = tokens.get("input_tokens", 0) + tokens.get("output_tokens", 0)
-        features.append(
-            {
-                "feature": feature,
-                "input_tokens": tokens.get("input_tokens", 0),
-                "output_tokens": tokens.get("output_tokens", 0),
-                "total_tokens": total,
-                "call_count": tokens.get("call_count", 0),
-            }
-        )
-
-    features.sort(key=lambda x: x["total_tokens"], reverse=True)
-    return features[:limit]
+    return _features_from_summary(global_summary, limit)
 
 
 # ============================================================================
@@ -253,7 +321,7 @@ def record_llm_usage_bucket(
     ref = db.collection("users").document(uid).collection("llm_usage").document(today)
 
     acct_key = f'{bucket}_{account}'
-    update = {
+    update: Dict[str, Any] = {
         f'{bucket}.input_tokens': firestore.Increment(input_tokens),
         f'{bucket}.output_tokens': firestore.Increment(output_tokens),
         f'{bucket}.cache_read_tokens': firestore.Increment(cache_read_tokens),
@@ -283,8 +351,9 @@ def get_total_llm_cost(uid: str, bucket: str = 'desktop_chat') -> float:
     col = db.collection("users").document(uid).collection("llm_usage")
     total = 0.0
     for doc in col.stream():
-        data = doc.to_dict()
+        data = _typed_doc(doc)
         dc = data.get(bucket)
         if isinstance(dc, dict):
-            total += dc.get('cost_usd', 0.0)
+            dc_dict: Dict[str, Any] = cast(Dict[str, Any], dc)
+            total += float(dc_dict.get('cost_usd', 0.0) or 0.0)
     return round(total, 6)

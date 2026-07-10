@@ -72,11 +72,7 @@ pub fn gemini_degrade_target() -> &'static str {
 /// Models NOT in this list must route through AI Studio even when USE_VERTEX_AI=true.
 /// Note: gemini-embedding-001 uses `:predict` action on Vertex (not `:embedContent`),
 /// and requires request/response body transformation — handled in the proxy.
-const VERTEX_AI_MODELS: &[&str] = &[
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-embedding-001",
-];
+const VERTEX_AI_MODELS: &[&str] = &["gemini-2.5-flash", "gemini-2.5-pro", "gemini-embedding-001"];
 
 /// Check if a model is available on Vertex AI.
 /// Used by the proxy to decide routing: Vertex AI vs AI Studio.
@@ -211,6 +207,7 @@ fn tier_description_for(tier: ModelTier) -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
@@ -262,9 +259,15 @@ mod tests {
         let allowed = gemini_proxy_allowed();
         assert!(allowed.contains(&"gemini-2.5-flash"));
         assert!(allowed.contains(&"gemini-2.5-pro"));
-        assert!(allowed.contains(&"gemini-3-flash-preview"), "kept for old app compat");
+        assert!(
+            allowed.contains(&"gemini-3-flash-preview"),
+            "kept for old app compat"
+        );
         assert!(allowed.contains(&"gemini-embedding-001"));
-        assert!(!allowed.contains(&"gemini-pro-latest"), "legacy pro not in allowlist");
+        assert!(
+            !allowed.contains(&"gemini-pro-latest"),
+            "legacy pro not in allowlist"
+        );
         assert!(!allowed.contains(&"gemini-ultra"));
     }
 

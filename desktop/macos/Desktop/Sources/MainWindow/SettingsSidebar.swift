@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Data Model
 
@@ -83,6 +84,12 @@ struct SettingsSearchItem: Identifiable {
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
       icon: "waveform", settingId: "transcription.languagemode"),
+    SettingsSearchItem(
+      name: "Voice Assistant Languages",
+      subtitle: "Languages you speak to Omi over push-to-talk",
+      keywords: ["voice", "push to talk", "ptt", "language", "russian", "multilingual"],
+      section: .transcription, icon: "person.wave.2",
+      settingId: "transcription.voicelanguages"),
     SettingsSearchItem(
       name: "Custom Vocabulary",
       subtitle: "Improve recognition of names, brands, and technical terms",
@@ -259,6 +266,11 @@ struct SettingsSearchItem: Identifiable {
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
+    SettingsSearchItem(
+      name: "Screen Sharing in Chat",
+      subtitle: "Let Ask Omi capture your screen when you ask about it",
+      keywords: ["screenshot", "screen", "capture", "share screen", "vision", "see my screen"],
+      section: .floatingBar, icon: "camera.viewfinder", settingId: "floatingbar.screenshare"),
     SettingsSearchItem(
       name: "Voice Speed", subtitle: "Adjust the playback speed for voice replies",
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
@@ -670,6 +682,7 @@ struct SettingHighlightModifier: ViewModifier {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   SettingsSidebar(
     selectedSection: .constant(.advanced),
@@ -678,3 +691,4 @@ struct SettingHighlightModifier: ViewModifier {
   )
   .preferredColorScheme(.dark)
 }
+#endif

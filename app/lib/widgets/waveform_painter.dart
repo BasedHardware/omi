@@ -83,8 +83,7 @@ class WaveformPainter extends CustomPainter {
     if (isPlaying && playbackProgress > 0) {
       final progressX = (barCount * playbackProgress) * (barWidth + spacing);
       final dotPaint = Paint()
-        ..color =
-            const Color(0xFF4A90E2) // Blue color like in the image
+        ..color = const Color(0xFF4A90E2) // Blue color like in the image
         ..style = PaintingStyle.fill;
 
       // Draw the progress dot above the waveform
@@ -96,7 +95,7 @@ class WaveformPainter extends CustomPainter {
 
       // Draw a subtle vertical line from dot to waveform
       final linePaint = Paint()
-        ..color = const Color(0xFF4A90E2).withOpacity(0.5)
+        ..color = const Color(0xFF4A90E2).withValues(alpha: 0.5)
         ..strokeWidth = 1.0;
 
       canvas.drawLine(Offset(progressX, size.height * 0.05 + 6), Offset(progressX, size.height * 0.95), linePaint);

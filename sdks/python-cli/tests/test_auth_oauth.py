@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import time
 
 import httpx
@@ -163,11 +165,22 @@ def test_exchange_code_for_custom_token_happy_path(monkeypatch) -> None:
         "https://api.test.omi.local",
         code="auth_code",
         redirect_uri="http://127.0.0.1:5555/callback",
+        code_verifier="verifier-123",
     )
     assert token == "ct_abc"
     assert captured["url"] == "https://api.test.omi.local/v1/auth/token"
     assert captured["data"]["grant_type"] == "authorization_code"
     assert captured["data"]["use_custom_token"] == "true"
+    assert captured["data"]["code_verifier"] == "verifier-123"
+
+
+def test_generate_pkce_pair_uses_s256_challenge() -> None:
+    code_verifier, code_challenge = oauth._generate_pkce_pair()
+    expected = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    )
+    assert 43 <= len(code_verifier) <= 128
+    assert code_challenge == expected
 
 
 def test_exchange_code_raises_on_non_200(monkeypatch) -> None:
@@ -177,7 +190,10 @@ def test_exchange_code_raises_on_non_200(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     with pytest.raises(AuthError):
         oauth._exchange_code_for_custom_token(
-            "https://api.test.omi.local", code="bad", redirect_uri="http://127.0.0.1:5555/callback"
+            "https://api.test.omi.local",
+            code="bad",
+            redirect_uri="http://127.0.0.1:5555/callback",
+            code_verifier="verifier-123",
         )
 
 
@@ -188,7 +204,10 @@ def test_exchange_code_raises_when_custom_token_missing(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     with pytest.raises(AuthError) as info:
         oauth._exchange_code_for_custom_token(
-            "https://api.test.omi.local", code="ok", redirect_uri="http://127.0.0.1:5555/callback"
+            "https://api.test.omi.local",
+            code="ok",
+            redirect_uri="http://127.0.0.1:5555/callback",
+            code_verifier="verifier-123",
         )
     assert "custom token" in str(info.value).lower()
 

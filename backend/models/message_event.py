@@ -1,10 +1,9 @@
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
 from models.chat import Message
 from models.conversation import Conversation
-from models.conversation_photo import ConversationPhoto
 
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
@@ -24,6 +23,10 @@ class MessageEvent(BaseModel):
 class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []
+    # The recording identity that caused this lifecycle event.  It is optional
+    # for older producers, but identified listen sessions must propagate it so
+    # clients never infer ownership from the WebSocket that delivered the event.
+    recording_session_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -95,6 +98,7 @@ class ConversationSessionEvent(MessageEvent):
     event_type: str = "conversation_session"
     conversation_id: str
     status: str = "in_progress"
+    recording_session_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -126,7 +130,7 @@ class LastConversationEvent(MessageEvent):
 
 class TranslationEvent(MessageEvent):
     event_type: str = "translating"
-    segments: List = []
+    segments: List[dict[str, Any]] = []
 
     def to_json(self):
         j = self.model_dump(mode="json")

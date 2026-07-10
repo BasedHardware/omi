@@ -6,7 +6,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -22,7 +22,16 @@ use crate::byok;
 use crate::models::chat_completions::*;
 use crate::AppState;
 
+use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use super::rate_limit::RateDecision;
+use super::retrieval_policy::{
+    caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
+    REQUIRED_WEB_SEARCH_INSTRUCTION,
+};
+
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    crate::routes::response_or_500("chat_completions", builder, body)
+}
 
 /// Default max_tokens when client doesn't specify one.
 const DEFAULT_MAX_TOKENS: u64 = 8192;
@@ -49,6 +58,31 @@ const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 /// Anthropic API version header.
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
+/// Anthropic server-side web search tool type (same version the Python
+/// backend's agentic chat uses). Executed entirely upstream by Anthropic —
+/// the OpenAI-side client never sees or executes it.
+const WEB_SEARCH_TOOL_TYPE: &str = "web_search_20260209";
+
+/// Max web searches per request (matches the Python backend's agentic chat).
+const WEB_SEARCH_MAX_USES: u32 = 5;
+
+/// Anthropic web search pricing: $10 per 1,000 searches.
+const WEB_SEARCH_COST_PER_REQUEST: f64 = 10.0 / 1_000.0;
+
+fn web_search_tool_def() -> AnthropicToolDef {
+    AnthropicToolDef::Server(json!({
+        "type": WEB_SEARCH_TOOL_TYPE,
+        "name": "web_search",
+        "max_uses": WEB_SEARCH_MAX_USES,
+    }))
+}
+
+/// Kill switch: set OMI_DESKTOP_WEB_SEARCH_DISABLED=1 to stop injecting the
+/// server-side web_search tool without shipping a new desktop build.
+fn web_search_enabled() -> bool {
+    std::env::var("OMI_DESKTOP_WEB_SEARCH_DISABLED").map_or(true, |v| v != "1")
+}
+
 /// Per-token costs for Anthropic models (USD per token).
 /// Updated for Claude 4 / Sonnet 4 pricing.
 struct ModelCost {
@@ -64,43 +98,58 @@ fn model_cost(upstream_model: &str) -> ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 6.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         "claude-opus-4-6" => ModelCost {
             input_per_token: 15.0 / 1_000_000.0,
             output_per_token: 75.0 / 1_000_000.0,
             cache_read_per_token: 1.50 / 1_000_000.0,
-            cache_write_per_token: 30.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 30.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         "claude-haiku-4-5" => ModelCost {
             input_per_token: 1.0 / 1_000_000.0,
             output_per_token: 5.0 / 1_000_000.0,
             cache_read_per_token: 0.10 / 1_000_000.0,
-            cache_write_per_token: 2.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 2.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         _ => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 6.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
     }
 }
 
 fn compute_cost(usage: &AnthropicUsage, upstream_model: &str) -> f64 {
     let c = model_cost(upstream_model);
+    let web_search_requests = usage
+        .server_tool_use
+        .as_ref()
+        .map_or(0, |s| s.web_search_requests);
     (usage.input_tokens as f64 * c.input_per_token)
         + (usage.output_tokens as f64 * c.output_per_token)
         + (usage.cache_read_input_tokens as f64 * c.cache_read_per_token)
         + (usage.cache_creation_input_tokens as f64 * c.cache_write_per_token)
+        + (web_search_requests as f64 * WEB_SEARCH_COST_PER_REQUEST)
 }
 
 // ── OpenAI → Anthropic request translation ──────────────────────────────────
 
+#[cfg(test)]
 fn translate_request(
     req: &ChatCompletionRequest,
     upstream_model: &str,
 ) -> Result<AnthropicRequest, String> {
+    translate_request_inner(req, upstream_model, web_search_enabled())
+}
+
+fn translate_request_inner(
+    req: &ChatCompletionRequest,
+    upstream_model: &str,
+    enable_web_search: bool,
+) -> Result<AnthropicRequest, String> {
+    let policy = retrieval_policy(&req.messages);
     let mut system_prompt: Option<String> = None;
     let mut anthropic_messages: Vec<AnthropicMessage> = Vec::new();
 
@@ -114,9 +163,8 @@ fn translate_request(
                 system_prompt = Some(text);
             }
             "user" => {
-                let content = convert_user_content(
-                    msg.content.as_ref().cloned().unwrap_or(json!("")),
-                );
+                let content =
+                    convert_user_content(msg.content.as_ref().cloned().unwrap_or(json!("")));
                 anthropic_messages.push(AnthropicMessage {
                     role: "user".to_string(),
                     content,
@@ -138,8 +186,7 @@ fn translate_request(
                 if let Some(tool_calls) = &msg.tool_calls {
                     for tc in tool_calls {
                         let args: serde_json::Value =
-                            serde_json::from_str(&tc.function.arguments)
-                                .unwrap_or(json!({}));
+                            serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
                         content_blocks.push(json!({
                             "type": "tool_use",
                             "id": tc.id,
@@ -184,11 +231,35 @@ fn translate_request(
         }
     }
 
-    // Translate tools
-    let anthropic_tools = req.tools.as_ref().map(|tools| {
-        tools
-            .iter()
-            .map(|t| AnthropicTool {
+    // Translate tools. Agentic requests (which carry client tools) also get
+    // Anthropic's server-side web_search tool injected ahead of them —
+    // restoring the web access desktop chat lost when the default harness
+    // moved off Claude Code (whose built-in WebSearch it inherited). Bare
+    // completions like the pill router classifier stay tool-free. Prepending
+    // keeps the tools array byte-stable for the prompt-cache prefix.
+    // Haiku is excluded: web_search_20260209 is not supported there, and a
+    // tools-bearing haiku request would 400 with it attached.
+    let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
+    let force_web_search =
+        policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
+    if force_web_search && !web_search_supported {
+        return Err(
+            "required public web search is unavailable for this model or deployment".to_string(),
+        );
+    }
+    let client_tools = req.tools.as_deref().unwrap_or(&[]);
+    let inject_web_search = web_search_supported
+        && !policy.prohibits(RetrievalSource::PublicWeb)
+        && (!client_tools.is_empty() || force_web_search);
+    let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
+        req.tools.as_ref().map(|_| Vec::new())
+    } else {
+        let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(client_tools.len() + 1);
+        if inject_web_search {
+            defs.push(web_search_tool_def());
+        }
+        defs.extend(client_tools.iter().map(|t| {
+            AnthropicToolDef::Custom(AnthropicTool {
                 name: t.function.name.clone(),
                 description: t.function.description.clone(),
                 input_schema: t
@@ -197,8 +268,24 @@ fn translate_request(
                     .clone()
                     .unwrap_or(json!({"type": "object", "properties": {}})),
             })
-            .collect()
-    });
+        }));
+        Some(defs)
+    };
+
+    if force_web_search {
+        prepend_latest_user_instruction(&mut anthropic_messages, REQUIRED_WEB_SEARCH_INSTRUCTION);
+    }
+
+    tracing::info!(
+        event = "retrieval_policy",
+        required_web = policy.requires(RetrievalSource::PublicWeb),
+        required_private = policy.requires(RetrievalSource::OmiPrivate),
+        prohibited_web = policy.prohibits(RetrievalSource::PublicWeb),
+        reason = policy.reason(),
+        web_search_exposed = inject_web_search,
+        web_search_forced = force_web_search,
+        "chat_retrieval_policy"
+    );
 
     let max_tokens = req
         .max_completion_tokens
@@ -213,7 +300,11 @@ fn translate_request(
         &req.tool_choice,
         Some(serde_json::Value::String(s)) if s == "none"
     );
-    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
+    let anthropic_tool_choice = if force_web_search {
+        Some(json!({"type": "tool", "name": "web_search"}))
+    } else {
+        translate_tool_choice(&req.tool_choice)?
+    };
 
     // ── Prompt caching ──────────────────────────────────────────────────────
     // Breakpoint 1: emit the system prompt as a content block carrying an
@@ -226,15 +317,14 @@ fn translate_request(
     // Filter empty/whitespace system prompts — Anthropic rejects empty cached
     // text blocks with 400, and whitespace-only prompts have no semantic value.
     // Use original text (not trimmed) for non-empty prompts to preserve content.
-    let system = system_prompt
-        .and_then(|text| {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(cached_system_block(text))
-            }
-        });
+    let system = system_prompt.and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(cached_system_block(text))
+        }
+    });
 
     // Breakpoint 2: mark the latest user message so the conversation prefix up
     // to the current turn is cached too. During a tool-use loop one user turn
@@ -254,7 +344,11 @@ fn translate_request(
         system,
         temperature: req.temperature,
         stream: req.stream,
-        tools: if is_tool_choice_none { None } else { anthropic_tools },
+        tools: if is_tool_choice_none {
+            None
+        } else {
+            anthropic_tools
+        },
         tool_choice: anthropic_tool_choice,
     })
 }
@@ -361,9 +455,7 @@ fn translate_tool_choice(
             let choice_type = obj
                 .get("type")
                 .and_then(|t| t.as_str())
-                .ok_or_else(|| {
-                    "invalid tool_choice object: missing 'type' field".to_string()
-                })?;
+                .ok_or_else(|| "invalid tool_choice object: missing 'type' field".to_string())?;
             if choice_type != "function" {
                 return Err(format!(
                     "invalid tool_choice object: unsupported type {:?}",
@@ -376,9 +468,7 @@ fn translate_tool_choice(
             let name = func
                 .get("name")
                 .and_then(|n| n.as_str())
-                .ok_or_else(|| {
-                    "invalid tool_choice object: missing function.name".to_string()
-                })?;
+                .ok_or_else(|| "invalid tool_choice object: missing function.name".to_string())?;
             Ok(Some(json!({"type": "tool", "name": name})))
         }
         Some(other) => Err(format!(
@@ -445,19 +535,17 @@ fn convert_user_content(content: serde_json::Value) -> serde_json::Value {
 fn extract_text_content(content: &Option<serde_json::Value>) -> String {
     match content {
         Some(serde_json::Value::String(s)) => s.clone(),
-        Some(serde_json::Value::Array(parts)) => {
-            parts
-                .iter()
-                .filter_map(|p| {
-                    if p.get("type")?.as_str()? == "text" {
-                        p.get("text")?.as_str().map(String::from)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        }
+        Some(serde_json::Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|p| {
+                if p.get("type")?.as_str()? == "text" {
+                    p.get("text")?.as_str().map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(""),
         Some(serde_json::Value::Null) | None => String::new(),
         Some(other) => other.to_string(),
     }
@@ -465,10 +553,7 @@ fn extract_text_content(content: &Option<serde_json::Value>) -> String {
 
 // ── Anthropic non-streaming response → OpenAI format ────────────────────────
 
-fn translate_response(
-    resp: &AnthropicResponse,
-    public_model: &str,
-) -> ChatCompletionResponse {
+fn translate_response(resp: &AnthropicResponse, public_model: &str) -> ChatCompletionResponse {
     let mut text_parts = Vec::new();
     let mut tool_calls = Vec::new();
     let mut tool_index: u32 = 0;
@@ -488,6 +573,11 @@ fn translate_response(
                     },
                 });
                 tool_index += 1;
+            }
+            AnthropicContentBlock::ServerToolUse { .. }
+            | AnthropicContentBlock::WebSearchToolResult {} => {
+                // Server-side tool blocks are consumed upstream — only the
+                // text they produced is surfaced to the client.
             }
         }
     }
@@ -564,6 +654,11 @@ async fn chat_completions(
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
+
+    if llm_stub_enabled() {
+        return Ok(stub_chat_completions_response(&req));
+    }
+
     // Validate model
     let route = resolve_model(&req.model).ok_or_else(|| {
         tracing::warn!(
@@ -574,9 +669,41 @@ async fn chat_completions(
         StatusCode::BAD_REQUEST
     })?;
 
+    let web_search_enabled = web_search_enabled();
+    let policy = retrieval_policy(&req.messages);
+    if policy.requires(RetrievalSource::PublicWeb)
+        && !caller_disabled_tools(&req)
+        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
+    {
+        tracing::warn!(
+            event = "retrieval_policy",
+            required_web = true,
+            reason = policy.reason(),
+            web_search_exposed = false,
+            web_search_forced = false,
+            "required public web search is unavailable"
+        );
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json"),
+            Body::from(
+                json!({
+                    "error": {
+                        "message": "Public web search is temporarily unavailable. Please try again.",
+                        "type": "web_search_unavailable",
+                        "code": 503
+                    }
+                })
+                .to_string(),
+            ),
+        ));
+    }
+
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
-    let byok_anthropic_key = byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
+    let byok_anthropic_key =
+        byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
     let is_byok = byok_anthropic_key.is_some();
 
     // Rate limiting — uses the dedicated CHAT limiter (NOT the Gemini one), so a
@@ -589,20 +716,25 @@ async fn chat_completions(
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
         if decision == RateDecision::Reject {
-            return Ok(Response::builder()
-                .status(StatusCode::TOO_MANY_REQUESTS)
-                .header("content-type", "application/json")
-                .header("retry-after", "60")
-                .body(axum::body::Body::from(
-                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}}).to_string()
-                ))
-                .unwrap());
+            return Ok(response_or_500(
+                Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "60"),
+                Body::from(
+                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
+                        .to_string(),
+                ),
+            ));
         }
     }
 
     // Get API key — prefer BYOK, fall back to server key
     let api_key: String = if let Some(byok_key) = byok_anthropic_key {
-        tracing::info!("chat_completions: using BYOK Anthropic key for uid={}", user.uid);
+        tracing::info!(
+            "chat_completions: using BYOK Anthropic key for uid={}",
+            user.uid
+        );
         byok_key.to_string()
     } else {
         match route.provider {
@@ -619,10 +751,11 @@ async fn chat_completions(
     };
 
     // Translate request
-    let anthropic_req = translate_request(&req, route.upstream_model).map_err(|e| {
-        tracing::warn!("chat_completions: request translation error: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+    let anthropic_req = translate_request_inner(&req, route.upstream_model, web_search_enabled)
+        .map_err(|e| {
+            tracing::warn!("chat_completions: request translation error: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry
@@ -748,15 +881,19 @@ async fn handle_non_streaming(
             user.uid,
             &body[..body.len().min(500)]
         );
-        return Ok(Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body))
-            .unwrap());
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+                .header("content-type", "application/json"),
+            Body::from(body),
+        ));
     }
 
     let anthropic_resp: AnthropicResponse = upstream_resp.json().await.map_err(|e| {
-        tracing::error!("chat_completions: failed to parse Anthropic response: {}", e);
+        tracing::error!(
+            "chat_completions: failed to parse Anthropic response: {}",
+            e
+        );
         StatusCode::BAD_GATEWAY
     })?;
 
@@ -792,11 +929,12 @@ async fn handle_streaming(
             user.uid,
             &body[..body.len().min(500)]
         );
-        return Ok(Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body))
-            .unwrap());
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+                .header("content-type", "application/json"),
+            Body::from(body),
+        ));
     }
 
     // State for stream translation
@@ -909,6 +1047,18 @@ async fn handle_streaming(
                             AnthropicContentBlock::Text { .. } => {
                                 // text_start — no chunk needed, text comes via deltas
                             }
+                            AnthropicContentBlock::ServerToolUse { name, .. } => {
+                                // Executed upstream by Anthropic — no OpenAI tool_call
+                                // is emitted, so the client never tries to run it.
+                                // Info-level: each invocation is a billable event.
+                                tracing::info!(
+                                    "chat_completions: server tool '{}' running upstream",
+                                    name
+                                );
+                            }
+                            AnthropicContentBlock::WebSearchToolResult {} => {
+                                // Consumed by the model upstream — nothing to forward.
+                            }
                         }
                     }
 
@@ -928,6 +1078,9 @@ async fn handle_streaming(
                                     None,
                                 );
                                 yield Ok(sse_line(&chunk_val));
+                            }
+                            AnthropicDelta::CitationsDelta {} => {
+                                // Web-search citation metadata — no OpenAI equivalent.
                             }
                             AnthropicDelta::InputJsonDelta { partial_json } => {
                                 if let Some(&ordinal) = tool_ordinals.get(&index) {
@@ -966,6 +1119,13 @@ async fn handle_streaming(
                             final_usage = Some(u);
                         }
 
+                        if delta.stop_reason.as_deref() == Some("pause_turn") {
+                            // Mapped to "stop" — the proxy cannot resume a paused
+                            // server-tool turn, so the reply ends where it is.
+                            tracing::warn!(
+                                "chat_completions: pause_turn stop_reason — terminating turn"
+                            );
+                        }
                         let finish = map_stop_reason(delta.stop_reason.as_deref());
                         let chunk_val = make_chunk(
                             &stream_id,
@@ -983,13 +1143,7 @@ async fn handle_streaming(
 
                         // Send usage chunk
                         if let Some(ref fu) = final_usage {
-                            // Merge initial + final usage
-                            let merged = AnthropicUsage {
-                                input_tokens: initial_usage.as_ref().map_or(0, |u| u.input_tokens),
-                                output_tokens: fu.output_tokens,
-                                cache_creation_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_creation_input_tokens),
-                                cache_read_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_read_input_tokens),
-                            };
+                            let merged = merge_stream_usage(initial_usage.as_ref(), fu);
                             let openai_usage = anthropic_usage_to_openai(&merged);
                             let usage_chunk = ChatCompletionChunk {
                                 id: stream_id.clone(),
@@ -1010,12 +1164,7 @@ async fn handle_streaming(
                         // Log usage asynchronously — skip for BYOK (user pays own bill)
                         if !is_byok {
                         if let Some(ref fu) = final_usage {
-                            let merged = AnthropicUsage {
-                                input_tokens: initial_usage.as_ref().map_or(0, |u| u.input_tokens),
-                                output_tokens: fu.output_tokens,
-                                cache_creation_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_creation_input_tokens),
-                                cache_read_input_tokens: initial_usage.as_ref().map_or(0, |u| u.cache_read_input_tokens),
-                            };
+                            let merged = merge_stream_usage(initial_usage.as_ref(), fu);
                             let cost = compute_cost(&merged, &upstream_model);
                             let uid_clone = uid.clone();
                             let fs = firestore.clone();
@@ -1057,15 +1206,16 @@ async fn handle_streaming(
         }
     };
 
-    let body = axum::body::Body::from_stream(translated_stream);
+    let body = Body::from_stream(translated_stream);
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "text/event-stream")
-        .header("cache-control", "no-cache")
-        .header("connection", "keep-alive")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/event-stream")
+            .header("cache-control", "no-cache")
+            .header("connection", "keep-alive"),
+        body,
+    ))
 }
 
 async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, cost: f64) {
@@ -1088,11 +1238,7 @@ async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, co
         )
         .await
     {
-        tracing::error!(
-            "chat_completions: usage log failed for {}: {}",
-            user.uid,
-            e
-        );
+        tracing::error!("chat_completions: usage log failed for {}: {}", user.uid, e);
     }
 }
 
@@ -1109,6 +1255,39 @@ pub fn chat_completions_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages,
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
+    fn user_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    fn assistant_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
 
     #[test]
     fn transient_statuses_retry() {
@@ -1212,6 +1391,7 @@ mod tests {
             output_tokens: 50,
             cache_creation_input_tokens: 10,
             cache_read_input_tokens: 20,
+            server_tool_use: None,
         };
         let openai = anthropic_usage_to_openai(&usage);
         assert_eq!(openai.prompt_tokens, 130); // 100 + 10 + 20
@@ -1226,11 +1406,125 @@ mod tests {
             output_tokens: 500,
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: 0,
+            server_tool_use: None,
         };
         let cost = compute_cost(&usage, "claude-sonnet-4-6");
         // input: 1000 * 3/1M = 0.003, output: 500 * 15/1M = 0.0075
         let expected = 0.003 + 0.0075;
         assert!((cost - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_cost_includes_web_search_requests() {
+        let usage = AnthropicUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            server_tool_use: Some(AnthropicServerToolUsage {
+                web_search_requests: 3,
+            }),
+        };
+        let cost = compute_cost(&usage, "claude-sonnet-4-6");
+        // tokens: 0.003 + 0.0075, web search: 3 * $0.01
+        let expected = 0.003 + 0.0075 + 0.03;
+        assert!((cost - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_stream_event_parses_server_tool_use_and_citations() {
+        // content_block_start for a server-side web search — must parse into
+        // ServerToolUse (not fail and not become a client ToolUse).
+        let start: AnthropicStreamEvent = serde_json::from_str(
+            r#"{"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}"#,
+        )
+        .unwrap();
+        match start {
+            AnthropicStreamEvent::ContentBlockStart { content_block, .. } => {
+                assert!(matches!(
+                    content_block,
+                    AnthropicContentBlock::ServerToolUse { .. }
+                ));
+            }
+            other => panic!("unexpected event: {:?}", other),
+        }
+
+        // web_search_tool_result block start — extra fields must be tolerated.
+        let result: AnthropicStreamEvent = serde_json::from_str(
+            r#"{"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.com","title":"t"}]}}"#,
+        )
+        .unwrap();
+        match result {
+            AnthropicStreamEvent::ContentBlockStart { content_block, .. } => {
+                assert!(matches!(
+                    content_block,
+                    AnthropicContentBlock::WebSearchToolResult {}
+                ));
+            }
+            other => panic!("unexpected event: {:?}", other),
+        }
+
+        // citations_delta on a text block — must parse into CitationsDelta.
+        let citation: AnthropicStreamEvent = serde_json::from_str(
+            r#"{"type":"content_block_delta","index":3,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://example.com"}}}"#,
+        )
+        .unwrap();
+        match citation {
+            AnthropicStreamEvent::ContentBlockDelta { delta, .. } => {
+                assert!(matches!(delta, AnthropicDelta::CitationsDelta {}));
+            }
+            other => panic!("unexpected event: {:?}", other),
+        }
+
+        // message_delta usage carrying server_tool_use must round-trip the count.
+        let md: AnthropicStreamEvent = serde_json::from_str(
+            r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42,"server_tool_use":{"web_search_requests":2}}}"#,
+        )
+        .unwrap();
+        match md {
+            AnthropicStreamEvent::MessageDelta { usage, .. } => {
+                let u = usage.unwrap();
+                assert_eq!(u.server_tool_use.unwrap().web_search_requests, 2);
+            }
+            other => panic!("unexpected event: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_translate_response_skips_server_tool_blocks() {
+        let resp = AnthropicResponse {
+            id: "msg_ws".to_string(),
+            response_type: "message".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
+            role: "assistant".to_string(),
+            content: vec![
+                AnthropicContentBlock::Text {
+                    text: "Checking. ".to_string(),
+                },
+                AnthropicContentBlock::ServerToolUse {
+                    id: "srvtoolu_1".to_string(),
+                    name: "web_search".to_string(),
+                },
+                AnthropicContentBlock::WebSearchToolResult {},
+                AnthropicContentBlock::Text {
+                    text: "It's 75F in NYC.".to_string(),
+                },
+            ],
+            stop_reason: Some("end_turn".to_string()),
+            usage: AnthropicUsage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+                server_tool_use: None,
+            },
+        };
+
+        let openai = translate_response(&resp, "omi-sonnet");
+        let msg = &openai.choices[0].message;
+        assert_eq!(msg.content.as_deref(), Some("Checking. It's 75F in NYC."));
+        // Server tool blocks must NOT surface as client tool_calls.
+        assert!(msg.tool_calls.is_none());
     }
 
     #[test]
@@ -1529,19 +1823,22 @@ mod tests {
         for content in [Some(json!("")), Some(json!("   ")), None] {
             let req = ChatCompletionRequest {
                 model: "omi-sonnet".to_string(),
-                messages: vec![ChatMessage {
-                    role: "system".to_string(),
-                    content: content.clone(),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                }, ChatMessage {
-                    role: "user".to_string(),
-                    content: Some(json!("Hello")),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                }],
+                messages: vec![
+                    ChatMessage {
+                        role: "system".to_string(),
+                        content: content.clone(),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    },
+                    ChatMessage {
+                        role: "user".to_string(),
+                        content: Some(json!("Hello")),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    },
+                ],
                 stream: false,
                 temperature: None,
                 max_tokens: None,
@@ -1715,14 +2012,221 @@ mod tests {
             tool_choice: None,
         };
 
-        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        // Server-side web_search is injected ahead of the client tools.
+        assert_eq!(tools.len(), 2);
+        let ws = serde_json::to_value(&tools[0]).unwrap();
+        assert_eq!(ws["type"], WEB_SEARCH_TOOL_TYPE);
+        assert_eq!(ws["name"], "web_search");
+        assert_eq!(ws["max_uses"], WEB_SEARCH_MAX_USES);
+        let custom = serde_json::to_value(&tools[1]).unwrap();
+        assert_eq!(custom["name"], "get_weather");
+        assert_eq!(custom["description"], "Get weather for a location");
+        // Server tools carry no input_schema; custom tools must.
+        assert!(ws.get("input_schema").is_none());
+        assert!(custom.get("input_schema").is_some());
+    }
+
+    #[test]
+    fn test_translate_request_web_search_disabled() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: Some(vec![ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "get_weather".to_string(),
+                    description: None,
+                    parameters: None,
+                },
+            }]),
+            tool_choice: None,
+        };
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap();
         let tools = result.tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].name, "get_weather");
+        let only = serde_json::to_value(&tools[0]).unwrap();
+        assert_eq!(only["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_translate_request_forces_required_web_search_without_client_tools() {
+        let req = test_request(vec![
+            user_message("I'm working on humanpost.co now"),
+            assistant_message("Is HumanPost separate from Vost or part of it?"),
+            user_message("look it up"),
+        ]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
         assert_eq!(
-            tools[0].description,
-            Some("Get weather for a location".to_string())
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "web_search"
         );
+        assert_eq!(
+            result.tool_choice,
+            Some(json!({"type": "tool", "name": "web_search"}))
+        );
+        let latest = result.messages.last().unwrap().content.to_string();
+        assert!(latest.contains("Public web search is required"));
+        assert!(latest.contains("look it up"));
+    }
+
+    #[test]
+    fn test_translate_request_required_web_search_fails_closed_when_disabled() {
+        let req = test_request(vec![user_message("Search the web for HumanPost")]);
+        let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
+        assert!(error.contains("required public web search is unavailable"));
+    }
+
+    #[test]
+    fn test_translate_request_private_lookup_excludes_server_web_search() {
+        let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
+        req.tools = Some(vec![ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "search_conversations".to_string(),
+                description: Some("Search private conversations".to_string()),
+                parameters: None,
+            },
+        }]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "search_conversations"
+        );
+        assert!(result.tool_choice.is_none());
+    }
+
+    #[test]
+    fn test_translate_request_no_web_search_on_haiku() {
+        // web_search_20260209 is unsupported on haiku — never inject there.
+        let req = ChatCompletionRequest {
+            model: "claude-haiku-4-5".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: Some(vec![ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "some_tool".to_string(),
+                    description: None,
+                    parameters: None,
+                },
+            }]),
+            tool_choice: None,
+        };
+        let result = translate_request_inner(&req, "claude-haiku-4-5", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "some_tool"
+        );
+    }
+
+    #[test]
+    fn test_map_stop_reason_pause_turn_terminates() {
+        assert_eq!(
+            map_stop_reason(Some("pause_turn")),
+            Some("stop".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_stream_usage_prefers_final_nonzero() {
+        let initial = AnthropicUsage {
+            input_tokens: 100,
+            output_tokens: 0,
+            cache_creation_input_tokens: 50,
+            cache_read_input_tokens: 20,
+            server_tool_use: None,
+        };
+        // Web-search turn: final usage carries cumulative input + search count.
+        let fin = AnthropicUsage {
+            input_tokens: 5000,
+            output_tokens: 300,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            server_tool_use: Some(AnthropicServerToolUsage {
+                web_search_requests: 2,
+            }),
+        };
+        let merged = merge_stream_usage(Some(&initial), &fin);
+        assert_eq!(merged.input_tokens, 5000); // final wins when nonzero
+        assert_eq!(merged.output_tokens, 300);
+        assert_eq!(merged.cache_creation_input_tokens, 50); // fallback to initial
+        assert_eq!(merged.cache_read_input_tokens, 20); // fallback to initial
+        assert_eq!(merged.server_tool_use.unwrap().web_search_requests, 2);
+
+        // Plain turn: final has only output — initial fields survive.
+        let fin_plain = AnthropicUsage {
+            input_tokens: 0,
+            output_tokens: 40,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            server_tool_use: None,
+        };
+        let merged_plain = merge_stream_usage(Some(&initial), &fin_plain);
+        assert_eq!(merged_plain.input_tokens, 100);
+        assert_eq!(merged_plain.cache_read_input_tokens, 20);
+        assert!(merged_plain.server_tool_use.is_none());
+    }
+
+    #[test]
+    fn test_translate_request_no_web_search_without_client_tools() {
+        // Tool-less requests (router classifier, summaries) must stay tool-free
+        // even with web search enabled.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hi")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        assert!(result.tools.is_none());
+
+        // Same for an explicitly empty tools array.
+        let req_empty = ChatCompletionRequest {
+            tools: Some(vec![]),
+            ..req
+        };
+        let result = translate_request_inner(&req_empty, "claude-sonnet-4-6", true).unwrap();
+        assert_eq!(result.tools.unwrap().len(), 0);
     }
 
     #[test]
@@ -1741,6 +2245,7 @@ mod tests {
                 output_tokens: 5,
                 cache_creation_input_tokens: 0,
                 cache_read_input_tokens: 0,
+                server_tool_use: None,
             },
         };
 
@@ -1752,10 +2257,7 @@ mod tests {
             Some("Hello!".to_string())
         );
         assert!(openai.choices[0].message.tool_calls.is_none());
-        assert_eq!(
-            openai.choices[0].finish_reason,
-            Some("stop".to_string())
-        );
+        assert_eq!(openai.choices[0].finish_reason, Some("stop".to_string()));
         let usage = openai.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 10);
         assert_eq!(usage.completion_tokens, 5);
@@ -1784,6 +2286,7 @@ mod tests {
                 output_tokens: 50,
                 cache_creation_input_tokens: 0,
                 cache_read_input_tokens: 0,
+                server_tool_use: None,
             },
         };
 
@@ -1936,7 +2439,10 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         // tool_choice "none" must strip tools entirely
-        assert!(result.tools.is_none(), "tools should be stripped when tool_choice is 'none'");
+        assert!(
+            result.tools.is_none(),
+            "tools should be stripped when tool_choice is 'none'"
+        );
         assert!(result.tool_choice.is_none());
     }
 
@@ -1970,7 +2476,10 @@ mod tests {
         // Unknown strings must return Err (→ 400) instead of silently coercing
         let choice = Some(json!("invalid_value"));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "unknown string tool_choice must return Err");
+        assert!(
+            result.is_err(),
+            "unknown string tool_choice must return Err"
+        );
     }
 
     #[test]
@@ -1992,7 +2501,10 @@ mod tests {
         // Malformed objects must return Err (→ 400)
         let choice = Some(json!({"type": "function", "function": {}}));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "object without function.name must return Err");
+        assert!(
+            result.is_err(),
+            "object without function.name must return Err"
+        );
     }
 
     #[test]
@@ -2012,7 +2524,10 @@ mod tests {
             "function": {"name": "get_weather"}
         }));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "non-function tool_choice object must return Err");
+        assert!(
+            result.is_err(),
+            "non-function tool_choice object must return Err"
+        );
     }
 
     #[test]
@@ -2075,7 +2590,10 @@ mod tests {
             tool_choice: None,
         };
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.max_tokens, 0, "max_tokens=0 should be respected (capped at min)");
+        assert_eq!(
+            result.max_tokens, 0,
+            "max_tokens=0 should be respected (capped at min)"
+        );
     }
 
     #[test]
@@ -2097,7 +2615,10 @@ mod tests {
             tool_choice: None,
         };
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.max_tokens, MAX_TOKENS_CAP, "max_tokens at exactly the cap should be preserved");
+        assert_eq!(
+            result.max_tokens, MAX_TOKENS_CAP,
+            "max_tokens at exactly the cap should be preserved"
+        );
     }
 
     // ── SSE helper tests ───────────────────────────────────────────────
@@ -2118,7 +2639,9 @@ mod tests {
             }]),
         };
         let chunk = make_chunk("id-1", 1000, "omi-sonnet", delta, None, None);
-        let tool_calls = chunk["choices"][0]["delta"]["tool_calls"].as_array().unwrap();
+        let tool_calls = chunk["choices"][0]["delta"]["tool_calls"]
+            .as_array()
+            .unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0]["function"]["name"], "get_weather");
         assert_eq!(tool_calls[0]["index"], 0);
@@ -2131,7 +2654,14 @@ mod tests {
             content: Some("done".to_string()),
             tool_calls: None,
         };
-        let chunk = make_chunk("id-2", 2000, "omi-sonnet", delta, Some("stop".to_string()), None);
+        let chunk = make_chunk(
+            "id-2",
+            2000,
+            "omi-sonnet",
+            delta,
+            Some("stop".to_string()),
+            None,
+        );
         assert_eq!(chunk["choices"][0]["finish_reason"], "stop");
     }
 
@@ -2148,7 +2678,14 @@ mod tests {
             total_tokens: 30,
             prompt_tokens_details: None,
         };
-        let chunk = make_chunk("id-3", 3000, "omi-sonnet", delta, Some("stop".to_string()), Some(usage));
+        let chunk = make_chunk(
+            "id-3",
+            3000,
+            "omi-sonnet",
+            delta,
+            Some("stop".to_string()),
+            Some(usage),
+        );
         assert_eq!(chunk["usage"]["prompt_tokens"], 10);
         assert_eq!(chunk["usage"]["completion_tokens"], 20);
         assert_eq!(chunk["usage"]["total_tokens"], 30);
@@ -2159,5 +2696,4 @@ mod tests {
         let done = Bytes::from("data: [DONE]\n\n");
         assert_eq!(done, "data: [DONE]\n\n".as_bytes());
     }
-
 }

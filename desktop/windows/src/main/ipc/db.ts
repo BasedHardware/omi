@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
+import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
 import type {
   AppUsageRecord,
   ChatMessage,
@@ -68,12 +69,11 @@ function get(): Database.Database {
   // never reads or writes the user's real omi.db.
   const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
   db = new Database(file)
-  // For the throwaway bench DB only, relax durability so seeding ~7k rows isn't
-  // dominated by a per-insert fsync (otherwise it swamps the startup measurement).
-  if (process.env.OMI_DB_PATH) {
-    db.pragma('journal_mode = WAL')
-    db.pragma('synchronous = NORMAL')
-  }
+  // WAL mode: allows main-thread reads to proceed concurrently while the KG
+  // write worker holds the write lock. Synchronous stays at the default FULL so
+  // non-KG tables (local_conversation etc.) are not at power-loss risk.
+  // The worker sets synchronous=NORMAL only on its own connection.
+  db.pragma('journal_mode = WAL')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
@@ -402,9 +402,9 @@ export function pruneAppUsage(cutoff: number): number {
 
 // --- Local knowledge graph (M2) ---
 
-// Full-replace the local graph: clear both tables and batch-insert in a single
-// transaction (matches replaceIndexedFiles cadence). 500-row batches keep
-// large graphs off a single mega-statement.
+// replaceLocalGraph — superseded by KgWriteQueue + kgWorker.ts (off-thread WAL
+// replace). Retained here so the schema initialisation path in get() and any
+// future rollback of the worker approach does not require re-adding this.
 export function replaceLocalGraph(graph: LocalKnowledgeGraph): void {
   const d = get()
   const insertNode = d.prepare(
@@ -531,7 +531,9 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
     aliases: parseJsonArray(r.aliasesJson),
     sourceRefs: parseJsonArray(r.sourceRefs)
   }))
-  if (nodes.length === 0) return { nodes: [], edges: [] }
+  if (nodes.length === 0) {
+    return { nodes: [], edges: [] }
+  }
   const ids = nodes.map((n) => n.id)
   const placeholders = ids.map(() => '?').join(',')
   const edges = d
@@ -736,14 +738,15 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
 
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const like = `%${query}%`
+    const search = buildRewindSearchQuery(query)
+    if (!search) return []
     return get()
       .prepare(
         `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
+       WHERE ${search.where}
        ORDER BY ts DESC LIMIT ?`
       )
-      .all(like, like, like, limit) as RewindFrame[]
+      .all(...search.params, limit) as RewindFrame[]
   })
 }
 

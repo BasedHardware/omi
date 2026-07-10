@@ -8,115 +8,35 @@ Verifies:
 - Circuit breaker + health tracking in chat tool endpoints
 """
 
-import importlib
 import os
-import sys
-import types
+from types import ModuleType
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import httpx
 import pytest
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+from testing.import_isolation import load_module_fresh, stub_modules
+from utils.apps import validate_app_endpoints_for_reenable
 
-# Stub database modules before import
-sys.modules.setdefault("database._client", MagicMock())
-_db_redis = sys.modules.get("database.redis_db")
-if _db_redis is None:
-    _db_redis = types.ModuleType("database.redis_db")
-    sys.modules["database.redis_db"] = _db_redis
-_db_redis.get_user_webhook_db = MagicMock(return_value="https://example.com/webhook")
-_db_redis.user_webhook_status_db = MagicMock(return_value=True)
-_db_redis.disable_user_webhook_db = MagicMock()
-_db_redis.enable_user_webhook_db = MagicMock()
-_db_redis.set_user_webhook_db = MagicMock()
-_db_redis.get_cached_user_geolocation = MagicMock(return_value=None)
-_db_redis.get_enabled_apps = MagicMock(return_value=[])
-_db_redis.r = MagicMock()
-
-_backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
-_db_dir = os.path.join(_backend_dir, 'database')
-
-for mod_name in ["database", "database.notifications", "database.users", "database.folders", "database.conversations"]:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
-        if mod_name == "database":
-            sys.modules[mod_name].__path__ = [os.path.abspath(_db_dir)]
-
-sys.modules["database.notifications"].get_token_only = MagicMock(return_value=None)
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "Test"})
-sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
-sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
-sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
-
-if "utils.notifications" not in sys.modules:
-    sys.modules["utils.notifications"] = types.ModuleType("utils.notifications")
-sys.modules["utils.notifications"].send_notification = MagicMock()
-
-if "database.apps" not in sys.modules:
-    sys.modules["database.apps"] = types.ModuleType("database.apps")
-sys.modules["database.apps"].delete_app_cache_by_id = MagicMock()
-sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
-
-if "utils.executors" not in sys.modules:
-    _executors_mod = types.ModuleType("utils.executors")
-    sys.modules["utils.executors"] = _executors_mod
-_executors_mod = sys.modules["utils.executors"]
-_executors_mod.db_executor = MagicMock()
-_executors_mod.llm_executor = MagicMock()
-_executors_mod.storage_executor = MagicMock()
-_executors_mod.critical_executor = MagicMock()
-_executors_mod.postprocess_executor = MagicMock()
-_executors_mod.sync_executor = MagicMock()
-_executors_mod.stripe_executor = MagicMock()
-
-
-async def _mock_run_blocking(executor, fn, *args, **kwargs):
-    return fn(*args, **kwargs)
-
-
-_executors_mod.run_blocking = _mock_run_blocking
+_BACKEND = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
 def _load_app_tools_module():
-    """Load app_tools module directly, bypassing __init__.py which pulls in heavy deps."""
-    _db_redis_mod = sys.modules.get("database.redis_db")
-    if _db_redis_mod:
-        for attr in ['get_cached_user_geolocation', 'delete_app_cache_by_id', 'get_enabled_apps']:
-            if not hasattr(_db_redis_mod, attr):
-                setattr(_db_redis_mod, attr, MagicMock())
-    for mod_name in [
-        "utils.mcp_client",
-        "utils.log_sanitizer",
-        "utils.retrieval",
-        "utils.retrieval.agentic",
-        "utils.notifications",
-    ]:
-        sys.modules.setdefault(mod_name, MagicMock())
-    _notif_mod = sys.modules.get("utils.notifications")
-    if _notif_mod and not hasattr(_notif_mod, 'send_notification'):
-        _notif_mod.send_notification = MagicMock()
-    _apps_db_mod = sys.modules.get("database.apps")
-    if _apps_db_mod and not hasattr(_apps_db_mod, 'get_app_by_id_db'):
-        _apps_db_mod.get_app_by_id_db = MagicMock(return_value=None)
-    if "utils.retrieval" in sys.modules:
-        sys.modules["utils.retrieval"].__path__ = []
-    if "utils.retrieval.tools.app_tools" in sys.modules:
-        existing = sys.modules["utils.retrieval.tools.app_tools"]
-        if hasattr(existing, 'is_app_webhook_disabled'):
-            return existing
-        del sys.modules["utils.retrieval.tools.app_tools"]
-    spec = importlib.util.spec_from_file_location(
-        "utils.retrieval.tools.app_tools",
-        os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'retrieval', 'tools', 'app_tools.py'),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["utils.retrieval.tools.app_tools"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """Load utils.retrieval.tools.app_tools directly, bypassing tools/__init__ (typesense import).
+
+    app_tools.py itself imports cleanly against the real database/utils modules; only the
+    sibling ``tools/__init__.py`` chain pulls in typesense at import time, so we shim the two
+    parent packages and exec the target file fresh.
+    """
+    retrieval_pkg = ModuleType("utils.retrieval")
+    retrieval_pkg.__path__ = []
+    tools_pkg = ModuleType("utils.retrieval.tools")
+    tools_pkg.__path__ = []
+    with stub_modules({"utils.retrieval": retrieval_pkg, "utils.retrieval.tools": tools_pkg}):
+        return load_module_fresh(
+            "utils.retrieval.tools.app_tools",
+            os.path.join(_BACKEND, "utils", "retrieval", "tools", "app_tools.py"),
+        )
 
 
 class TestAppWebhookHealthLuaScript:
@@ -320,6 +240,64 @@ class TestDevWebhookHealthTracking:
 class TestDevWebhookAutoDisable:
     """Test developer webhook auto-disable integration in webhooks.py."""
 
+    @pytest.fixture(autouse=True)
+    def _stub_webhook_db_lookups(self, monkeypatch):
+        monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
+        monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+
+    def test_append_query_params_preserves_existing_query(self):
+        from utils.webhooks import _append_query_params
+
+        result = _append_query_params(
+            "https://example.com/webhook?token=abc&uid=stale",
+            {"uid": "uid-1", "sample_rate": 16000},
+        )
+
+        assert result == "https://example.com/webhook?token=abc&uid=uid-1&sample_rate=16000"
+
+    def test_retry_delays_can_be_overridden_by_env(self, monkeypatch):
+        from utils.webhooks import _get_dev_webhook_retry_delays
+
+        monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "0,0.25,1")
+
+        assert _get_dev_webhook_retry_delays() == (0.0, 0.25, 1.0)
+
+    @pytest.mark.asyncio
+    async def test_post_dev_webhook_retries_until_success(self):
+        from utils.webhooks import _post_dev_webhook
+
+        responses = [MagicMock(status_code=500), MagicMock(status_code=502), MagicMock(status_code=200)]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=responses)
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+            )
+
+        assert response.status_code == 200
+        assert mock_client.post.await_count == 3
+        assert sleep_calls == [0.1, 0.2]
+        idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
+        assert len(set(idempotency_keys)) == 1
+        assert idempotency_keys[0]
+
     @pytest.mark.asyncio
     async def test_dev_webhook_disabled_on_threshold(self):
         """When failure threshold exceeded, disable_user_webhook_db should be called."""
@@ -340,6 +318,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
@@ -388,12 +367,54 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
             args = mock_fail.call_args[0]
             assert args[2] == 0
             assert args[3] == 'ConnectionError'
+
+    @pytest.mark.asyncio
+    async def test_realtime_transcript_retry_success_records_success_only(self):
+        from utils.webhooks import realtime_transcript_webhook
+
+        first_response = MagicMock()
+        first_response.status_code = 500
+        second_response = MagicMock()
+        second_response.status_code = 200
+        second_response.json.return_value = {}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[first_response, second_response])
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.record_dev_webhook_success") as mock_success,
+            patch("utils.webhooks.record_dev_webhook_failure") as mock_fail,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", (0.01,)),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+
+        assert mock_client.post.await_count == 2
+        assert sleep_calls == [0.01]
+        mock_success.assert_called_once()
+        mock_fail.assert_not_called()
 
 
 class TestDisableAppInFirestore:
@@ -648,52 +669,12 @@ class TestChatToolCircuitBreaker:
         mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
 
 
-def _load_validate_helper():
-    """Load validate_app_endpoints_for_reenable directly from source, bypassing heavy deps."""
-    _utils_apps_key = "utils.apps"
-    if _utils_apps_key in sys.modules and hasattr(sys.modules[_utils_apps_key], 'validate_app_endpoints_for_reenable'):
-        return sys.modules[_utils_apps_key].validate_app_endpoints_for_reenable
-    _saved = {}
-    _mock_modules = [
-        "database.redis_db",
-        "database.apps",
-        "database.auth",
-        "database.cache",
-        "database.conversations",
-        "database.memories",
-        "database.users",
-        "utils.stripe",
-        "utils.llm",
-        "utils.llm.persona",
-        "utils.llm.usage_tracker",
-        "utils.social",
-        "utils.conversations",
-        "utils.conversations.factory",
-        "utils.conversations.render",
-        "models.app",
-    ]
-    for mod_name in _mock_modules:
-        _saved[mod_name] = sys.modules.get(mod_name)
-        sys.modules[mod_name] = MagicMock()
-    spec = importlib.util.spec_from_file_location(
-        _utils_apps_key,
-        os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'apps.py'),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[_utils_apps_key] = mod
-    spec.loader.exec_module(mod)
-    for mod_name, orig in _saved.items():
-        if orig is not None:
-            sys.modules[mod_name] = orig
-    return mod.validate_app_endpoints_for_reenable
-
-
 class TestReEnableRouterBehavior:
     """Tests for the production validate_app_endpoints_for_reenable helper from utils.apps."""
 
     @pytest.fixture(autouse=True)
     def _load_helper(self):
-        self._validate = _load_validate_helper()
+        self._validate = validate_app_endpoints_for_reenable
 
     def test_no_endpoints_returns_400(self):
         """Re-enable with no configured endpoints should return 400."""
@@ -1788,6 +1769,7 @@ class TestPerEndpointHealthIsolation:
             assert _disabled_cache.get("app-mcp-1", (None,))[0] is True
 
 
+@pytest.mark.integration
 class TestFakeRedisFailureLua:
     """Execute the real failure Lua script against fakeredis to verify atomic behavior."""
 
@@ -1856,6 +1838,7 @@ class TestFakeRedisFailureLua:
         assert len(state['last_error']) <= 200
 
 
+@pytest.mark.integration
 class TestFakeRedisSuccessLua:
     """Execute the real success Lua script against fakeredis."""
 
@@ -1900,6 +1883,7 @@ class TestFakeRedisSuccessLua:
         assert ttl > 0
 
 
+@pytest.mark.integration
 class TestFakeRedisDevFailureLua:
     """Execute the real dev failure Lua script against fakeredis."""
 
@@ -1946,6 +1930,11 @@ class TestFakeRedisDevFailureLua:
 
 class TestDevWebhookIntegrationPaths:
     """Test developer webhook health tracking integration in utils/webhooks.py."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_webhook_db_lookups(self, monkeypatch):
+        monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
+        monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
 
     @pytest.mark.asyncio
     async def test_conversation_created_records_success(self):
@@ -2005,6 +1994,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             mock_memory = MagicMock()
             mock_memory.is_locked = False
@@ -2041,6 +2031,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             mock_memory = MagicMock()
             mock_memory.is_locked = False

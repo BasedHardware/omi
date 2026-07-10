@@ -82,12 +82,18 @@ fn parse_ai_studio_path(path: &str) -> Option<(&str, &str)> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn build_url_generates_correct_vertex_endpoint() {
-        let url = build_vertex_url("my-project", "us-central1", "gemini-2.5-flash", "generateContent");
+        let url = build_vertex_url(
+            "my-project",
+            "us-central1",
+            "gemini-2.5-flash",
+            "generateContent",
+        );
         assert_eq!(
             url,
             "https://us-central1-aiplatform.googleapis.com/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
@@ -96,20 +102,35 @@ mod tests {
 
     #[test]
     fn build_url_embedding_model() {
-        let url = build_vertex_url("my-project", "us-central1", "gemini-embedding-001", "embedContent");
+        let url = build_vertex_url(
+            "my-project",
+            "us-central1",
+            "gemini-embedding-001",
+            "embedContent",
+        );
         assert!(url.contains("gemini-embedding-001:embedContent"));
         assert!(url.contains("/projects/my-project/"));
     }
 
     #[test]
     fn build_url_stream_action() {
-        let url = build_vertex_url("my-project", "us-central1", "gemini-2.5-flash", "streamGenerateContent");
+        let url = build_vertex_url(
+            "my-project",
+            "us-central1",
+            "gemini-2.5-flash",
+            "streamGenerateContent",
+        );
         assert!(url.contains("streamGenerateContent"));
     }
 
     #[test]
     fn build_url_custom_location() {
-        let url = build_vertex_url("prod-project", "europe-west4", "gemini-2.5-flash", "generateContent");
+        let url = build_vertex_url(
+            "prod-project",
+            "europe-west4",
+            "gemini-2.5-flash",
+            "generateContent",
+        );
         assert!(url.starts_with("https://europe-west4-aiplatform.googleapis.com/"));
         assert!(url.contains("/projects/prod-project/"));
         assert!(url.contains("/locations/europe-west4/"));
@@ -117,7 +138,8 @@ mod tests {
 
     #[test]
     fn parse_path_generates_content() {
-        let (model, action) = parse_ai_studio_path("models/gemini-2.5-flash:generateContent").unwrap();
+        let (model, action) =
+            parse_ai_studio_path("models/gemini-2.5-flash:generateContent").unwrap();
         assert_eq!(model, "gemini-2.5-flash");
         assert_eq!(action, "generateContent");
         let url = build_vertex_url("p", "us-central1", model, action);
@@ -126,14 +148,16 @@ mod tests {
 
     #[test]
     fn parse_path_embedding() {
-        let (model, action) = parse_ai_studio_path("models/gemini-embedding-001:embedContent").unwrap();
+        let (model, action) =
+            parse_ai_studio_path("models/gemini-embedding-001:embedContent").unwrap();
         assert_eq!(model, "gemini-embedding-001");
         assert_eq!(action, "embedContent");
     }
 
     #[test]
     fn parse_path_stream() {
-        let (model, action) = parse_ai_studio_path("models/gemini-2.5-flash:streamGenerateContent").unwrap();
+        let (model, action) =
+            parse_ai_studio_path("models/gemini-2.5-flash:streamGenerateContent").unwrap();
         assert_eq!(model, "gemini-2.5-flash");
         assert_eq!(action, "streamGenerateContent");
     }
@@ -155,7 +179,12 @@ mod tests {
 
     #[test]
     fn build_url_batch_embed() {
-        let url = build_vertex_url("p", "us-central1", "gemini-embedding-001", "batchEmbedContents");
+        let url = build_vertex_url(
+            "p",
+            "us-central1",
+            "gemini-embedding-001",
+            "batchEmbedContents",
+        );
         assert!(url.contains("batchEmbedContents"));
     }
 }

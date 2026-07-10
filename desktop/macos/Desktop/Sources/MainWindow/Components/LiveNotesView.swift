@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Live notes view showing AI-generated and manual notes during recording
 struct LiveNotesView: View {
@@ -312,8 +313,10 @@ private struct NoteRowView: View {
 
 // MARK: - Preview
 
+#if canImport(PreviewsMacros)
 #Preview {
     LiveNotesView()
         .frame(width: 300, height: 500)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

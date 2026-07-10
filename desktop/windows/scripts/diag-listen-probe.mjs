@@ -88,7 +88,7 @@ function probe(label, base, headers, tag, qs = QS, waitForClose = false) {
     const ws = new WebSocket(`${base}/v4/listen?${qs}`, { headers })
     let opened = false
     const done = (r) => {
-      try { ws.terminate() } catch {}
+      try { ws.terminate() } catch { /* already closing */ }
       resolve(`${label}[${tag}] -> ${r} (${Date.now() - t0}ms)`)
     }
     ws.on('open', () => {

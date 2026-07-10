@@ -21,9 +21,40 @@ struct AgentSurfaceReference: Hashable, Sendable {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }
 
-  static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
-    AgentSurfaceReference(surfaceKind: "floating_pill", externalRefKind: "pill", externalRefId: pillId.uuidString)
+  /// Notch / floating "Omi Chat" text conversation. Used as an independent
+  /// completed-agent-delta consumer so a finished sub-agent's artifacts can be
+  /// delivered to the floating bar separately from the main chat.
+  static func floatingChat(chatId: String? = nil) -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "floating_chat",
+      externalRefKind: "chat",
+      externalRefId: chatId?.isEmpty == false ? chatId! : "default"
+    )
   }
+
+  static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "floating_bar", externalRefKind: "pill", externalRefId: pillId.uuidString)
+  }
+
+  static func floatingBarRun(runId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "floating_bar", externalRefKind: "run", externalRefId: runId)
+  }
+
+  static func onboarding() -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "onboarding", externalRefKind: "session", externalRefId: "default")
+  }
+
+  static func service(_ name: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "service", externalRefKind: "service", externalRefId: name)
+  }
+
+  static func chatLab(labSessionId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "chat_lab", externalRefKind: "session", externalRefId: labSessionId)
+  }
+}
+
+enum AgentClientScope {
+  static let floatingPill = "floating-pill"
 }
 
 enum AgentRunProjectionStatus: String, Sendable {
@@ -88,6 +119,7 @@ struct AgentRunProjection: Identifiable, Sendable {
   var status: AgentRunProjectionStatus
   var statusText: String?
   var errorMessage: String?
+  var failure: AgentRuntimeFailure?
   var updatedAt: Date
   var completedAt: Date?
   var costUsd: Double?
@@ -120,12 +152,30 @@ final class AgentRuntimeStatusStore: ObservableObject {
     projectionsBySurface[surface.key]
   }
 
-  func knownSessionId(for surface: AgentSurfaceReference) -> String? {
-    sessionIdBySurface[surface.key]
+  func clear(surface: AgentSurfaceReference) {
+    if let existing = projectionsBySurface.removeValue(forKey: surface.key) {
+      if let runId = existing.runId {
+        projectionByRunId.removeValue(forKey: runId)
+      }
+      if let sessionId = existing.sessionId {
+        projectionBySessionId.removeValue(forKey: sessionId)
+      }
+    }
+    if let runId = runIdBySurface.removeValue(forKey: surface.key) {
+      projectionByRunId.removeValue(forKey: runId)
+    }
+    if let sessionId = sessionIdBySurface.removeValue(forKey: surface.key) {
+      projectionBySessionId.removeValue(forKey: sessionId)
+    }
   }
 
   func beginRequest(surface: AgentSurfaceReference, statusText: String? = "Starting...") {
-    update(surface: surface, status: .starting, statusText: statusText, terminal: false)
+    clearTerminalProjectionForNewRun(surface: surface)
+    var payload: [String: Any] = [:]
+    if let sessionId = sessionIdBySurface[surface.key] {
+      payload["sessionId"] = sessionId
+    }
+    update(surface: surface, status: .starting, statusText: statusText, terminal: false, payload: payload)
   }
 
   func updateActivity(surface: AgentSurfaceReference, statusText: String?) {
@@ -136,11 +186,31 @@ final class AgentRuntimeStatusStore: ObservableObject {
   }
 
   func recordLocalFailure(surface: AgentSurfaceReference, error: String) {
-    update(surface: surface, status: .failed, statusText: nil, errorMessage: error, terminal: true)
+    let failure = AgentRuntimeFailure(
+      code: "local_failure",
+      userMessage: error,
+      technicalMessage: nil,
+      source: "runtime",
+      adapterId: nil,
+      provider: nil,
+      retryable: nil
+    )
+    update(surface: surface, status: .failed, statusText: nil, errorMessage: error, failure: failure, terminal: true)
   }
 
   func recordLocalCancellation(surface: AgentSurfaceReference, message: String? = nil) {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
+  }
+
+  func recordAcceptedRun(surface: AgentSurfaceReference, sessionId: String, runId: String, attemptId: String?, statusText: String?) {
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+    ]
+    if let attemptId, !attemptId.isEmpty {
+      payload["attemptId"] = attemptId
+    }
+    update(surface: surface, status: .running, statusText: statusText, terminal: false, payload: payload)
   }
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
@@ -152,22 +222,43 @@ final class AgentRuntimeStatusStore: ObservableObject {
       let status = message.payload["status"] as? String
       let text = status == "completed" ? nil : name.map { ChatContentBlock.displayName(for: $0) }
       update(surface: surface, status: .running, statusText: text, terminal: false, payload: message.payload)
+    case .toolResultDisplay:
+      let name = message.payload["name"] as? String
+      let displayName = name.map { ChatContentBlock.displayName(for: $0) }
+      if projectionsBySurface[surface.key]?.status == .cancelling {
+        return
+      }
+      // Ambient status surfaces are visible outside the chat transcript; never
+      // echo raw tool output here because it may contain secrets or local paths.
+      update(surface: surface, status: .running, statusText: displayName, terminal: false, payload: message.payload)
     case .cancelAck:
       let accepted = message.payload["accepted"] as? Bool ?? false
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)
     case .result:
       let terminalStatus = AgentRunProjectionStatus.fromWire(message.payload["terminalStatus"] as? String) ?? .succeeded
-      update(surface: surface, status: terminalStatus, statusText: nil, terminal: true, payload: message.payload)
+      let text = (message.payload["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+      update(
+        surface: surface,
+        status: terminalStatus,
+        statusText: text?.isEmpty == false ? text : nil,
+        errorMessage: failure?.displayMessage,
+        failure: failure,
+        terminal: true,
+        payload: message.payload
+      )
     case .error:
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
       update(
         surface: surface,
         status: .failed,
         statusText: nil,
-        errorMessage: message.payload["message"] as? String,
+        errorMessage: failure?.displayMessage ?? message.payload["message"] as? String,
+        failure: failure,
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
+    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .turnRecorded, .voiceSeedContext, .kernelTurnTail, .unknown:
       break
     }
   }
@@ -175,6 +266,14 @@ final class AgentRuntimeStatusStore: ObservableObject {
   func taskProjections(limit: Int = 20) -> [AgentRunProjection] {
     projectionsBySurface.values
       .filter { $0.surface.surfaceKind == "task_chat" }
+      .sorted { $0.updatedAt > $1.updatedAt }
+      .prefix(limit)
+      .map { $0 }
+  }
+
+  func floatingPillProjections(limit: Int = 20) -> [AgentRunProjection] {
+    projectionsBySurface.values
+      .filter { $0.surface.surfaceKind == "floating_bar" || $0.surface.externalRefKind == "pill" }
       .sorted { $0.updatedAt > $1.updatedAt }
       .prefix(limit)
       .map { $0 }
@@ -189,9 +288,14 @@ final class AgentRuntimeStatusStore: ObservableObject {
     status: AgentRunProjectionStatus,
     statusText: String?,
     errorMessage: String? = nil,
+    failure: AgentRuntimeFailure? = nil,
     terminal: Bool,
     payload: [String: Any] = [:]
   ) {
+    if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {
+      return
+    }
+
     var projection = projectionsBySurface[surface.key] ?? AgentRunProjection(
       surface: surface,
       sessionId: nil,
@@ -201,6 +305,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       status: .idle,
       statusText: nil,
       errorMessage: nil,
+      failure: nil,
       updatedAt: Date(),
       completedAt: nil,
       costUsd: nil,
@@ -213,11 +318,11 @@ final class AgentRuntimeStatusStore: ObservableObject {
     projection.attemptId = (payload["attemptId"] as? String) ?? projection.attemptId
     projection.adapterSessionId =
       (payload["adapterSessionId"] as? String)
-      ?? (payload["legacyAdapterSessionId"] as? String)
       ?? projection.adapterSessionId
     projection.status = status
-    projection.statusText = terminal ? nil : statusText
-    projection.errorMessage = errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
+    projection.statusText = statusText
+    projection.failure = failure ?? (terminal || status.isActive ? nil : projection.failure)
+    projection.errorMessage = projection.failure?.displayMessage ?? errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil
     projection.costUsd = (payload["costUsd"] as? Double) ?? projection.costUsd
@@ -232,6 +337,20 @@ final class AgentRuntimeStatusStore: ObservableObject {
     if let runId = projection.runId {
       runIdBySurface[surface.key] = runId
       projectionByRunId[runId] = projection
+    }
+  }
+
+  private func clearTerminalProjectionForNewRun(surface: AgentSurfaceReference) {
+    guard let existing = projectionsBySurface[surface.key], existing.status.isTerminal else { return }
+    projectionsBySurface.removeValue(forKey: surface.key)
+    if let runId = existing.runId {
+      projectionByRunId.removeValue(forKey: runId)
+      if runIdBySurface[surface.key] == runId {
+        runIdBySurface.removeValue(forKey: surface.key)
+      }
+    }
+    if let sessionId = existing.sessionId {
+      projectionBySessionId.removeValue(forKey: sessionId)
     }
   }
 }

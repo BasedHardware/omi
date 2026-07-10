@@ -25,7 +25,10 @@ final class AgentControlService {
   }
 
   func executeVoiceTool(name: String, arguments: [String: Any]) async throws -> String {
-    let input = resolveVoiceHandles(in: arguments)
+    if let unresolved = unresolvedVoiceHandleError(name: name, arguments: arguments) {
+      return unresolved
+    }
+    let input = canonicalizeVoiceArguments(name: name, arguments: arguments)
     if let missing = missingScopeError(name: name, input: input) {
       return missing
     }
@@ -109,6 +112,44 @@ final class AgentControlService {
     }
   }
 
+  func canonicalizeVoiceArguments(name: String, arguments: [String: Any]) -> [String: Any] {
+    var input = resolveVoiceHandles(in: arguments)
+    let aliases = [
+      "parent_run_id": "parentRunId",
+      "run_id": "runId",
+      "session_id": "sessionId",
+      "attempt_id": "attemptId",
+      "artifact_id": "artifactId",
+      "owner_id": "ownerId",
+      "max_depth": "maxDepth",
+      "max_budget_usd": "maxBudgetUsd",
+      "run_mode": "runMode",
+    ]
+    for (alias, canonical) in aliases {
+      if input[canonical] == nil, let value = input[alias] {
+        input[canonical] = value
+      }
+      input.removeValue(forKey: alias)
+    }
+    switch name {
+    case "spawn_agent":
+      input.removeValue(forKey: "brief")
+    default:
+      break
+    }
+    return input
+  }
+
+  func unresolvedVoiceHandleError(name: String, arguments: [String: Any]) -> String? {
+    if let agentRef = stringValue(arguments["agentRef"]), agentHandles[agentRef] == nil {
+      return "I couldn't resolve that agent reference. Try listing the agents again, then retry with the matching item."
+    }
+    if let artifactRef = stringValue(arguments["artifactRef"]), artifactHandles[artifactRef] == nil {
+      return "I couldn't resolve that artifact reference. Try inspecting the artifacts again, then retry with the matching item."
+    }
+    return nil
+  }
+
   func resolveVoiceHandles(in arguments: [String: Any]) -> [String: Any] {
     var input = arguments
     if let agentRef = stringValue(input["agentRef"]), let handle = agentHandles[agentRef] {
@@ -146,7 +187,7 @@ final class AgentControlService {
       let mode = stringValue(selectedRun["mode"])
       let updatedAt = stringValue(session["updatedAt"]) ?? stringValue(selectedRun["updatedAt"])
       agentHandles[agentRef] = AgentHandle(
-        sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+        sessionId: stringValue(session["sessionId"]),
         runId: stringValue(selectedRun["runId"]),
         attemptId: stringValue(selectedAttempt["attemptId"])
       )

@@ -22,9 +22,10 @@ export async function pruneRewindOnce(): Promise<number> {
 }
 
 export function startRewindRetention(): void {
-  // Surface a prune failure (e.g. SQLITE_BUSY) instead of dropping it as an
-  // unhandled rejection on the fire-and-forget timer.
+  // Prune once on launch so a restart enforces retention promptly (not only
+  // after the first hourly tick), and surface failures instead of dropping them.
+  void pruneRewindOnce().catch((e) => console.warn('[rewind] initial prune failed:', e))
   setInterval(() => {
-    pruneRewindOnce().catch((e) => console.warn('[rewind] prune failed:', e))
+    void pruneRewindOnce().catch((e) => console.warn('[rewind] prune failed:', e))
   }, PRUNE_INTERVAL_MS)
 }

@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import os.log
+import OmiWAL
 
 // MARK: - Storage Sync Service
 
@@ -351,6 +352,13 @@ final class StorageSyncService: ObservableObject {
             frames: downloadedFrames
         )
 
+        let frameCount = downloadedFrames.count
+
+        // Upload downloaded WALs to cloud (real POST /v2/sync-local-files) before
+        // resetting isSyncing, so a concurrent BLE download cannot start and get
+        // its own syncToCloud() skipped by WALService's isSyncing guard.
+        await walService.syncToCloud()
+
         await MainActor.run {
             isSyncing = false
             currentWal = nil
@@ -358,7 +366,7 @@ final class StorageSyncService: ObservableObject {
             totalBytesDownloaded = 0
         }
 
-        logger.info("Sync completed: \(self.downloadedFrames.count) frames downloaded")
+        logger.info("Sync completed: \(frameCount) frames downloaded")
     }
 }
 

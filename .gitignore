@@ -2,12 +2,19 @@
 .env*
 !.env.template
 !.env.example
+!.env.local-dev.template
+!.env.dev.template
+!.env.prod.template
+!.env.offline.template
+!.envrc.example
 *__pycache__/
 *venv/
 libraries/
 myenv/
 venv/
 .DS_Store
+.memory_pipeline_runs/
+.local/
 dump/
 /scripts/
 *.zip
@@ -56,6 +63,7 @@ dist/
 **/ios/**/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/RayBanMetaCredentials.xcconfig
 **/ios/.generated/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
@@ -151,6 +159,7 @@ backend/scripts/rag/visualizations/
 /backend/scripts/data/
 /backend/pretrained_models/
 */pretrained_models/
+/backend/_temp/
 /backend/_speech_profiles
 
 backend/google-credentials.json
@@ -180,6 +189,11 @@ app/lib/env/prod_env.g.dart
 
 
 /omi/firmware/firmware/v2.7.0/
+
+# nRF Connect SDK west workspaces (downloaded on demand, ~1.5GB) + build outputs
+/omi/firmware/v2.7.0/
+/omi/firmware/v2.9.0/
+/omi/firmware/build/
 
 
 # Additional Expo/React Native specific ignores
@@ -224,3 +238,11 @@ builds-snapshot.md
 
 # Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
 .dev/
+
+# Agent planning artifacts (ephemeral; do not commit)
+.cursor/plans/*
+!.cursor/plans/.gitkeep
+
+.hermes/
+backend/.venv
+backend/.harness/

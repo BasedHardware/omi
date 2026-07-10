@@ -19,6 +19,11 @@ ok()   { echo -e "  ${GREEN}✓${NC} $1"; pass=$((pass + 1)); }
 skip() { echo -e "  ${YELLOW}⚠${NC} $1"; warn=$((warn + 1)); }
 bad()  { echo -e "  ${RED}✗${NC} $1"; fail=$((fail + 1)); }
 
+EXPECTED_PYTHON_VERSION=""
+if [[ -f .python-version ]]; then
+  EXPECTED_PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
+fi
+
 # ── Tools ──
 echo "Tools:"
 
@@ -38,7 +43,16 @@ done
 PYTHON_BIN="${PYTHON_BIN:-$FIRST_PYTHON_BIN}"
 
 if [[ -n "$PYTHON_BIN" ]]; then
-  ok "$PYTHON_BIN $("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
+  python_version="$("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
+  ok "$PYTHON_BIN $python_version"
+  if [[ -n "$EXPECTED_PYTHON_VERSION" ]]; then
+    if [[ "$python_version" == "$EXPECTED_PYTHON_VERSION" ]]; then
+      ok "Python version matches .python-version ($EXPECTED_PYTHON_VERSION)"
+    else
+      bad "Python version mismatch: expected $EXPECTED_PYTHON_VERSION from .python-version, got $python_version from $PYTHON_BIN"
+      echo -e "  ${YELLOW}→${NC} Run: ./scripts/sync-python-deps.sh, then PYTHON=.venv/bin/python bash test-preflight.sh"
+    fi
+  fi
 else
   bad "python not found"
 fi
@@ -47,6 +61,12 @@ if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pytest --version &>/dev/null 2>&1;
   ok "pytest $("$PYTHON_BIN" -m pytest --version 2>&1 | awk '{print $2}')"
 else
   bad "pytest not installed (${PYTHON_BIN:-python} -m pip install pytest)"
+fi
+
+if [[ -n "$PYTHON_BIN" ]] && PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version &>/dev/null 2>&1; then
+  ok "pyright $(PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version 2>&1 | head -n 1 | awk '{print $2}')"
+else
+  bad "pyright not installed (${PYTHON_BIN:-python} -m pip install pyright)"
 fi
 
 if command -v black &>/dev/null; then
@@ -60,7 +80,7 @@ echo ""
 echo "Python packages:"
 
 missing_pkgs=()
-for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe; do
+for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe pytest_asyncio fake_firestore fakeredis; do
   if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -c "import $pkg" &>/dev/null 2>&1; then
     ok "$pkg"
   else
@@ -132,19 +152,18 @@ else
   bad "No unit test files found in tests/unit/"
 fi
 
-# Check if test.sh test files all exist
-missing_tests=()
-while IFS= read -r line; do
-  test_file=$(echo "$line" | sed 's/pytest //' | sed 's/ -v//')
-  if [[ ! -f "$test_file" ]]; then
-    missing_tests+=("$test_file")
-  fi
-done < <(grep '^pytest tests/' test.sh 2>/dev/null)
-
-if [[ ${#missing_tests[@]} -gt 0 ]]; then
-  bad "test.sh references missing files: ${missing_tests[*]}"
+# Check if the discovered full unit suite resolves cleanly.
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all >/tmp/backend-unit-tests-preflight.txt; then
+  selected_test_count=$(wc -l </tmp/backend-unit-tests-preflight.txt | tr -d ' ')
+  ok "$selected_test_count backend unit test files selected"
 else
-  ok "All test.sh references resolve to existing files"
+  bad "backend unit test selection failed"
+fi
+
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/export_openapi.py --help &>/dev/null 2>&1; then
+  ok "OpenAPI export script is runnable"
+else
+  bad "OpenAPI export script failed to start"
 fi
 
 # ── Summary ──

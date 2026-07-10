@@ -1,6 +1,7 @@
 import SwiftUI
+import OmiTheme
 
-/// Standalone multi-phase onboarding view for setting up the Playwright MCP Chrome extension.
+/// Standalone multi-phase onboarding view for setting up the Playwright MCP browser extension.
 /// Can be presented as a sheet, overlay, or full page from any context.
 struct BrowserExtensionSetup: View {
     var onComplete: () -> Void
@@ -24,10 +25,12 @@ struct BrowserExtensionSetup: View {
     @State private var isVerifying = false
     @State private var verifyError: String? = nil
     @State private var verifySuccess = false
-    @State private var chromeInstalled = false
+    @State private var selectedTarget =
+        BrowserAutomationTargetResolver.preferredTarget() ?? BrowserAutomationTargetResolver.knownTargets[0]
+    @State private var browserInstalled = false
     @State private var extensionStepDone = false
     @State private var tokenStepDone = false
-    @State private var chromeCheckTimer: Timer? = nil
+    @State private var browserCheckTimer: Timer? = nil
     @State private var extensionCheckTimer: Timer? = nil
 
     var body: some View {
@@ -118,14 +121,14 @@ struct BrowserExtensionSetup: View {
                 .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text("This lets the AI use your Chrome browser with all your logged-in sessions — search the web, fill forms, and interact with sites on your behalf.")
+            Text("This lets the AI use your signed-in browser session — search the web, fill forms, and interact with sites on your behalf.")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
             VStack(alignment: .leading, spacing: 8) {
-                featureRow(icon: "checkmark.shield", text: "Uses a Chrome extension for secure access")
+                featureRow(icon: "checkmark.shield", text: "Uses a Chromium browser extension for secure access")
                 featureRow(icon: "key", text: "One-time auth token setup")
                 featureRow(icon: "bolt", text: "No more Allow/Reject popups")
             }
@@ -135,11 +138,9 @@ struct BrowserExtensionSetup: View {
         .padding(.horizontal, 20)
     }
 
-    private static let chromeWebStoreURL = "https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm"
-
     /// Which GIF to show based on the current active step.
     private var activeGifName: String? {
-        if !chromeInstalled { return nil }
+        if !browserInstalled { return nil }
         if !extensionStepDone { return "installing_extension" }
         return "enabling_token"
     }
@@ -152,26 +153,28 @@ struct BrowserExtensionSetup: View {
                     .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
-                // Step 1: Install Chrome
+                browserPicker
+
+                // Step 1: Install the selected browser
                 HStack(alignment: .top, spacing: 12) {
-                    stepBadge("1", done: chromeInstalled)
+                    stepBadge("1", done: browserInstalled)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(chromeInstalled ? "Google Chrome is installed" : "Install Google Chrome")
+                        Text(browserInstalled ? "\(selectedTarget.name) is installed" : "Install \(selectedTarget.name)")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(chromeInstalled ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .foregroundColor(browserInstalled ? OmiColors.textTertiary : OmiColors.textPrimary)
 
-                        if !chromeInstalled {
+                        if !browserInstalled {
                             Button(action: {
-                                if let url = URL(string: "https://www.google.com/chrome/") {
+                                if let url = selectedTarget.installURL {
                                     NSWorkspace.shared.open(url)
                                 }
-                                startChromeCheckTimer()
+                                startBrowserCheckTimer()
                             }) {
                                 HStack(spacing: 5) {
                                     Image(systemName: "arrow.down.circle")
                                         .scaledFont(size: 11)
-                                    Text("Download Chrome")
+                                    Text("Download \(selectedTarget.name)")
                                         .scaledFont(size: 12)
                                 }
                             }
@@ -182,29 +185,31 @@ struct BrowserExtensionSetup: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Step 2: Install extension from Chrome Web Store
+                // Step 2: Install extension from the browser's extension store
                 HStack(alignment: .top, spacing: 12) {
                     stepBadge("2", done: extensionStepDone)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Install the extension from Chrome Web Store")
+                        Text("Install the Playwright MCP Bridge extension")
                             .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(extensionStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
 
                         Button(action: {
-                            Self.openURLInChrome(Self.chromeWebStoreURL)
+                            if let url = selectedTarget.extensionInstallURL() {
+                                BrowserAutomationTargetResolver.open(url, in: selectedTarget)
+                            }
                             startExtensionCheckTimer()
                         }) {
                             HStack(spacing: 5) {
                                 Image(systemName: extensionStepDone ? "checkmark" : "arrow.up.right.square")
                                     .scaledFont(size: 11)
-                                Text(extensionStepDone ? "Installed" : "Add to Chrome")
+                                Text(extensionStepDone ? "Installed" : "Add Extension")
                                     .scaledFont(size: 12)
                             }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(!chromeInstalled || extensionStepDone)
+                        .disabled(!browserInstalled || extensionStepDone)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,7 +224,9 @@ struct BrowserExtensionSetup: View {
                             .foregroundColor(tokenStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
 
                         Button(action: {
-                            Self.openExtensionInChrome()
+                            if let url = selectedTarget.extensionStatusURL() {
+                                BrowserAutomationTargetResolver.open(url, in: selectedTarget)
+                            }
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 tokenStepDone = true
                             }
@@ -233,7 +240,7 @@ struct BrowserExtensionSetup: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(!chromeInstalled)
+                        .disabled(!browserInstalled)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -265,7 +272,7 @@ struct BrowserExtensionSetup: View {
                                             )
                                     )
                             )
-                            .disabled(!chromeInstalled)
+                            .disabled(!browserInstalled)
                             .onChange(of: tokenInput) { _, _ in
                                 tokenError = nil
                             }
@@ -289,15 +296,46 @@ struct BrowserExtensionSetup: View {
                 .padding(.trailing, 24)
         }
         .onAppear {
-            chromeInstalled = Self.isChromeInstalled
-            extensionStepDone = Self.isExtensionInstalled
+            refreshBrowserState()
         }
         .onDisappear {
-            chromeCheckTimer?.invalidate()
-            chromeCheckTimer = nil
+            browserCheckTimer?.invalidate()
+            browserCheckTimer = nil
             extensionCheckTimer?.invalidate()
             extensionCheckTimer = nil
         }
+    }
+
+    private var browserPicker: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text("Browser")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.textTertiary)
+
+            Picker("", selection: $selectedTarget) {
+                ForEach(BrowserAutomationTargetResolver.knownTargets) { target in
+                    Text(target.name).tag(target)
+                }
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .onChange(of: selectedTarget) { _, target in
+                BrowserAutomationTargetStore.select(target)
+                resetConnectionStateForSelectedBrowser()
+                refreshBrowserState()
+            }
+
+            Spacer()
+
+            if let defaultTarget = BrowserAutomationTargetResolver.defaultTarget(),
+               defaultTarget.bundleIdentifier == selectedTarget.bundleIdentifier
+            {
+                Text("Default")
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(OmiColors.success)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Right-side guide panel showing the appropriate GIF for the current step.
@@ -311,12 +349,12 @@ struct BrowserExtensionSetup: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(OmiColors.textTertiary.opacity(0.2), lineWidth: 1)
                     )
-            } else if !chromeInstalled {
+            } else if !browserInstalled {
                 VStack(spacing: 12) {
                     Image(systemName: "desktopcomputer")
                         .scaledFont(size: 40)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
-                    Text("Install Chrome to get started")
+                    Text("Install \(selectedTarget.name) to get started")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
@@ -356,7 +394,7 @@ struct BrowserExtensionSetup: View {
                     .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
-                Text("The browser extension is working. The AI can now use your Chrome browser.")
+                Text("The browser extension is working. The AI can now use \(selectedTarget.name).")
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -376,7 +414,7 @@ struct BrowserExtensionSetup: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
 
-                Text("Make sure Chrome is open and the extension page shows \"Connected\".")
+                Text("Make sure \(selectedTarget.name) is open and the extension page shows \"Connected\".")
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textQuaternary)
                     .multilineTextAlignment(.center)
@@ -396,7 +434,7 @@ struct BrowserExtensionSetup: View {
                 .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text("Browser access is configured. The AI can now browse the web, fill forms, and interact with sites using your Chrome sessions.")
+            Text("Browser access is configured. The AI can now browse the web, fill forms, and interact with sites using your \(selectedTarget.name) sessions.")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -463,61 +501,29 @@ struct BrowserExtensionSetup: View {
         return nil
     }
 
-    /// Check if Google Chrome is installed.
-    static var isChromeInstalled: Bool {
-        FileManager.default.fileExists(atPath: "/Applications/Google Chrome.app")
+    private func resetConnectionStateForSelectedBrowser() {
+        tokenInput = ""
+        tokenError = nil
+        tokenStepDone = false
+        verifyError = nil
+        verifySuccess = false
     }
 
-    /// Open a URL explicitly in Chrome (not the default browser).
-    static func openURLInChrome(_ urlString: String) {
-        guard let url = URL(string: urlString) else { return }
-        let chromeURL = URL(fileURLWithPath: "/Applications/Google Chrome.app")
-
-        if FileManager.default.fileExists(atPath: chromeURL.path) {
-            NSWorkspace.shared.open(
-                [url],
-                withApplicationAt: chromeURL,
-                configuration: NSWorkspace.OpenConfiguration()
-            )
-        } else {
-            // Fallback: try default browser
-            NSWorkspace.shared.open(url)
-        }
+    private func refreshBrowserState() {
+        browserInstalled = BrowserAutomationTargetResolver.isInstalled(selectedTarget)
+        extensionStepDone = BrowserAutomationTargetResolver.isExtensionInstalled(in: selectedTarget)
     }
 
-    /// Open the extension status page in Chrome.
-    static func openExtensionInChrome() {
-        openURLInChrome("chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html")
-    }
-
-    private static let extensionId = "mmlmfjhmonkocbjadbfplnigmagldckm"
-
-    /// Check if the Playwright MCP Bridge extension is installed in any Chrome profile.
-    static var isExtensionInstalled: Bool {
-        let chromeSupport = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Google/Chrome")
-        guard let profiles = try? FileManager.default.contentsOfDirectory(
-            at: chromeSupport, includingPropertiesForKeys: nil
-        ) else { return false }
-        for profile in profiles {
-            let extDir = profile.appendingPathComponent("Extensions/\(extensionId)")
-            if FileManager.default.fileExists(atPath: extDir.path) {
-                return true
-            }
-        }
-        return false
-    }
-
-    /// Poll every 2 seconds to detect Chrome installation.
-    private func startChromeCheckTimer() {
-        guard chromeCheckTimer == nil else { return }
-        chromeCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            if Self.isChromeInstalled {
+    /// Poll every 2 seconds to detect selected browser installation.
+    private func startBrowserCheckTimer() {
+        guard browserCheckTimer == nil else { return }
+        browserCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+            if BrowserAutomationTargetResolver.isInstalled(selectedTarget) {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    chromeInstalled = true
+                    browserInstalled = true
                 }
-                chromeCheckTimer?.invalidate()
-                chromeCheckTimer = nil
+                browserCheckTimer?.invalidate()
+                browserCheckTimer = nil
             }
         }
     }
@@ -526,7 +532,7 @@ struct BrowserExtensionSetup: View {
     private func startExtensionCheckTimer() {
         guard extensionCheckTimer == nil else { return }
         extensionCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            if Self.isExtensionInstalled {
+            if BrowserAutomationTargetResolver.isExtensionInstalled(in: selectedTarget) {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     extensionStepDone = true
                 }
@@ -636,7 +642,7 @@ struct BrowserExtensionSetup: View {
                         verifySuccess = true
                         log("BrowserExtensionSetup: Connection test succeeded")
                     } else {
-                        verifyError = "Could not connect to the Chrome extension. Make sure Chrome is open and try again."
+                        verifyError = "Could not connect to the extension. Make sure \(selectedTarget.name) is open and try again."
                         log("BrowserExtensionSetup: Connection test returned false")
                     }
                 }
@@ -645,7 +651,7 @@ struct BrowserExtensionSetup: View {
                     isVerifying = false
                     let msg = error.localizedDescription
                     if msg.contains("timeout") || msg.contains("Extension connection timeout") {
-                        verifyError = "Connection timed out. Make sure Chrome is running and the extension is installed, then try again."
+                        verifyError = "Connection timed out. Make sure \(selectedTarget.name) is running and the extension is installed, then try again."
                     } else {
                         verifyError = msg
                     }

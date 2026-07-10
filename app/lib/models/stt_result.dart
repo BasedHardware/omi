@@ -149,9 +149,8 @@ class SttTranscriptionResult {
 
           final speakerValue = _schemaValue(seg, schema.segmentsSpeakerField, 'speaker');
           final speakerIdValue = _schemaValue(seg, schema.segmentsSpeakerIdField, 'speaker_id');
-          final speakerId = speakerIdValue != null
-              ? _extractSpeakerId(speakerIdValue)
-              : _extractSpeakerId(speakerValue);
+          final speakerId =
+              speakerIdValue != null ? _extractSpeakerId(speakerIdValue) : _extractSpeakerId(speakerValue);
           final speaker = _extractSpeakerLabel(speakerValue, speakerId);
           final isUser = _extractBool(_schemaValue(seg, schema.segmentsIsUserField, 'is_user'));
           final personId = _extractNullableString(_schemaValue(seg, schema.segmentsPersonIdField, 'person_id'));

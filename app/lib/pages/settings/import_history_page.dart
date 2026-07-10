@@ -369,7 +369,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         color: Colors.deepPurple.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+                      child: FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
                     )
             else
               Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),
@@ -418,28 +418,28 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   }
 
   Widget _buildJobCard(ImportJobResponse job) {
-    IconData statusIcon;
+    FaIconData statusIcon;
     Color statusColor;
     String statusText;
 
     switch (job.status) {
       case ImportJobStatus.pending:
-        statusIcon = Icons.hourglass_empty;
+        statusIcon = FontAwesomeIcons.hourglass;
         statusColor = Colors.orange;
         statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
-        statusIcon = Icons.sync;
+        statusIcon = FontAwesomeIcons.arrowsRotate;
         statusColor = Colors.blue;
         statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
-        statusIcon = Icons.done;
+        statusIcon = FontAwesomeIcons.check;
         statusColor = Colors.green;
         statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
-        statusIcon = Icons.error;
+        statusIcon = FontAwesomeIcons.circleExclamation;
         statusColor = Colors.red;
         statusText = context.l10n.statusFailed;
         break;
@@ -490,7 +490,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               if (job.isProcessing)
                 _RotatingSyncIcon(color: statusColor, size: 18)
               else if (job.status != ImportJobStatus.completed)
-                Icon(statusIcon, color: statusColor, size: 18),
+                FaIcon(statusIcon, color: statusColor, size: 18),
               if (job.status != ImportJobStatus.completed) const SizedBox(width: 6),
               // Status text and date
               Expanded(
@@ -716,7 +716,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                child: const Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
+                child: Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
               ),
             ),
           ),
@@ -728,7 +728,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               itemBuilder: (context) => [
                 PullDownMenuItem(
                   title: context.l10n.deleteImportedData,
-                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                  iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                   onTap: () {
                     _showDeleteLimitlessDialog();
                   },
@@ -743,9 +743,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child: const Center(
-                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
-                  ),
+                  child: Center(child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white)),
                 ),
               ),
             ),

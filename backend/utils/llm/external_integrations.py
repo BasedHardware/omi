@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, Dict, List, Optional, cast
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import ValidationError
@@ -11,6 +11,7 @@ import database.users as users_db
 from models.conversation import Conversation
 from models.daily_summary_payload import DailySummaryPayload
 from models.structured import Structured
+from models.structured_extraction import StructuredExtraction
 from models.other import Person
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
@@ -22,17 +23,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _content_str(response: Any) -> str:
+    content = response.content
+    return content if isinstance(content, str) else str(content)
+
+
+def _coerce_structured(response: Any) -> Structured:
+    if isinstance(response, StructuredExtraction):
+        return response.to_structured()
+    return response
+
+
 def _basic_daily_summary(
     date_str: str,
     total_conversations: int,
     total_duration_minutes: float,
-    actual_action_items: list,
-    locations: list,
-) -> dict:
+    actual_action_items: List[Dict[str, Any]],
+    locations: List[Dict[str, Any]],
+) -> Dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
         "date": date_str,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "headline": "Your Day in Review",
         "overview": f"You had {total_conversations} conversations today.",
         "day_emoji": "📅",
@@ -55,8 +67,8 @@ def get_message_structure(
     started_at: datetime,
     language_code: str,
     tz: str,
-    text_source_spec: str = None,
-    output_language_code: str = None,
+    text_source_spec: Optional[str] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
     response_language = output_language_code or language_code
     prompt_text = '''
@@ -74,19 +86,21 @@ def get_message_structure(
 
     {format_instructions}'''.replace('    ', '').strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     chain = prompt | get_llm('external_structure') | parser
 
-    response = chain.invoke(
-        {
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
-            'text': text,
-            'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
-            'format_instructions': parser.get_format_instructions(),
-        }
+    response = _coerce_structured(
+        chain.invoke(
+            {
+                'language_code': language_code,
+                'response_language': response_language,
+                'started_at': started_at.isoformat(),
+                'tz': tz,
+                'text': text,
+                'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
+                'format_instructions': parser.get_format_instructions(),
+            }
+        )
     )
 
     for event in response.events or []:
@@ -102,19 +116,29 @@ def get_message_structure(
     return response
 
 
-def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
+def summarize_experience_text(
+    text: str, text_source_spec: Optional[str] = None, tz: Optional[str] = None
+) -> Structured:
     source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
+    tz = tz or 'UTC'
+    try:
+        current_date = datetime.now(pytz.timezone(tz)).strftime('%Y-%m-%d')
+    except Exception:  # unknown/invalid timezone -> anchor to UTC
+        tz = 'UTC'
+        current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     prompt = f'''The user sent a text of {source_context}, and wants to create a memory from it.
       For the title, use the main topic of the experience or thought.
       For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
       For the category, classify the scenes into one of the available categories.
       For the action items, include any tasks or actions that need to be taken based on the content.
-      For Calendar Events, include any events or meetings mentioned in the content.
+      For Calendar Events, include any events or meetings mentioned in the content. For date context, today is {current_date} in the user's timezone ({tz}); resolve any relative dates like "tomorrow" or "next week" against it.
 
       Text: ```{text}```
       '''.replace('    ', '').strip()
 
-    response = get_llm('external_structure').with_structured_output(Structured).invoke(prompt)
+    response = _coerce_structured(
+        get_llm('external_structure').with_structured_output(StructuredExtraction).invoke(prompt)
+    )
 
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
@@ -128,11 +152,11 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
     user_language = users_db.get_user_language_preference(uid)
 
-    all_person_ids = []
+    all_person_ids: List[str] = []
     for m in memories:
         all_person_ids.extend(m.get_person_ids())
 
-    people = []
+    people: List[Person] = []
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
@@ -161,12 +185,16 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     """.replace('    ', '').strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
-        return get_llm('daily_summary_simple').invoke(prompt).content
+        return _content_str(get_llm('daily_summary_simple').invoke(prompt))
 
 
 def generate_comprehensive_daily_summary(
-    uid: str, conversations: List[Conversation], date_str: str, start_date_utc=None, end_date_utc=None
-) -> dict:
+    uid: str,
+    conversations: List[Conversation],
+    date_str: str,
+    start_date_utc: Optional[datetime] = None,
+    end_date_utc: Optional[datetime] = None,
+) -> Dict[str, Any]:
     """
     Generate a comprehensive daily summary with structured data for storage.
 
@@ -185,16 +213,14 @@ def generate_comprehensive_daily_summary(
     # Get user's language preference for generating summary in their language
     output_language = user_profile.get('language', '') or 'en'
 
-    all_person_ids = []
+    all_person_ids: List[str] = []
     for m in conversations:
         all_person_ids.extend(m.get_person_ids())
 
-    people = []
-    people_names = []
+    people: List[Person] = []
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
-        people_names = [p.name for p in people if p.name]
 
     conversation_history = conversations_to_string(conversations, people=people)
 
@@ -205,10 +231,13 @@ def generate_comprehensive_daily_summary(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
     )
 
-    # Extract ALL locations from non-discarded conversations
-    locations = []
+    # Extract ALL locations from non-discarded conversations.
+    # latitude/longitude are required floats on the Geolocation model, so guarding on
+    # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
+    # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
+    locations: List[Dict[str, Any]] = []
     for c in non_discarded:
-        if c.geolocation and c.geolocation.latitude and c.geolocation.longitude:
+        if c.geolocation:
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:
@@ -229,7 +258,7 @@ def generate_comprehensive_daily_summary(
     # Fetch action items for the specific conversations being summarised.
     # Querying by conversation_id (not date range) prevents pulling in items whose
     # async processing happened to land on the same UTC day as an unrelated conversation.
-    actual_action_items = []
+    actual_action_items: List[Dict[str, Any]] = []
     for c in non_discarded:
         for item in action_items_db.get_action_items(uid, conversation_id=c.id):
             actual_action_items.append(
@@ -303,7 +332,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
 
     try:
         with track_usage(uid, Features.DAILY_SUMMARY):
-            response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(prompt).content
+            response = _content_str(get_llm('daily_summary', cache_key='omi-daily-summary').invoke(prompt))
         # Clean up response - remove markdown if present
         response = response.strip()
         if response.startswith('```'):
@@ -319,13 +348,13 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         summary_data = DailySummaryPayload.model_validate(json.loads(response))
 
         # Helper to map conversation number to ID
-        def get_convo_id(num):
+        def get_convo_id(num: Any):
             if num and isinstance(num, int) and num in convo_id_map:
                 return convo_id_map[num]
             return None
 
         # Process highlights - map conversation_numbers to conversation_ids
-        highlights = []
+        highlights: List[Dict[str, Any]] = []
         for h in summary_data.highlights:
             convo_nums = h.conversation_numbers
             convo_ids = [get_convo_id(n) for n in convo_nums if get_convo_id(n)]
@@ -339,19 +368,19 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             )
 
         # Process unresolved questions
-        unresolved_questions = []
+        unresolved_questions: List[Dict[str, Any]] = []
         for q in summary_data.unresolved_questions:
             unresolved_questions.append(
                 {"question": q.question, "conversation_id": get_convo_id(q.conversation_number)}
             )
 
         # Process decisions made
-        decisions_made = []
+        decisions_made: List[Dict[str, Any]] = []
         for d in summary_data.decisions_made:
             decisions_made.append({"decision": d.decision, "conversation_id": get_convo_id(d.conversation_number)})
 
         # Process knowledge nuggets
-        knowledge_nuggets = []
+        knowledge_nuggets: List[Dict[str, Any]] = []
         for k in summary_data.knowledge_nuggets:
             knowledge_nuggets.append({"insight": k.insight, "conversation_id": get_convo_id(k.conversation_number)})
 
@@ -360,7 +389,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         return {
             "id": summary_id,
             "date": date_str,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "headline": summary_data.headline,
             "overview": summary_data.overview,
             "day_emoji": summary_data.day_emoji,
@@ -382,7 +411,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             date_str, total_conversations, total_duration_minutes, actual_action_items, locations
         )
     except ValidationError as e:
-        logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(e))
+        logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(cast(Any, e)))
         return _basic_daily_summary(
             date_str, total_conversations, total_duration_minutes, actual_action_items, locations
         )

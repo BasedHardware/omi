@@ -18,6 +18,12 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
   String result = '';
 
   @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,

@@ -1,0 +1,27 @@
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+
+ENV PATH="/opt/venv/bin:$PATH"
+RUN python -m venv /opt/venv
+
+# build-essential (not bare gcc): forky slim lacks libc headers otherwise, and
+# requirements.txt compiles webrtcvad from source.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt /tmp/reqs/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /tmp/reqs/requirements.txt
+
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+
+WORKDIR /app
+ENV PATH="/opt/venv/bin:$PATH"
+
+# No ffmpeg/curl/unzip: ST→LT maintenance is Firestore/LLM/vector only.
+
+COPY --from=builder /opt/venv /opt/venv
+COPY backend/ .
+COPY backend/modal/ .
+
+CMD ["python", "memory_maintenance_job.py"]

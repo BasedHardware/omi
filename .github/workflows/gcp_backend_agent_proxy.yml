@@ -70,6 +70,11 @@ jobs:
       - name: Deploy Agent Proxy to GKE cluster using Helm
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-agent-proxy ./backend/charts/agent-proxy -f ./backend/charts/agent-proxy/${{ vars.ENV }}_omi_agent_proxy_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-agent-proxy --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service agent-proxy || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service agent-proxy
 
       - name: Show Output
         run: echo "Agent proxy deployed to ${{ github.event.inputs.environment }}"
