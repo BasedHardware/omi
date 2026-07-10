@@ -100,7 +100,7 @@ class WorkstreamIndexRebuildReport(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     uid: str
-    index_version: Literal['workstream-association-v1'] = 'workstream-association-v1'
+    index_version: Literal['workstream-association-v2'] = 'workstream-association-v2'
     source_count: int = Field(ge=0)
     indexed_count: int = Field(ge=0)
     failed_workstream_ids: list[StableId] = Field(default_factory=list)

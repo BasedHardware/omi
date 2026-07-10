@@ -46,6 +46,8 @@ def _raise_store_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, recommendation_db.StaleSnapshotError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, recommendation_db.RecommendationGenerationMismatchError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, recommendations.SnapshotValidationError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     raise exc
@@ -60,9 +62,11 @@ def _rollout(uid: str):
     )
 
 
-def _require_product(uid: str) -> None:
-    if not _rollout(uid).intelligence_product_enabled:
+def _require_product(uid: str):
+    rollout = _rollout(uid)
+    if not rollout.intelligence_product_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return rollout
 
 
 def _require_mutation_generation(uid: str, account_generation: int) -> None:
@@ -73,9 +77,18 @@ def _require_mutation_generation(uid: str, account_generation: int) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch')
 
 
-def _require_evaluation_ingress(uid: str) -> None:
-    if not _rollout(uid).intelligence_evaluation_enabled:
+def _require_evaluation_ingress(uid: str):
+    rollout = _rollout(uid)
+    if not rollout.intelligence_evaluation_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return rollout
+
+
+def _require_evaluation_generation(uid: str, account_generation: int):
+    rollout = _require_evaluation_ingress(uid)
+    if rollout.account_generation != account_generation:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch')
+    return rollout
 
 
 def _bound_device_id(request: Request, requested_device_id: Optional[str], *, required: bool) -> Optional[str]:
@@ -98,9 +111,17 @@ def get_what_matters_now(
     device_id: Optional[str] = Query(default=None, min_length=1, max_length=128),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    rollout = _require_product(uid)
     bound_device_id = _bound_device_id(request_context, device_id, required=False)
-    return recommendations.evaluate(uid, EvaluationRequest(device_id=bound_device_id), judgment=_live_judgment())
+    try:
+        return recommendations.evaluate(
+            uid,
+            EvaluationRequest(device_id=bound_device_id),
+            judgment=_live_judgment(),
+            account_generation=rollout.account_generation,
+        )
+    except recommendation_db.TaskRecommendationStoreError as exc:
+        _raise_store_error(exc)
 
 
 @router.post('/v1/what-matters-now/evaluate', response_model=WhatMattersNowProjection, tags=['task-intelligence'])
@@ -109,9 +130,17 @@ def evaluate_what_matters_now(
     request_context: Request,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    rollout = _require_product(uid)
     device_id = _bound_device_id(request_context, request.device_id, required=False)
-    return recommendations.evaluate(uid, request.model_copy(update={'device_id': device_id}), judgment=_live_judgment())
+    try:
+        return recommendations.evaluate(
+            uid,
+            request.model_copy(update={'device_id': device_id}),
+            judgment=_live_judgment(),
+            account_generation=rollout.account_generation,
+        )
+    except recommendation_db.TaskRecommendationStoreError as exc:
+        _raise_store_error(exc)
 
 
 @router.post('/v1/task-intelligence/interventions', response_model=InterventionRecord, tags=['task-intelligence'])
@@ -123,7 +152,9 @@ def register_intervention(
 ):
     _require_mutation_generation(uid, account_generation)
     try:
-        return recommendations.register_intervention(uid, request, idempotency_key=idempotency_key)
+        return recommendations.register_intervention(
+            uid, request, idempotency_key=idempotency_key, account_generation=account_generation
+        )
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
         _raise_store_error(exc)
 
@@ -137,7 +168,9 @@ def create_feedback(
 ):
     _require_mutation_generation(uid, account_generation)
     try:
-        return recommendations.record_feedback(uid, request, idempotency_key=idempotency_key)
+        return recommendations.record_feedback(
+            uid, request, idempotency_key=idempotency_key, account_generation=account_generation
+        )
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
         _raise_store_error(exc)
 
@@ -151,7 +184,9 @@ def create_outcome(
 ):
     _require_mutation_generation(uid, account_generation)
     try:
-        return recommendations.record_outcome(uid, request, idempotency_key=idempotency_key)
+        return recommendations.record_outcome(
+            uid, request, idempotency_key=idempotency_key, account_generation=account_generation
+        )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
 
@@ -160,12 +195,19 @@ def create_outcome(
 def replace_context_snapshot(
     request: NormalizedContextSnapshot,
     request_context: Request,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_evaluation_ingress(uid)
+    _require_evaluation_generation(uid, account_generation)
     _bound_device_id(request_context, request.device_id, required=True)
     try:
-        return recommendations.ingest_context_snapshot(uid, request)
+        return recommendations.ingest_context_snapshot(
+            uid,
+            request,
+            account_generation=account_generation,
+            idempotency_key=idempotency_key,
+        )
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
         _raise_store_error(exc)
 
@@ -174,12 +216,19 @@ def replace_context_snapshot(
 def replace_open_loop_snapshot(
     request: OpenLoopSnapshot,
     request_context: Request,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_evaluation_ingress(uid)
+    _require_evaluation_generation(uid, account_generation)
     _bound_device_id(request_context, request.device_id, required=True)
     try:
-        return recommendations.ingest_open_loop_snapshot(uid, request)
+        return recommendations.ingest_open_loop_snapshot(
+            uid,
+            request,
+            account_generation=account_generation,
+            idempotency_key=idempotency_key,
+        )
     except (recommendation_db.TaskRecommendationStoreError, recommendations.SnapshotValidationError) as exc:
         _raise_store_error(exc)
 
@@ -196,11 +245,16 @@ def get_evaluation_debug_projection(
     device_id: Optional[str] = Query(default=None, min_length=1, max_length=128),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_product(uid)
+    rollout = _require_product(uid)
     if not x_omi_debug:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     bound_device_id = _bound_device_id(request_context, device_id, required=False)
-    projection = recommendations.get_debug_projection(uid, evaluation_id, device_id=bound_device_id)
+    try:
+        projection = recommendations.get_debug_projection(
+            uid, evaluation_id, device_id=bound_device_id, account_generation=rollout.account_generation
+        )
+    except recommendation_db.TaskRecommendationStoreError as exc:
+        _raise_store_error(exc)
     if projection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Evaluation not found')
     return projection

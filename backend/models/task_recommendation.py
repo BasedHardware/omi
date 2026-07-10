@@ -106,7 +106,7 @@ class Recommendation(BaseModel):
     recommended_action: str = Field(min_length=1, max_length=128)
     alternative_action: Optional[str] = Field(default=None, max_length=128)
     evidence_preview: str = Field(max_length=512)
-    evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=50)
+    evidence_refs: list[EvidenceRef] = Field(min_length=1, max_length=50)
     dedupe_key: StableId
     expires_at: AwareDatetime
 

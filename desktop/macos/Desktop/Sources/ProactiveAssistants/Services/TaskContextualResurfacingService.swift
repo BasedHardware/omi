@@ -464,12 +464,16 @@ protocol TaskInterruptionLedgerPersisting: AnyObject {
 
 final class TaskInterruptionLedgerDefaults: TaskInterruptionLedgerPersisting {
   private let defaults: UserDefaults
-  private let key: String
+  private let fixedOwnerID: String?
 
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
-    let owner = ownerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
-    key = "proactiveTaskInterruptionLedger.v1.\(owner)"
+    fixedOwnerID = ownerID
+  }
+
+  private var key: String {
+    let owner = fixedOwnerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
+    return "proactiveTaskInterruptionLedger.v1.\(owner)"
   }
 
   func load() -> TaskInterruptionLedger {
@@ -698,7 +702,10 @@ final class KernelPreparedArtifactBridge {
 
 protocol TaskContextualResurfacingClient: AnyObject {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
-  func replaceTaskContextSnapshot(_ snapshot: OmiAPI.NormalizedContextSnapshot) async throws -> OmiAPI.SnapshotReceipt
+  func replaceTaskContextSnapshot(
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.SnapshotReceipt
   func evaluateWhatMattersNow(_ request: OmiAPI.EvaluationRequest) async throws -> OmiAPI.WhatMattersNowProjection
 }
 
@@ -796,7 +803,7 @@ actor TaskContextualResurfacingService {
     }
     do {
       let control = try await client.getCandidateWorkflowControl()
-      guard control.workflowMode == .read else { return }
+      guard control.workflowMode == .read, let accountGeneration = control.accountGeneration else { return }
       let deviceID = ClientDeviceService.shared.deviceIdHash
       let matches = Self.contextMatches(events)
       let snapshot = OmiAPI.NormalizedContextSnapshot(
@@ -807,7 +814,10 @@ actor TaskContextualResurfacingService {
         schemaVersion: 1,
         snapshotId: "ctx-\(UUID().uuidString.lowercased())"
       )
-      _ = try await client.replaceTaskContextSnapshot(snapshot)
+      _ = try await client.replaceTaskContextSnapshot(
+        snapshot,
+        accountGeneration: accountGeneration
+      )
       let projection = try await client.evaluateWhatMattersNow(
         OmiAPI.EvaluationRequest(deviceId: deviceID, materialHint: materialHint)
       )

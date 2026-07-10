@@ -275,6 +275,7 @@ def upsert_workstream_association_vector(
     *,
     objective: str,
     current_state_summary: str,
+    account_generation: int = 0,
 ) -> bool:
     """Write a rebuildable retrieval projection for one open workstream."""
     if index is None:
@@ -283,12 +284,13 @@ def upsert_workstream_association_vector(
     if not content:
         return False
     data: VectorRecordDoc = {
-        'id': f'{uid}:workstream:{workstream_id}',
+        'id': f'{uid}:workstream:{account_generation}:{workstream_id}',
         'values': embeddings.embed_query(content),
         'metadata': {
             'uid': uid,
             'workstream_id': workstream_id,
             'status': 'open',
+            'account_generation': account_generation,
             'schema_version': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION,
         },
     }
@@ -296,7 +298,9 @@ def upsert_workstream_association_vector(
     return True
 
 
-def query_workstream_association_candidates(uid: str, summary: str, *, limit: int = 5) -> List[str]:
+def query_workstream_association_candidates(
+    uid: str, summary: str, *, account_generation: int = 0, limit: int = 5
+) -> List[str]:
     """Return derived candidate IDs only; callers must hydrate authority."""
     if index is None or not summary.strip():
         return []
@@ -308,6 +312,7 @@ def query_workstream_association_candidates(uid: str, summary: str, *, limit: in
         filter={
             'uid': {'$eq': uid},
             'status': {'$eq': 'open'},
+            'account_generation': {'$eq': account_generation},
             'schema_version': {'$eq': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION},
         },
         namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
@@ -321,17 +326,28 @@ def query_workstream_association_candidates(uid: str, summary: str, *, limit: in
     return result
 
 
-def delete_workstream_association_vector(uid: str, workstream_id: str) -> bool:
+def delete_workstream_association_vector(uid: str, workstream_id: str, *, account_generation: int = 0) -> bool:
     if index is None:
         return False
-    index.delete(ids=[f'{uid}:workstream:{workstream_id}'], namespace=WORKSTREAM_ASSOCIATION_NAMESPACE)
+    index.delete(
+        ids=[f'{uid}:workstream:{account_generation}:{workstream_id}'],
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
     return True
 
 
-def reset_workstream_association_vectors(uid: str) -> bool:
+def reset_workstream_association_vectors(uid: str, *, account_generation: int = 0) -> bool:
     if index is None:
         return False
-    index.delete(filter={'uid': {'$eq': uid}}, namespace=WORKSTREAM_ASSOCIATION_NAMESPACE)
+    index.delete(
+        filter={
+            '$and': [
+                {'uid': {'$eq': uid}},
+                {'account_generation': {'$eq': account_generation}},
+            ]
+        },
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
     return True
 
 

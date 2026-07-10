@@ -15427,6 +15427,7 @@
               "$ref": "#/components/schemas/EvidenceRef"
             },
             "maxItems": 50,
+            "minItems": 1,
             "title": "Evidence Refs",
             "type": "array"
           },
@@ -15511,6 +15512,7 @@
           "why_now",
           "recommended_action",
           "evidence_preview",
+          "evidence_refs",
           "dedupe_key",
           "expires_at"
         ],
@@ -43722,6 +43724,27 @@
         "parameters": [
           {
             "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -44140,6 +44163,27 @@
       "put": {
         "operationId": "replace_open_loop_snapshot_v1_task_intelligence_open_loop_snapshot_put",
         "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

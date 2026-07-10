@@ -109,27 +109,33 @@ struct PendingDashboardFeedback: Codable {
 }
 
 protocol DashboardFeedbackOutboxPersisting: AnyObject {
-  func load() -> [PendingDashboardFeedback]
-  func save(_ entries: [PendingDashboardFeedback])
+  func currentOwnerID() -> String
+  func load(ownerID: String) -> [PendingDashboardFeedback]
+  func save(_ entries: [PendingDashboardFeedback], ownerID: String)
 }
 
 final class DashboardFeedbackOutboxDefaults: DashboardFeedbackOutboxPersisting {
   private let defaults: UserDefaults
-  private let key: String
+  private let fixedOwnerID: String?
 
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
-    let owner = ownerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
-    self.key = "whatMattersNowFeedbackOutbox.v1.\(owner)"
+    fixedOwnerID = ownerID
   }
 
-  func load() -> [PendingDashboardFeedback] {
-    guard let data = defaults.data(forKey: key) else { return [] }
+  func currentOwnerID() -> String {
+    fixedOwnerID ?? defaults.string(forKey: "auth_userId") ?? "signed-out"
+  }
+
+  private func key(ownerID: String) -> String { "whatMattersNowFeedbackOutbox.v1.\(ownerID)" }
+
+  func load(ownerID: String) -> [PendingDashboardFeedback] {
+    guard let data = defaults.data(forKey: key(ownerID: ownerID)) else { return [] }
     return (try? JSONDecoder().decode([PendingDashboardFeedback].self, from: data)) ?? []
   }
 
-  func save(_ entries: [PendingDashboardFeedback]) {
-    defaults.set(try? JSONEncoder().encode(entries), forKey: key)
+  func save(_ entries: [PendingDashboardFeedback], ownerID: String) {
+    defaults.set(try? JSONEncoder().encode(entries), forKey: key(ownerID: ownerID))
   }
 }
 
@@ -158,7 +164,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     self.client = client
     self.outboxStore = outboxStore
     self.now = now
-    self.pendingFeedback = outboxStore.load()
+    self.pendingFeedback = outboxStore.load(ownerID: outboxStore.currentOwnerID())
   }
 
   var focusedGoals: [OmiAPI.GoalResponse] {
@@ -187,9 +193,11 @@ final class DashboardIntelligenceStore: ObservableObject {
         return
       }
       accountGeneration = control.accountGeneration
+      let ownerID = outboxStore.currentOwnerID()
+      pendingFeedback = outboxStore.load(ownerID: ownerID)
       pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
-      outboxStore.save(pendingFeedback)
-      await retryPendingFeedback()
+      outboxStore.save(pendingFeedback, ownerID: ownerID)
+      await retryPendingFeedback(ownerID: ownerID)
       do {
         let projection = try await client.getWhatMattersNow(deviceID: nil)
         recommendations = Self.project(projection, now: now())
@@ -418,32 +426,41 @@ final class DashboardIntelligenceStore: ObservableObject {
       idempotencyKey: idempotencyKey,
       accountGeneration: generation
     )
-    pendingFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
-    pendingFeedback.append(entry)
-    outboxStore.save(pendingFeedback)
+    let ownerID = outboxStore.currentOwnerID()
+    var ownerFeedback = outboxStore.load(ownerID: ownerID)
+    ownerFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
+    ownerFeedback.append(entry)
+    outboxStore.save(ownerFeedback, ownerID: ownerID)
+    if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
     do {
       _ = try await client.recordTaskFeedback(
         request, idempotencyKey: idempotencyKey, accountGeneration: generation)
-      pendingFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
-      outboxStore.save(pendingFeedback)
+      ownerFeedback = outboxStore.load(ownerID: ownerID)
+      ownerFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
+      outboxStore.save(ownerFeedback, ownerID: ownerID)
+      if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
       error = nil
     } catch {
       self.error = "Saved. Feedback will retry automatically."
     }
   }
 
-  private func retryPendingFeedback() async {
-    var remaining: [PendingDashboardFeedback] = []
-    for entry in pendingFeedback {
+  private func retryPendingFeedback(ownerID: String) async {
+    var succeeded = Set<String>()
+    for entry in outboxStore.load(ownerID: ownerID) {
       do {
         _ = try await client.recordTaskFeedback(
           entry.request, idempotencyKey: entry.idempotencyKey, accountGeneration: entry.accountGeneration)
+        succeeded.insert(entry.idempotencyKey)
       } catch {
-        remaining.append(entry)
+        continue
       }
     }
-    pendingFeedback = remaining
-    outboxStore.save(remaining)
+    let remaining = outboxStore.load(ownerID: ownerID).filter {
+      !succeeded.contains($0.idempotencyKey)
+    }
+    outboxStore.save(remaining, ownerID: ownerID)
+    if outboxStore.currentOwnerID() == ownerID { pendingFeedback = remaining }
   }
 
   static func project(
@@ -488,7 +505,7 @@ final class DashboardIntelligenceStore: ObservableObject {
         contextLabel: item.goalOrWorkstreamLabel,
         recommendedAction: item.recommendedAction,
         evidencePreview: item.evidencePreview,
-        evidenceCount: item.evidenceRefs?.count ?? 0,
+        evidenceCount: item.evidenceRefs.count,
         dedupeKey: item.dedupeKey,
         expiresAt: item.expiresAt,
         destination: destination

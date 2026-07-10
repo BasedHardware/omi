@@ -19,6 +19,8 @@ List and point reads expose only the current account generation, including legac
 an identifier retained across an account reset cannot retrieve prior evidence.
 Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
 one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
+When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance
+is merged with the Candidate evidence using structural deduplication; review feedback never rewrites origin history.
 Accepted task-create integrations are written to a durable outbox in that transaction, then leased and marked
 complete only by the matching lease token after delivery or a terminal no-op. Account generation fences claims
 and completion, and a late completion from an expired lease cannot resolve its replacement attempt. Failed
@@ -57,3 +59,10 @@ without a task, and score-based promotion skips forward rather than starving beh
 Released action-item request shapes are accepted through an explicit compatibility adapter. The canonical task
 and Candidate models remain strict; legacy-only fields are ignored at the old route boundary, and
 `clear_due_at` is projected to an explicit `due_at: null` update.
+
+What Matters Now projections, interventions, feedback, outcomes, attention overrides, and device snapshots are
+all account-generation scoped. Their Firestore mutations re-read workflow control in the commit transaction, so
+a reset during model judgment or feedback handling cannot publish or link stale state. Context and open-loop
+snapshot PUTs require both mutation headers; evaluation reads only the captured generation and publication fails
+closed if it changes. Derived workstream association vectors carry the same generation and authority is rehydrated
+with that fence before the journal transaction appends evidence.

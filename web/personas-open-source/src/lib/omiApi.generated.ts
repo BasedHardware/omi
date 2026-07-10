@@ -2538,7 +2538,7 @@ export interface Recommendation {
   destination_task_id?: string | null;
   destination_workstream_id?: string | null;
   evidence_preview: string;
-  evidence_refs?: Array<EvidenceRef>;
+  evidence_refs: Array<EvidenceRef>;
   expires_at: string;
   feedback_subject_id: string;
   feedback_subject_kind: FeedbackSubjectKind;
@@ -12852,7 +12852,7 @@ export async function create_task_via_integration_v1_task_integrations__app_key_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function replace_context_snapshot_v1_task_intelligence_context_snapshot_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: NormalizedContextSnapshot, init?: OmiApiClientInit): Promise<SnapshotReceipt> {
+export async function replace_context_snapshot_v1_task_intelligence_context_snapshot_put(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: NormalizedContextSnapshot, init?: OmiApiClientInit): Promise<SnapshotReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-intelligence/context-snapshot`;
   const _search = "";
@@ -12862,6 +12862,8 @@ export async function replace_context_snapshot_v1_task_intelligence_context_snap
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -12942,7 +12944,7 @@ export async function register_intervention_v1_task_intelligence_interventions_p
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function replace_open_loop_snapshot_v1_task_intelligence_open_loop_snapshot_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: OpenLoopSnapshot, init?: OmiApiClientInit): Promise<SnapshotReceipt> {
+export async function replace_open_loop_snapshot_v1_task_intelligence_open_loop_snapshot_put(header: { Idempotency_Key: string, X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: OpenLoopSnapshot, init?: OmiApiClientInit): Promise<SnapshotReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-intelligence/open-loop-snapshot`;
   const _search = "";
@@ -12952,6 +12954,8 @@ export async function replace_open_loop_snapshot_v1_task_intelligence_open_loop_
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      "Idempotency-Key": String(header.Idempotency_Key),
+      "X-Account-Generation": String(header.X_Account_Generation),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),

@@ -239,11 +239,13 @@ final class APIClientCandidateTests: XCTestCase {
       snapshotId: "context-1"
     )
 
-    _ = try? await client.replaceTaskContextSnapshot(snapshot)
+    _ = try? await client.replaceTaskContextSnapshot(snapshot, accountGeneration: 7)
 
     let request = try XCTUnwrap(CandidateURLCapture.captured())
     XCTAssertEqual(request.url.path, "/v1/task-intelligence/context-snapshot")
     XCTAssertEqual(request.method, "PUT")
+    XCTAssertEqual(request.headers["X-Account-Generation"], "7")
+    XCTAssertEqual(request.headers["Idempotency-Key"], "context-1")
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.body)) as? [String: Any])
     XCTAssertEqual(json["snapshot_id"] as? String, "context-1")
     XCTAssertNil(json["window_title"])

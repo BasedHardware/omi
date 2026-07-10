@@ -27,14 +27,21 @@ def refresh_workstream_association_index(
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return False
     try:
-        workstream = hydrate(uid, workstream_id, firestore_client=firestore_client)
+        control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+        workstream = hydrate(
+            uid,
+            workstream_id,
+            account_generation=control.account_generation,
+            firestore_client=firestore_client,
+        )
         if workstream is None or workstream.status != WorkstreamStatus.open:
-            return delete_index(uid, workstream_id)
+            return delete_index(uid, workstream_id, account_generation=control.account_generation)
         return upsert_index(
             uid,
             workstream.workstream_id,
             objective=workstream.objective,
             current_state_summary=workstream.current_state_summary,
+            account_generation=control.account_generation,
         )
     except Exception:
         record_fallback(
@@ -57,10 +64,17 @@ def rebuild_workstream_association_index(
 ) -> WorkstreamIndexRebuildReport:
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return WorkstreamIndexRebuildReport(uid=uid, source_count=0, indexed_count=0)
+    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     workstreams = [
-        item for item in list_source(uid, firestore_client=firestore_client) if item.status == WorkstreamStatus.open
+        item
+        for item in list_source(
+            uid,
+            account_generation=control.account_generation,
+            firestore_client=firestore_client,
+        )
+        if item.status == WorkstreamStatus.open
     ]
-    reset_index(uid)
+    reset_index(uid, account_generation=control.account_generation)
     indexed_count = 0
     failed: list[str] = []
     for workstream in workstreams:
@@ -69,6 +83,7 @@ def rebuild_workstream_association_index(
             workstream.workstream_id,
             objective=workstream.objective,
             current_state_summary=workstream.current_state_summary,
+            account_generation=control.account_generation,
         ):
             indexed_count += 1
         else:

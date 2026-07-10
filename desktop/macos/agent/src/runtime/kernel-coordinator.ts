@@ -256,7 +256,10 @@ export class AgentRuntimeKernel extends KernelSessions {
     mappings: Array<{ taskId: string; workstreamId: string }>;
     nowMs?: number;
   }): TaskSessionMigrationReport {
-    return migrateTaskSessionsToWorkstreams(this.store, input);
+    return migrateTaskSessionsToWorkstreams(this.store, {
+      ...input,
+      sourceRuntimeId: this.runtimeNodeId,
+    });
   }
 
   buildDesktopAwarenessSnapshot(input: DesktopAwarenessSnapshotInput): DesktopAwarenessSnapshot {

@@ -3064,7 +3064,7 @@ public enum OmiAPI {
     public let destinationTaskId: String?
     public let destinationWorkstreamId: String?
     public let evidencePreview: String
-    public let evidenceRefs: [EvidenceRef]?
+    public let evidenceRefs: [EvidenceRef]
     public let expiresAt: String
     public let feedbackSubjectId: String
     public let feedbackSubjectKind: FeedbackSubjectKind
@@ -3104,7 +3104,7 @@ public enum OmiAPI {
       destinationTaskId = try c.decodeIfPresent(String.self, forKey: .destinationTaskId)
       destinationWorkstreamId = try c.decodeIfPresent(String.self, forKey: .destinationWorkstreamId)
       evidencePreview = try c.decode(String.self, forKey: .evidencePreview)
-      evidenceRefs = try c.decodeIfPresent([EvidenceRef].self, forKey: .evidenceRefs)
+      evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       expiresAt = try c.decode(String.self, forKey: .expiresAt)
       feedbackSubjectId = try c.decode(String.self, forKey: .feedbackSubjectId)
       feedbackSubjectKind = try c.decode(FeedbackSubjectKind.self, forKey: .feedbackSubjectKind)
@@ -3118,7 +3118,7 @@ public enum OmiAPI {
       whyNow = try c.decode(String.self, forKey: .whyNow)
     }
 
-    public init(alternativeAction: String?, dedupeKey: String, destinationTaskId: String?, destinationWorkstreamId: String?, evidencePreview: String, evidenceRefs: [EvidenceRef]?, expiresAt: String, feedbackSubjectId: String, feedbackSubjectKind: FeedbackSubjectKind, goalOrWorkstreamLabel: String?, headline: String, interventionId: String, outputVersion: String, recommendedAction: String, subjectId: String, subjectKind: RecommendationSubjectKind, whyNow: String) {
+    public init(alternativeAction: String?, dedupeKey: String, destinationTaskId: String?, destinationWorkstreamId: String?, evidencePreview: String, evidenceRefs: [EvidenceRef], expiresAt: String, feedbackSubjectId: String, feedbackSubjectKind: FeedbackSubjectKind, goalOrWorkstreamLabel: String?, headline: String, interventionId: String, outputVersion: String, recommendedAction: String, subjectId: String, subjectKind: RecommendationSubjectKind, whyNow: String) {
       self.alternativeAction = alternativeAction
       self.dedupeKey = dedupeKey
       self.destinationTaskId = destinationTaskId
@@ -10919,7 +10919,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func replaceContextSnapshotV1TaskIntelligenceContextSnapshotPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: NormalizedContextSnapshot) async throws -> SnapshotReceipt {
+  public static func replaceContextSnapshotV1TaskIntelligenceContextSnapshotPut(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: NormalizedContextSnapshot) async throws -> SnapshotReceipt {
     let _path = "/v1/task-intelligence/context-snapshot"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -10931,6 +10931,8 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")
+    req.setValue(String(xAccountGeneration), forHTTPHeaderField: "X-Account-Generation")
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
@@ -11031,7 +11033,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(InterventionRecord.self, from: data)
   }
 
-  public static func replaceOpenLoopSnapshotV1TaskIntelligenceOpenLoopSnapshotPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OpenLoopSnapshot) async throws -> SnapshotReceipt {
+  public static func replaceOpenLoopSnapshotV1TaskIntelligenceOpenLoopSnapshotPut(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OpenLoopSnapshot) async throws -> SnapshotReceipt {
     let _path = "/v1/task-intelligence/open-loop-snapshot"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11043,6 +11045,8 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")
+    req.setValue(String(xAccountGeneration), forHTTPHeaderField: "X-Account-Generation")
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }

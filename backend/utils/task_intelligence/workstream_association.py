@@ -43,7 +43,7 @@ from utils.task_intelligence import candidate_service
 from utils.task_intelligence.workstream_index import rebuild_workstream_association_index
 
 ASSOCIATION_POLICY_VERSION = 'association.v1'
-ASSOCIATION_INDEX_VERSION = 'workstream-association-v1'
+ASSOCIATION_INDEX_VERSION = 'workstream-association-v2'
 ASSOCIATION_TOP_K = 5
 RECURRENCE_POLICY_VERSION = 'recurrence.v1'
 RECURRENCE_MIN_OCCURRENCES = 2
@@ -116,7 +116,7 @@ def associate_canonical_evidence(
     firestore_client: Any = None,
     retrieve_ids: Callable[..., list[str]] = query_workstream_association_candidates,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
-    purge_stale: Callable[[str, str], bool] = delete_workstream_association_vector,
+    purge_stale: Callable[..., bool] = delete_workstream_association_vector,
     adjudicate: AssociationAdjudicator = _default_adjudicator,
     append_event: Callable[..., Any] = workstreams_db.append_workstream_event,
     telemetry: Optional[AssociationTelemetry] = None,
@@ -144,12 +144,29 @@ def associate_canonical_evidence(
     if control.workflow_mode == TaskWorkflowMode.off:
         return finish(AssociationOutcome(outcome=AssociationOutcomeKind.workflow_disabled))
 
-    retrieved_ids = list(dict.fromkeys(retrieve_ids(uid, evidence.summary, limit=ASSOCIATION_TOP_K)))
+    target_generation = control.account_generation if account_generation is None else account_generation
+    if target_generation != control.account_generation:
+        raise workstreams_db.WorkstreamGenerationMismatchError('account generation mismatch')
+    retrieved_ids = list(
+        dict.fromkeys(
+            retrieve_ids(
+                uid,
+                evidence.summary,
+                account_generation=target_generation,
+                limit=ASSOCIATION_TOP_K,
+            )
+        )
+    )
     candidates: list[Workstream] = []
     for workstream_id in retrieved_ids:
-        workstream = hydrate(uid, workstream_id, firestore_client=firestore_client)
+        workstream = hydrate(
+            uid,
+            workstream_id,
+            account_generation=target_generation,
+            firestore_client=firestore_client,
+        )
         if workstream is None or workstream.status != WorkstreamStatus.open:
-            purge_stale(uid, workstream_id)
+            purge_stale(uid, workstream_id, account_generation=target_generation)
             continue
         candidates.append(workstream)
         if len(candidates) == ASSOCIATION_TOP_K:
@@ -228,7 +245,7 @@ def associate_canonical_evidence(
             sensitivity=WorkstreamSensitivity.normal,
         ),
         idempotency_key=_association_idempotency_key(evidence, judgment.workstream_id),
-        account_generation=control.account_generation if account_generation is None else account_generation,
+        account_generation=target_generation,
         firestore_client=firestore_client,
         required_status=WorkstreamStatus.open,
     )
@@ -253,6 +270,7 @@ def consume_recurrence_signal(
     uid: str,
     signal: CanonicalRecurrenceSignal,
     *,
+    account_generation: int = 0,
     firestore_client: Any = None,
     create_candidate: Callable[..., Any] = candidate_service.create_candidate,
 ) -> RecurrenceConsumptionOutcome:
@@ -262,6 +280,8 @@ def consume_recurrence_signal(
             signal_id=signal.signal_id,
         )
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    if control.account_generation != account_generation:
+        raise recurrence_inbox_db.RecurrenceGenerationMismatchError('account generation mismatch')
     if control.workflow_mode == TaskWorkflowMode.off:
         return RecurrenceConsumptionOutcome(
             outcome=RecurrenceOutcomeKind.workflow_disabled,
@@ -303,7 +323,7 @@ def consume_recurrence_signal(
         uid,
         proposal,
         idempotency_key=idempotency_key,
-        account_generation=control.account_generation,
+        account_generation=account_generation,
     )
     return RecurrenceConsumptionOutcome(
         outcome=RecurrenceOutcomeKind.candidate_created,
@@ -325,7 +345,12 @@ def persist_recurrence_signals_for_maintenance(
     signal_list = list(signals)
     if control.workflow_mode == TaskWorkflowMode.shadow:
         return sum(
-            consume_recurrence_signal(uid, signal, firestore_client=firestore_client).outcome
+            consume_recurrence_signal(
+                uid,
+                signal,
+                account_generation=control.account_generation,
+                firestore_client=firestore_client,
+            ).outcome
             == RecurrenceOutcomeKind.would_create
             for signal in signal_list
         )
@@ -375,19 +400,28 @@ def drain_recurrence_inbox_for_maintenance(
     )
     for receipt in receipts:
         try:
-            result = consume_recurrence_signal(uid, receipt.signal, firestore_client=firestore_client)
+            result = consume_recurrence_signal(
+                uid,
+                receipt.signal,
+                account_generation=receipt.account_generation,
+                firestore_client=firestore_client,
+            )
             complete(
                 uid,
                 receipt.receipt_id,
                 outcome=result.outcome,
+                account_generation=receipt.account_generation,
                 firestore_client=firestore_client,
             )
             created += int(result.outcome == RecurrenceOutcomeKind.candidate_created)
+        except recurrence_inbox_db.RecurrenceGenerationMismatchError:
+            continue
         except Exception as exc:
             retry(
                 uid,
                 receipt.receipt_id,
                 error_code=type(exc).__name__,
+                account_generation=receipt.account_generation,
                 firestore_client=firestore_client,
             )
             record_fallback(

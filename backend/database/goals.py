@@ -309,12 +309,37 @@ def create_goal(
     client = _get_db(firestore_client)
     now = datetime.now(timezone.utc)
     goal_id = str(goal_data.get('goal_id') or goal_data.get('id') or f'goal_{uuid4().hex[:12]}')
-    payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now)
-    client.collection(users_collection).document(uid).collection(goals_collection).document(goal_id).create(payload)
-    return normalize_goal_storage(payload, goal_id=goal_id)
+    user_ref = client.collection(users_collection).document(uid)
+    goal_ref = user_ref.collection(goals_collection).document(goal_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def create_in_generation(write_transaction):
+        control_snapshot = (
+            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+            .get(transaction=write_transaction)
+        )
+        account_generation = (
+            TaskWorkflowControl.model_validate(_snapshot_dict(control_snapshot)).account_generation
+            if control_snapshot.exists
+            else 0
+        )
+        payload = _new_goal_payload(
+            goal_data,
+            goal_id=goal_id,
+            now=now,
+            account_generation=account_generation,
+        )
+        write_transaction.create(goal_ref, payload)
+        return normalize_goal_storage(payload, goal_id=goal_id)
+
+    return create_in_generation(transaction)
 
 
-def _new_goal_payload(goal_data: Dict[str, Any], *, goal_id: str, now: datetime) -> dict[str, Any]:
+def _new_goal_payload(
+    goal_data: Dict[str, Any], *, goal_id: str, now: datetime, account_generation: int = 0
+) -> dict[str, Any]:
     metric = _metric_from_storage(goal_data)
     status = GoalStatus(goal_data.get('status', GoalStatus.background.value))
     if status == GoalStatus.focused:
@@ -335,6 +360,7 @@ def _new_goal_payload(goal_data: Dict[str, Any], *, goal_id: str, now: datetime)
         'is_active': status not in {GoalStatus.achieved, GoalStatus.abandoned},
         'created_at': now,
         'updated_at': now,
+        'account_generation': account_generation,
     }
     if not payload['title'] or not payload['desired_outcome']:
         raise ValueError('goal title and desired_outcome are required')
@@ -371,7 +397,7 @@ def create_goal_idempotent(
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
-        payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now)
+        payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now, account_generation=account_generation)
         goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
         write_transaction.create(goal_ref, payload)
         result = normalize_goal_storage(payload, goal_id=goal_id)

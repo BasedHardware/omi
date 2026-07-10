@@ -10,7 +10,13 @@ from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
 
 import database.task_recommendations as recommendation_db
-from models.task_intelligence import TaskIntelligenceFeedbackAction, TaskIntelligenceFeedbackReason
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
+from models.task_intelligence import (
+    TaskIntelligenceFeedbackAction,
+    TaskIntelligenceFeedbackReason,
+    TaskWorkflowControl,
+    TaskWorkflowMode,
+)
 from models.task_recommendation import (
     DeterministicFacts,
     EvaluationRequest,
@@ -56,6 +62,10 @@ class FakeDocument:
     def __init__(self, database, path):
         self.database = database
         self.path = path
+
+    @property
+    def id(self):
+        return self.path[-1]
 
     def collection(self, name):
         return FakeCollection(self.database, (*self.path, name))
@@ -117,6 +127,8 @@ class FakeCollection:
             return actual == expected
         if operator == '>':
             return actual is not None and actual > expected
+        if operator == '<=':
+            return actual is not None and actual <= expected
         raise AssertionError(f'unsupported fake query operator: {operator}')
 
 
@@ -161,6 +173,10 @@ class FakeTransaction:
         self.has_written = True
         ref.set(payload)
 
+    def delete(self, ref):
+        self.has_written = True
+        ref.delete()
+
 
 @pytest.fixture
 def fake_firestore(monkeypatch):
@@ -169,7 +185,16 @@ def fake_firestore(monkeypatch):
         'transactional',
         lambda function: lambda transaction: function(transaction),
     )
-    return FakeFirestore()
+    fake = FakeFirestore()
+    fake.rows[
+        (
+            'users',
+            'u1',
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
+        )
+    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0,).model_dump(mode='python')
+    return fake
 
 
 class RecordedJudgment:
@@ -268,7 +293,9 @@ def fixture_subject(subject_id: str, facts_payload: dict) -> recommendations.Eva
         headline=f'Fixture {subject_id}',
         label=None,
         evidence_preview='Fixture evidence.',
-        evidence_refs=(),
+        evidence_refs=(
+            EvidenceRef(kind=EvidenceKind.external, id=f'evidence-{subject_id}', scope=EvidenceScope.canonical),
+        ),
         facts=facts,
         eligibility=eligibility,
         material_token='v1',
@@ -558,6 +585,63 @@ def test_context_contract_accepts_every_normalized_resurfacing_signal():
         assert {value.value for value in match.signals} == {signal}
 
 
+def test_recommendation_eligibility_requires_visible_typed_evidence():
+    local_other_device = EvidenceRef(
+        kind=EvidenceKind.local_screen,
+        id='screen-other',
+        scope=EvidenceScope.device_local,
+        device_id='device-2',
+    ).model_dump(mode='json')
+    canonical = EvidenceRef(
+        kind=EvidenceKind.conversation,
+        id='conversation-1',
+        scope=EvidenceScope.canonical,
+    ).model_dump(mode='json')
+    state = {
+        'tasks': [
+            {'task_id': 'task-empty', 'description': 'No evidence', 'status': 'active', 'provenance': []},
+            {
+                'task_id': 'task-other-device',
+                'description': 'Private elsewhere',
+                'status': 'active',
+                'provenance': [local_other_device],
+            },
+            {
+                'task_id': 'task-canonical',
+                'description': 'Grounded task',
+                'status': 'active',
+                'provenance': [canonical],
+            },
+        ],
+        'candidates': [],
+        'goals': [],
+        'workstreams': [{'workstream_id': 'workstream-1', 'status': 'open', 'title': 'Work'}],
+        'artifacts': [
+            {
+                'artifact_id': 'artifact-empty',
+                'workstream_id': 'workstream-1',
+                'status': 'awaiting_review',
+                'kind': 'draft',
+                'evidence_refs': [],
+            }
+        ],
+    }
+    context = NormalizedContextSnapshot(
+        device_id='device-1',
+        snapshot_id='context-1',
+        matches=[],
+        generated_at=NOW,
+        expires_at=NOW + timedelta(minutes=5),
+    )
+
+    subjects = recommendations._build_subjects(state, context=context, open_loop_snapshots=[], now=NOW)
+    by_id = {subject.subject_id: subject for subject in subjects}
+    assert not by_id['task-empty'].eligibility.passes_recommendation_gates
+    assert not by_id['task-other-device'].eligibility.passes_recommendation_gates
+    assert not by_id['artifact-empty'].eligibility.passes_recommendation_gates
+    assert by_id['task-canonical'].eligibility.passes_recommendation_gates
+
+
 def test_open_loop_subjects_are_device_scoped_actionable_and_expiring():
     loop = OpenLoopDescriptor(
         loop_id='loop-1',
@@ -692,11 +776,6 @@ def test_feedback_later_and_already_handled_semantics(monkeypatch):
     assert resolved[1][1]['reason'] == 'not_mine'
 
     monkeypatch.setattr(
-        recommendations.task_control_db,
-        'get_task_workflow_control',
-        lambda _uid: SimpleNamespace(account_generation=7),
-    )
-    monkeypatch.setattr(
         recommendations.candidates_db,
         'create_candidate',
         lambda *_a, **_k: SimpleNamespace(candidate_id='completion-candidate-1'),
@@ -714,7 +793,9 @@ def test_feedback_later_and_already_handled_semantics(monkeypatch):
         action=TaskIntelligenceFeedbackAction.dismiss,
         reason=TaskIntelligenceFeedbackReason.already_handled,
     )
-    task_result = recommendations.record_feedback('u1', task_handled, idempotency_key='task-handled-1', now=NOW)
+    task_result = recommendations.record_feedback(
+        'u1', task_handled, idempotency_key='task-handled-1', account_generation=7, now=NOW
+    )
     assert task_result.proposed_completion_candidate_id == 'completion-candidate-1'
     assert links == [('u1', 'feedback-1', 'completion-candidate-1')]
 
@@ -874,6 +955,138 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         )
 
 
+def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore):
+    fake_db = fake_firestore
+    control_path = (
+        'users',
+        'u1',
+        recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
+        recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
+    )
+
+    def set_generation(generation: int) -> None:
+        fake_db.rows[control_path] = TaskWorkflowControl(
+            workflow_mode=TaskWorkflowMode.read,
+            account_generation=generation,
+        ).model_dump(mode='python')
+
+    request = InterventionCreate(
+        surface=InterventionSurface.suggested,
+        subject_kind=FeedbackSubjectKind.task,
+        subject_id='task-1',
+        dedupe_key='task-1:v1',
+        expires_at=NOW + timedelta(hours=1),
+    )
+    set_generation(7)
+    old_intervention, _ = recommendation_db.create_intervention(
+        'u1',
+        request,
+        idempotency_key='same-click',
+        account_generation=7,
+        now=NOW,
+        firestore_client=fake_db,
+    )
+    old_snapshot = NormalizedContextSnapshot(
+        device_id='device-1',
+        snapshot_id='generation-7',
+        generated_at=NOW + timedelta(minutes=2),
+        expires_at=NOW + timedelta(minutes=10),
+    )
+    recommendation_db.replace_context_snapshot('u1', old_snapshot, account_generation=7, firestore_client=fake_db)
+
+    set_generation(8)
+    new_intervention, _ = recommendation_db.create_intervention(
+        'u1',
+        request,
+        idempotency_key='same-click',
+        account_generation=8,
+        now=NOW,
+        firestore_client=fake_db,
+    )
+    assert new_intervention.intervention_id != old_intervention.intervention_id
+    assert (
+        recommendation_db.get_intervention(
+            'u1', old_intervention.intervention_id, account_generation=8, firestore_client=fake_db
+        )
+        is None
+    )
+    with pytest.raises(recommendation_db.InterventionNotFoundError):
+        recommendation_db.create_feedback(
+            'u1',
+            FeedbackCreate(
+                subject_kind=FeedbackSubjectKind.task,
+                subject_id='task-1',
+                intervention_id=old_intervention.intervention_id,
+                action=TaskIntelligenceFeedbackAction.later,
+            ),
+            idempotency_key='cross-generation-feedback',
+            now=NOW,
+            override_expires_at=NOW + timedelta(days=1),
+            account_generation=8,
+            firestore_client=fake_db,
+        )
+    new_snapshot = old_snapshot.model_copy(
+        update={
+            'snapshot_id': 'generation-8',
+            'generated_at': NOW,
+            'expires_at': NOW + timedelta(minutes=5),
+        }
+    )
+    recommendation_db.replace_context_snapshot('u1', new_snapshot, account_generation=8, firestore_client=fake_db)
+    assert (
+        recommendation_db.get_context_snapshot(
+            'u1', 'device-1', now=NOW, account_generation=8, firestore_client=fake_db
+        )
+        == new_snapshot
+    )
+
+    stale_projection = WhatMattersNowProjection(
+        evaluation_id='generation-7-evaluation',
+        output_version='generation-7-output',
+        material_version='generation-7-material',
+        generated_at=NOW,
+        expires_at=NOW + timedelta(minutes=30),
+        recommendations=[],
+    )
+    with pytest.raises(recommendation_db.RecommendationGenerationMismatchError):
+        recommendation_db.save_projection(
+            'u1',
+            device_scope='device-1',
+            projection=stale_projection,
+            decisions=[],
+            account_generation=7,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(recommendation_db.RecommendationGenerationMismatchError):
+        recommendation_db.get_projection(
+            'u1',
+            device_scope='device-1',
+            now=NOW,
+            account_generation=7,
+            firestore_client=fake_db,
+        )
+    assert not [path for path in fake_db.rows if path[-2] == recommendation_db.PROJECTIONS_COLLECTION]
+    fake_db.rows[control_path] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.off,
+        account_generation=8,
+    ).model_dump(mode='python')
+    with pytest.raises(recommendation_db.RecommendationGenerationMismatchError, match='mode changed'):
+        recommendation_db.save_projection(
+            'u1',
+            device_scope='device-1',
+            projection=stale_projection.model_copy(
+                update={
+                    'evaluation_id': 'generation-8-evaluation',
+                    'output_version': 'generation-8-output',
+                    'material_version': 'generation-8-material',
+                }
+            ),
+            decisions=[],
+            account_generation=8,
+            firestore_client=fake_db,
+        )
+
+
 def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_firestore):
     fake_db = fake_firestore
     first = NormalizedContextSnapshot(
@@ -901,10 +1114,12 @@ def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_f
     receipt_one = recommendation_db.replace_context_snapshot('u1', first, firestore_client=fake_db)
     receipt_two = recommendation_db.replace_context_snapshot('u1', second, firestore_client=fake_db)
     recommendation_db.replace_context_snapshot('u1', other_device, firestore_client=fake_db)
+    delayed_replay = recommendation_db.replace_context_snapshot('u1', first, firestore_client=fake_db)
 
-    assert not receipt_one.replaced and receipt_two.replaced
+    assert not receipt_one.replaced and receipt_two.replaced and delayed_replay == receipt_one
+    assert len([path for path in fake_db.rows if path[-2] == recommendation_db.SNAPSHOT_RECEIPTS_COLLECTION]) == 3
     with pytest.raises(recommendation_db.StaleSnapshotError):
-        recommendation_db.replace_context_snapshot('u1', first, firestore_client=fake_db)
+        recommendation_db.replace_context_snapshot('u1', first, idempotency_key='stale-retry', firestore_client=fake_db)
     assert (
         recommendation_db.get_context_snapshot('u1', 'device-1', now=NOW, firestore_client=fake_db).snapshot_id
         == 'context-v2'
@@ -942,6 +1157,7 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
                 why_now='It is ready.',
                 recommended_action='Continue',
                 evidence_preview='Due soon.',
+                evidence_refs=[EvidenceRef(kind=EvidenceKind.external, id='evidence-1', scope=EvidenceScope.canonical)],
                 dedupe_key='task-1:v1',
                 expires_at=NOW + timedelta(minutes=30),
             )

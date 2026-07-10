@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { DesktopActionQueueItem } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type BuiltDesktopContextPacket } from "./desktop-context-packet.js";
@@ -199,10 +201,174 @@ export interface TaskSessionMigrationReport {
   migratedTaskMappings: number;
   copiedTurns: number;
   migratedArtifacts: number;
+  indexedArtifactVersions: number;
+  repairedArtifactHeads: number;
   invalidatedBindingIds: string[];
   legacySessionIds: string[];
   skippedMappings: number;
   compatibilityMappings: Array<{ taskId: string; workstreamId: string; agentSessionId: string }>;
+}
+
+function indexLegacyWorkstreamArtifact(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    workstreamId: string;
+    canonicalSessionId: string;
+    sourceRuntimeId: string;
+    sourceSessionId: string;
+    sourceArtifactId: string;
+    migratedArtifactId: string;
+    now: number;
+  },
+): { indexed: boolean; repairedHead: boolean } {
+  const proposedLogicalKey = `legacy-task-artifact:${hash(
+    `${input.ownerId}:${input.workstreamId}:${input.sourceSessionId}:${input.sourceArtifactId}`,
+  ).slice(0, 32)}`;
+  const proposedEvidenceRefs: EvidenceRef[] = [{
+    kind: "artifact",
+    id: input.sourceArtifactId,
+    version: "legacy-task-session-migration.v1",
+    scope: "device_local",
+    device_id: input.sourceRuntimeId,
+  }];
+  const artifact = store.getRow("SELECT * FROM artifacts WHERE artifact_id = ? AND session_id = ?", [
+    input.migratedArtifactId,
+    input.canonicalSessionId,
+  ]);
+  let version = store.getOptionalRow(
+    `SELECT session_id, logical_key, version, artifact_id, supersedes_artifact_id, evidence_refs_json
+       FROM workstream_artifact_versions WHERE artifact_id = ?`,
+    [input.migratedArtifactId],
+  );
+  const indexed = !version && store.execute(
+    `INSERT OR IGNORE INTO workstream_artifact_versions (
+       session_id, logical_key, version, artifact_id, supersedes_artifact_id,
+       evidence_refs_json, created_at_ms
+     ) VALUES (?, ?, 1, ?, NULL, ?, ?)`,
+    [
+      input.canonicalSessionId,
+      proposedLogicalKey,
+      input.migratedArtifactId,
+      JSON.stringify(proposedEvidenceRefs),
+      Number(artifact.created_at_ms),
+    ],
+  ) > 0;
+  version = store.getRow(
+    `SELECT session_id, logical_key, version, artifact_id, supersedes_artifact_id, evidence_refs_json
+       FROM workstream_artifact_versions WHERE artifact_id = ?`,
+    [input.migratedArtifactId],
+  );
+  const logicalKey = String(version.logical_key);
+  const logicalVersion = Number(version.version);
+  const supersedesArtifactId = nullableText(version.supersedes_artifact_id);
+  const evidenceRefs = parseEvidenceRefs(String(version.evidence_refs_json));
+  const metadata = {
+    ...parseLegacyMetadata(String(artifact.metadata_json)),
+    sourceArtifactId: input.sourceArtifactId,
+    migratedFromArtifactId: input.sourceArtifactId,
+    migratedFromSessionId: input.sourceSessionId,
+    migrationVersion: "legacy-task-session-migration.v1",
+    workstreamId: input.workstreamId,
+    logicalKey,
+    logicalVersion,
+    supersedesArtifactId,
+    evidenceRefs,
+  };
+  store.execute("UPDATE artifacts SET metadata_json = ? WHERE artifact_id = ?", [
+    JSON.stringify(metadata),
+    input.migratedArtifactId,
+  ]);
+  const currentHead = store.getOptionalRow(
+    `SELECT version, artifact_id FROM workstream_artifact_heads
+      WHERE session_id = ? AND logical_key = ?`,
+    [version.session_id, version.logical_key],
+  );
+  const repairedHead = !currentHead
+    || Number(currentHead.version) < logicalVersion
+    || (Number(currentHead.version) === logicalVersion && String(currentHead.artifact_id) !== String(version.artifact_id));
+  if (repairedHead) {
+    store.execute(
+      `INSERT INTO workstream_artifact_heads (session_id, logical_key, artifact_id, version, updated_at_ms)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(session_id, logical_key) DO UPDATE SET
+         artifact_id = excluded.artifact_id,
+         version = excluded.version,
+         updated_at_ms = excluded.updated_at_ms
+       WHERE excluded.version > workstream_artifact_heads.version
+          OR (excluded.version = workstream_artifact_heads.version
+              AND excluded.artifact_id != workstream_artifact_heads.artifact_id)`,
+      [version.session_id, version.logical_key, version.artifact_id, version.version, input.now],
+    );
+  }
+  if (indexed) {
+    store.appendEvent({
+      sessionId: input.canonicalSessionId,
+      type: "workstream.artifact_version_migrated",
+      visibility: "internal",
+      payloadJson: JSON.stringify({
+        artifactId: input.migratedArtifactId,
+        sourceArtifactId: input.sourceArtifactId,
+        logicalKey,
+        version: logicalVersion,
+        evidenceRefs,
+      }),
+      createdAtMs: input.now,
+    });
+  }
+  const deliveryId = `artifactDelivery:workstream-migration:${input.workstreamId}:${input.migratedArtifactId}`;
+  if (!store.getOptionalRow("SELECT delivery_id FROM desktop_artifact_deliveries WHERE delivery_id = ?", [deliveryId])) {
+    const storedHash = nullableText(artifact.content_hash);
+    const contentHash = storedHash && storedHash.length >= 16
+      ? storedHash
+      : hashReadableArtifactFile(String(artifact.uri));
+    store.insertDesktopArtifactDelivery({
+      deliveryId,
+      artifactId: input.migratedArtifactId,
+      ownerId: input.ownerId,
+      sourceSessionId: input.canonicalSessionId,
+      intendedSurface: "canonical_workstream",
+      targetKind: "task_chat",
+      targetRef: input.workstreamId,
+      contentHash,
+      deliveryStatus: contentHash ? "pending" : "cancelled",
+      errorJson: contentHash ? null : JSON.stringify({
+        code: "local_only_artifact",
+        message: "Migrated artifact has no content hash",
+      }),
+      receiptJson: JSON.stringify({
+        kind: "artifact_descriptor",
+        sourceArtifactId: input.sourceArtifactId,
+        logicalKey,
+        artifactKind: String(artifact.kind),
+        uri: String(artifact.uri),
+        contentHash,
+        sourceRunId: null,
+        evidenceRefs,
+      }),
+    });
+  }
+  return { indexed, repairedHead };
+}
+
+function hashReadableArtifactFile(uri: string): string | null {
+  if (!uri.startsWith("file://")) return null;
+  try {
+    return `sha256:${createHash("sha256").update(readFileSync(fileURLToPath(uri))).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
+
+function parseLegacyMetadata(json: string | undefined): Record<string, unknown> {
+  if (!json) return {};
+  try {
+    const value = JSON.parse(json) as unknown;
+    if (value && !Array.isArray(value) && typeof value === "object") return value as Record<string, unknown>;
+    return { legacyMetadata: value };
+  } catch {
+    return {};
+  }
 }
 
 export function workstreamSurfaceRef(workstreamId: string) {
@@ -770,7 +936,12 @@ export function buildWorkstreamOpenLoopSnapshot(input: {
 
 export function migrateTaskSessionsToWorkstreams(
   store: AgentStore,
-  input: { ownerId: string; mappings: Array<{ taskId: string; workstreamId: string }>; nowMs?: number },
+  input: {
+    ownerId: string;
+    sourceRuntimeId: string;
+    mappings: Array<{ taskId: string; workstreamId: string }>;
+    nowMs?: number;
+  },
 ): TaskSessionMigrationReport {
   const now = input.nowMs ?? Date.now();
   return store.withTransaction(() => {
@@ -778,6 +949,8 @@ export function migrateTaskSessionsToWorkstreams(
       migratedTaskMappings: 0,
       copiedTurns: 0,
       migratedArtifacts: 0,
+      indexedArtifactVersions: 0,
+      repairedArtifactHeads: 0,
       invalidatedBindingIds: [],
       legacySessionIds: [],
       skippedMappings: 0,
@@ -787,6 +960,28 @@ export function migrateTaskSessionsToWorkstreams(
       const taskId = requiredText(mapping.taskId, "taskId");
       const workstreamId = requiredText(mapping.workstreamId, "workstreamId");
       const canonical = resolveWorkstreamSession(store, { ownerId: input.ownerId, workstreamId }, () => now);
+      const repairArtifacts = store.allRows(
+        `SELECT * FROM artifacts
+          WHERE session_id = ? AND json_type(metadata_json, '$.migratedFromArtifactId') = 'text'`,
+        [canonical.agentSessionId],
+      );
+      for (const artifact of repairArtifacts) {
+        const metadata = parseObject(String(artifact.metadata_json));
+        const sourceArtifactId = String(metadata.migratedFromArtifactId);
+        const sourceSessionId = String(metadata.migratedFromSessionId ?? "unknown-legacy-session");
+        const result = indexLegacyWorkstreamArtifact(store, {
+          ownerId: input.ownerId,
+          workstreamId,
+          canonicalSessionId: canonical.agentSessionId,
+          sourceRuntimeId: input.sourceRuntimeId,
+          sourceSessionId,
+          sourceArtifactId,
+          migratedArtifactId: String(artifact.artifact_id),
+          now,
+        });
+        report.indexedArtifactVersions += Number(result.indexed);
+        report.repairedArtifactHeads += Number(result.repairedHead);
+      }
       const taskRows = store.allRows(
         `SELECT conversation_id, agent_session_id, surface_kind, external_ref_kind, external_ref_id
          FROM surface_conversations
@@ -819,17 +1014,35 @@ export function migrateTaskSessionsToWorkstreams(
         const sourceArtifacts = store.allRows("SELECT * FROM artifacts WHERE session_id = ?", [sourceSessionId]);
         for (const artifact of sourceArtifacts) {
           const migratedArtifactId = `art_${hash(`${input.ownerId}:${workstreamId}:${String(artifact.artifact_id)}`).slice(0, 32)}`;
+          const sourceArtifactId = String(artifact.artifact_id);
           report.migratedArtifacts += store.execute(
             `INSERT OR IGNORE INTO artifacts (
                artifact_id, session_id, run_id, attempt_id, kind, role, uri, display_name,
                mime_type, content_hash, size_bytes, lifecycle_state, lifecycle_updated_at_ms,
                metadata_json, created_at_ms
-             ) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, json_set(?, '$.migratedFromArtifactId', ?, '$.migratedFromSessionId', ?), ?)`,
+             ) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [migratedArtifactId, canonical.agentSessionId, artifact.kind, artifact.role, artifact.uri,
              artifact.display_name, artifact.mime_type, artifact.content_hash, artifact.size_bytes,
-             artifact.lifecycle_state, artifact.lifecycle_updated_at_ms, artifact.metadata_json,
-             artifact.artifact_id, sourceSessionId, artifact.created_at_ms],
+             artifact.lifecycle_state, artifact.lifecycle_updated_at_ms,
+             JSON.stringify({
+               ...parseLegacyMetadata(String(artifact.metadata_json)),
+               migratedFromArtifactId: sourceArtifactId,
+               migratedFromSessionId: sourceSessionId,
+             }),
+             artifact.created_at_ms],
           );
+          const result = indexLegacyWorkstreamArtifact(store, {
+            ownerId: input.ownerId,
+            workstreamId,
+            canonicalSessionId: canonical.agentSessionId,
+            sourceRuntimeId: input.sourceRuntimeId,
+            sourceSessionId,
+            sourceArtifactId,
+            migratedArtifactId,
+            now,
+          });
+          report.indexedArtifactVersions += Number(result.indexed);
+          report.repairedArtifactHeads += Number(result.repairedHead);
         }
         const activeBindings = store.allRows(
           "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND status = 'active'",

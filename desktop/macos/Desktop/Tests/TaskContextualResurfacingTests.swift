@@ -8,6 +8,21 @@ final class MemoryTaskInterruptionLedger: TaskInterruptionLedgerPersisting {
   func save(_ ledger: TaskInterruptionLedger) { self.ledger = ledger }
 }
 
+final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
+  func testDefaultOwnerTracksAuthenticationChanges() {
+    let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let persistence = TaskInterruptionLedgerDefaults(defaults: defaults)
+    defaults.set("owner-a", forKey: "auth_userId")
+    persistence.save(TaskInterruptionLedger(sentAt: [Date(timeIntervalSince1970: 42)]))
+    defaults.set("owner-b", forKey: "auth_userId")
+    XCTAssertTrue(persistence.load().sentAt.isEmpty)
+    defaults.set("owner-a", forKey: "auth_userId")
+    XCTAssertEqual(persistence.load().sentAt.count, 1)
+  }
+}
+
 final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient {
   var workflowMode: OmiAPI.TaskWorkflowMode = .read
   var snapshots: [OmiAPI.NormalizedContextSnapshot] = []
@@ -18,8 +33,10 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
   }
 
   func replaceTaskContextSnapshot(
-    _ snapshot: OmiAPI.NormalizedContextSnapshot
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int
   ) async throws -> OmiAPI.SnapshotReceipt {
+    XCTAssertEqual(accountGeneration, 1)
     snapshots.append(snapshot)
     return OmiAPI.SnapshotReceipt(
       expiresAt: snapshot.expiresAt,

@@ -85,10 +85,12 @@ def fake_db(monkeypatch):
         'title': 'Goal 1',
         'status': 'focused',
         'is_active': True,
+        'account_generation': 3,
     }
     database.rows[('users', 'user-1', 'workstreams', 'workstream-1')] = {
         'workstream_id': 'workstream-1',
         'goal_id': 'goal-1',
+        'account_generation': 3,
     }
 
     def transactional(function):
@@ -222,6 +224,45 @@ def test_candidate_create_and_accept_are_idempotent_and_preserve_envelope(fake_d
     assert task['source'] == 'conversation'
     assert task['provenance'][0]['id'] == 'conversation-1'
     assert task['due_confidence'] == 0.9
+
+
+def test_task_mutation_preserves_origin_and_merges_provenance(fake_db):
+    original = {'kind': 'conversation', 'id': 'conversation-1', 'scope': 'canonical'}
+    added = {'kind': 'artifact', 'id': 'artifact-2', 'scope': 'canonical'}
+    task_path = ('users', 'user-1', 'action_items', 'task-1')
+    fake_db.rows[task_path] = {
+        'id': 'task-1',
+        'task_id': 'task-1',
+        'description': 'Original task',
+        'status': 'active',
+        'completed': False,
+        'goal_id': 'goal-1',
+        'workstream_id': 'workstream-1',
+        'source': 'manual',
+        'provenance': [original],
+    }
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            proposed_action='update',
+            task_id='task-1',
+            task_change={'description': 'Updated task'},
+            source_surface='feedback',
+            evidence_refs=[original, added],
+        ),
+        idempotency_key='feedback:update-task-1',
+        account_generation=3,
+    )
+
+    first = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    replay = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    task = fake_db.rows[task_path]
+
+    assert first.newly_resolved is True
+    assert replay.newly_resolved is False
+    assert task['description'] == 'Updated task'
+    assert task['source'] == 'manual'
+    assert task['provenance'] == [original, added]
 
 
 def test_candidate_idempotency_key_rejects_a_different_proposal(fake_db):

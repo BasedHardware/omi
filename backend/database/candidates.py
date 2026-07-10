@@ -1,6 +1,7 @@
 """Canonical Candidate persistence and atomic task resolution."""
 
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
@@ -11,7 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
 from database._client import db
-from models.action_item import TaskChangePayload, TaskCreatePayload, TaskStatus
+from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskStatus
 from models.candidate import (
     CandidateAction,
     CandidateCreate,
@@ -245,7 +246,7 @@ def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datet
     return task
 
 
-def _task_update_storage(candidate: CandidateRecord, *, now: datetime) -> dict[str, Any]:
+def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, Any], now: datetime) -> dict[str, Any]:
     if not isinstance(candidate.task_change, TaskChangePayload):
         raise CandidateConflictError('task mutation Candidate has invalid payload')
     patch = candidate.task_change.model_dump(mode='python', exclude_unset=True)
@@ -253,8 +254,23 @@ def _task_update_storage(candidate: CandidateRecord, *, now: datetime) -> dict[s
         patch['goal_id'] = candidate.goal_id
     if candidate.workstream_id is not None:
         patch['workstream_id'] = candidate.workstream_id
-    patch['source'] = candidate.source_surface
-    patch['provenance'] = [ref.model_dump(mode='python') for ref in candidate.evidence_refs]
+    provenance: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_ref in list(current_task.get('provenance') or []) + [
+        ref.model_dump(mode='json', exclude_none=True) for ref in candidate.evidence_refs
+    ]:
+        if not isinstance(raw_ref, dict):
+            continue
+        try:
+            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(mode='json', exclude_none=True)
+        except ValueError:
+            normalized_ref = raw_ref
+        identity = json.dumps(normalized_ref, sort_keys=True, default=str)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        provenance.append(normalized_ref)
+    patch['provenance'] = provenance
     if candidate.proposed_action == CandidateAction.complete:
         patch.update(status=TaskStatus.completed.value, completed=True, completed_at=now)
     elif candidate.proposed_action == CandidateAction.cancel:
@@ -324,6 +340,7 @@ def resolve_task_candidate(
                     workstream_id=candidate.workstream_id,
                     transaction=write_transaction,
                     firestore_client=db,
+                    account_generation=account_generation,
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
@@ -340,11 +357,15 @@ def resolve_task_candidate(
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
+            current_task_generation = int(current_task.get('account_generation', 0))
+            if current_task_generation not in {0, account_generation}:
+                raise CandidateGenerationMismatchError('task account generation mismatch')
             if expected_task_links is not None:
                 current_links = (current_task.get('goal_id'), current_task.get('workstream_id'))
                 if current_links != expected_task_links:
                     raise CandidateConflictError('task links changed while resolving Candidate')
-            task_patch = _task_update_storage(candidate, now=resolved_at)
+            task_patch = _task_update_storage(candidate, current_task=current_task, now=resolved_at)
+            task_patch['account_generation'] = account_generation
             final_goal_id = task_patch.get('goal_id', current_task.get('goal_id'))
             final_workstream_id = task_patch.get('workstream_id', current_task.get('workstream_id'))
             try:
@@ -356,6 +377,7 @@ def resolve_task_candidate(
                     firestore_client=db,
                     allow_ended_goal=(final_goal_id, final_workstream_id)
                     == (current_task.get('goal_id'), current_task.get('workstream_id')),
+                    account_generation=account_generation,
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc

@@ -2985,21 +2985,24 @@ extension APIClient {
 
 extension APIClient {
   func getWhatMattersNow(deviceID: String? = nil) async throws -> OmiAPI.WhatMattersNowProjection {
-    let suffix = deviceID.map {
-      "?device_id=\($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0)"
-    } ?? ""
-    return try await get("v1/what-matters-now\(suffix)")
+    var endpoint = "v1/what-matters-now"
+    if let deviceID {
+      let encodedDeviceID = deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID
+      endpoint += "?device_id=\(encodedDeviceID)"
+    }
+    return try await get(endpoint)
   }
 
   func replaceTaskContextSnapshot(
-    _ snapshot: OmiAPI.NormalizedContextSnapshot
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int
   ) async throws -> OmiAPI.SnapshotReceipt {
     try await taskIntelligenceMutation(
       endpoint: "v1/task-intelligence/context-snapshot",
       method: "PUT",
       body: snapshot,
-      idempotencyKey: nil,
-      accountGeneration: nil
+      idempotencyKey: snapshot.snapshotId,
+      accountGeneration: accountGeneration
     )
   }
 

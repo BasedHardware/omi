@@ -76,8 +76,8 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
             'uid-1',
             AssociationEvidence(evidence_id=case['id'], **case['evidence']),
             firestore_client=object(),
-            retrieve_ids=lambda uid, summary, limit: list(records),
-            hydrate=lambda uid, workstream_id, firestore_client=None: records.get(workstream_id),
+            retrieve_ids=lambda uid, summary, **kwargs: list(records),
+            hydrate=lambda uid, workstream_id, **kwargs: records.get(workstream_id),
             adjudicate=lambda request: AssociationJudgment(
                 workstream_id=judgment['workstream_id'],
                 material=judgment['material'],
@@ -121,9 +121,9 @@ def test_retrieval_hydrates_authority_and_purges_missing_or_closed_hits(enabled)
             evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
         ),
         firestore_client=object(),
-        retrieve_ids=lambda uid, summary, limit: ['missing-1', 'closed-1', 'open-1'],
-        hydrate=lambda uid, workstream_id, firestore_client=None: records.get(workstream_id),
-        purge_stale=lambda uid, workstream_id: purged.append(workstream_id) is None,
+        retrieve_ids=lambda uid, summary, **kwargs: ['missing-1', 'closed-1', 'open-1'],
+        hydrate=lambda uid, workstream_id, **kwargs: records.get(workstream_id),
+        purge_stale=lambda uid, workstream_id, **kwargs: purged.append(workstream_id) is None,
         adjudicate=lambda request: (
             seen_candidates.extend(item.workstream_id for item in request.candidates)
             or AssociationJudgment(material=False, reason=AssociationReason.no_match)
@@ -156,8 +156,8 @@ def test_retry_coalesces_same_evidence_into_one_event_key(enabled):
     )
     kwargs = {
         'firestore_client': object(),
-        'retrieve_ids': lambda uid, summary, limit: ['ws-1'],
-        'hydrate': lambda uid, workstream_id, firestore_client=None: record,
+        'retrieve_ids': lambda uid, summary, **kwargs: ['ws-1'],
+        'hydrate': lambda uid, workstream_id, **kwargs: record,
         'adjudicate': lambda request: AssociationJudgment(
             workstream_id='ws-1',
             material=True,
@@ -363,18 +363,21 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
     one_off = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=1),
+        account_generation=7,
         firestore_client=object(),
         create_candidate=create,
     )
     first = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
+        account_generation=7,
         firestore_client=object(),
         create_candidate=create,
     )
     second = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
+        account_generation=7,
         firestore_client=object(),
         create_candidate=create,
     )
@@ -400,6 +403,7 @@ def test_recurrence_shadow_evaluates_without_candidate_mutation(monkeypatch):
     result = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
+        account_generation=7,
         create_candidate=lambda *args, **kwargs: calls.append('candidate'),
     )
 
@@ -480,8 +484,8 @@ def test_recurrence_identity_is_stable_across_independent_evolving_signals(enabl
         keys.append(idempotency_key)
         return SimpleNamespace(candidate_id='candidate-1')
 
-    association.consume_recurrence_signal('uid-1', first, create_candidate=create)
-    association.consume_recurrence_signal('uid-1', later, create_candidate=create)
+    association.consume_recurrence_signal('uid-1', first, account_generation=7, create_candidate=create)
+    association.consume_recurrence_signal('uid-1', later, account_generation=7, create_candidate=create)
 
     assert keys[0] == keys[1]
 
@@ -495,6 +499,13 @@ def test_recurrence_contract_rejects_impossible_temporal_counts():
 
 def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(monkeypatch):
     monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(
+        workstream_index.workstreams_db,
+        'get_task_workflow_control',
+        lambda uid, firestore_client=None: TaskWorkflowControl(
+            workflow_mode=TaskWorkflowMode.read, account_generation=7
+        ),
+    )
     open_record = _workstream(
         {'workstream_id': 'open-1', 'objective': 'Ship update', 'current_state_summary': 'Drafting'}
     )
@@ -504,8 +515,8 @@ def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(mo
 
     report = association.rebuild_workstream_association_index(
         'uid-1',
-        list_source=lambda uid, firestore_client=None: [open_record, archived],
-        reset_index=lambda uid: resets.append(uid) is None,
+        list_source=lambda uid, **kwargs: [open_record, archived],
+        reset_index=lambda uid, **kwargs: resets.append(uid) is None,
         upsert_index=lambda uid, workstream_id, **kwargs: indexed.append(workstream_id) is None or True,
     )
 
@@ -524,19 +535,26 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
     deleted: list[str] = []
 
     monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(
+        workstream_index.workstreams_db,
+        'get_task_workflow_control',
+        lambda uid, firestore_client=None: TaskWorkflowControl(
+            workflow_mode=TaskWorkflowMode.read, account_generation=7
+        ),
+    )
     assert workstream_index.refresh_workstream_association_index(
         'uid-1',
         'open-1',
         hydrate=lambda *args, **kwargs: open_record,
         upsert_index=lambda uid, workstream_id, **kwargs: indexed.append(workstream_id) is None or True,
-        delete_index=lambda uid, workstream_id: deleted.append(workstream_id) is None or True,
+        delete_index=lambda uid, workstream_id, **kwargs: deleted.append(workstream_id) is None or True,
     )
     assert workstream_index.refresh_workstream_association_index(
         'uid-1',
         'open-1',
         hydrate=lambda *args, **kwargs: closed_record,
         upsert_index=lambda *args, **kwargs: False,
-        delete_index=lambda uid, workstream_id: deleted.append(workstream_id) is None or True,
+        delete_index=lambda uid, workstream_id, **kwargs: deleted.append(workstream_id) is None or True,
     )
 
     monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
@@ -547,7 +565,7 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
     )
     report = workstream_index.rebuild_workstream_association_index(
         'uid-1',
-        list_source=lambda uid, firestore_client=None: (_ for _ in ()).throw(AssertionError('must not list')),
+        list_source=lambda uid, **kwargs: (_ for _ in ()).throw(AssertionError('must not list')),
     )
 
     assert indexed == ['open-1']

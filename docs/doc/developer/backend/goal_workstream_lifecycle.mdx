@@ -40,6 +40,9 @@ drafts. The narrow status transition API advances only `draft → awaiting_revie
 mutate content/version fields or revive a superseded version. Continuation checkpoints are
 per-runtime minimized summaries pinned to a journal sequence. They describe resumable context only—the backend
 does not store local run, attempt, grant, or execution truth.
+Checkpoint sequence is monotonic per runtime: lower sequences are rejected, and an equal sequence is idempotent
+only when runtime, summary, and evidence are identical. This prevents a delayed runtime write from rolling back
+or silently replacing newer continuation state.
 
 The goal-detail and workstream-detail endpoints aggregate their task, journal, artifact, and checkpoint
 projections so clients do not issue per-row reads. Task/workstream goal equality is validated server-side, and

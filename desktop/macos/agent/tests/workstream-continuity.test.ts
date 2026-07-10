@@ -16,6 +16,7 @@ import {
   persistWorkstreamArtifactVersion,
   persistWorkstreamContextPacket,
   projectCanonicalCandidateResolution,
+  projectWorkstreamContinuity,
   readWorkstreamContinuationCheckpoint,
   reconcileLegacyTaskCandidateOutbox,
   resolveWorkstreamSession,
@@ -542,7 +543,7 @@ describe("workstream continuity", () => {
       kind: "markdown",
       role: "result",
       uri: "omi-artifact://legacy-draft",
-      contentHash: "sha256:legacy",
+      contentHash: "a".repeat(64),
     });
     const legacyBinding = store.insertAdapterBinding({
       sessionId: task.agentSessionId,
@@ -566,6 +567,7 @@ describe("workstream continuity", () => {
 
     const report = migrateTaskSessionsToWorkstreams(store, {
       ownerId: "owner",
+      sourceRuntimeId: "mac-a",
       mappings: [
         { taskId: "task-1", workstreamId: "ws-1" },
         { taskId: "task-2", workstreamId: "ws-1" },
@@ -579,6 +581,8 @@ describe("workstream continuity", () => {
       migratedTaskMappings: 2,
       copiedTurns: 2,
       migratedArtifacts: 1,
+      indexedArtifactVersions: 1,
+      repairedArtifactHeads: 1,
       skippedMappings: 0,
       invalidatedBindingIds: [legacyBinding.bindingId],
     });
@@ -589,15 +593,96 @@ describe("workstream continuity", () => {
     expect(store.getRow("SELECT content FROM conversation_turns WHERE conversation_id = ?", [canonical.conversationId]).content).toBe("Draft the email");
     expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [legacyBinding.bindingId]).status).toBe("stale");
     expect(store.getRow("SELECT metadata_json FROM artifacts WHERE session_id = ? AND artifact_id != ?", [canonical.agentSessionId, legacyArtifact.artifactId]).metadata_json).toContain(legacyArtifact.artifactId);
+    const version = store.getRow(
+      "SELECT * FROM workstream_artifact_versions WHERE session_id = ?",
+      [canonical.agentSessionId],
+    );
+    expect(version).toMatchObject({ version: 1 });
+    expect(store.getRow(
+      "SELECT artifact_id, version FROM workstream_artifact_heads WHERE session_id = ?",
+      [canonical.agentSessionId],
+    )).toMatchObject({ artifact_id: version.artifact_id, version: 1 });
+    expect(projectWorkstreamContinuity(store, { ownerId: "owner", workstreamId: "ws-1" }).artifactVersions)
+      .toHaveLength(1);
+    expect(store.getRow(
+      "SELECT delivery_status, receipt_json FROM desktop_artifact_deliveries WHERE artifact_id = ?",
+      [version.artifact_id],
+    )).toMatchObject({ delivery_status: "pending" });
     const rerun = migrateTaskSessionsToWorkstreams(store, {
       ownerId: "owner",
+      sourceRuntimeId: "mac-a",
       mappings: [
         { taskId: "task-1", workstreamId: "ws-1" },
         { taskId: "task-2", workstreamId: "ws-1" },
       ],
       nowMs: 4,
     });
-    expect(rerun).toMatchObject({ migratedTaskMappings: 0, migratedArtifacts: 0, skippedMappings: 2 });
+    expect(rerun).toMatchObject({
+      migratedTaskMappings: 0,
+      migratedArtifacts: 0,
+      indexedArtifactVersions: 0,
+      repairedArtifactHeads: 0,
+      skippedMappings: 2,
+    });
+    store.close();
+  });
+
+  it("repairs legacy artifacts copied before version indexing without duplicating history", () => {
+    const store = newStore();
+    const canonical = resolveWorkstreamSession(store, { ownerId: "owner", workstreamId: "ws-1" }, () => 1);
+    const copied = store.insertArtifact({
+      artifactId: "artifact-copied-by-old-migration",
+      sessionId: canonical.agentSessionId,
+      kind: "markdown",
+      role: "result",
+      uri: "omi-artifact://legacy-draft",
+      contentHash: "sha256:legacy",
+      metadataJson: JSON.stringify({
+        migratedFromArtifactId: "legacy-artifact-1",
+        migratedFromSessionId: "legacy-session-1",
+      }),
+      createdAtMs: 2,
+    });
+
+    const repaired = migrateTaskSessionsToWorkstreams(store, {
+      ownerId: "owner",
+      sourceRuntimeId: "mac-a",
+      mappings: [{ taskId: "missing-task", workstreamId: "ws-1" }],
+      nowMs: 3,
+    });
+    expect(repaired).toMatchObject({ indexedArtifactVersions: 1, repairedArtifactHeads: 1 });
+    expect(store.allRows(
+      "SELECT * FROM events WHERE session_id = ? AND type = 'workstream.artifact_version_migrated'",
+      [canonical.agentSessionId],
+    )).toHaveLength(1);
+
+    store.execute("DELETE FROM workstream_artifact_heads WHERE artifact_id = ?", [copied.artifactId]);
+    const headRepair = migrateTaskSessionsToWorkstreams(store, {
+      ownerId: "owner",
+      sourceRuntimeId: "mac-a",
+      mappings: [{ taskId: "missing-task", workstreamId: "ws-1" }],
+      nowMs: 4,
+    });
+    expect(headRepair).toMatchObject({ indexedArtifactVersions: 0, repairedArtifactHeads: 1 });
+    const replay = migrateTaskSessionsToWorkstreams(store, {
+      ownerId: "owner",
+      sourceRuntimeId: "mac-a",
+      mappings: [{ taskId: "missing-task", workstreamId: "ws-1" }],
+      nowMs: 5,
+    });
+    expect(replay).toMatchObject({ indexedArtifactVersions: 0, repairedArtifactHeads: 0 });
+    expect(store.allRows("SELECT * FROM workstream_artifact_versions WHERE artifact_id = ?", [copied.artifactId]))
+      .toHaveLength(1);
+    expect(store.allRows("SELECT * FROM desktop_artifact_deliveries WHERE artifact_id = ?", [copied.artifactId]))
+      .toHaveLength(1);
+    expect(store.getRow(
+      "SELECT delivery_status FROM desktop_artifact_deliveries WHERE artifact_id = ?",
+      [copied.artifactId],
+    )).toMatchObject({ delivery_status: "cancelled" });
+    expect(store.allRows(
+      "SELECT * FROM events WHERE session_id = ? AND type = 'workstream.artifact_version_migrated'",
+      [canonical.agentSessionId],
+    )).toHaveLength(1);
     store.close();
   });
 

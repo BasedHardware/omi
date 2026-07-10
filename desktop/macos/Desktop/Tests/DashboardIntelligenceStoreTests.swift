@@ -432,8 +432,130 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
 private final class MemoryDashboardOutbox: DashboardFeedbackOutboxPersisting {
   var entries: [PendingDashboardFeedback] = []
-  func load() -> [PendingDashboardFeedback] { entries }
-  func save(_ entries: [PendingDashboardFeedback]) { self.entries = entries }
+  func currentOwnerID() -> String { "test-owner" }
+  func load(ownerID: String) -> [PendingDashboardFeedback] { entries }
+  func save(_ entries: [PendingDashboardFeedback], ownerID: String) { self.entries = entries }
+}
+
+@MainActor
+final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
+  func testDefaultOwnerTracksAuthenticationChanges() {
+    let suite = "DashboardFeedbackOutboxOwnerIsolationTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let outbox = DashboardFeedbackOutboxDefaults(defaults: defaults)
+    let entry = PendingDashboardFeedback(
+      request: OmiAPI.FeedbackCreate(
+        action: .dismiss,
+        contextSnapshotHash: nil,
+        interventionId: nil,
+        laterUntil: nil,
+        reason: .not_useful,
+        subjectId: "task-1",
+        subjectKind: .task
+      ),
+      idempotencyKey: "feedback-1",
+      accountGeneration: 7
+    )
+    defaults.set("owner-a", forKey: "auth_userId")
+    outbox.save([entry], ownerID: outbox.currentOwnerID())
+    defaults.set("owner-b", forKey: "auth_userId")
+    XCTAssertTrue(outbox.load(ownerID: outbox.currentOwnerID()).isEmpty)
+    defaults.set("owner-a", forKey: "auth_userId")
+    XCTAssertEqual(outbox.load(ownerID: outbox.currentOwnerID()).first?.idempotencyKey, "feedback-1")
+  }
+
+  func testAccountSwitchDuringFeedbackDoesNotOverwriteNewOwnerQueue() async {
+    let suite = "DashboardFeedbackOutboxOwnerIsolationTests.inflight.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set("owner-a", forKey: "auth_userId")
+    let outbox = DashboardFeedbackOutboxDefaults(defaults: defaults)
+    let client = FakeDashboardIntelligenceClient()
+    client.feedbackSuspensionsRemaining = 1
+    let store = DashboardIntelligenceStore(client: client, outboxStore: outbox)
+    await store.load()
+    let recommendation = Self.recommendation(id: "recommendation-1")
+    let requestTask = Task { await store.later(recommendation) }
+    while client.feedbackRelease == nil { await Task.yield() }
+    defaults.set("owner-b", forKey: "auth_userId")
+    let ownerBEntry = PendingDashboardFeedback(
+      request: OmiAPI.FeedbackCreate(
+        action: .dismiss,
+        contextSnapshotHash: nil,
+        interventionId: nil,
+        laterUntil: nil,
+        reason: .not_useful,
+        subjectId: "task-b",
+        subjectKind: .task
+      ),
+      idempotencyKey: "owner-b-feedback",
+      accountGeneration: 7
+    )
+    outbox.save([ownerBEntry], ownerID: "owner-b")
+    client.feedbackRelease?.resume()
+    await requestTask.value
+
+    XCTAssertTrue(outbox.load(ownerID: "owner-a").isEmpty)
+    XCTAssertEqual(outbox.load(ownerID: "owner-b").map(\.idempotencyKey), ["owner-b-feedback"])
+  }
+
+  func testRetryMergesConcurrentSameOwnerEnqueue() async {
+    let suite = "DashboardFeedbackOutboxOwnerIsolationTests.retry.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set("owner-a", forKey: "auth_userId")
+    let outbox = DashboardFeedbackOutboxDefaults(defaults: defaults)
+    let retryEntry = PendingDashboardFeedback(
+      request: OmiAPI.FeedbackCreate(
+        action: .later,
+        contextSnapshotHash: nil,
+        interventionId: "intervention-retry",
+        laterUntil: "2030-01-01T00:00:00Z",
+        reason: nil,
+        subjectId: "task-retry",
+        subjectKind: .task
+      ),
+      idempotencyKey: "retry-feedback",
+      accountGeneration: 7
+    )
+    outbox.save([retryEntry], ownerID: "owner-a")
+    let client = FakeDashboardIntelligenceClient()
+    client.feedbackSuspensionsRemaining = 1
+    let store = DashboardIntelligenceStore(client: client, outboxStore: outbox)
+    let loadTask = Task { await store.load() }
+    while client.feedbackRelease == nil { await Task.yield() }
+    client.failFeedback = true
+    await store.later(Self.recommendation(id: "new-recommendation"))
+    client.failFeedback = false
+    client.feedbackRelease?.resume()
+    await loadTask.value
+
+    let remaining = outbox.load(ownerID: "owner-a")
+    XCTAssertEqual(remaining.count, 1)
+    XCTAssertTrue(remaining[0].idempotencyKey.hasPrefix("wmn:intervention-new-recommendation:later:"))
+  }
+
+  private static func recommendation(id: String) -> DashboardRecommendation {
+    DashboardRecommendation(
+      id: id,
+      interventionID: "intervention-\(id)",
+      outputVersion: "output-1",
+      subjectKind: .task,
+      subjectID: "task-1",
+      feedbackSubjectKind: .task,
+      feedbackSubjectID: "task-1",
+      headline: "Continue task",
+      whyNow: "Ready",
+      contextLabel: nil,
+      recommendedAction: "Continue",
+      evidencePreview: "Evidence",
+      evidenceCount: 1,
+      dedupeKey: "task-1:v1",
+      expiresAt: "2030-01-01T00:00:00Z",
+      destination: .task(taskID: "task-1", workstreamID: nil)
+    )
+  }
 }
 
 private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient {
@@ -448,6 +570,8 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   var focusError: Error?
   var failFeedback = false
   var feedbackKeys: [String] = []
+  var feedbackSuspensionsRemaining = 0
+  var feedbackRelease: CheckedContinuation<Void, Never>?
   var createdGoal: (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
   var exactCandidate: OmiAPI.CandidateRecord?
   var exactTask: TaskActionItem?
@@ -504,6 +628,11 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
     _ request: OmiAPI.FeedbackCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.FeedbackRecord {
     feedbackKeys.append(idempotencyKey)
+    if feedbackSuspensionsRemaining > 0 {
+      feedbackSuspensionsRemaining -= 1
+      await withCheckedContinuation { feedbackRelease = $0 }
+      feedbackRelease = nil
+    }
     if failFeedback { throw FakeError.missing }
     return OmiAPI.FeedbackRecord(
       action: request.action,

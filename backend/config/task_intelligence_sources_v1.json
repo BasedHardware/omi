@@ -33,6 +33,7 @@
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift",

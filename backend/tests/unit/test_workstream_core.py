@@ -175,7 +175,7 @@ def fake_db(monkeypatch):
 
 
 def create_goal(fake_db, goal_id, *, status='background', focus_rank=None):
-    return goals_db.create_goal(
+    result = goals_db.create_goal(
         'u1',
         {
             'id': goal_id,
@@ -186,6 +186,8 @@ def create_goal(fake_db, goal_id, *, status='background', focus_rank=None):
         },
         firestore_client=fake_db,
     )
+    fake_db.rows[('users', 'u1', 'goals', goal_id)]['account_generation'] = 3
+    return result
 
 
 def seed_control(fake_db, generation=3, mode='read'):
@@ -438,6 +440,7 @@ def seed_task(fake_db, task_id='t1', goal_id=None):
         'status': 'active',
         'goal_id': goal_id,
         'workstream_id': None,
+        'account_generation': 3,
     }
 
 
@@ -573,10 +576,12 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0):
         'latest_event_sequence': latest_sequence,
         'created_at': now,
         'updated_at': now,
+        'account_generation': 3,
     }
 
 
 def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
+    seed_control(fake_db, generation=3)
     now = datetime.now(timezone.utc)
     signal = CanonicalRecurrenceSignal(
         signal_id='observation-1',
@@ -598,6 +603,7 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
         account_generation=3,
         firestore_client=fake_db,
     )
+    seed_control(fake_db, generation=4)
     next_generation = recurrence_inbox_db.enqueue_recurrence_signal(
         'u1', signal, account_generation=4, firestore_client=fake_db
     )
@@ -609,15 +615,17 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
         'u1', account_generation=3, firestore_client=fake_db
     ) == [replay]
 
-    recurrence_inbox_db.complete_recurrence_receipt(
-        'u1',
-        first.receipt_id,
-        outcome=RecurrenceOutcomeKind.candidate_created,
-        firestore_client=fake_db,
-    )
-    assert (
-        recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3, firestore_client=fake_db) == []
-    )
+    with pytest.raises(recurrence_inbox_db.RecurrenceGenerationMismatchError):
+        recurrence_inbox_db.complete_recurrence_receipt(
+            'u1',
+            first.receipt_id,
+            outcome=RecurrenceOutcomeKind.candidate_created,
+            account_generation=3,
+            firestore_client=fake_db,
+        )
+    assert recurrence_inbox_db.list_pending_recurrence_receipts(
+        'u1', account_generation=3, firestore_client=fake_db
+    ) == [replay]
 
 
 def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuity(fake_db):
@@ -745,6 +753,45 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         account_generation=3,
         firestore_client=fake_db,
     )
+    checkpoint_replay = workstreams_db.upsert_continuation_checkpoint(
+        'u1',
+        'w1',
+        ContinuationCheckpointUpsert(
+            runtime_id='runtime-mac-1',
+            last_event_sequence=6,
+            context_summary='Pricing changed; v2 awaits review.',
+            evidence_refs=[local_ref],
+        ),
+        idempotency_key='checkpoint-runtime-mac-1-retry',
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    with pytest.raises(workstreams_db.WorkstreamConflictError, match='backwards'):
+        workstreams_db.upsert_continuation_checkpoint(
+            'u1',
+            'w1',
+            ContinuationCheckpointUpsert(
+                runtime_id='runtime-mac-1',
+                last_event_sequence=5,
+                context_summary='Stale context.',
+            ),
+            idempotency_key='checkpoint-stale',
+            account_generation=3,
+            firestore_client=fake_db,
+        )
+    with pytest.raises(workstreams_db.WorkstreamConflictError, match='different content'):
+        workstreams_db.upsert_continuation_checkpoint(
+            'u1',
+            'w1',
+            ContinuationCheckpointUpsert(
+                runtime_id='runtime-mac-1',
+                last_event_sequence=6,
+                context_summary='Conflicting context.',
+            ),
+            idempotency_key='checkpoint-conflict',
+            account_generation=3,
+            firestore_client=fake_db,
+        )
 
     assert first_event.event_id == replay.event_id
     assert (first_event.sequence, v1.version, v2.version) == (1, 1, 2)
@@ -756,6 +803,7 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         'delivered',
     ]
     assert checkpoint.last_event_sequence == 6
+    assert checkpoint_replay == checkpoint
     assert checkpoint.model_dump().keys().isdisjoint({'run_status', 'attempt_id', 'execution_state'})
     assert checkpoint.evidence_refs[0].device_id == 'mac-1'
 

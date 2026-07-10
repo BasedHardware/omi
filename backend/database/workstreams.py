@@ -190,7 +190,9 @@ def _validate_control(snapshot: Any, *, account_generation: int) -> None:
 
 
 def _workstream_from_snapshot(snapshot: Any) -> Workstream:
-    return Workstream.model_validate(_snapshot_dict(snapshot))
+    payload = _snapshot_dict(snapshot)
+    payload.pop('account_generation', None)
+    return Workstream.model_validate(payload)
 
 
 def _task_storage(
@@ -208,6 +210,7 @@ def _task_storage(
     priority: Optional[TaskPriority] = None,
     recurrence_rule: Optional[str] = None,
     recurrence_parent_id: Optional[str] = None,
+    account_generation: int = 0,
 ) -> dict[str, Any]:
     return {
         'id': task_id,
@@ -229,6 +232,7 @@ def _task_storage(
         'indent_level': 0,
         'created_at': now,
         'updated_at': now,
+        'account_generation': account_generation,
     }
 
 
@@ -241,8 +245,9 @@ def _workstream_storage(
     now: datetime,
     summary: str = '',
     latest_event_sequence: int = 1,
+    account_generation: int = 0,
 ) -> dict[str, Any]:
-    return Workstream(
+    payload = Workstream(
         workstream_id=workstream_id,
         goal_id=goal_id,
         title=title,
@@ -254,6 +259,8 @@ def _workstream_storage(
         created_at=now,
         updated_at=now,
     ).model_dump(mode='python', exclude_none=True)
+    payload['account_generation'] = account_generation
+    return payload
 
 
 def _initial_event_storage(
@@ -279,20 +286,40 @@ def _initial_event_storage(
     return event_id, event.model_dump(mode='python')
 
 
-def _assert_goal_exists(uid: str, goal_id: Optional[str], *, transaction: Any, firestore_client: Any) -> None:
+def _assert_goal_exists(
+    uid: str,
+    goal_id: Optional[str],
+    *,
+    account_generation: int,
+    transaction: Any,
+    firestore_client: Any,
+) -> None:
     if goal_id is None:
         return
     snapshot = goals_db.goal_document_ref(uid, goal_id, firestore_client=firestore_client).get(transaction=transaction)
     if not snapshot.exists:
         raise WorkstreamConflictError('goal does not exist')
     goal = goals_db.normalize_goal_storage(_snapshot_dict(snapshot), goal_id=goal_id)
+    if goal.get('account_generation', 0) != account_generation:
+        raise WorkstreamGenerationMismatchError('goal account generation mismatch')
     if goal['status'] in {GoalStatus.achieved.value, GoalStatus.abandoned.value}:
         raise WorkstreamConflictError('ended goal cannot receive new work')
 
 
-def get_workstream(uid: str, workstream_id: str, *, firestore_client: Any = None) -> Optional[Workstream]:
+def get_workstream(
+    uid: str,
+    workstream_id: str,
+    *,
+    account_generation: Optional[int] = None,
+    firestore_client: Any = None,
+) -> Optional[Workstream]:
     snapshot = _workstream_ref(uid, workstream_id, firestore_client=firestore_client).get()
-    return _workstream_from_snapshot(snapshot) if snapshot.exists else None
+    if not snapshot.exists:
+        return None
+    payload = _snapshot_dict(snapshot)
+    if account_generation is not None and payload.get('account_generation', 0) != account_generation:
+        return None
+    return _workstream_from_snapshot(snapshot)
 
 
 def get_workstream_goal_id(uid: str, workstream_id: str, *, firestore_client: Any = None) -> Optional[str]:
@@ -313,15 +340,21 @@ def list_open_workstreams(
     uid: str,
     *,
     limit: int = 500,
+    account_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> list[Workstream]:
     query = (
         _user_ref(uid, firestore_client=firestore_client)
         .collection(WORKSTREAMS_COLLECTION)
         .where(filter=FieldFilter('status', '==', WorkstreamStatus.open.value))
-        .limit(limit)
     )
-    records = [_workstream_from_snapshot(snapshot) for snapshot in query.stream()]
+    if account_generation is not None and account_generation > 0:
+        query = query.where(filter=FieldFilter('account_generation', '==', account_generation))
+    query = query.limit(limit)
+    snapshots = list(query.stream())
+    if account_generation == 0:
+        snapshots = [snapshot for snapshot in snapshots if _snapshot_dict(snapshot).get('account_generation', 0) == 0]
+    records = [_workstream_from_snapshot(snapshot) for snapshot in snapshots]
     records.sort(key=lambda record: record.updated_at, reverse=True)
     return records
 
@@ -732,6 +765,27 @@ def upsert_continuation_checkpoint(
         workstream = _workstream_from_snapshot(workstream_snapshot)
         if checkpoint.last_event_sequence > workstream.latest_event_sequence:
             raise WorkstreamConflictError('checkpoint cannot advance beyond the workstream journal')
+        checkpoint_snapshot = checkpoint_ref.get(transaction=write_transaction)
+        if checkpoint_snapshot.exists:
+            existing = ContinuationCheckpoint.model_validate(_snapshot_dict(checkpoint_snapshot))
+            if checkpoint.last_event_sequence < existing.last_event_sequence:
+                raise WorkstreamConflictError('checkpoint sequence cannot move backwards')
+            if checkpoint.last_event_sequence == existing.last_event_sequence:
+                equivalent = (
+                    checkpoint.runtime_id == existing.runtime_id
+                    and checkpoint.context_summary == existing.context_summary
+                    and checkpoint.evidence_refs == existing.evidence_refs
+                )
+                if not equivalent:
+                    raise WorkstreamConflictError('checkpoint sequence already stores different content')
+                _finish_mutation(
+                    write_transaction,
+                    receipt_ref,
+                    request_hash=request_hash,
+                    result=existing.model_dump(mode='python'),
+                    now=now,
+                )
+                return existing
         record = ContinuationCheckpoint(
             **checkpoint.model_dump(mode='python'),
             checkpoint_id=checkpoint_id,
@@ -808,7 +862,13 @@ def resolve_workstream_candidate(
         proposal = stored_candidate.workstream_proposal
         if proposal is None:
             raise WorkstreamConflictError('stored Candidate has no workstream proposal')
-        _assert_goal_exists(uid, stored_candidate.goal_id, transaction=write_transaction, firestore_client=client)
+        _assert_goal_exists(
+            uid,
+            stored_candidate.goal_id,
+            account_generation=account_generation,
+            transaction=write_transaction,
+            firestore_client=client,
+        )
         workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         task_snapshot = task_ref.get(transaction=write_transaction)
         if workstream_snapshot.exists or task_snapshot.exists:
@@ -830,6 +890,7 @@ def resolve_workstream_candidate(
                 goal_id=stored_candidate.goal_id,
                 summary=proposal.objective,
                 now=now,
+                account_generation=account_generation,
             ),
         )
         write_transaction.create(workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data)
@@ -849,6 +910,7 @@ def resolve_workstream_candidate(
                 recurrence_rule=proposal.anchor_task.recurrence_rule,
                 recurrence_parent_id=proposal.anchor_task.recurrence_parent_id,
                 now=now,
+                account_generation=account_generation,
             ),
         )
         write_transaction.update(
@@ -927,22 +989,57 @@ def resolve_work_intent(
             if not task_snapshot.exists:
                 raise WorkstreamNotFoundError(f'task:{request.task_id}')
             task = _snapshot_dict(task_snapshot)
+            task_generation = int(task.get('account_generation', 0))
+            if task_generation not in {0, account_generation}:
+                raise WorkstreamGenerationMismatchError('task account generation mismatch')
             existing_workstream_id = task.get('workstream_id')
             goal_id = task.get('goal_id')
+            legacy_goal_ref = None
+            if isinstance(goal_id, str) and goal_id:
+                goal_ref = goals_db.goal_document_ref(uid, goal_id, firestore_client=client)
+                goal_snapshot = goal_ref.get(transaction=write_transaction)
+                if not goal_snapshot.exists:
+                    raise WorkstreamConflictError('goal does not exist')
+                goal_payload = goals_db.normalize_goal_storage(_snapshot_dict(goal_snapshot), goal_id=goal_id)
+                goal_generation = int(goal_payload.get('account_generation', 0))
+                if goal_generation not in {0, account_generation}:
+                    raise WorkstreamGenerationMismatchError('goal account generation mismatch')
+                if goal_payload['status'] in {GoalStatus.achieved.value, GoalStatus.abandoned.value}:
+                    raise WorkstreamConflictError('ended goal cannot receive new work')
+                if goal_generation == 0:
+                    legacy_goal_ref = goal_ref
             if isinstance(existing_workstream_id, str) and existing_workstream_id:
                 existing_workstream = _workstream_ref(uid, existing_workstream_id, firestore_client=client).get(
                     transaction=write_transaction
                 )
                 if not existing_workstream.exists:
                     raise WorkstreamConflictError('task points to a missing workstream')
+                existing_payload = _snapshot_dict(existing_workstream)
+                workstream_generation = int(existing_payload.get('account_generation', 0))
+                if workstream_generation not in {0, account_generation}:
+                    raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
                 workstream = _workstream_from_snapshot(existing_workstream)
                 if workstream.goal_id != goal_id:
                     raise WorkstreamConflictError('task and workstream goals disagree')
                 workstream_id = existing_workstream_id
                 task_id = request.task_id
+                if legacy_goal_ref is not None:
+                    write_transaction.update(
+                        legacy_goal_ref,
+                        {'account_generation': account_generation, 'updated_at': now},
+                    )
+                if task_generation == 0:
+                    write_transaction.update(
+                        task_ref,
+                        {'account_generation': account_generation, 'updated_at': now},
+                    )
+                if workstream_generation == 0:
+                    write_transaction.update(
+                        _workstream_ref(uid, workstream_id, firestore_client=client),
+                        {'account_generation': account_generation, 'updated_at': now},
+                    )
             else:
-                _assert_goal_exists(uid, goal_id, transaction=write_transaction, firestore_client=client)
-                workstream_id = _stable_id('workstream', uid, 'task', request.task_id)
+                workstream_id = _stable_id('workstream', uid, account_generation, 'task', request.task_id)
                 task_id = request.task_id
                 workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
                 workstream_snapshot = workstream_ref.get(transaction=write_transaction)
@@ -950,7 +1047,12 @@ def resolve_work_intent(
                     existing = _workstream_from_snapshot(workstream_snapshot)
                     if existing.goal_id != goal_id:
                         raise WorkstreamConflictError('deterministic workstream goal collision')
-                else:
+                if legacy_goal_ref is not None:
+                    write_transaction.update(
+                        legacy_goal_ref,
+                        {'account_generation': account_generation, 'updated_at': now},
+                    )
+                if not workstream_snapshot.exists:
                     event_id, event_data = _initial_event_storage(
                         uid=uid,
                         workstream_id=workstream_id,
@@ -967,16 +1069,30 @@ def resolve_work_intent(
                             objective=request.objective or str(task.get('description') or 'Advance this task'),
                             goal_id=goal_id,
                             now=now,
+                            account_generation=account_generation,
                         ),
                     )
                     write_transaction.create(
                         workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data
                     )
                     newly_created = True
-                write_transaction.update(task_ref, {'workstream_id': workstream_id, 'updated_at': now})
+                write_transaction.update(
+                    task_ref,
+                    {
+                        'workstream_id': workstream_id,
+                        'account_generation': account_generation,
+                        'updated_at': now,
+                    },
+                )
         else:
             goal_id = request.goal_id
-            _assert_goal_exists(uid, goal_id, transaction=write_transaction, firestore_client=client)
+            _assert_goal_exists(
+                uid,
+                goal_id,
+                account_generation=account_generation,
+                transaction=write_transaction,
+                firestore_client=client,
+            )
             workstream_id = _stable_id('workstream', uid, 'goal-intent', receipt_id)
             task_id = _stable_id('task', uid, 'goal-intent', receipt_id)
             workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
@@ -1002,6 +1118,7 @@ def resolve_work_intent(
                     objective=request.objective,
                     goal_id=goal_id,
                     now=now,
+                    account_generation=account_generation,
                 ),
             )
             write_transaction.create(workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data)
@@ -1014,6 +1131,7 @@ def resolve_work_intent(
                     workstream_id=workstream_id,
                     source='explicit_goal_intent',
                     now=now,
+                    account_generation=account_generation,
                 ),
             )
             newly_created = True
@@ -1116,17 +1234,39 @@ def import_task_goal_links(
                     relationship_valid = bool(
                         workstream_snapshot.exists
                         and _snapshot_dict(workstream_snapshot).get('goal_id') == link.goal_id
+                        and _snapshot_dict(workstream_snapshot).get('account_generation', 0) == account_generation
                     )
+                goal_generation_matches = (
+                    _snapshot_dict(goal_snapshot).get('account_generation', 0) == account_generation
+                )
                 current_goal_id = task.get('goal_id')
-                if not relationship_valid or current_goal_id not in {None, link.goal_id}:
+                task_generation = int(task.get('account_generation', 0))
+                if (
+                    task_generation not in {0, account_generation}
+                    or not goal_generation_matches
+                    or not relationship_valid
+                    or current_goal_id not in {None, link.goal_id}
+                ):
                     outcome = 'failed'
                 elif current_goal_id == link.goal_id:
                     outcome = 'unchanged'
+                    if task_generation == 0:
+                        write_transaction.update(
+                            task_ref,
+                            {
+                                'account_generation': account_generation,
+                                'updated_at': datetime.now(timezone.utc),
+                            },
+                        )
                 else:
                     outcome = 'imported'
                     write_transaction.update(
                         task_ref,
-                        {'goal_id': link.goal_id, 'updated_at': datetime.now(timezone.utc)},
+                        {
+                            'goal_id': link.goal_id,
+                            'account_generation': account_generation,
+                            'updated_at': datetime.now(timezone.utc),
+                        },
                     )
             outcomes[outcome_key] = outcome
             write_transaction.update(receipt_ref, {'outcomes': outcomes, 'updated_at': datetime.now(timezone.utc)})

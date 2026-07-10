@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 # Collection name
 action_items_collection = 'action_items'
+TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
+TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 
 
 class TaskRelationshipConflictError(ValueError):
@@ -27,6 +29,7 @@ def validate_task_relationship_in_transaction(
     transaction: Any,
     firestore_client: Any = None,
     allow_ended_goal: bool = False,
+    account_generation: Optional[int] = None,
 ) -> None:
     """Final relationship check that participates in the caller's task-write transaction."""
 
@@ -37,6 +40,8 @@ def validate_task_relationship_in_transaction(
         if not goal_snapshot.exists:
             raise TaskRelationshipConflictError('goal does not exist')
         goal = _typed_doc(goal_snapshot)
+        if account_generation is not None and goal.get('account_generation', 0) != account_generation:
+            raise TaskRelationshipConflictError('goal account generation mismatch')
         status = goal.get('status')
         if not allow_ended_goal and (
             status in {'achieved', 'abandoned'} or (status is None and goal.get('is_active') is False)
@@ -46,7 +51,10 @@ def validate_task_relationship_in_transaction(
         workstream_snapshot = user_ref.collection('workstreams').document(workstream_id).get(transaction=transaction)
         if not workstream_snapshot.exists:
             raise TaskRelationshipConflictError('workstream does not exist')
-        if _typed_doc(workstream_snapshot).get('goal_id') != goal_id:
+        workstream = _typed_doc(workstream_snapshot)
+        if account_generation is not None and workstream.get('account_generation', 0) != account_generation:
+            raise TaskRelationshipConflictError('workstream account generation mismatch')
+        if workstream.get('goal_id') != goal_id:
             raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
 
 
@@ -194,33 +202,8 @@ def create_action_item(
         action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
-
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
-
-    # Idempotency check: if the caller supplied a key and we already have an
-    # *active* (not completed, not soft-deleted) document with that key,
-    # return its id rather than creating a duplicate. Completed/deleted
-    # matches are treated as "the user is recreating the task" and we fall
-    # through to the normal create path — otherwise a permanent content hash
-    # would silently swallow legitimate re-creation of recurring tasks.
-    if idempotency_key:
-        existing_query = (
-            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
-            .where(filter=FieldFilter('completed', '==', False))
-            .limit(5)
-        )
-        for doc in existing_query.stream():
-            data: Dict[str, Any] = _typed_doc(doc)
-            if data.get('deleted'):
-                continue
-            logger.info(
-                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
-                uid,
-                idempotency_key,
-                doc.id,
-            )
-            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -236,40 +219,57 @@ def create_action_item(
 
     goal_id = action_item_data.get('goal_id')
     workstream_id = action_item_data.get('workstream_id')
-    if goal_id is not None or workstream_id is not None:
-        if document_id is not None and not document_id:
-            raise ValueError('document_id must not be empty')
-        doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
-        transaction = db.transaction()
+    if document_id is not None and not document_id:
+        raise ValueError('document_id must not be empty')
+    doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
+    transaction = db.transaction()
 
-        @firestore.transactional
-        def create_linked(write_transaction):
-            if document_id is not None and doc_ref.get(transaction=write_transaction).exists:
+    @firestore.transactional
+    def create_in_generation(write_transaction):
+        control_snapshot = (
+            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+            .get(transaction=write_transaction)
+        )
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        account_generation = int(control.get('account_generation', 0))
+        if idempotency_key:
+            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
+                filter=FieldFilter('completed', '==', False)
+            )
+            if account_generation > 0:
+                existing_query = existing_query.where(
+                    filter=FieldFilter('account_generation', '==', account_generation)
+                )
+            existing_query = existing_query.limit(5)
+            for existing in existing_query.stream(transaction=write_transaction):
+                data = _typed_doc(existing)
+                if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
+                    continue
+                if not data.get('deleted'):
+                    return existing.id
+        if document_id is not None:
+            existing_document = doc_ref.get(transaction=write_transaction)
+            if existing_document.exists:
+                existing_generation = int(_typed_doc(existing_document).get('account_generation', 0))
+                if existing_generation != account_generation:
+                    raise TaskRelationshipConflictError('document id belongs to another account generation')
                 return document_id
+        if goal_id is not None or workstream_id is not None:
             validate_task_relationship_in_transaction(
                 uid,
                 goal_id=cast(Optional[str], goal_id),
                 workstream_id=cast(Optional[str], workstream_id),
                 transaction=write_transaction,
                 firestore_client=db,
+                account_generation=account_generation,
             )
-            write_transaction.set(doc_ref, action_item_data)
-            return doc_ref.id
+        payload = dict(action_item_data)
+        payload['account_generation'] = account_generation
+        write_transaction.set(doc_ref, payload)
+        return doc_ref.id
 
-        return cast(str, create_linked(transaction))
-
-    if document_id is not None:
-        if not document_id:
-            raise ValueError('document_id must not be empty')
-        doc_ref = action_items_ref.document(document_id)
-        if doc_ref.get().exists:
-            return document_id
-        doc_ref.set(action_item_data)
-        return document_id
-
-    doc_ref = action_items_ref.add(action_item_data)[1]
-
-    return doc_ref.id
+    return cast(str, create_in_generation(transaction))
 
 
 def create_action_items_batch(
@@ -319,13 +319,20 @@ def create_action_items_batch(
         document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
 
-    if any(item.get('goal_id') is not None or item.get('workstream_id') is not None for item in prepared_items):
-        if len(prepared_items) > 200:
-            raise ValueError('linked action-item batches are limited to 200 items')
-        transaction = db.transaction()
+    if len(prepared_items) > 400:
+        raise ValueError('action-item batches are limited to 400 items')
+    transaction = db.transaction()
 
-        @firestore.transactional
-        def create_linked_batch(write_transaction):
+    @firestore.transactional
+    def create_batch_in_generation(write_transaction):
+        control_snapshot = (
+            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+            .get(transaction=write_transaction)
+        )
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        account_generation = int(control.get('account_generation', 0))
+        if any(item.get('goal_id') is not None or item.get('workstream_id') is not None for item in prepared_items):
             for item in prepared_items:
                 validate_task_relationship_in_transaction(
                     uid,
@@ -333,19 +340,13 @@ def create_action_items_batch(
                     workstream_id=cast(Optional[str], item.get('workstream_id')),
                     transaction=write_transaction,
                     firestore_client=db,
+                    account_generation=account_generation,
                 )
-            for doc_ref, item in zip(document_refs, prepared_items):
-                write_transaction.set(doc_ref, item)
-            return doc_refs
+        for doc_ref, item in zip(document_refs, prepared_items):
+            write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
+        return doc_refs
 
-        return cast(List[str], create_linked_batch(transaction))
-
-    batch = db.batch()
-    for doc_ref, item in zip(document_refs, prepared_items):
-        batch.set(doc_ref, item)
-    batch.commit()
-
-    return doc_refs
+    return cast(List[str], create_batch_in_generation(transaction))
 
 
 # *****************************

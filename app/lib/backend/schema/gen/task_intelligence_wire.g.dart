@@ -2172,7 +2172,7 @@ class GeneratedRecommendation {
   final String? destinationTaskId;
   final String? destinationWorkstreamId;
   final String evidencePreview;
-  final List<GeneratedEvidenceRef>? evidenceRefs;
+  final List<GeneratedEvidenceRef> evidenceRefs;
   final DateTime expiresAt;
   final String feedbackSubjectId;
   final GeneratedFeedbackSubjectKind feedbackSubjectKind;
@@ -2191,7 +2191,7 @@ class GeneratedRecommendation {
     this.destinationTaskId,
     this.destinationWorkstreamId,
     required this.evidencePreview,
-    this.evidenceRefs,
+    required this.evidenceRefs,
     required this.expiresAt,
     required this.feedbackSubjectId,
     required this.feedbackSubjectKind,
@@ -2212,7 +2212,7 @@ class GeneratedRecommendation {
       destinationTaskId: _readFieldValue<String>(_readField(json, const ["destination_task_id"]), "destination_task_id", _readString, requiredField: false, nullable: true),
       destinationWorkstreamId: _readFieldValue<String>(_readField(json, const ["destination_workstream_id"]), "destination_workstream_id", _readString, requiredField: false, nullable: true),
       evidencePreview: _required(_readFieldValue<String>(_readField(json, const ["evidence_preview"]), "evidence_preview", _readString, requiredField: true, nullable: false), "evidence_preview"),
-      evidenceRefs: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
+      evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
       feedbackSubjectId: _required(_readFieldValue<String>(_readField(json, const ["feedback_subject_id"]), "feedback_subject_id", _readString, requiredField: true, nullable: false), "feedback_subject_id"),
       feedbackSubjectKind: _required(_readFieldValue<GeneratedFeedbackSubjectKind>(_readField(json, const ["feedback_subject_kind"]), "feedback_subject_kind", GeneratedFeedbackSubjectKind.fromJson, requiredField: true, nullable: false), "feedback_subject_kind"),
@@ -2234,7 +2234,7 @@ class GeneratedRecommendation {
       'destination_task_id': destinationTaskId,
       'destination_workstream_id': destinationWorkstreamId,
       'evidence_preview': evidencePreview,
-      'evidence_refs': evidenceRefs?.map((value) => value.toJson()).toList(),
+      'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'expires_at': expiresAt.toUtc().toIso8601String(),
       'feedback_subject_id': feedbackSubjectId,
       'feedback_subject_kind': feedbackSubjectKind.toJson(),
