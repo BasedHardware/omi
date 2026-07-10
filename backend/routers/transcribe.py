@@ -124,6 +124,7 @@ from utils.translation_cache import (
     ConversationLanguageState,
     should_persist_translation,
 )
+from utils.listen_session_bootstrap import finalize_listen_connect_context, load_listen_connect_base
 from utils.translation_coordinator import TranslationCoordinator
 from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
     ConversationLifecycleAction,
@@ -400,13 +401,6 @@ async def _stream_handler(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     include_speech_profile = should_include_speech_profile(include_speech_profile, is_multi_channel, onboarding_mode)
 
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
-    if not user_has_credits:
-        try:
-            await send_credit_limit_notification(uid)
-        except Exception as e:
-            logger.error(f"Error sending credit limit notification: {e} {uid} {session_id}")
-
     # Frame size, codec
     frame_size: int = 160
     lc3_chunk_size: Optional[int] = None
@@ -418,30 +412,22 @@ async def _stream_handler(
     lc3_chunk_size = codec_decision.lc3_chunk_size
     lc3_frame_duration_us = codec_decision.lc3_frame_duration_us
 
-    # Fetch user transcription preferences once and reuse its embedded language
-    # projection below for translation targeting. Avoid a second user preference
-    # read on the hot WebSocket startup path.
-    transcription_prefs = get_user_transcription_preferences(uid)
-    single_language_mode = transcription_prefs.get('single_language_mode', False)
-    vocabulary = transcription_prefs.get('vocabulary', [])
-    user_language_preference = transcription_prefs.get('language', '')
+    connect_base = await load_listen_connect_base(uid, source=source, use_custom_stt=use_custom_stt)
+    if not connect_base.user_exists:
+        await websocket.close(code=1008, reason="Bad user")
+        return
 
-    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
-    # and meterable (#7690) — the app otherwise only signals it per-session via the
-    # custom_stt WS param. Write only on change to keep this off the hot path.
-    # Best-effort telemetry only: never let a tracking write failure (e.g. a
-    # transient Firestore error) tear down the session — catch, log, and proceed.
-    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+    user_has_credits = connect_base.user_has_credits
+    if not user_has_credits:
         try:
-            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+            await send_credit_limit_notification(uid)
         except Exception as e:
-            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
+            logger.error(f"Error sending credit limit notification: {e} {uid} {session_id}")
 
-    # Onboarding mode: force single language for better accuracy
-    single_language_mode = should_force_single_language(onboarding_mode, single_language_mode)
-
-    # Always include "Omi" as predefined vocabulary
-    vocabulary = list({"Omi"} | set(vocabulary))
+    transcription_prefs = connect_base.transcription_prefs
+    single_language_mode = should_force_single_language(
+        onboarding_mode, transcription_prefs.get('single_language_mode', False)
+    )
 
     # Convert 'auto' to 'multi' for consistency
     language = normalize_language(language)
@@ -459,17 +445,32 @@ async def _stream_handler(
         return
 
     # Opt-in: honor an explicit Parakeet request only when the self-hosted service is configured.
-    # Default stays unchanged (Deepgram / language-selected) — this never auto-switches anyone.
     if requested_stt_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
         stt_service = STTService.parakeet
 
-    # Translation language (disabled in single language mode)
-    translation_language = select_translation_language(
-        single_language_mode=single_language_mode,
-        stt_language=stt_language,
+    connect_ctx = finalize_listen_connect_context(
+        connect_base,
         language=language,
-        user_language_preference=user_language_preference,
+        onboarding_mode=onboarding_mode,
+        stt_language=stt_language,
     )
+    single_language_mode = connect_ctx.single_language_mode
+    vocabulary = connect_ctx.vocabulary
+    language = connect_ctx.language
+    user_language_preference = connect_ctx.user_language_preference
+    translation_language = connect_ctx.translation_language
+    transcription_prefs = connect_ctx.transcription_prefs
+
+    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
+    # and meterable (#7690) — the app otherwise only signals it per-session via the
+    # custom_stt WS param. Write only on change to keep this off the hot path.
+    # Best-effort telemetry only: never let a tracking write failure (e.g. a
+    # transient Firestore error) tear down the session — catch, log, and proceed.
+    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+        try:
+            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+        except Exception as e:
+            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
 
     session = ListenSessionState()
     task_supervisor = WebSocketTaskSupervisor(
@@ -507,12 +508,6 @@ async def _stream_handler(
 
     def spawn(coro: Awaitable[Any], *, name: str) -> asyncio.Task[Any]:
         return task_supervisor.create_task(cast(Coroutine[Any, Any, Any], coro), name=name)
-
-    # Validate user before spawning any session-scoped tasks.
-    if not user_db.is_exists_user(uid):
-        session.active = False
-        await websocket.close(code=1008, reason="Bad user")
-        return
 
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
@@ -566,11 +561,11 @@ async def _stream_handler(
     # Session-start: check DG budget for restrict-stage users (#6083)
     if FAIR_USE_ENABLED:
         try:
-            _init_stage = get_enforcement_stage(uid)
+            _init_stage = connect_ctx.fair_use_init_stage
             logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
-            if _init_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+            if connect_ctx.fair_use_track_dg_usage:
                 session.fair_use_track_dg_usage = True
-                session.fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
+                session.fair_use_dg_budget_exhausted = connect_ctx.fair_use_dg_budget_exhausted
                 if session.fair_use_dg_budget_exhausted:
                     logger.info(f'fair_use: DG budget already exhausted at session start for {uid}')
         except Exception as e:

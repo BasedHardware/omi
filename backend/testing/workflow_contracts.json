@@ -102,7 +102,7 @@
     {
       "id": "sync_cloud_tasks",
       "risk": "high",
-      "sources": ["backend/routers/sync.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
+      "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
       "tests": ["tests/unit/test_sync_v2.py", "tests/unit/test_sync_cloud_tasks.py", "tests/unit/test_audio_merge_tasks.py"],
       "checks": [],
       "invariants": [
@@ -208,6 +208,26 @@
       "invariants": [
         "resume config mismatches fail closed",
         "failed shards remain visible in run summaries"
+      ]
+    },
+    {
+      "id": "listen_ws_session",
+      "risk": "high",
+      "sources": [
+        "backend/utils/listen_session_bootstrap.py",
+        "backend/routers/transcribe.py",
+        "backend/utils/transcribe_decisions.py"
+      ],
+      "tests": [
+        "tests/unit/test_listen_session_bootstrap.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/utils/test_listen_pusher_session.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "connect-time Firestore reads run off the event loop",
+        "translation and vocabulary decisions stay pinned by characterization tests"
       ]
     },
     {
