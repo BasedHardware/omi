@@ -85,6 +85,69 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.conversations[0].structured.overview, "Fresh server summary")
   }
 
+  func testResetRejectsDetailResponseFromPreviousSessionBeforeCacheWrite() async {
+    let initial = makeConversation(title: "Previous account", revision: 1)
+    let staleDetail = makeConversation(title: "Stale detail", revision: 2, transcript: "private transcript")
+    let suspendedDetails = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.detailHandler = { id in try await suspendedDetails.result(for: id) }
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+
+    let detailTask = Task {
+      try await repository.detail(id: initial.id, seed: initial)
+    }
+    await suspendedDetails.waitUntilRequested(initial.id)
+    repository.reset()
+    await suspendedDetails.resume(initial.id, with: .success(staleDetail))
+
+    do {
+      _ = try await detailTask.value
+      XCTFail("A detail response from the previous session must be cancelled")
+    } catch is CancellationError {
+      // Expected: stale account data must not publish or enter the current cache.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
+  func testResetRejectsDetailCacheWriteSuspendedBeforeTransactionAdmission() async {
+    let initial = makeConversation(title: "Previous account", revision: 1)
+    let staleDetail = makeConversation(title: "Stale detail", revision: 2, transcript: "private transcript")
+    let suspendedWrites = SuspendedCacheWrites()
+    let remote = FakeConversationRemote(
+      listResult: .success([initial]),
+      countResult: .success(1),
+      detailResult: .success(staleDetail)
+    )
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+    local.events.removeAll()
+    local.storeHandler = { conversation in await suspendedWrites.suspend(conversation.id) }
+
+    let detailTask = Task { try await repository.detail(id: initial.id, seed: initial) }
+    await suspendedWrites.waitUntilRequested(initial.id)
+    repository.reset()
+    await suspendedWrites.resume(initial.id)
+
+    do {
+      _ = try await detailTask.value
+      XCTFail("A cache write fenced by reset must cancel the detail request")
+    } catch is CancellationError {
+      // Expected.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+    XCTAssertTrue(local.stored.isEmpty)
+    XCTAssertTrue(repository.conversations.isEmpty)
+  }
+
   func testSuccessfulMutationHasOptimisticUXThenSettlesFromCanonicalSnapshot() async throws {
     let initial = makeConversation(overview: "Before processing", starred: false, revision: 1)
     let canonical = makeConversation(overview: "Processing finished", starred: true, revision: 2)
@@ -109,6 +172,233 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(snapshots[1].conversations[0].updatedAt, canonical.updatedAt)
   }
 
+  func testResetRejectsMutationAcknowledgementFromPreviousSessionBeforeCacheWrite() async {
+    let initial = makeConversation(title: "Previous account", revision: 1)
+    let staleCanonical = makeConversation(title: "Stale acknowledgement", revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+
+    let mutationTask = Task {
+      try await repository.updateTitle(id: initial.id, title: "New title")
+    }
+    await suspendedTitles.waitUntilRequested("New title")
+    repository.reset()
+    await suspendedTitles.resume("New title", with: .success(staleCanonical))
+
+    do {
+      try await mutationTask.value
+      XCTFail("A mutation acknowledgement from the previous session must be cancelled")
+    } catch is CancellationError {
+      // Expected: stale account data must not publish or enter the current cache.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
+  func testConcurrentTitleAndStarMutationsKeepBothOptimisticFieldsUntilAcknowledged() async throws {
+    let initial = makeConversation(title: "Original", starred: false, revision: 1)
+    let titleCanonical = makeConversation(title: "Renamed", starred: false, revision: 2)
+    let starCanonical = makeConversation(title: "Renamed", starred: true, revision: 3)
+    let suspendedTitles = SuspendedConversationResults()
+    let suspendedStars = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    remote.starHandler = { starred in try await suspendedStars.result(for: String(starred)) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+
+    let titleTask = Task { try await repository.updateTitle(id: initial.id, title: "Renamed") }
+    await suspendedTitles.waitUntilRequested("Renamed")
+    let starTask = Task { try await repository.setStarred(id: initial.id, starred: true) }
+    await waitUntil { repository.conversations.first?.starred == true }
+
+    XCTAssertEqual(repository.conversations[0].structured.title, "Renamed")
+    XCTAssertTrue(repository.conversations[0].starred)
+    let starRequestedBeforeTitleSettled = await suspendedStars.wasRequested("true")
+    XCTAssertFalse(starRequestedBeforeTitleSettled, "Remote mutations for one conversation must be serialized")
+
+    await suspendedTitles.resume("Renamed", with: .success(titleCanonical))
+    try await titleTask.value
+    XCTAssertEqual(repository.conversations[0].structured.title, "Renamed")
+    XCTAssertTrue(repository.conversations[0].starred, "The title acknowledgement must not erase the queued star intent")
+
+    await suspendedStars.waitUntilRequested("true")
+    await suspendedStars.resume("true", with: .success(starCanonical))
+    try await starTask.value
+    XCTAssertEqual(repository.conversations, [starCanonical])
+  }
+
+  func testConcurrentTitleFailureRollsBackOnlyTitleAndKeepsStarIntent() async throws {
+    let initial = makeConversation(title: "Original", starred: false, revision: 1)
+    let starCanonical = makeConversation(title: "Original", starred: true, revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let suspendedStars = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    remote.starHandler = { starred in try await suspendedStars.result(for: String(starred)) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+
+    let titleTask = Task { try await repository.updateTitle(id: initial.id, title: "Rejected") }
+    await suspendedTitles.waitUntilRequested("Rejected")
+    let starTask = Task { try await repository.setStarred(id: initial.id, starred: true) }
+    await waitUntil { repository.conversations.first?.starred == true }
+
+    await suspendedTitles.resume("Rejected", with: .failure(TestFailure.offline))
+    do {
+      try await titleTask.value
+      XCTFail("Expected title failure")
+    } catch TestFailure.offline {
+      // Expected: the title caller receives its own failure.
+    }
+    XCTAssertEqual(repository.conversations[0].structured.title, "Original")
+    XCTAssertTrue(repository.conversations[0].starred, "An unrelated optimistic star must survive title rollback")
+
+    await suspendedStars.waitUntilRequested("true")
+    await suspendedStars.resume("true", with: .success(starCanonical))
+    try await starTask.value
+    XCTAssertEqual(repository.conversations, [starCanonical])
+  }
+
+  func testQueuedSameFieldFailuresRollBackToLastConfirmedValue() async {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let suspendedTitles = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all)
+
+    let firstTask = Task { try await repository.updateTitle(id: initial.id, title: "First rejected title") }
+    await suspendedTitles.waitUntilRequested("First rejected title")
+    let secondTask = Task { try await repository.updateTitle(id: initial.id, title: "Second rejected title") }
+    await waitUntil { repository.conversations.first?.structured.title == "Second rejected title" }
+    let secondRequestedEarly = await suspendedTitles.wasRequested("Second rejected title")
+    XCTAssertFalse(secondRequestedEarly)
+
+    await suspendedTitles.resume("First rejected title", with: .failure(TestFailure.offline))
+    do {
+      try await firstTask.value
+      XCTFail("Expected first title failure")
+    } catch TestFailure.offline {
+      // Expected.
+    } catch {
+      XCTFail("Unexpected first title error: \(error)")
+    }
+
+    await suspendedTitles.waitUntilRequested("Second rejected title")
+    await suspendedTitles.resume("Second rejected title", with: .failure(TestFailure.offline))
+    do {
+      try await secondTask.value
+      XCTFail("Expected second title failure")
+    } catch TestFailure.offline {
+      // Expected.
+    } catch {
+      XCTFail("Unexpected second title error: \(error)")
+    }
+
+    XCTAssertEqual(repository.conversations, [initial])
+  }
+
+  func testDuplicateTitleFailureDoesNotClearNewerIdenticalIntent() async {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let sequencedTitles = SequencedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await sequencedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    var optimisticCount = 0
+    repository.onSnapshot = { snapshot in
+      if snapshot.source == .optimistic { optimisticCount += 1 }
+    }
+    await repository.load(query: .all)
+
+    let firstTask = Task { try await repository.updateTitle(id: initial.id, title: "Same title") }
+    await sequencedTitles.waitUntilRequestCount(1)
+    let secondTask = Task { try await repository.updateTitle(id: initial.id, title: "Same title") }
+    await waitUntil { optimisticCount == 2 }
+
+    await sequencedTitles.resume(at: 0, with: .failure(TestFailure.offline))
+    do {
+      try await firstTask.value
+      XCTFail("Expected first title failure")
+    } catch TestFailure.offline {
+      // Expected.
+    } catch {
+      XCTFail("Unexpected first title error: \(error)")
+    }
+    XCTAssertEqual(repository.conversations[0].structured.title, "Same title")
+
+    await sequencedTitles.waitUntilRequestCount(2)
+    await sequencedTitles.resume(at: 1, with: .failure(TestFailure.offline))
+    do {
+      try await secondTask.value
+      XCTFail("Expected second title failure")
+    } catch TestFailure.offline {
+      // Expected.
+    } catch {
+      XCTFail("Unexpected second title error: \(error)")
+    }
+    XCTAssertEqual(repository.conversations, [initial])
+  }
+
+  func testCyclicTitleAcknowledgementsAndRefreshPreserveLatestIntent() async throws {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let firstCanonical = makeConversation(title: "A", revision: 2)
+    let secondCanonical = makeConversation(title: "B", revision: 3)
+    let thirdCanonical = makeConversation(title: "A", revision: 4)
+    let sequencedTitles = SequencedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await sequencedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    var optimisticCount = 0
+    repository.onSnapshot = { snapshot in
+      if snapshot.source == .optimistic { optimisticCount += 1 }
+    }
+    await repository.load(query: .all)
+
+    let firstTask = Task { try await repository.updateTitle(id: initial.id, title: "A") }
+    await sequencedTitles.waitUntilRequestCount(1)
+    let secondTask = Task { try await repository.updateTitle(id: initial.id, title: "B") }
+    let thirdTask = Task { try await repository.updateTitle(id: initial.id, title: "A") }
+    await waitUntil { optimisticCount == 3 }
+
+    remote.listResult = .success([firstCanonical])
+    await repository.refresh(query: .all)
+    XCTAssertEqual(
+      repository.conversations[0].structured.title,
+      "A",
+      "A refresh reflecting the first A must not clear the newer queued A operation"
+    )
+
+    await sequencedTitles.resume(at: 0, with: .success(firstCanonical))
+    try await firstTask.value
+    XCTAssertEqual(repository.conversations[0].structured.title, "A")
+
+    await sequencedTitles.waitUntilRequestCount(2)
+    await sequencedTitles.resume(at: 1, with: .success(secondCanonical))
+    try await secondTask.value
+    XCTAssertEqual(repository.conversations[0].structured.title, "A")
+
+    await sequencedTitles.waitUntilRequestCount(3)
+    await sequencedTitles.resume(at: 2, with: .success(thirdCanonical))
+    try await thirdTask.value
+    XCTAssertEqual(repository.conversations, [thirdCanonical])
+  }
+
+  private func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<1_000 {
+      if condition() { return }
+      await Task.yield()
+    }
+    XCTFail("Condition did not become true after yielding to pending tasks")
+  }
+
   func testFailedMutationRollsBackTheExactVisibleState() async {
     let initial = makeConversation(title: "Original", starred: false, revision: 1)
     let remote = FakeConversationRemote(
@@ -130,6 +420,68 @@ final class ConversationRepositoryTests: XCTestCase {
       XCTAssertEqual(snapshots[0].conversations[0].structured.title, "Optimistic")
       XCTAssertEqual(snapshots[1].conversations, [initial])
     }
+  }
+
+  func testCurrentSessionCancellationRollsBackItsOptimisticField() async {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let suspendedTitles = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    var snapshots: [ConversationRepositorySnapshot] = []
+    repository.onSnapshot = { snapshots.append($0) }
+    await repository.load(query: .all)
+    snapshots.removeAll()
+
+    let task = Task { try await repository.updateTitle(id: initial.id, title: "Cancelled") }
+    await suspendedTitles.waitUntilRequested("Cancelled")
+    await suspendedTitles.resume("Cancelled", with: .failure(CancellationError()))
+
+    do {
+      try await task.value
+      XCTFail("Expected cancellation")
+    } catch is CancellationError {
+      // Expected.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+    XCTAssertEqual(snapshots.map(\.source), [.optimistic, .rollback])
+    XCTAssertEqual(repository.conversations, [initial])
+  }
+
+  func testTaskCancelledWhileQueuedRollsBackWithoutCallingRemote() async throws {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let firstCanonical = makeConversation(title: "First", revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    var optimisticCount = 0
+    repository.onSnapshot = { snapshot in
+      if snapshot.source == .optimistic { optimisticCount += 1 }
+    }
+    await repository.load(query: .all)
+
+    let firstTask = Task { try await repository.updateTitle(id: initial.id, title: "First") }
+    await suspendedTitles.waitUntilRequested("First")
+    let queuedTask = Task { try await repository.updateTitle(id: initial.id, title: "Never sent") }
+    await waitUntil { optimisticCount == 2 }
+    queuedTask.cancel()
+
+    await suspendedTitles.resume("First", with: .success(firstCanonical))
+    try await firstTask.value
+    do {
+      try await queuedTask.value
+      XCTFail("Expected queued task cancellation")
+    } catch is CancellationError {
+      // Expected.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+
+    let queuedRequestWasSent = await suspendedTitles.wasRequested("Never sent")
+    XCTAssertFalse(queuedRequestWasSent)
+    XCTAssertEqual(repository.conversations, [firstCanonical])
   }
 
   func testOlderCanonicalResponseCannotRegressNewerVisibleRevision() async throws {
@@ -206,6 +558,60 @@ final class ConversationRepositoryTests: XCTestCase {
       XCTAssertTrue(local.deletedIds.isEmpty)
       XCTAssertEqual(repository.count, 1)
     }
+  }
+
+  func testDeleteSerializesBehindMutationAndCannotBeUndoneByItsAcknowledgement() async throws {
+    let initial = makeConversation(title: "Original", revision: 1)
+    let renamed = makeConversation(title: "Renamed", revision: 2)
+    let suspendedTitles = SuspendedConversationResults()
+    let suspendedDeletes = SuspendedVoidResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.titleHandler = { title in try await suspendedTitles.result(for: title) }
+    remote.deleteHandler = { id in try await suspendedDeletes.result(for: id) }
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.events.removeAll()
+
+    let titleTask = Task { try await repository.updateTitle(id: initial.id, title: "Renamed") }
+    await suspendedTitles.waitUntilRequested("Renamed")
+    let deleteTask = Task { try await repository.delete(id: initial.id) }
+
+    await suspendedTitles.resume("Renamed", with: .success(renamed))
+    try await titleTask.value
+    await suspendedDeletes.waitUntilRequested(initial.id)
+    await suspendedDeletes.resume(initial.id, with: .success(()))
+    try await deleteTask.value
+
+    XCTAssertEqual(local.events, ["store:\(initial.id)", "delete:\(initial.id)"])
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertEqual(repository.count, 0)
+  }
+
+  func testResetRejectsDeleteAcknowledgementFromPreviousSession() async {
+    let initial = makeConversation(title: "Previous account", revision: 1)
+    let suspendedDeletes = SuspendedVoidResults()
+    let remote = FakeConversationRemote(listResult: .success([initial]), countResult: .success(1))
+    remote.deleteHandler = { id in try await suspendedDeletes.result(for: id) }
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+
+    let deleteTask = Task { try await repository.delete(id: initial.id) }
+    await suspendedDeletes.waitUntilRequested(initial.id)
+    repository.reset()
+    await suspendedDeletes.resume(initial.id, with: .success(()))
+
+    do {
+      try await deleteTask.value
+      XCTFail("A delete acknowledgement from the previous session must be cancelled")
+    } catch is CancellationError {
+      // Expected.
+    } catch {
+      XCTFail("Expected CancellationError, got \(error)")
+    }
+    XCTAssertTrue(local.deletedIds.isEmpty)
+    XCTAssertTrue(repository.conversations.isEmpty)
   }
 
   func testSupersededRequestCannotReplaceRowsFromTheNewerFilter() async {
@@ -335,6 +741,10 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var deleteResult: Result<Void, Error>
   var listHandler: ((ConversationListQuery) async throws -> [ServerConversation])?
   var searchHandler: ((String) async throws -> [ServerConversation])?
+  var detailHandler: ((String) async throws -> ServerConversation)?
+  var starHandler: ((Bool) async throws -> ServerConversation)?
+  var titleHandler: ((String) async throws -> ServerConversation)?
+  var deleteHandler: ((String) async throws -> Void)?
   var deletedIds: [String] = []
 
   init(
@@ -362,15 +772,29 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     return try listResult.get()
   }
   func count(query: ConversationListQuery) async throws -> Int { try countResult.get() }
-  func detail(id: String) async throws -> ServerConversation { try detailResult.get() }
+  func detail(id: String) async throws -> ServerConversation {
+    if let detailHandler { return try await detailHandler(id) }
+    return try detailResult.get()
+  }
   func search(text: String) async throws -> [ServerConversation] {
     if let searchHandler { return try await searchHandler(text) }
     return try searchResult.get()
   }
-  func setStarred(id: String, starred: Bool) async throws -> ServerConversation { try starResult.get() }
-  func updateTitle(id: String, title: String) async throws -> ServerConversation { try titleResult.get() }
+  func setStarred(id: String, starred: Bool) async throws -> ServerConversation {
+    if let starHandler { return try await starHandler(starred) }
+    return try starResult.get()
+  }
+  func updateTitle(id: String, title: String) async throws -> ServerConversation {
+    if let titleHandler { return try await titleHandler(title) }
+    return try titleResult.get()
+  }
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation { try folderResult.get() }
   func delete(id: String) async throws {
+    if let deleteHandler {
+      try await deleteHandler(id)
+      deletedIds.append(id)
+      return
+    }
     try deleteResult.get()
     deletedIds.append(id)
   }
@@ -382,6 +806,8 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   var detailResult: ServerConversation?
   var stored: [ServerConversation] = []
   var deletedIds: [String] = []
+  var events: [String] = []
+  var storeHandler: ((ServerConversation) async throws -> Void)?
 
   init(
     listResult: [ServerConversation] = [],
@@ -396,8 +822,28 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   func list(query: ConversationListQuery) async throws -> [ServerConversation] { listResult }
   func count(query: ConversationListQuery) async throws -> Int { countValue }
   func detail(id: String) async throws -> ServerConversation? { detailResult }
-  func store(_ conversation: ServerConversation) async throws { stored.append(conversation) }
-  func delete(id: String) async throws { deletedIds.append(id) }
+  func store(
+    _ conversation: ServerConversation,
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws {
+    if let storeHandler { try await storeHandler(conversation) }
+    try scope.withCurrent(generation) {
+      stored.append(conversation)
+      events.append("store:\(conversation.id)")
+    }
+  }
+
+  func delete(
+    id: String,
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws {
+    try scope.withCurrent(generation) {
+      deletedIds.append(id)
+      events.append("delete:\(id)")
+    }
+  }
 }
 
 private actor SuspendedConversationLists {
@@ -422,5 +868,114 @@ private actor SuspendedConversationLists {
 
   func resume(_ key: String, with conversations: [ServerConversation]) {
     resultContinuations.removeValue(forKey: key)?.resume(returning: conversations)
+  }
+}
+
+private actor SuspendedConversationResults {
+  private var requested: Set<String> = []
+  private var requestWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+  private var resultContinuations: [String: CheckedContinuation<ServerConversation, Error>] = [:]
+
+  func result(for key: String) async throws -> ServerConversation {
+    requested.insert(key)
+    requestWaiters.removeValue(forKey: key)?.resume()
+    return try await withCheckedThrowingContinuation { continuation in
+      resultContinuations[key] = continuation
+    }
+  }
+
+  func waitUntilRequested(_ key: String) async {
+    if requested.contains(key) { return }
+    await withCheckedContinuation { continuation in
+      requestWaiters[key] = continuation
+    }
+  }
+
+  func wasRequested(_ key: String) -> Bool {
+    requested.contains(key)
+  }
+
+  func resume(_ key: String, with result: Result<ServerConversation, Error>) {
+    resultContinuations.removeValue(forKey: key)?.resume(with: result)
+  }
+}
+
+private actor SequencedConversationResults {
+  private var requestedValues: [String] = []
+  private var requestCountWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+  private var resultContinuations: [Int: CheckedContinuation<ServerConversation, Error>] = [:]
+
+  func result(for value: String) async throws -> ServerConversation {
+    let index = requestedValues.count
+    requestedValues.append(value)
+    let requestCount = requestedValues.count
+    for count in requestCountWaiters.keys where count <= requestCount {
+      let waiters = requestCountWaiters.removeValue(forKey: count) ?? []
+      for waiter in waiters { waiter.resume() }
+    }
+    return try await withCheckedThrowingContinuation { continuation in
+      resultContinuations[index] = continuation
+    }
+  }
+
+  func waitUntilRequestCount(_ count: Int) async {
+    if requestedValues.count >= count { return }
+    await withCheckedContinuation { continuation in
+      requestCountWaiters[count, default: []].append(continuation)
+    }
+  }
+
+  func resume(at index: Int, with result: Result<ServerConversation, Error>) {
+    resultContinuations.removeValue(forKey: index)?.resume(with: result)
+  }
+}
+
+private actor SuspendedVoidResults {
+  private var requested: Set<String> = []
+  private var requestWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+  private var resultContinuations: [String: CheckedContinuation<Void, Error>] = [:]
+
+  func result(for key: String) async throws {
+    requested.insert(key)
+    requestWaiters.removeValue(forKey: key)?.resume()
+    return try await withCheckedThrowingContinuation { continuation in
+      resultContinuations[key] = continuation
+    }
+  }
+
+  func waitUntilRequested(_ key: String) async {
+    if requested.contains(key) { return }
+    await withCheckedContinuation { continuation in
+      requestWaiters[key] = continuation
+    }
+  }
+
+  func resume(_ key: String, with result: Result<Void, Error>) {
+    resultContinuations.removeValue(forKey: key)?.resume(with: result)
+  }
+}
+
+private actor SuspendedCacheWrites {
+  private var requested: Set<String> = []
+  private var requestWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+  private var writeContinuations: [String: CheckedContinuation<Void, Never>] = [:]
+
+  func suspend(_ key: String) async {
+    requested.insert(key)
+    requestWaiters.removeValue(forKey: key)?.resume()
+    await withCheckedContinuation { continuation in
+      writeContinuations[key] = continuation
+    }
+  }
+
+  func waitUntilRequested(_ key: String) async {
+    if requested.contains(key) { return }
+    await withCheckedContinuation { continuation in
+      requestWaiters[key] = continuation
+    }
+  }
+
+  func resume(_ key: String) {
+    writeContinuations.removeValue(forKey: key)?.resume()
   }
 }

@@ -1,0 +1,3 @@
+{
+  "change": "Kept conversation details and edits isolated across account changes while preserving simultaneous title, star, and folder updates"
+}
