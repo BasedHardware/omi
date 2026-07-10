@@ -61,7 +61,7 @@ Confirm:
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
 - release metadata includes canonical `qualifiedBeta: true`, `qualifiedBetaTier: 2`, `qualifiedBetaSha` matching the tag commit, `qualifiedBetaAt`, and a published `qualifiedBetaEvidence` asset; legacy `blessed*` metadata remains valid for releases qualified before the migration;
-- a compatible Python backend commit is attested by a `python-backend-bless-<sha>` release (python-backend surface; not desktop legacy qualification), and that SHA is an ancestor of the desktop release tag;
+- a compatible Python backend commit is attested by a `python-backend-bless-<sha>` release, and that attested SHA is a git ancestor of the desktop release tag (attestation ≠ live prod deploy; see §4);
 - live appcast beta/dev item points to the same build.
 
 For high-risk desktop auth/runtime releases, run the live signed-artifact canary
@@ -141,13 +141,24 @@ Curate the final stable release log into these buckets:
 
 Include this curated log in the approval plan. Do not rely on the target release's per-build notes alone when the target spans multiple beta/dev builds since stable.
 
-## 4. Decide shared backend coupling
+## 4. Python-backend attestation vs deploy sequencing
 
 Desktop promotion always deploys the **Rust `desktop-backend`** from the exact `v*-macos` tag via `desktop_promote_prod.yml`.
 
-The **shared Python backend** is separate (`gcp_backend.yml`). It is not always required, but many desktop capabilities are coupled to shared backend routes, schemas, OAuth clients, feature flags, or response contracts.
+### 4a. Coupling attestation (required at promote)
 
-Before approval, classify shared backend as:
+Stable promotion must name a `python_backend_sha` that is:
+
+1. the full 40-character SHA from an existing `python-backend-bless-<sha>` GitHub Release (create/refresh with `backend/scripts/bless-python-backend.sh`), and
+2. a git ancestor of the desktop release tag SHA.
+
+The promote workflow validates that attestation + ancestry gate. **It does not prove live Cloud Run / GKE prod is already running that SHA** (prod image tags are short SHAs; the workflow records `live_prod_check: NOT_RUN`). Live proof stays here in the runbook.
+
+### 4b. Deploy sequencing (`backend_required` / phase)
+
+The **shared Python backend** deploy is separate (`gcp_backend.yml`). Attestation does not replace deciding whether a live backend deploy is needed for the desktop capability.
+
+Before approval, classify shared backend deploy sequencing as:
 
 ```text
 backend_required: yes | no | optional
@@ -225,7 +236,7 @@ End with an explicit confirmation question naming the exact tag and phase(s).
 
 Desktop stable promotion:
 
-Use the full 40-character SHA from the compatible `python-backend-bless-<sha>` GitHub Release (python-backend surface; not desktop legacy qualification). Create or refresh that attestation with `backend/scripts/bless-python-backend.sh` when needed.
+Use the full 40-character SHA from the compatible `python-backend-bless-<sha>` GitHub Release (attestation tag; not a Cloud Run short tag; not the desktop tag SHA). Create or refresh that attestation with `backend/scripts/bless-python-backend.sh` when needed. This gate checks attestation + ancestry only; it does not prove live prod is on that SHA.
 
 ```bash
 RELEASE_TAG='vX.Y.Z+BUILD-macos'

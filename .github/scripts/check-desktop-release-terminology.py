@@ -20,6 +20,19 @@ OPERATOR_SURFACES = (
     "web/admin/app/(protected)/dashboard/releases/page.tsx",
 )
 
+# Protocol IDs for the python-backend attestation surface may appear on operator
+# surfaces without a "legacy" disclaimer. Desktop beta qualification still must
+# not use bare bless/blessed/blessing wording.
+PROTOCOL_ALLOWLIST = (
+    "python-backend-bless-",
+    "bless-python-backend.sh",
+    "check-python-backend-blessing.py",
+)
+
+
+def _is_protocol_mention(line: str) -> bool:
+    return any(token in line for token in PROTOCOL_ALLOWLIST)
+
 
 def main() -> int:
     failures: list[str] = []
@@ -27,7 +40,7 @@ def main() -> int:
     for relative in OPERATOR_SURFACES:
         path = ROOT / relative
         for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if legacy_term.search(line) and "legacy" not in line.lower():
+            if legacy_term.search(line) and "legacy" not in line.lower() and not _is_protocol_mention(line):
                 failures.append(f"{relative}:{line_number}: desktop beta qualification uses legacy terminology")
 
     canonical_script = ROOT / "desktop/macos/scripts/qualify-desktop-beta.sh"

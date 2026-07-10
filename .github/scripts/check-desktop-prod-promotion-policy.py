@@ -71,16 +71,26 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
-    require("check-python-backend-blessing.py", text, "workflow must validate the compatible python-backend blessing")
-    require("python-backend-bless-${PYTHON_BACKEND_SHA}", text, "workflow must look up the explicit python-backend blessing")
-    require("--tag-sha", text, "workflow must verify the python-backend blessing tag points to the explicit SHA")
     require(
-        'git merge-base --is-ancestor "$PYTHON_BACKEND_SHA" "$TARGET_SHA"',
+        "check-desktop-python-backend-coupling.py",
         text,
-        "workflow must enforce backend SHA ancestry",
+        "workflow must validate attested python-backend coupling via the extracted checker",
     )
-    require("backend/scripts/bless-python-backend.sh", text, "workflow must tell operators how to bless python-backend")
-    require("PYTHON_BACKEND_CHECK_ARGS=(", text, "workflow must keep python-backend check args populated under set -u")
+    require("--desktop-target-sha", text, "workflow must pass the desktop target SHA to the coupling checker")
+    require("--python-backend-sha", text, "workflow must pass the attested python-backend SHA to the coupling checker")
+    require(
+        "python-backend-bless-${PYTHON_BACKEND_SHA}",
+        text,
+        "workflow must look up the explicit python-backend attestation",
+    )
+    require("--tag-sha", text, "workflow must verify the python-backend attestation tag points to the explicit SHA")
+    require(
+        "backend/scripts/bless-python-backend.sh",
+        text,
+        "workflow must tell operators how to create python-backend attestation",
+    )
+    require("COUPLING_CHECK_ARGS=(", text, "workflow must keep coupling-check args populated under set -u")
+    require("live_prod_check: NOT_RUN", text, "workflow must honestly report that live prod SHA matching is not run")
     require("--break-glass", text, "workflow must expose an audited emergency bypass")
     require("--break-glass-confirm", text, "workflow must require typed break-glass confirmation")
     require("--break-glass-reason", text, "workflow must require a break-glass audit rationale")
@@ -92,6 +102,12 @@ def main() -> int:
         text,
         "workflow must keep promotion-check arguments populated when break glass is disabled under set -u",
     )
+    if "I-ACCEPT-UNBLESSED-PROD-RISK" in text:
+        fail("desktop prod promotion must not hardcode the python-backend unblessed override phrase")
+    if "--override-unblessed" in text:
+        fail("desktop prod promotion must not call check-python-backend-blessing.py with override flags")
+    if "git fetch --depth=1" in text:
+        fail("desktop prod promotion must not shallow-fetch the attested python-backend SHA")
     if "BREAK_GLASS_ARGS=()" in text:
         fail("normal stable promotion must not expand an empty optional array under set -u")
     require(
