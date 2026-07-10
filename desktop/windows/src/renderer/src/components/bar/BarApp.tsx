@@ -46,7 +46,7 @@ export function BarApp(): React.JSX.Element {
     recording: false,
     transcribing: false,
     sending: false,
-    analyser: null
+    getAnalyser: () => null
   })
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
   const [signedIn, setSignedIn] = useState(() => !!auth.currentUser)
@@ -154,10 +154,10 @@ export function BarApp(): React.JSX.Element {
 
   // --- orb state ----------------------------------------------------------------
   let orbState: OrbState = 'idle'
-  let amplitudeSource: WaveformSource | null = null
+  let amplitudeSource: (() => WaveformSource | null) | null = null
   if (activity.recording) {
     orbState = 'speaking'
-    amplitudeSource = activity.analyser
+    amplitudeSource = activity.getAnalyser
   } else if (activity.sending || activity.transcribing) {
     orbState = 'thinking'
   } else if (continuous && signedIn) {

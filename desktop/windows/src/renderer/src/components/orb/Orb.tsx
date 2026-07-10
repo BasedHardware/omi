@@ -15,8 +15,10 @@ export type OrbProps = {
   /** Real speech signal (PTT capturing / VAD gate open). Only meaningful with
    *  state 'listening' — 'speaking' implies it. */
   speechActive?: boolean
-  /** Live level source, sampled ~30Hz while speech is active. */
-  amplitudeSource?: WaveformSource | null
+  /** Live level source, sampled ~30Hz while speech is active. A getter is
+   *  resolved per sample — the PTT analyser attaches shortly AFTER recording
+   *  flips true, so a snapshotted value would be stale-null. */
+  amplitudeSource?: WaveformSource | (() => WaveformSource | null) | null
   /** Bump to replay the genesis spring (materialize from scale 0). */
   genesisNonce?: number
   /** 0fps hard-off (e.g. the bar window is hidden). */
@@ -48,7 +50,7 @@ export function Orb({
 }: OrbProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animatorRef = useRef<OrbAnimator | null>(null)
-  const sourceRef = useRef<WaveformSource | null>(amplitudeSource)
+  const sourceRef = useRef(amplitudeSource)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the sampling interval
   sourceRef.current = amplitudeSource
 
@@ -100,7 +102,8 @@ export function Orb({
     }
     const scratch = new Uint8Array(64)
     const timer = setInterval(() => {
-      const src = sourceRef.current
+      const raw = sourceRef.current
+      const src = typeof raw === 'function' ? raw() : raw
       if (src) animatorRef.current?.setAmplitude(sampleAmplitude(src, scratch))
     }, 33)
     return () => clearInterval(timer)

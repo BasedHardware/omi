@@ -126,6 +126,11 @@ export function createBarWindow(): BrowserWindow {
   win.webContents.on('did-fail-load', (_e, code, desc, url) =>
     console.error('[bar] did-fail-load', code, desc, url)
   )
+  // A crash-reload restarts the renderer: it must re-report bar:ready before
+  // any deferred show presents (otherwise we'd present an unmounted frame).
+  win.webContents.on('did-start-loading', () => {
+    barReady = false
+  })
 
   // Same-origin as the main window (auth/localStorage are per-origin).
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -389,12 +394,16 @@ export function startBarStrips(): void {
   screen.on('display-removed', rebuildStrips)
   screen.on('display-metrics-changed', rebuildStrips)
   unsubForeground = subscribeForegroundChange(() => {
-    // The hook fires on our thread; keep the handler tiny + guarded.
-    try {
-      evaluateStripSuppression()
-    } catch {
-      /* never throw into the native dispatcher */
-    }
+    // The WinEvent hook calls back on our thread mid-dispatch — defer the
+    // window show/hide work out of the native callback, and never throw back
+    // into the dispatcher.
+    setImmediate(() => {
+      try {
+        evaluateStripSuppression()
+      } catch {
+        /* guarded */
+      }
+    })
   })
 }
 

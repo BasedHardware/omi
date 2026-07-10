@@ -15,7 +15,9 @@ export type AskPanelActivity = {
   recording: boolean
   transcribing: boolean
   sending: boolean
-  analyser: WaveformSource | null
+  /** Resolve the live PTT analyser at sample time (it attaches shortly AFTER
+   *  `recording` flips true — a snapshot would be stale-null). */
+  getAnalyser: () => WaveformSource | null
 }
 
 export type AskPanelProps = {
@@ -85,14 +87,15 @@ export function AskPanel({ onRegisterPtt, onActivity, onClose }: AskPanelProps):
       endHold: () => endHoldRef.current()
     })
   }, [])
+  const analyserRefStable = ptt.analyserRef
   useEffect(() => {
     onActivity?.({
       recording: ptt.recording,
       transcribing: ptt.transcribing,
       sending,
-      analyser: ptt.analyserRef.current
+      getAnalyser: () => analyserRefStable.current
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- analyserRef is a ref; recording flips when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- analyserRef is a stable ref
   }, [ptt.recording, ptt.transcribing, sending])
 
   useEffect(() => {
