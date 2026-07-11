@@ -402,6 +402,57 @@ class TestNllbPrimaryMode(unittest.TestCase):
             results = self.service._translate_nllb_batch(["Hello"], "es")
             self.assertEqual(results, [])
 
+    def test_nllb_batch_truncated_response_returns_partial(self):
+        """NLLB returning fewer translations than requested should return partial results."""
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "translations": [
+                {"translated_text": "Hola", "detected_language_code": "en"},
+            ],
+            "model": "nllb",
+            "latency_ms": 10,
+        }
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            results = self.service._translate_nllb_batch(["Hello", "World", "Goodbye"], "es")
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0], ("Hola", "en"))
+
+    def test_nllb_batch_empty_contents_returns_empty(self):
+        """Sending empty contents list should return empty results without API call."""
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"translations": [], "model": "nllb", "latency_ms": 0}
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            results = self.service._translate_nllb_batch([], "es")
+            self.assertEqual(results, [])
+
+    def test_translate_batch_nllb_truncated_falls_back_to_google(self):
+        """When NLLB returns truncated results, the batch should still succeed (partial is valid)."""
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
+            results = self.service._translate_batch(["Hello", "World"], "es")
+            mock_nllb.assert_called_once()
+            self.assertEqual(len(results), 1)
+
     def test_nllb_fallback_both_fail_raises(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
