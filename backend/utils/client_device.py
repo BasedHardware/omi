@@ -10,6 +10,7 @@ Contract (see docs/memory/domain_model.md):
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
@@ -64,7 +65,9 @@ class ClientDeviceContext:
 def build_client_device_id(platform: Optional[str], device_hash: Optional[str]) -> Optional[str]:
     platform_norm = (platform or "").strip().lower()
     hash_norm = (device_hash or "").strip().lower()
-    if not platform_norm or not hash_norm or hash_norm == "default":
+    if platform_norm not in {'android', 'ios', 'linux', 'macos', 'web', 'windows'} or not re.fullmatch(
+        r'[0-9a-f]{8}', hash_norm
+    ):
         return None
     return f"{platform_norm}_{hash_norm}"
 

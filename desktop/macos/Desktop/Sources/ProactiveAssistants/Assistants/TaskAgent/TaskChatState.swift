@@ -1,17 +1,17 @@
 import SwiftUI
 import Combine
 
-/// Per-task chat UI state. Execution uses the shared `TaskChatRuntime` bridge and
-/// kernel-owned `task_chat` sessions — no per-task bridge or session identity.
+/// Task-scoped UI projected over one kernel-owned workstream conversation.
 @MainActor
 class TaskChatState: ObservableObject {
-    let taskId: String
+    let workstreamId: String
+    @Published private(set) var activeTaskId: String
 
     @Published var messages: [ChatMessage] = []
     @Published var isSending = false
     @Published var isStopping = false
     @Published var draftText: String {
-        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(taskId)) }
+        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(workstreamId)) }
     }
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
@@ -22,6 +22,7 @@ class TaskChatState: ObservableObject {
     /// Workspace path for file-system tools
     let workspacePath: String
     var systemPromptBuilder: (() -> String)?
+    var onQueryCompleted: ((AgentBridge.QueryResult, String) async -> Void)?
 
     /// Auth callbacks for ACP mode
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
@@ -38,10 +39,15 @@ class TaskChatState: ObservableObject {
     /// Whether persisted messages have been loaded from GRDB
     private var hasLoadedFromStorage = false
 
-    init(taskId: String, workspacePath: String) {
-        self.taskId = taskId
+    init(taskId: String, workstreamId: String, workspacePath: String) {
+        self.activeTaskId = taskId
+        self.workstreamId = workstreamId
         self.workspacePath = workspacePath
-        self.draftText = ChatDraftStore.shared.text(for: .taskChat(taskId))
+        self.draftText = ChatDraftStore.shared.text(for: .taskChat(workstreamId))
+    }
+
+    func selectTask(_ taskId: String) {
+        activeTaskId = taskId
     }
 
     // MARK: - Persistence
@@ -52,7 +58,7 @@ class TaskChatState: ObservableObject {
         hasLoadedFromStorage = true
 
         do {
-            let records = try await TaskChatMessageStorage.shared.getMessages(forTaskId: taskId)
+            let records = try await TaskChatMessageStorage.shared.getMessages(forWorkstreamId: workstreamId)
             observeRuntimeProjectionFailures()
             guard !records.isEmpty else {
                 surfaceCurrentRuntimeFailureIfNeeded()
@@ -62,33 +68,33 @@ class TaskChatState: ObservableObject {
             messages = records.map { $0.toChatMessage() }
 
             surfaceCurrentRuntimeFailureIfNeeded()
-            log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
+            log("TaskChatState[\(workstreamId)]: Loaded \(records.count) persisted messages")
         } catch {
-            logError("TaskChatState[\(taskId)]: Failed to load persisted messages", error: error)
+            logError("TaskChatState[\(workstreamId)]: Failed to load persisted messages", error: error)
         }
     }
 
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
-        let taskId = self.taskId
+        let workstreamId = self.workstreamId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, workstreamId: workstreamId)
             } catch {
-                logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
+                logError("TaskChatState[\(workstreamId)]: Failed to persist message \(message.id)", error: error)
             }
         }
     }
 
     /// Update a persisted message (for finalizing AI streaming)
     private func updatePersistedMessage(_ message: ChatMessage) {
-        let taskId = self.taskId
+        let workstreamId = self.workstreamId
         Task.detached {
             do {
                 let blocksJson: String?
                 if message.sender == .ai && !message.contentBlocks.isEmpty {
                     // Re-encode through the record's serialization
-                    let record = TaskChatMessageRecord.from(message, taskId: taskId)
+                    let record = TaskChatMessageRecord.from(message, taskId: workstreamId)
                     blocksJson = record.contentBlocksJson
                 } else {
                     blocksJson = nil
@@ -99,7 +105,7 @@ class TaskChatState: ObservableObject {
                     contentBlocksJson: blocksJson
                 )
             } catch {
-                logError("TaskChatState[\(taskId)]: Failed to update persisted message \(message.id)", error: error)
+                logError("TaskChatState[\(workstreamId)]: Failed to update persisted message \(message.id)", error: error)
             }
         }
     }
@@ -110,13 +116,12 @@ class TaskChatState: ObservableObject {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
-            log("TaskChatState[\(taskId)]: sendMessage called while already sending, ignoring")
+            log("TaskChatState[\(workstreamId)]: sendMessage called while already sending, ignoring")
             return
         }
 
         isSending = true
         errorMessage = nil
-        TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
         // Signal local send for turn anchoring.
         localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
@@ -183,7 +188,7 @@ class TaskChatState: ObservableObject {
             let queryResult = try await TaskChatRuntime.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                taskId: taskId,
+                workstreamId: workstreamId,
                 workspacePath: workspacePath,
                 mode: chatMode.rawValue,
                 surfaceContextJson: taskContext,
@@ -230,17 +235,16 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            log("TaskChatState[\(taskId)]: response complete (cost=$\(queryResult.costUsd))")
+            log("TaskChatState[\(workstreamId)]: response complete (cost=$\(queryResult.costUsd))")
             let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
             if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
                 let failureText =
-                    AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId))
+                    AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId))
                     .flatMap(AgentFailureTranscriptFormatter.errorText(for:))
                     ?? "Agent failed"
                 errorMessage = failureText
-                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: failureText)
             } else {
-                TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
+                await onQueryCompleted?(queryResult, userMessage.id)
             }
         } catch {
             streamingBuffer.cancelPendingFlush()
@@ -269,13 +273,10 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            if failedByUserStop {
-                TaskAgentStatusRegistry.shared.markStopped(taskId: taskId)
-            } else {
+            if !failedByUserStop {
                 errorMessage = error.localizedDescription
-                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: error.localizedDescription)
             }
-            logError("TaskChatState[\(taskId)]: query failed", error: error)
+            logError("TaskChatState[\(workstreamId)]: query failed", error: error)
         }
 
         activeAssistantMessageId = nil
@@ -333,7 +334,7 @@ class TaskChatState: ObservableObject {
     }
 
     func surfaceRuntimeFailure(_ projection: AgentRunProjection, fallbackMessage: String? = nil, persist: Bool = true) {
-        guard projection.surface == .taskChat(taskId: taskId) else { return }
+        guard projection.surface == .workstream(workstreamId: workstreamId) else { return }
         guard let errorText = AgentFailureTranscriptFormatter.errorText(for: projection) ?? fallbackMessage else { return }
         let failureKey = [
             projection.runId,
@@ -352,7 +353,7 @@ class TaskChatState: ObservableObject {
 
     private func observeRuntimeProjectionFailures() {
         guard runtimeProjectionCancellable == nil else { return }
-        let surface = AgentSurfaceReference.taskChat(taskId: taskId)
+        let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
         runtimeProjectionCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
             .dropFirst()
             .sink { [weak self] projections in
@@ -362,7 +363,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: String? = nil) {
-        if let projection = AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId)) {
+        if let projection = AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId)) {
             surfaceRuntimeFailure(projection, fallbackMessage: fallbackMessage)
         } else if let fallbackMessage {
             appendFailureTranscriptMessage(fallbackMessage)
@@ -418,7 +419,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            await TaskChatRuntime.interrupt(taskId: taskId)
+            await TaskChatRuntime.interrupt(workstreamId: workstreamId)
         }
     }
 

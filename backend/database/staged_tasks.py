@@ -85,12 +85,71 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     return items
 
 
+def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
+    """Read active and terminal staged rows for idempotent Candidate reconciliation."""
+
+    items: List[dict] = []
+    for snapshot in _user_col(uid, 'staged_tasks').stream():
+        data = snapshot.to_dict() or {}
+        data['id'] = snapshot.id
+        items.append(data)
+    return items
+
+
+def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
+    """Select the exact active row that a fenced write-mode promotion will mutate."""
+
+    query = (
+        _user_col(uid, 'staged_tasks')
+        .where(filter=FieldFilter('completed', '==', False))
+        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
+        .limit(1)
+    )
+    docs = list(query.stream())
+    if not docs:
+        return None
+    row = docs[0].to_dict() or {}
+    row['id'] = docs[0].id
+    return row
+
+
 def delete_staged_task(uid: str, task_id: str) -> bool:
     ref = _user_col(uid, 'staged_tasks').document(task_id)
     if not ref.get().exists:
         return False
     ref.delete()
     return True
+
+
+def complete_staged_task_promotion(
+    uid: str,
+    staged_id: str,
+    task_id: str,
+    *,
+    promotion_skipped: Optional[str] = None,
+) -> None:
+    patch = {
+        'completed': True,
+        'promoted_at': datetime.now(timezone.utc),
+        'promoted_to': task_id,
+    }
+    if promotion_skipped is not None:
+        patch['promotion_skipped'] = promotion_skipped
+    _user_col(uid, 'staged_tasks').document(staged_id).update(patch)
+
+
+def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, reason: str) -> None:
+    """Close a legacy row whose canonical sidecar is already terminal without creating a task."""
+
+    now = datetime.now(timezone.utc)
+    _user_col(uid, 'staged_tasks').document(staged_id).update(
+        {
+            'completed': True,
+            'updated_at': now,
+            'candidate_terminal_reason': reason,
+            'promotion_skipped': 'candidate_terminal',
+        }
+    )
 
 
 def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
@@ -119,7 +178,14 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
         batch.commit()
 
 
-def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dict]:
+def promote_staged_task(
+    uid: str,
+    task_id: Optional[str] = None,
+    *,
+    include_staged_id: bool = False,
+    action_item_id: Optional[str] = None,
+    reservation_kind: Optional[str] = None,
+) -> Optional[dict]:
     """Promote a staged task to an action_item.
 
     When ``task_id`` is given, promote that specific candidate; otherwise promote the
@@ -127,6 +193,10 @@ def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dic
     action_item dict, or None if there is nothing to promote — no staged tasks exist, or the
     given id does not exist or is already promoted/completed. Uses
     ``database.action_items.create_action_item()`` for consistent field handling.
+    ``action_item_id`` reserves the exact document id for a crash-retried
+    Candidate write; semantic dedup is honored when it resolves to that id.
+    An ``existing`` reservation never creates that document if the user has
+    completed or deleted it after reservation.
 
     Deduplicates against the live ``action_items`` collection: if a user
     already has an active (uncompleted, undeleted) action_item with the same
@@ -141,6 +211,8 @@ def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dic
     a few hours of activity.
     """
     col = _user_col(uid, 'staged_tasks')
+    if reservation_kind not in {None, 'create', 'existing'}:
+        raise ValueError('reservation_kind must be create or existing')
     if task_id is not None:
         snap = col.document(task_id).get()
         if not snap.exists:
@@ -165,7 +237,7 @@ def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dic
     # Dedup: skip promotion if an active action_item with the same description
     # already exists. Close the staged task pointing at the existing item.
     existing = action_items_db.get_active_action_item_by_description(uid, staged['description'])
-    if existing is not None:
+    if existing is not None and (action_item_id is None or existing.get('id') == action_item_id):
         # Merge enrichment fields the existing item is missing. The staged
         # task may carry richer context from a later conversation
         # (e.g. a due_at the user mentioned later) that the original
@@ -205,7 +277,21 @@ def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dic
             existing['id'],
             len(merge_fields),
         )
-        return existing
+        return {**existing, '_staged_task_id': staged['id']} if include_staged_id else existing
+
+    if reservation_kind == 'existing':
+        if action_item_id is None:
+            raise ValueError('existing reservation requires action_item_id')
+        col.document(staged['id']).update(
+            {
+                'completed': True,
+                'promoted_at': datetime.now(timezone.utc),
+                'promotion_skipped': 'duplicate_target_closed',
+                'promoted_to': action_item_id,
+            }
+        )
+        result = {'id': action_item_id}
+        return {**result, '_staged_task_id': staged['id']} if include_staged_id else result
 
     # Build action_item data from staged task fields
     action_data = {
@@ -217,13 +303,25 @@ def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dic
         if staged.get(field) is not None:
             action_data[field] = staged[field]
 
-    action_id = action_items_db.create_action_item(uid, action_data)
+    action_id = (
+        action_items_db.create_action_item(uid, action_data, document_id=action_item_id)
+        if action_item_id is not None
+        else action_items_db.create_action_item(uid, action_data)
+    )
 
     # Mark staged task as completed
-    col.document(staged['id']).update({'completed': True, 'promoted_at': datetime.now(timezone.utc)})
+    col.document(staged['id']).update(
+        {
+            'completed': True,
+            'promoted_at': datetime.now(timezone.utc),
+            'promoted_to': action_id,
+        }
+    )
 
     action_item = action_items_db.get_action_item(uid, action_id)
-    return action_item
+    if action_item is None:
+        return None
+    return {**action_item, '_staged_task_id': staged['id']} if include_staged_id else action_item
 
 
 def clear_staged_tasks(uid: str) -> int:

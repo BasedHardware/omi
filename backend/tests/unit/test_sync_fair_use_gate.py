@@ -128,7 +128,7 @@ class TestSyncRateLimitContract:
 
 
 class TestRecordSpeechMsSource:
-    """Test that source param is accepted and doesn't change Redis behavior."""
+    """Test lane-specific speech accounting keys."""
 
     @pytest.fixture(autouse=True)
     def mock_redis(self, monkeypatch):
@@ -146,17 +146,16 @@ class TestRecordSpeechMsSource:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_source_sync_accepted(self):
-        """Calling with source='sync' works the same — same Redis keys."""
+        """The legacy sync alias maps to the fresh lane."""
         fair_use_mod.record_speech_ms('user1', 5000, source='sync')
         pipe = self._mock_redis.pipeline.return_value
         pipe.hincrby.assert_called_once()
-        # Verify same Redis key pattern (no source in key)
         call_args = pipe.hincrby.call_args
-        assert 'fair_use:bucket:user1' in str(call_args)
+        assert 'fair_use:v2:bucket:sync_fresh:user1' in str(call_args)
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    def test_source_does_not_change_redis_keys(self):
-        """Source param is for logging only — Redis keys are identical."""
+    def test_source_separates_live_and_fresh_redis_keys(self):
+        """Realtime and fresh sync usage remain independently queryable."""
         pipe_mock = MagicMock()
         self._mock_redis.pipeline.return_value = pipe_mock
 
@@ -170,8 +169,15 @@ class TestRecordSpeechMsSource:
             fair_use_mod.record_speech_ms('user1', 1000, source='sync')
             sync_calls = [str(c) for c in pipe_mock.method_calls]
 
-        # Same Redis operations regardless of source
-        assert realtime_calls == sync_calls
+        assert realtime_calls != sync_calls
+        assert any('fair_use:v2:bucket:realtime:user1' in call for call in realtime_calls)
+        assert any('fair_use:v2:bucket:sync_fresh:user1' in call for call in sync_calls)
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_backfill_uses_non_live_key(self):
+        fair_use_mod.record_speech_ms('user1', 1000, source='sync_backfill')
+        call_args = self._mock_redis.pipeline.return_value.hincrby.call_args
+        assert 'fair_use:v2:bucket:sync_backfill:user1' in str(call_args)
 
 
 class TestCheckSoftCapsWithPrecomputedTotals:

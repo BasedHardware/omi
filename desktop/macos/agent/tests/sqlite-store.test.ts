@@ -19,10 +19,12 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(9);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(14);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
+      "completion_delta_checkpoints",
+      "conversation_turns",
       "delegations",
       "desktop_artifact_deliveries",
       "desktop_attention_overrides",
@@ -37,6 +39,10 @@ describe("SqliteAgentStore", () => {
       "runs",
       "schema_migrations",
       "sessions",
+      "surface_conversations",
+      "workstream_artifact_heads",
+      "workstream_artifact_versions",
+      "workstream_continuation_checkpoints",
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 
@@ -84,6 +90,30 @@ describe("SqliteAgentStore", () => {
       expect.objectContaining({ attempt_no: 1, status: "running" }),
       expect.objectContaining({ attempt_no: 3, status: "failed" }),
     ]);
+    store.close();
+  });
+
+  it("persists execution role and provider boundary on sessions", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const managedLeaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    expect(managedLeaf).toMatchObject({
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+    });
+    expect(store.getRow(
+      "SELECT execution_role, provider_boundary FROM sessions WHERE session_id = ?",
+      [managedLeaf.sessionId],
+    )).toMatchObject({
+      execution_role: "leaf",
+      provider_boundary: "managed_cloud",
+    });
     store.close();
   });
 
