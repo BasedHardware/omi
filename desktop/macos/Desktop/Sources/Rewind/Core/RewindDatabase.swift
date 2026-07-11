@@ -167,15 +167,22 @@ actor RewindDatabase {
         try installActionItemsFTS(in: db, populateExistingRows: true)
     }
 
+    /// Single source of truth for the action_items FTS5 virtual-table shape, so the install path
+    /// and the shadow-table repair template stay byte-identical. If the tokenizer, columns, or
+    /// content mapping ever diverged, recovery would build a mismatched shadow table.
+    private static func actionItemsFTSCreateSQL(tableName: String) -> String {
+        """
+        CREATE VIRTUAL TABLE \(tableName) USING fts5(
+            description,
+            content='action_items',
+            content_rowid='id',
+            tokenize='unicode61'
+        )
+        """
+    }
+
     private static func installActionItemsFTS(in db: Database, populateExistingRows: Bool) throws {
-        try db.execute(sql: """
-            CREATE VIRTUAL TABLE action_items_fts USING fts5(
-                description,
-                content='action_items',
-                content_rowid='id',
-                tokenize='unicode61'
-            )
-            """)
+        try db.execute(sql: actionItemsFTSCreateSQL(tableName: "action_items_fts"))
 
         try db.execute(sql: """
             CREATE TRIGGER action_items_fts_ai AFTER INSERT ON action_items BEGIN
@@ -223,14 +230,7 @@ actor RewindDatabase {
     private static func restoreMissingActionItemsFTSShadowTables(in db: Database) throws {
         let templateName = "action_items_fts_repair_template"
         try db.execute(sql: "DROP TABLE IF EXISTS \(templateName)")
-        try db.execute(sql: """
-            CREATE VIRTUAL TABLE \(templateName) USING fts5(
-                description,
-                content='action_items',
-                content_rowid='id',
-                tokenize='unicode61'
-            )
-            """)
+        try db.execute(sql: actionItemsFTSCreateSQL(tableName: templateName))
         defer { try? db.execute(sql: "DROP TABLE IF EXISTS \(templateName)") }
 
         for table in actionItemsFTSShadowTables {
