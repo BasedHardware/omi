@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Omi Chat getting stuck on a stale local-provider setting before its first response"
-}
