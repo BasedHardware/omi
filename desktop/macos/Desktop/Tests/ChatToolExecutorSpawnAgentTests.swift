@@ -162,6 +162,21 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     XCTAssertFalse(route.recoversMalformedDelegation)
   }
 
+  func testExecutionContextSuppliesOriginatingUserTextForPermissionRouting() async {
+    let route = await ChatToolExecutor.withOriginatingUserText(
+      "Request Omi Screen Recording permission."
+    ) {
+      ChatToolExecutor.permissionExecutionRoute(
+        toolName: "spawn_agent",
+        arguments: ["brief": "Run a background task"],
+        originatingUserText: ChatToolExecutor.effectiveOriginatingUserText(nil))
+    }
+
+    XCTAssertEqual(
+      route,
+      .directNative(toolName: "request_permission", type: "screen_recording", recoveredFromDelegation: true))
+  }
+
   func testFloatingPillCannotSpawnNestedFloatingPill() async {
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(

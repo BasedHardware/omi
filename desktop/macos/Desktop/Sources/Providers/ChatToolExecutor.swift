@@ -4,6 +4,10 @@ import Foundation
 import GRDB
 import UserNotifications
 
+enum ChatToolExecutionContext {
+  @TaskLocal static var originatingUserText: String?
+}
+
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
 @MainActor
@@ -242,6 +246,19 @@ class ChatToolExecutor {
     followupContinuation = nil
   }
 
+  nonisolated static func effectiveOriginatingUserText(_ explicit: String?) -> String? {
+    explicit ?? ChatToolExecutionContext.originatingUserText
+  }
+
+  nonisolated static func withOriginatingUserText<T>(
+    _ text: String?,
+    operation: () async -> T
+  ) async -> T {
+    await ChatToolExecutionContext.$originatingUserText.withValue(text) {
+      await operation()
+    }
+  }
+
   /// Execute a tool call and return the result as a string
   static func execute(
     _ toolCall: ToolCall,
@@ -255,7 +272,7 @@ class ChatToolExecutor {
     let permissionRoute = permissionExecutionRoute(
       toolName: toolCall.name,
       arguments: toolCall.arguments,
-      originatingUserText: originatingUserText)
+      originatingUserText: Self.effectiveOriginatingUserText(originatingUserText))
     switch permissionRoute {
     case .directNative(let toolName, let type, _) where toolName != toolCall.name:
       routedToolCall = ToolCall(
