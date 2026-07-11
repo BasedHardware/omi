@@ -161,6 +161,17 @@ export interface AcpRuntimeAdapterOptions {
   sessionMcpServersMode?: 'passthrough' | 'empty'
   supportsSessionSetModel?: boolean
   noProgressTimeoutMs?: number
+  /**
+   * ACP session permission mode for the Claude Code bridge ('default' |
+   * 'acceptEdits' | 'bypassPermissions' | 'plan'). Set explicitly right after
+   * session/new so the agent's tool access does NOT silently inherit the
+   * machine's global ~/.claude `permissions.defaultMode` — which is often a
+   * read-only mode ('plan', 'dontAsk') that disables Write/Bash and leaves the
+   * agent unable to actually do anything. In 'default' every tool call still
+   * routes through resolveAcpPermission (high-trust auto-approve), so grants
+   * stay audited. Undefined = leave the inherited mode (external adapters).
+   */
+  permissionMode?: string
 }
 
 const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000
@@ -198,6 +209,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly sessionMcpServersMode: 'passthrough' | 'empty'
   private readonly supportsSessionSetModel: boolean
   private readonly noProgressTimeoutMs: number
+  private readonly permissionMode?: string
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
     this.adapterId = options.adapterId ?? 'acp'
@@ -215,6 +227,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       options.noProgressTimeoutMs ??
       parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS) ??
       (this.adapterId === 'acp' ? 0 : DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS)
+    // Pin an explicit acting mode for the first-party Claude Code bridge so tool
+    // access is predictable regardless of the machine's global ~/.claude mode.
+    // External adapters keep whatever mode they negotiate themselves.
+    this.permissionMode =
+      options.permissionMode ??
+      (this.adapterId === 'acp' ? (process.env.OMI_ACP_PERMISSION_MODE ?? 'default') : undefined)
   }
 
   async start(): Promise<void> {
@@ -465,7 +483,24 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       })
     }
 
+    await this.applyPermissionMode(result.sessionId)
+
     return this.binding(input, result.sessionId, this.supportsSessionSetModel)
+  }
+
+  /**
+   * Pin the session's ACP permission mode (Claude Code) so tool access doesn't
+   * inherit the machine's global ~/.claude default. Best-effort: a bridge or
+   * mode that doesn't support session/set_mode just keeps the inherited mode
+   * rather than failing the whole binding.
+   */
+  private async applyPermissionMode(sessionId: string): Promise<void> {
+    if (!this.permissionMode) return
+    try {
+      await this.request('session/set_mode', { sessionId, modeId: this.permissionMode })
+    } catch (error) {
+      this.log(`session/set_mode('${this.permissionMode}') not applied: ${String(error)}`)
+    }
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
@@ -481,6 +516,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         modelId: input.model
       })
     }
+
+    await this.applyPermissionMode(input.adapterNativeSessionId)
 
     return this.binding(input, input.adapterNativeSessionId, this.supportsSessionSetModel)
   }

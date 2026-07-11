@@ -79,6 +79,13 @@ export function answerCommonHandshake(
     respond(proc, message.id, { sessionId: nativeSessionId })
     return true
   }
+  // openBinding pins the session's permission mode (session/set_mode) right
+  // after session/new so tool access doesn't inherit the machine's global
+  // ~/.claude default — acknowledge it so the binding handshake completes.
+  if (message.method === 'session/set_mode' && message.id !== undefined) {
+    respond(proc, message.id, {})
+    return true
+  }
   return false
 }
 

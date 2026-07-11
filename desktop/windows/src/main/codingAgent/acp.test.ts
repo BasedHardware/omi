@@ -63,7 +63,7 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     return new AcpRuntimeAdapter({ acpEntry: 'stub-entry.mjs' })
   }
 
-  it('opens a binding via initialize + session/new + session/set_model', async () => {
+  it('opens a binding via initialize + session/new + session/set_model + session/set_mode', async () => {
     const adapter = makeAdapter()
     const seen = scriptJsonRpc(proc, (message) => {
       if (answerCommonHandshake(proc, message)) return
@@ -82,7 +82,39 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     expect(binding.adapterNativeSessionId).toBe('native-session-1')
     expect(binding.sessionId).toBe('omi-session')
     expect(binding.model).toBe('model-x')
-    expect(seen.map((m) => m.method)).toEqual(['initialize', 'session/new', 'session/set_model'])
+    expect(seen.map((m) => m.method)).toEqual([
+      'initialize',
+      'session/new',
+      'session/set_model',
+      'session/set_mode'
+    ])
+    await adapter.stop()
+  })
+
+  it('pins the acp session to "default" permission mode so the machine global cannot disable its tools', async () => {
+    const adapter = makeAdapter()
+    let setModeParams: Record<string, unknown> | undefined
+    scriptJsonRpc(proc, (message) => {
+      if (message.method === 'initialize' && message.id !== undefined) {
+        respond(proc, message.id, { protocolVersion: 1 })
+      }
+      if (message.method === 'session/new' && message.id !== undefined) {
+        respond(proc, message.id, { sessionId: 'native-session-1' })
+      }
+      if (message.method === 'session/set_mode' && message.id !== undefined) {
+        setModeParams = message.params as Record<string, unknown>
+        respond(proc, message.id, {})
+      }
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+
+    // Regression: without an explicit set_mode the session inherits the user's
+    // global ~/.claude permissions.defaultMode (e.g. 'plan'/'dontAsk'), which
+    // disables Write/Bash — the agent connects but can't actually do anything.
+    // Verified end to end against real Claude Code: default mode routes tool
+    // calls through resolveAcpPermission (high-trust auto-approve) and they run.
+    expect(setModeParams).toMatchObject({ sessionId: 'native-session-1', modeId: 'default' })
     await adapter.stop()
   })
 

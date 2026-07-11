@@ -35,6 +35,10 @@ rl.on('line', (line) => {
     case 'session/new':
       send({ id: msg.id, result: { sessionId: 'fake-native-session' } })
       break
+    case 'session/set_mode':
+      // openBinding pins the session permission mode after session/new.
+      send({ id: msg.id, result: {} })
+      break
     case 'session/prompt': {
       const text = (msg.params?.prompt ?? [])
         .filter((block) => block.type === 'text')
