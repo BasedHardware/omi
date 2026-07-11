@@ -88,7 +88,7 @@ def update_folder(
     description: Optional[str] = None,
     color: Optional[str] = None,
     icon: Optional[str] = None,
-) -> dict:
+) -> Optional[dict]:
     folder_id = _require_str(folder_id, "folder_id")
     if not folders_db.get_folder(uid, folder_id):
         raise FolderNotFound("Folder not found")
