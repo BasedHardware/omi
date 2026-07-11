@@ -21,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
   - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift
+  - desktop/macos/Desktop/Sources/WAL/StorageSyncView.swift
   - desktop/macos/Desktop/Sources/WAL/WifiSyncService.swift
   - desktop/macos/Desktop/Sources/WAL/WALCloudSyncLogic.swift
   - desktop/macos/Desktop/Sources/WAL/WALService.swift

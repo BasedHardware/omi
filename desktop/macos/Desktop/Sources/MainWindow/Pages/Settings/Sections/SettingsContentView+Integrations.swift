@@ -134,7 +134,7 @@ extension SettingsContentView {
         isSavingGmailMemories = false
       }
     } catch {
-      gmailReadError = error.localizedDescription
+      gmailReadError = UserFacingErrorPresentation.message(for: error, while: .integration("Gmail"))
     }
 
     isReadingGmail = false
@@ -242,7 +242,7 @@ extension SettingsContentView {
         calendarTasksCreated = result.tasks
       }
     } catch {
-      calendarSyncError = error.localizedDescription
+      calendarSyncError = UserFacingErrorPresentation.message(for: error, while: .integration("Google Calendar"))
     }
     isReadingCalendar = false
   }

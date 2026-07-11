@@ -13,6 +13,49 @@ logger = logging.getLogger(__name__)
 
 # Collection name
 action_items_collection = 'action_items'
+TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
+TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+
+
+class TaskRelationshipConflictError(ValueError):
+    pass
+
+
+def validate_task_relationship_in_transaction(
+    uid: str,
+    *,
+    goal_id: Optional[str],
+    workstream_id: Optional[str],
+    transaction: Any,
+    firestore_client: Any = None,
+    allow_ended_goal: bool = False,
+    account_generation: Optional[int] = None,
+) -> None:
+    """Final relationship check that participates in the caller's task-write transaction."""
+
+    client = firestore_client or db
+    user_ref = client.collection('users').document(uid)
+    if goal_id is not None:
+        goal_snapshot = user_ref.collection('goals').document(goal_id).get(transaction=transaction)
+        if not goal_snapshot.exists:
+            raise TaskRelationshipConflictError('goal does not exist')
+        goal = _typed_doc(goal_snapshot)
+        if account_generation is not None and goal.get('account_generation', 0) != account_generation:
+            raise TaskRelationshipConflictError('goal account generation mismatch')
+        status = goal.get('status')
+        if not allow_ended_goal and (
+            status in {'achieved', 'abandoned'} or (status is None and goal.get('is_active') is False)
+        ):
+            raise TaskRelationshipConflictError('ended goal cannot receive new task links')
+    if workstream_id is not None:
+        workstream_snapshot = user_ref.collection('workstreams').document(workstream_id).get(transaction=transaction)
+        if not workstream_snapshot.exists:
+            raise TaskRelationshipConflictError('workstream does not exist')
+        workstream = _typed_doc(workstream_snapshot)
+        if account_generation is not None and workstream.get('account_generation', 0) != account_generation:
+            raise TaskRelationshipConflictError('workstream account generation mismatch')
+        if workstream.get('goal_id') != goal_id:
+            raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -62,8 +105,25 @@ def get_action_item_ids(uid: str) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-def _prepare_action_item_for_write(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
+def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
+    action_item_data = dict(action_item_data)
+    if not partial or 'status' in action_item_data or 'completed' in action_item_data:
+        status = action_item_data.get('status')
+        completed = action_item_data.get('completed')
+        if status is None:
+            status = 'completed' if completed is True else 'active'
+            action_item_data['status'] = status
+        if completed is None:
+            action_item_data['completed'] = status == 'completed'
+        elif completed != (status == 'completed'):
+            raise ValueError('completed must agree with canonical status')
+    if not partial:
+        action_item_data.setdefault('owner', 'unknown')
+        action_item_data.setdefault('source', 'legacy')
+        action_item_data.setdefault('provenance', [])
+        action_item_data.setdefault('sort_order', 0)
+        action_item_data.setdefault('indent_level', 0)
     # Ensure timestamps are properly formatted
     if 'created_at' in action_item_data and action_item_data['created_at']:
         if isinstance(action_item_data['created_at'], str):
@@ -92,6 +152,13 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any]) -> Dict[str
 
 def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
+    action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
+    action_item_data.setdefault('owner', 'unknown')
+    action_item_data.setdefault('source', 'legacy')
+    action_item_data.setdefault('provenance', [])
+    action_item_data.setdefault('sort_order', 0)
+    action_item_data.setdefault('indent_level', 0)
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
             if hasattr(action_item_data[field], 'timestamp'):
@@ -104,7 +171,13 @@ def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str,
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_key: Optional[str] = None) -> str:
+def create_action_item(
+    uid: str,
+    action_item_data: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
+    *,
+    document_id: Optional[str] = None,
+) -> str:
     """
     Create a new action item for a user.
 
@@ -120,39 +193,17 @@ def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_k
             document so future calls can find it. Callers that want
             content-based idempotency typically pass
             ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
+        document_id: Optional caller-reserved Firestore document id. Reusing
+            the id returns the existing document without rewriting it, making
+            a crash-retried create deterministic.
 
     Returns:
         The ID of the created (or pre-existing, when idempotency_key matches)
         action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
-
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
-
-    # Idempotency check: if the caller supplied a key and we already have an
-    # *active* (not completed, not soft-deleted) document with that key,
-    # return its id rather than creating a duplicate. Completed/deleted
-    # matches are treated as "the user is recreating the task" and we fall
-    # through to the normal create path — otherwise a permanent content hash
-    # would silently swallow legitimate re-creation of recurring tasks.
-    if idempotency_key:
-        existing_query = (
-            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
-            .where(filter=FieldFilter('completed', '==', False))
-            .limit(5)
-        )
-        for doc in existing_query.stream():
-            data: Dict[str, Any] = _typed_doc(doc)
-            if data.get('deleted'):
-                continue
-            logger.info(
-                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
-                uid,
-                idempotency_key,
-                doc.id,
-            )
-            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -166,12 +217,67 @@ def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_k
     if idempotency_key:
         action_item_data['idempotency_key'] = idempotency_key
 
-    doc_ref = action_items_ref.add(action_item_data)[1]
+    goal_id = action_item_data.get('goal_id')
+    workstream_id = action_item_data.get('workstream_id')
+    if document_id is not None and not document_id:
+        raise ValueError('document_id must not be empty')
+    doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
+    transaction = db.transaction()
 
-    return doc_ref.id
+    @firestore.transactional
+    def create_in_generation(write_transaction):
+        control_snapshot = (
+            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+            .get(transaction=write_transaction)
+        )
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        account_generation = int(control.get('account_generation', 0))
+        if idempotency_key:
+            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
+                filter=FieldFilter('completed', '==', False)
+            )
+            if account_generation > 0:
+                existing_query = existing_query.where(
+                    filter=FieldFilter('account_generation', '==', account_generation)
+                )
+            existing_query = existing_query.limit(5)
+            for existing in existing_query.stream(transaction=write_transaction):
+                data = _typed_doc(existing)
+                if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
+                    continue
+                if not data.get('deleted'):
+                    return existing.id
+        if document_id is not None:
+            existing_document = doc_ref.get(transaction=write_transaction)
+            if existing_document.exists:
+                existing_generation = int(_typed_doc(existing_document).get('account_generation', 0))
+                if existing_generation != account_generation:
+                    raise TaskRelationshipConflictError('document id belongs to another account generation')
+                return document_id
+        if goal_id is not None or workstream_id is not None:
+            validate_task_relationship_in_transaction(
+                uid,
+                goal_id=cast(Optional[str], goal_id),
+                workstream_id=cast(Optional[str], workstream_id),
+                transaction=write_transaction,
+                firestore_client=db,
+                account_generation=account_generation,
+            )
+        payload = dict(action_item_data)
+        payload['account_generation'] = account_generation
+        write_transaction.set(doc_ref, payload)
+        return doc_ref.id
+
+    return cast(str, create_in_generation(transaction))
 
 
-def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]]) -> List[str]:
+def create_action_items_batch(
+    uid: str,
+    action_items_data: List[Dict[str, Any]],
+    *,
+    document_ids: Optional[List[str]] = None,
+) -> List[str]:
     """
     Create multiple action items in a batch operation.
 
@@ -184,14 +290,17 @@ def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]])
     """
     if not action_items_data:
         return []
+    if document_ids is not None and len(document_ids) != len(action_items_data):
+        raise ValueError('document_ids must match action_items_data length')
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    batch = db.batch()
     doc_refs: List[str] = []
+    prepared_items: List[Dict[str, Any]] = []
+    document_refs: List[Any] = []
 
-    for action_item_data in action_items_data:
+    for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
 
         if 'created_at' not in action_item_data:
@@ -203,14 +312,41 @@ def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]])
         if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = action_items_ref.document()
-        batch.set(doc_ref, action_item_data)
+        doc_ref = (
+            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
+        )
+        prepared_items.append(action_item_data)
+        document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
 
-    # Commit batch
-    batch.commit()
+    if len(prepared_items) > 400:
+        raise ValueError('action-item batches are limited to 400 items')
+    transaction = db.transaction()
 
-    return doc_refs
+    @firestore.transactional
+    def create_batch_in_generation(write_transaction):
+        control_snapshot = (
+            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+            .get(transaction=write_transaction)
+        )
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        account_generation = int(control.get('account_generation', 0))
+        if any(item.get('goal_id') is not None or item.get('workstream_id') is not None for item in prepared_items):
+            for item in prepared_items:
+                validate_task_relationship_in_transaction(
+                    uid,
+                    goal_id=cast(Optional[str], item.get('goal_id')),
+                    workstream_id=cast(Optional[str], item.get('workstream_id')),
+                    transaction=write_transaction,
+                    firestore_client=db,
+                    account_generation=account_generation,
+                )
+        for doc_ref, item in zip(document_refs, prepared_items):
+            write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
+        return doc_refs
+
+    return cast(List[str], create_batch_in_generation(transaction))
 
 
 # *****************************
@@ -310,6 +446,8 @@ def get_action_items(
     action_items: List[Dict[str, Any]] = []
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
         data['id'] = doc.id
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
@@ -350,6 +488,11 @@ def _normalize_description(desc: Optional[str]) -> str:
     if s.endswith(' [screen]'):
         s = s[: -len(' [screen]')]
     return s.strip().lower()
+
+
+def normalize_action_item_description(description: str) -> str:
+    """Public normalization seam for cross-source idempotency keys."""
+    return _normalize_description(description)
 
 
 def get_active_action_item_by_description(uid: str, description: str) -> Optional[Dict[str, Any]]:
@@ -454,10 +597,37 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         True if updated successfully, False otherwise
     """
     # Prepare data
-    update_data = _prepare_action_item_for_write(update_data)
+    update_data = _prepare_action_item_for_write(update_data, partial=True)
 
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
+
+    if 'goal_id' in update_data or 'workstream_id' in update_data:
+        transaction = db.transaction()
+        now = datetime.now(timezone.utc)
+
+        @firestore.transactional
+        def update_linked(write_transaction):
+            snapshot = action_item_ref.get(transaction=write_transaction)
+            if not snapshot.exists:
+                return False
+            current = _typed_doc(snapshot)
+            goal_id = update_data.get('goal_id') if 'goal_id' in update_data else current.get('goal_id')
+            workstream_id = (
+                update_data.get('workstream_id') if 'workstream_id' in update_data else current.get('workstream_id')
+            )
+            validate_task_relationship_in_transaction(
+                uid,
+                goal_id=cast(Optional[str], goal_id),
+                workstream_id=cast(Optional[str], workstream_id),
+                transaction=write_transaction,
+                firestore_client=db,
+                allow_ended_goal=(goal_id, workstream_id) == (current.get('goal_id'), current.get('workstream_id')),
+            )
+            write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
+            return True
+
+        return bool(update_linked(transaction))
 
     # Check if exists
     if not action_item_ref.get().exists:
@@ -615,6 +785,46 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     if count > 0:
         batch.commit()
 
+    return count
+
+
+def retire_action_items_for_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    active_ids: List[str],
+    replacements: Optional[Dict[str, str]] = None,
+) -> int:
+    """Soft-retire removed write-mode projections so accepted Candidate receipts keep a target."""
+    active_id_set = set(active_ids)
+    replacement_map = replacements or {}
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(action_items_collection)
+        .where(filter=FieldFilter('conversation_id', '==', conversation_id))
+    )
+    batch = db.batch()
+    count = 0
+    now = datetime.now(timezone.utc)
+    for doc in query.stream():
+        if doc.id in active_id_set:
+            continue
+        replacement_id = replacement_map.get(doc.id)
+        batch.update(
+            doc.reference,
+            {
+                'deleted': True,
+                'status': 'superseded' if replacement_id else 'cancelled',
+                'completed': False,
+                'completed_at': None,
+                'superseded_by': replacement_id,
+                'updated_at': now,
+            },
+        )
+        count += 1
+    if count:
+        batch.commit()
     return count
 
 
