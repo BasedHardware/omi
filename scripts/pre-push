@@ -144,6 +144,20 @@ check_arch_guardrails() {
   python3 .github/scripts/check_arch_guardrails.py --changed-files "$CHANGED_FILES_LIST"
 }
 
+check_pr_preflight() {
+  if [ "${PRE_PUSH_SKIP_PR_PREFLIGHT:-}" = "1" ]; then
+    echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
+    return
+  fi
+
+  # Same cheap contracts Hygiene runs (invariants, e2e covers, changelog schema, …).
+  # Draft a PR body first when invariants are required:
+  #   scripts/pr-preflight --suggest
+  #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
+  # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
+  scripts/pr-preflight --base "$BASE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+}
+
 check_optional_formatters() {
   local -a dart_files=()
   local -a python_files=()
@@ -761,6 +775,7 @@ check_gauntlet_evidence_if_needed() {
 
 run_step check_merge_conflicts
 run_step check_arch_guardrails
+run_step check_pr_preflight
 run_step python3 .github/scripts/desktop-changelog.py validate
 
 if [[ "$CURRENT_BRANCH" == changelog/v* ]]; then

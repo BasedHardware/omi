@@ -3861,6 +3861,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
+        // Only the primary chat can turn the user's current message into a
+        // permission authorization. Child, floating, and lab surfaces never
+        // inherit this capability.
+        let isPrimaryChatPermissionSurface = systemPromptStyle == .main && !isOnboarding && surfaceRef == nil
+        let precedingAssistantMessage = messages.last.flatMap { message in
+            message.sender == .ai && !message.isStreaming ? message.copyableText : nil
+        }
+        let permissionAuthorization = isPrimaryChatPermissionSurface
+            ? PermissionRequestAuthorization.authorize(
+                userMessage: trimmedText,
+                precedingAssistantMessage: precedingAssistantMessage
+            )
+            : nil
         // saveMessage site 3 of 5: user message at turn start.
         // Fire-and-forget Task launched before the bridge query so
         // it doesn't block streaming. `isSending` already gates the
@@ -4042,7 +4055,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         "guidance": screenContextReason.isExplicitScreenRequest
                             ? (screenRecordingGranted
                                 ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
-                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.")
+                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and ask whether they want to grant it. Call request_permission with type=screen_recording only after they explicitly request or affirm it.")
                             : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
                     ]
                     if let data = try? JSONSerialization.data(
@@ -4073,6 +4086,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // any kind (text delta OR tool_use start). It also brackets the
             // text-streaming window so the `generation` span excludes tool time.
             let currentChatMode = chatMode
+            let currentIsOnboardingSurface = isOnboarding
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
                 ? AgentClientScope.floatingPill
                 : nil
@@ -4103,7 +4117,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     toolCall,
                     originatingChatMode: currentChatMode,
                     originatingClientScope: currentToolClientScope,
-                    originatingSurfaceRef: resolvedSurface)
+                    originatingSurfaceRef: resolvedSurface,
+                    permissionAuthorization: permissionAuthorization,
+                    isOnboardingSurface: currentIsOnboardingSurface)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result

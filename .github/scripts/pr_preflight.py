@@ -58,13 +58,20 @@ def resolve_pr_metadata(
     repository: str | None,
     pr_number: int | None,
 ) -> PullRequestMetadata | None:
+    if body_file is None:
+        env_body = os.getenv("OMI_PR_BODY_FILE", "").strip()
+        if env_body:
+            body_file = Path(env_body)
     if body_file:
+        resolved = body_file.expanduser()
+        if not resolved.is_file():
+            raise RuntimeError(f"PR body file not found: {resolved}")
         return PullRequestMetadata(
             number=0,
-            body=body_file.read_text(encoding="utf-8"),
+            body=resolved.read_text(encoding="utf-8"),
             updated_at="local file",
             labels=(),
-            source=str(body_file.resolve()),
+            source=str(resolved.resolve()),
         )
     if repository and pr_number:
         return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
@@ -72,7 +79,8 @@ def resolve_pr_metadata(
         return load_from_gh(root)
     except RuntimeError as exc:
         print(f"PR metadata: unavailable ({exc})")
-        print("If invariant citations are required, rerun with --pr-body-file <draft.md>.")
+        print("If invariant citations are required, rerun with --pr-body-file <draft.md>")
+        print("or set OMI_PR_BODY_FILE, or run: scripts/pr-preflight --suggest")
         return None
 
 
@@ -148,6 +156,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
     parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
+    parser.add_argument(
+        "--suggest",
+        action="store_true",
+        help="Print a paste-ready product-invariants PR body section for the diff and exit 0",
+    )
     parser.add_argument("--root", type=Path)
     return parser.parse_args()
 
@@ -166,36 +179,60 @@ def main() -> int:
         print(f"FAIL: could not resolve preflight diff: {exc.stderr.strip()}", file=sys.stderr)
         return 1
     checks = select_checks(files)
-    print(f"PR preflight: base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}")
-    for check in checks:
-        print(f"  SELECTED {check.name}: {check.reason}")
+    summary = f"PR preflight: base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}"
+    selected_lines = [f"  SELECTED {check.name}: {check.reason}" for check in checks]
+    if args.suggest:
+        print(summary, file=sys.stderr)
+        for line in selected_lines:
+            print(line, file=sys.stderr)
+    else:
+        print(summary)
+        for line in selected_lines:
+            print(line)
     if args.list:
         return 0
-
-    try:
-        metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
-    except RuntimeError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        return 1
-    labels = metadata.labels if metadata else ()
-    head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
-    if not head_branch:
-        head_branch = subprocess.run(
-            ["git", "symbolic-ref", "--short", "-q", "HEAD"],
-            cwd=root,
-            check=False,
-            stdout=subprocess.PIPE,
-            text=True,
-        ).stdout.strip()
-    skip_changelog = "no-changelog-needed" in labels or head_branch.startswith("changelog/v")
-    if metadata:
-        print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
 
     with tempfile.TemporaryDirectory(prefix="omi-pr-preflight-") as temp_dir:
         temp = Path(temp_dir)
         files_path = temp / "changed-files.txt"
-        body_path = temp / "pr-body.txt"
         files_path.write_text("".join(f"{path}\n" for path in files), encoding="utf-8")
+
+        if args.suggest:
+            suggest = subprocess.run(
+                [
+                    sys.executable,
+                    ".github/scripts/check_product_invariants.py",
+                    "--changed-files",
+                    str(files_path),
+                    "--suggest",
+                ],
+                cwd=root,
+                check=False,
+            )
+            return suggest.returncode
+
+        try:
+            metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
+        except RuntimeError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        labels = metadata.labels if metadata else ()
+        head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
+        if not head_branch:
+            head_branch = subprocess.run(
+                ["git", "symbolic-ref", "--short", "-q", "HEAD"],
+                cwd=root,
+                check=False,
+                stdout=subprocess.PIPE,
+                text=True,
+            ).stdout.strip()
+        skip_changelog = "no-changelog-needed" in labels or head_branch.startswith("changelog/v")
+        if metadata:
+            print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
+        elif any(check.name == "product-invariants" for check in checks):
+            print("PR metadata: none (product-invariants will use an empty body)")
+
+        body_path = temp / "pr-body.txt"
         body_path.write_text(metadata.body if metadata else "", encoding="utf-8")
         failures: list[str] = []
         for check in checks:
@@ -216,6 +253,11 @@ def main() -> int:
     elapsed = time.monotonic() - started
     if failures:
         print(f"PR preflight failed in {elapsed:.2f}s: {', '.join(failures)}", file=sys.stderr)
+        if "product-invariants" in failures:
+            print(
+                "Remediation: scripts/pr-preflight --suggest  # paste into PR body / draft, then re-run",
+                file=sys.stderr,
+            )
         return 1
     print(f"PR preflight passed: {len(checks)} checks in {elapsed:.2f}s.")
     return 0

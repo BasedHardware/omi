@@ -87,7 +87,9 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil,
     originatingSurfaceRef: AgentSurfaceReference? = nil,
-    originatingRunId: String? = nil
+    originatingRunId: String? = nil,
+    permissionAuthorization: PermissionRequestAuthorization? = nil,
+    isOnboardingSurface: Bool = false
   ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
     let telemetryContext = ScreenContextTelemetryContext.from(
@@ -140,14 +142,28 @@ class ChatToolExecutor {
 
     // Onboarding tools
     case .requestPermission:
+      let permissionType = permissionType(from: toolCall.arguments)
+      // Onboarding globals hold UI callbacks and must not grant permission
+      // authority to calls that did not originate from the onboarding surface.
+      let isOnboardingRequest = isOnboardingSurface
+      guard isOnboardingRequest || (permissionType.flatMap { permissionAuthorization?.consume(permissionType: $0) } == true) else {
+        return policyDeniedMessage(
+          toolName: toolCall.name,
+          code: "explicit_user_permission_required",
+          capability: "desktop.permissions.request",
+          message: "The user must explicitly request this named macOS permission, or affirm your immediately preceding request, before Omi can open System Settings."
+        )
+      }
       let result = await executeRequestPermission(toolCall.arguments)
       let permType = toolCall.arguments["type"] as? String ?? "unknown"
       let granted = permissionToolResultGranted(result)
-      AnalyticsManager.shared.onboardingChatToolUsed(
-        tool: "request_permission",
-        properties: ["permission": permType, "result": granted ? "granted" : "pending"])
-      if !granted {
-        DispatchQueue.main.async { onPermissionPending?(permType) }
+      if isOnboardingRequest {
+        AnalyticsManager.shared.onboardingChatToolUsed(
+          tool: "request_permission",
+          properties: ["permission": permType, "result": granted ? "granted" : "pending"])
+        if !granted {
+          DispatchQueue.main.async { onPermissionPending?(permType) }
+        }
       }
       return result
 
@@ -357,7 +373,7 @@ class ChatToolExecutor {
         toolName: "capture_screen",
         permission: "screen_recording",
         message:
-          "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet, then call request_permission with type=screen_recording if they want to grant access."
+          "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet and ask whether they want to grant access. Call request_permission with type=screen_recording only after they explicitly request or affirm it."
       )
     }
     guard let fileURL = ScreenCaptureManager.captureScreen() else {

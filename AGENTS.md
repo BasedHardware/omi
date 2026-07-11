@@ -19,6 +19,7 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
 7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
+8. **PR contracts pass before opening the PR** — draft the PR body to a file, then run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` to get the paste-ready invariant IDs). Pre-push runs the same cheap contracts; Hygiene will fail if you skip this.
 
 ## Bug Fixes: Close the Failure Class
 
@@ -78,7 +79,8 @@ Improve the code you touch — within your blast radius:
 ### Product invariants
 
 - Read [`PRODUCT.md`](PRODUCT.md) before changing product behavior. Locked rules live in [`docs/product/invariants/`](docs/product/invariants/) (shared chat continuity, memory tiers, agent control plane, integrations harness, brand UI).
-- If you touch a locked invariant’s path globs, name the invariant ID in the PR and update its guard test when behavior changes.
+- If you touch a locked invariant’s path globs, name **every** matched invariant ID in the PR body (path-based, not intent-based — e.g. touching `ChatProvider.swift` requires `INV-AUTH-1` even when the diff is not about auth). Discover IDs with `scripts/pr-preflight --suggest`; do not invent a partial list.
+- Update the invariant’s guard test when behavior changes.
 - Do not paste product essays into this file — keep the registry as the SSOT and link here.
 
 ### UI / Design (all platforms)

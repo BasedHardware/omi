@@ -26,8 +26,8 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
     Clone your fork, create a branch, and implement your changes.
   </Step>
   <Step title="Test Your Changes">
-    Add focused tests and include the commands or manual steps you used to verify the change. Before pushing, run
-    `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` to catch PR contract issues locally.
+    Add focused tests and include the commands or manual steps you used to verify the change. Before pushing, draft the PR body and run
+    `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` (use `scripts/pr-preflight --suggest` to get the paste-ready invariant ID block). Pre-push runs the same cheap contracts.
   </Step>
   <Step title="Create a Pull Request">
     Submit a PR and specify which issue it relates to. Name any product invariants your change affects.
@@ -53,8 +53,10 @@ Good PRs are easy to review and come with evidence that the change works.
   static tripwires only; they do not prove lifecycle, concurrency, or integration
   behavior.
 - **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
-- **Fast local PR contract check** — run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`. Once the
-  branch has a PR, `scripts/pr-preflight` reads its current body automatically with `gh`.
+- **Fast local PR contract check** — draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
+  Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
+  `scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
+  same cheap contracts.
 
 ### Contributing with an AI agent
 
