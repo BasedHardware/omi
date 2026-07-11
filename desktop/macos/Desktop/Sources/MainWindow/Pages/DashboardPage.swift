@@ -305,7 +305,6 @@ struct DashboardPage: View {
     private static let homeConnectSheetMinHeight: CGFloat = 360
     private static let homeConnectSheetCornerRadius: CGFloat = 24
     private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
-    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
     private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
 
     private var homeConnectSheetIsPresented: Bool {
@@ -427,7 +426,7 @@ struct DashboardPage: View {
                     selectedImportConnector = nil
                 }
             )
-            .frame(width: 520, height: 620)
+            .frame(width: connector.sheetPreferredSize.width, height: connector.sheetPreferredSize.height)
         }
         .dismissableSheet(item: legacySelectedExportDestination) { destination in
             ConnectDestinationSheet(
@@ -675,6 +674,7 @@ struct DashboardPage: View {
                     contentWidth: proxy.size.width,
                     panelWidth: panelWidth,
                     panelHeight: panelHeight,
+                    availableHeight: proxy.size.height,
                     panelTop: panelTop
                 )
 
@@ -1228,6 +1228,7 @@ struct DashboardPage: View {
         contentWidth: CGFloat,
         panelWidth: CGFloat,
         panelHeight: CGFloat,
+        availableHeight: CGFloat,
         panelTop: CGFloat
     ) -> some View {
         ZStack {
@@ -1241,7 +1242,7 @@ struct DashboardPage: View {
                     .transition(.opacity)
                     .zIndex(4)
 
-                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, availableHeight: availableHeight)
 
                 homeConnectSheetContent()
                     .frame(width: sheetSize.width, height: sheetSize.height)
@@ -1269,7 +1270,7 @@ struct DashboardPage: View {
         .zIndex(4)
     }
 
-    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+    private func homeConnectSheetSize(panelWidth: CGFloat, availableHeight: CGFloat) -> CGSize {
         let preferred = homeConnectSheetPreferredSize
         return CGSize(
             width: min(
@@ -1278,7 +1279,7 @@ struct DashboardPage: View {
             ),
             height: min(
                 preferred.height,
-                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
+                max(Self.homeConnectSheetMinHeight, availableHeight - (Self.homeConnectSheetVerticalMargin * 2))
             )
         )
     }
@@ -1287,8 +1288,8 @@ struct DashboardPage: View {
         if selectedCatalogApp != nil {
             return Self.appDetailSheetPreferredSize
         }
-        if selectedImportConnector != nil {
-            return Self.importConnectorSheetPreferredSize
+        if let connector = selectedImportConnector {
+            return connector.sheetPreferredSize
         }
         return Self.exportDestinationSheetPreferredSize
     }
