@@ -1053,6 +1053,29 @@
         "title": "ActionItemUpdateRequest",
         "type": "object"
       },
+      "ActionItemsCountResponse": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "completed",
+          "incomplete"
+        ],
+        "title": "ActionItemsCountResponse",
+        "type": "object"
+      },
       "ActionItemsResponse": {
         "properties": {
           "action_items": {
@@ -22940,6 +22963,84 @@
           }
         ],
         "summary": "Batch Delete Action Items",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
+    "/v1/action-items/count": {
+      "get": {
+        "description": "Return total / completed / incomplete action-item counts for the user.\n\nA lightweight badge/summary source that avoids paging the full list. Declared before\n/v1/action-items/{action_item_id} so the static path is not captured as an action item id.",
+        "operationId": "get_action_items_count_v1_action_items_count_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionItemsCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Action Items Count",
         "tags": [
           "action-items"
         ]

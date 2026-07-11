@@ -230,6 +230,12 @@ class ActionItemsResponse(BaseModel):
     has_more: bool = False
 
 
+class ActionItemsCountResponse(BaseModel):
+    total: int
+    completed: int
+    incomplete: int
+
+
 class ActionItemsSearchResponse(BaseModel):
     action_items: list[ActionItemResponse]
 

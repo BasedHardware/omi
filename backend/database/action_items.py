@@ -377,6 +377,19 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
     return _prepare_action_item_for_read(data)
 
 
+def get_action_items_count(uid: str) -> Dict[str, int]:
+    """Return total / completed / incomplete action-item counts for a user.
+
+    Uses Firestore count() aggregation so clients can show a badge or summary
+    without fetching every item. ``incomplete`` is derived as total - completed
+    (never negative) so the three values are always internally consistent.
+    """
+    items_ref = db.collection('users').document(uid).collection(action_items_collection)
+    total = int(items_ref.count().get()[0][0].value)
+    completed = int(items_ref.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+    return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
+
+
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,

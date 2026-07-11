@@ -123,6 +123,12 @@ export interface ActionItemUpdateRequest {
   workstream_id?: string | null;
 }
 
+export interface ActionItemsCountResponse {
+  completed: number;
+  incomplete: number;
+  total: number;
+}
+
 export interface ActionItemsResponse {
   action_items: Array<ActionItemResponse>;
   has_more?: boolean;
@@ -3664,6 +3670,7 @@ export interface OmiApiSchemas {
   "ActionItemIdsResponse": ActionItemIdsResponse;
   "ActionItemResponse": ActionItemResponse;
   "ActionItemUpdateRequest": ActionItemUpdateRequest;
+  "ActionItemsCountResponse": ActionItemsCountResponse;
   "ActionItemsResponse": ActionItemsResponse;
   "ActionItemsSearchResponse": ActionItemsSearchResponse;
   "ActionType": ActionType;
@@ -4209,6 +4216,16 @@ export interface OmiApiPaths {
       operationId: "batch_delete_action_items_v1_action_items_batch_delete_post";
       responses: {
         "200": BatchDeleteActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/count": {
+    get: {
+      operationId: "get_action_items_count_v1_action_items_count_get";
+      responses: {
+        "200": ActionItemsCountResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8105,6 +8122,25 @@ export async function batch_delete_action_items_v1_action_items_batch_delete_pos
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_action_items_count_v1_action_items_count_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemsCountResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/count`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15430,4 +15466,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 379 client methods generated.
+// Total: 380 client methods generated.
