@@ -676,9 +676,14 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     return all_people
 
 
-def update_person(uid: str, person_id: str, name: str):
+def update_person(uid: str, person_id: str, name: str) -> bool:
+    """Rename a person. Returns False when the person does not exist so callers can 404,
+    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    if not person_ref.get().exists:
+        return False
     person_ref.update({'name': name})
+    return True
 
 
 def delete_person(uid: str, person_id: str):

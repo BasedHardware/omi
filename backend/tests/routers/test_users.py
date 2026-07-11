@@ -189,3 +189,22 @@ def test_export_all_user_data_keeps_streaming_headers():
         return ''.join(parts)
 
     assert asyncio.run(_consume()) == '{"ok": true}\n'
+
+
+def test_update_person_name_missing_returns_404():
+    # A well-formed PATCH for a nonexistent/stale person id must 404, not 500. update_person now
+    # returns False for a missing person (instead of Firestore .update() raising NotFound).
+    with patch.object(users_router, 'update_person', MagicMock(return_value=False)):
+        with pytest.raises(HTTPException) as exc:
+            users_router.update_person_name(person_id='missing', value='Alice', uid='uid1')
+
+    assert exc.value.status_code == 404
+
+
+def test_update_person_name_existing_returns_ok():
+    update_person = MagicMock(return_value=True)
+    with patch.object(users_router, 'update_person', update_person):
+        result = users_router.update_person_name(person_id='p1', value='Alice', uid='uid1')
+
+    assert result == {'status': 'ok'}
+    update_person.assert_called_once_with('uid1', 'p1', 'Alice')

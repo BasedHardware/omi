@@ -586,7 +586,8 @@ def update_person_name(
     value: str,  # = Field(min_length=2, max_length=40),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    update_person(uid, person_id, value)
+    if not update_person(uid, person_id, value):
+        raise HTTPException(status_code=404, detail="Person not found")
     return {'status': 'ok'}
 
 
