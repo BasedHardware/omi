@@ -23,7 +23,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('job-1');
       },
@@ -43,7 +43,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'throttle'},
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('job-after-expiry');
       },
@@ -63,7 +63,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -82,7 +82,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'future_stage'},
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -95,8 +95,10 @@ void main() {
   });
 
   test('legacy unclassified rateLimit state never blocks admission or becomes fair use offline', () async {
-    SharedPreferencesUtil()
-        .saveInt('syncRateLimitedUntilMs', DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch);
+    SharedPreferencesUtil().saveInt(
+      'syncRateLimitedUntilMs',
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
     SharedPreferencesUtil().saveString('syncRateLimitedReason', 'rateLimit');
     var statusCalls = 0;
     var uploads = 0;
@@ -106,7 +108,7 @@ void main() {
         statusCalls++;
         throw Exception('offline');
       },
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('legacy-cleared');
       },
@@ -129,7 +131,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'restrict'},
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -154,7 +156,8 @@ void main() {
         statusCalls++;
         return response.future;
       },
-      uploader: (files, {onUploadProgress, conversationId}) async => UploadFilesResult.queued('job'),
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+          UploadFilesResult.queued('job'),
     );
 
     final first = gate.reconcileFairUseStatus();
@@ -173,7 +176,8 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId}) async => UploadFilesResult.queued('job'),
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+          UploadFilesResult.queued('job'),
     );
 
     expect(await gate.reconcileFairUseStatus(), isFalse);
@@ -187,12 +191,9 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
-        throw SyncRateLimitedException(
-          kind: SyncRateLimitKind.backendCapacity,
-          retryAfterSeconds: 40 * 24 * 60 * 60,
-        );
+        throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 40 * 24 * 60 * 60);
       },
     );
 
@@ -217,7 +218,7 @@ void main() {
         statusCalls++;
         return {'stage': 'none'};
       },
-      uploader: (files, {onUploadProgress, conversationId}) async {
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
         uploads++;
         throw SyncRateLimitedException(kind: SyncRateLimitKind.fairUse, retryAfterSeconds: 30 * 24 * 60 * 60);
       },
@@ -234,5 +235,44 @@ void main() {
     expect(limiter.reason, RateLimitReason.fairUse);
     expect(limiter.hasPersistedFairUseState, isTrue);
     expect(limiter.activeRetryAfterSeconds, inInclusiveRange(30 * 24 * 60 * 60 - 2, 30 * 24 * 60 * 60));
+  });
+
+  test('backfill pacing persists without blocking a fresh upload', () async {
+    final uploadedLanes = <SyncUploadLane>[];
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => {'stage': 'none'},
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+        uploadedLanes.add(syncLane);
+        return UploadFilesResult.queued('fresh-job');
+      },
+    );
+    limiter.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backfillPaced);
+
+    await expectLater(
+      gate.upload([], lane: SyncUploadLane.backfill),
+      throwsA(isA<SyncRateLimitedException>().having((error) => error.kind, 'kind', SyncRateLimitKind.backfillPaced)),
+    );
+    final fresh = await gate.upload([], lane: SyncUploadLane.fresh);
+
+    expect(fresh.jobId, 'fresh-job');
+    expect(uploadedLanes, [SyncUploadLane.fresh]);
+    expect(limiter.isBackfillLimited, isTrue);
+  });
+
+  test('backfill responses are passed to the uploader as a lane hint', () async {
+    SyncUploadLane? seenLane;
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+        seenLane = syncLane;
+        return UploadFilesResult.queued('backfill-job');
+      },
+    );
+
+    await gate.upload([], lane: SyncUploadLane.backfill);
+
+    expect(seenLane, SyncUploadLane.backfill);
   });
 }

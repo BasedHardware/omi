@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
+from llm_gateway.gateway.schemas import RouteArtifact
 from llm_gateway.routers.dependencies import get_gateway_config
 
 router = APIRouter()
@@ -41,8 +42,9 @@ async def create_anthropic_message(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='request body must be an object')
 
     body = cast(dict[str, Any], request_body)
-    provider_model = _resolve_lane_provider_model(config, body.get('model'))
-    body['model'] = provider_model
+    route = _resolve_lane_route(config, body.get('model'))
+    body['model'] = route.primary.model
+    body.update(route.provider_options)
 
     api_key = _resolve_anthropic_api_key(request)
     if not api_key:
@@ -69,7 +71,7 @@ async def create_anthropic_message(
     return JSONResponse(status_code=response.status_code, content=_response_json_or_error(response))
 
 
-def _resolve_lane_provider_model(config: GatewayConfig, model: object) -> str:
+def _resolve_lane_route(config: GatewayConfig, model: object) -> RouteArtifact:
     if not isinstance(model, str) or not model.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='model is required')
     lane_id = model.strip()
@@ -93,7 +95,7 @@ def _resolve_lane_provider_model(config: GatewayConfig, model: object) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'lane {lane_id} is not an anthropic messages lane',
         )
-    return provider_ref.model
+    return route
 
 
 def _resolve_anthropic_api_key(request: Request) -> str | None:

@@ -14,6 +14,29 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     XCTAssertNil(store.error)
   }
 
+  func testControlFailureUsesDashboardErrorWithoutLeakingBackendDetail() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.controlError = APIError.httpError(statusCode: 404, detail: "v1/candidates/control was not found")
+    let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+    await store.load()
+
+    XCTAssertEqual(store.error, "Couldn't refresh the dashboard. Try again.")
+    XCTAssertTrue(store.recommendations.isEmpty)
+    XCTAssertTrue(store.goals.isEmpty)
+  }
+
+  func testGoalsFailureUsesDashboardErrorWithoutMislabelingWhatMattersNow() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.goalsError = APIError.httpError(statusCode: 503, detail: "goals service unavailable")
+    let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+    await store.load()
+
+    XCTAssertEqual(store.error, "Omi's service is unavailable right now. Try again.")
+    XCTAssertTrue(store.goals.isEmpty)
+  }
+
   func testContextProjectionRefreshesDashboardWithoutConsultingNotificationSettings() {
     let defaults = UserDefaults.standard
     let previousMaster = defaults.object(forKey: NotificationService.masterEnabledDefaultsKey)
@@ -211,6 +234,7 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
     XCTAssertTrue(store.recommendations.isEmpty)
     XCTAssertEqual(store.focusedGoals.map(\.goalId), ["goal-1"])
+    XCTAssertNil(store.error)
   }
 
   func testGoalFocusUsesExplicitReplacementAndKeepsHistory() async {
@@ -618,6 +642,8 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   var detail: OmiAPI.GoalDetailProjection?
   var projectionLoads = 0
   var failProjection = false
+  var controlError: Error?
+  var goalsError: Error?
   var detailLoads = 0
   var focusRequests: [(goalID: String, replacementID: String?)] = []
   var focusError: Error?
@@ -646,7 +672,8 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   }
 
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
-    OmiAPI.TaskWorkflowControl(accountGeneration: 7, workflowMode: workflowMode)
+    if let controlError { throw controlError }
+    return OmiAPI.TaskWorkflowControl(accountGeneration: 7, workflowMode: workflowMode)
   }
 
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
@@ -656,7 +683,10 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
     return projection
   }
 
-  func getCanonicalGoals(includeEnded: Bool) async throws -> [OmiAPI.GoalResponse] { goals }
+  func getCanonicalGoals(includeEnded: Bool) async throws -> [OmiAPI.GoalResponse] {
+    if let goalsError { throw goalsError }
+    return goals
+  }
 
   func getCanonicalGoalDetail(goalID: String) async throws -> OmiAPI.GoalDetailProjection {
     detailLoads += 1

@@ -125,22 +125,43 @@ final class BeeDeviceConnection: BaseDeviceConnection {
         guard data.count >= 2 else { return nil }
 
         audioBuffer.append(contentsOf: data.dropFirst(2))
+        return Self.nextADTSFrame(from: &audioBuffer)
+    }
 
-        while audioBuffer.count >= 7 {
+    /// Pop the next complete ADTS/AAC frame from `buffer`, skipping leading
+    /// non-sync or malformed-header bytes. Returns nil when no complete valid
+    /// frame is available yet.
+    ///
+    /// A valid ADTS frame is at least 7 bytes (the header length is part of the
+    /// frameLength field). A decoded `frameLength < 7` — e.g. a false sync where
+    /// 0xFF 0xFx matched inside AAC payload after a dropped BLE notification — was
+    /// previously accepted: `buffer.count >= 0` is always true, `prefix(0)` is
+    /// empty, and `removeFirst(0)` advances nothing, so the corrupt header stayed
+    /// at the head and every later packet re-hit it — audio went permanently
+    /// silent while the buffer grew without bound. Treat `< 7` as a false sync and
+    /// advance one byte so the scanner keeps making progress.
+    static func nextADTSFrame(from buffer: inout [UInt8]) -> [UInt8]? {
+        while buffer.count >= 7 {
             // Look for ADTS sync word (0xFF 0xFx)
-            guard audioBuffer[0] == 0xFF, (audioBuffer[1] & 0xF0) == 0xF0 else {
-                audioBuffer.removeFirst()
+            guard buffer[0] == 0xFF, (buffer[1] & 0xF0) == 0xF0 else {
+                buffer.removeFirst()
                 continue
             }
 
             // Extract frame length from ADTS header
-            let frameLength = (Int(audioBuffer[3] & 0x03) << 11) |
-                              (Int(audioBuffer[4]) << 3) |
-                              (Int(audioBuffer[5] & 0xE0) >> 5)
+            let frameLength = (Int(buffer[3] & 0x03) << 11) |
+                              (Int(buffer[4]) << 3) |
+                              (Int(buffer[5] & 0xE0) >> 5)
 
-            if audioBuffer.count >= frameLength {
-                let frame = Array(audioBuffer.prefix(frameLength))
-                audioBuffer.removeFirst(frameLength)
+            guard frameLength >= 7 else {
+                // False sync: 0xFF 0xFx matched but the header is invalid.
+                buffer.removeFirst()
+                continue
+            }
+
+            if buffer.count >= frameLength {
+                let frame = Array(buffer.prefix(frameLength))
+                buffer.removeFirst(frameLength)
                 return frame
             }
             break

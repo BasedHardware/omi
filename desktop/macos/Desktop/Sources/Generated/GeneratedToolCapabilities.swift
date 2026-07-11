@@ -438,7 +438,7 @@ enum GeneratedToolCapabilities {
       toolName: "check_permission_status",
       title: "Check Permission Status",
       latency: .fastLocal,
-      surfaces: Set([.desktopChat, .onboarding]),
+      surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
       summary: "Check whether a required macOS permission has been granted.",
       bullets: [
       "Use before requesting a permission or after request_permission returns pending.",
@@ -449,12 +449,14 @@ enum GeneratedToolCapabilities {
       toolName: "request_permission",
       title: "Request Permission",
       latency: .fastLocal,
-      surfaces: Set([.desktopChat, .onboarding]),
+      surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
       summary: "Open or guide the user through granting a required macOS permission.",
       bullets: [
-      "Use when a tool reports permission_required or the user asks Omi to grant/check a permission.",
-      "Use strict permission types only.",
-      "For screen-related requests, if Screen Recording is missing, tell the user Omi cannot see the current screen yet and call request_permission with type=screen_recording.",
+      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
+      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."
     ]
@@ -608,6 +610,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

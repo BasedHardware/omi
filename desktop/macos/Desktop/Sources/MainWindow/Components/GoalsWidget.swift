@@ -878,7 +878,7 @@ struct GoalInsightSheet: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    errorMessage = UserFacingErrorPresentation.message(for: error, while: .goals)
                     isLoading = false
                 }
             }

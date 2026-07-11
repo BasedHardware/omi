@@ -137,7 +137,9 @@ class SectionAppItemCard extends StatelessWidget {
           onTap: () async {
             PlatformManager.instance.analytics.pageOpened('App Detail');
             await routeToPage(context, AppDetailPage(app: app));
-            context.read<AppProvider>().filterApps();
+            if (context.mounted) {
+              context.read<AppProvider>().filterApps();
+            }
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),

@@ -1,0 +1,3 @@
+{
+    "change": "Fixed more macOS defects: the Automation permission prompt is now reliably triggered on the main thread, deleting a memory no longer skips one memory the next time the list pages, rapid task reordering no longer briefly flickers back to the old order, and a Limitless storage-status check no longer risks a crash"
+}

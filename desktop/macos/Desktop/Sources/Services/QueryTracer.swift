@@ -462,11 +462,21 @@ final class QueryTracer: @unchecked Sendable {
             }
 
             if let handle = try? FileHandle(forWritingTo: logFile) {
-                handle.seekToEndOfFile()
-                if let lineData = (jsonString + "\n").data(using: .utf8) {
-                    handle.write(lineData)
+                // Use the throwing seek/write/close APIs, not seekToEndOfFile()/
+                // write(_:)/closeFile(). The legacy ObjC variants raise
+                // NSFileHandleOperationException on I/O failure (disk full, file
+                // removed mid-write); Swift cannot catch that, so it aborts the
+                // whole process — and finalize() runs on every completed query, so
+                // a full disk would crash the app on each one. Drop the trace instead.
+                defer { try? handle.close() }
+                do {
+                    try handle.seekToEnd()
+                    if let lineData = (jsonString + "\n").data(using: .utf8) {
+                        try handle.write(contentsOf: lineData)
+                    }
+                } catch {
+                    log("QueryTracer: failed to append trace: \(error.localizedDescription)")
                 }
-                handle.closeFile()
             } else {
                 // First write — create the file
                 try? (jsonString + "\n").data(using: .utf8)?.write(to: logFile)

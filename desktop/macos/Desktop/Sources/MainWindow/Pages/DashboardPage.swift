@@ -564,7 +564,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onOpenAgent: { agentID, completion in
@@ -867,7 +869,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
@@ -1081,7 +1085,7 @@ struct DashboardPage: View {
     private func reportHomeAutomationMode() {
         guard DesktopAutomationLaunchOptions.isEnabled else { return }
         let modeLabel = useLegacyHomeDesign ? nil : homeMode.automationLabel
-        DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+        _ = DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
             snapshot.homeMode = modeLabel
             snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
         }
@@ -1816,11 +1820,32 @@ struct DashboardPage: View {
     @ViewBuilder
     private var dashboardIntelligenceError: some View {
         if let error = intelligenceStore.error, !error.isEmpty {
-            Text(error)
-                .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("dashboard-intelligence-error")
+            HStack(spacing: OmiSpacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.warning)
+                Text(error)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.textSecondary)
+                Spacer(minLength: OmiSpacing.sm)
+                Button("Retry") {
+                    Task { await intelligenceStore.load() }
+                }
+                .buttonStyle(.plain)
+                .scaledFont(size: OmiType.caption, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                    .fill(OmiColors.backgroundSecondary.opacity(0.88))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                    .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
+            )
+            .accessibilityIdentifier("dashboard-intelligence-error")
         }
     }
 

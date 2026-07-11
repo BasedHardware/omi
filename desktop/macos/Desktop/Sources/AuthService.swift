@@ -2417,7 +2417,7 @@ class AuthService {
             SentrySDK.setUser(nil)
         }
 
-        let signingOutUserID = UserDefaults.standard.string(forKey: "auth_userId")
+        let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
         try Auth.auth().signOut()
         // Reset coordinator only after Firebase sign-out succeeds so the state
         // transition is atomic — if signOut() throws (e.g. keychain error), the
@@ -2431,11 +2431,26 @@ class AuthService {
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()
+        RewindDatabase.currentUserId = nil
 
         // Stop background services that make API calls before clearing caches
-        Task {
+        Task { [signingOutUserID] in
+            guard UserDefaults.standard.string(forKey: .authUserId) == nil
+                || UserDefaults.standard.string(forKey: .authUserId) == signingOutUserID
+            else {
+                log("AuthService: skipping stale sign-out service cleanup after a new sign-in")
+                return
+            }
             await AgentSyncService.shared.stop()
-            await FloatingBarUsageLimiter.shared.reset()
+            await MainActor.run {
+                guard UserDefaults.standard.string(forKey: .authUserId) == nil
+                    || UserDefaults.standard.string(forKey: .authUserId) == signingOutUserID
+                else {
+                    log("AuthService: skipping stale usage limiter reset after a new sign-in")
+                    return
+                }
+                FloatingBarUsageLimiter.shared.reset()
+            }
         }
 
         // Stop trial polling and reset banner state for this user session
@@ -2452,7 +2467,11 @@ class AuthService {
         // a new sign-in session has already called configure() by the time this runs.
         let closeGeneration = RewindDatabase.configureGeneration
         Task {
-            await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            let didClose = await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            guard didClose else {
+                log("AuthService: skipping stale sign-out cache invalidation after a new database session")
+                return
+            }
             await RewindIndexer.shared.reset()
             await RewindStorage.shared.reset()
             await TranscriptionStorage.shared.invalidateCache()
@@ -2461,6 +2480,13 @@ class AuthService {
             await ProactiveStorage.shared.invalidateCache()
             await NoteStorage.shared.invalidateCache()
             await AIUserProfileService.shared.invalidateCache()
+            // These per-user storages cache a DatabasePool bound to the previous
+            // user's omi.db. Without invalidation the next signed-in user reads and
+            // writes the prior account's staged tasks, goals, and task-chat history
+            // until the app is relaunched (cross-account data leak).
+            await StagedTaskStorage.shared.invalidateCache()
+            await GoalStorage.shared.invalidateCache()
+            await TaskChatMessageStorage.shared.invalidateCache()
         }
 
         // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.

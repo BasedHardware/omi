@@ -2,6 +2,36 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.71",
+      "date": "2026-07-11",
+      "changes": [
+        "Made macOS permission requests safer across chat and voice and kept notch transitions centered after push-to-talk",
+        "Improved push-to-talk reliability during reconnects and rapid state changes",
+        "Fixed the floating notch disappearing after macOS moves it between displays or Spaces",
+        "Added a consent-gated way to let Omi open macOS permission settings directly from main chat"
+      ]
+    },
+    {
+      "version": "0.12.70",
+      "date": "2026-07-11",
+      "changes": [
+        "Fixed voice requests for a background agent's completed result",
+        "Agent provider boundaries and worker roles are now enforced by the desktop runtime: managed work stays on Omi cloud routing, local modes stay pinned to their selected provider, leaf workers cannot create more agents, and failed required control actions cannot appear as successful completion.",
+        "Fixed agent-management questions from creating unintended background agents and duplicate completion cards",
+        "Fixed background agents so they can use your Omi memories",
+        "Improved sync recovery reliability for large offline recording backlogs",
+        "Fixed the floating Omi notch drifting away from the MacBook camera housing after it resizes",
+        "Fixed OpenClaw and Hermes agent pills and a voice-startup crash in development builds",
+        "Fixed Omi Chat getting stuck on a stale local-provider setting before its first response",
+        "Fixed Neo subscribers being blocked from Desktop audio by stale trial paywall state",
+        "Fixed voice requests so completed background agents remain discoverable",
+        "Fixed push-to-talk notch alignment and restored direct macOS permission requests in chat and voice",
+        "Fixed Push to Talk audio being lost while the realtime session reconnects",
+        "Fixed goal creation, memory editing, memory visibility, and voice-provider authorization failures that could interrupt desktop workflows",
+        "Improved desktop error messages with clear retry guidance instead of technical backend details"
+      ]
+    },
+    {
       "version": "0.12.69",
       "date": "2026-07-10",
       "changes": [

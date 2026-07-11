@@ -290,9 +290,18 @@ actor APIClient {
   /// Firebase session (e.g. background polling that should not sign the user out).
   struct RequestAuthPolicy: Sendable {
     var signOutOn401: Bool
+    var recordsAuthRetryTelemetry: Bool = true
+    /// When true, a post-refresh HTTP 401 is returned to the caller instead of
+    /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
+    var returnsPersistent401Response: Bool = false
 
     static let `default` = RequestAuthPolicy(signOutOn401: true)
     static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
+    static let providerCredentialBoundary = RequestAuthPolicy(
+      signOutOn401: false,
+      recordsAuthRetryTelemetry: false,
+      returnsPersistent401Response: true
+    )
   }
 
   private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
@@ -352,7 +361,10 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      if !retriedAuth {
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (data, httpResponse)
+      }
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       }
       guard let retryRequest = try await authorizedRetryRequest(
@@ -360,7 +372,9 @@ actor APIClient {
         retriedAuth: retriedAuth,
         signOutOn401: authPolicy.signOutOn401
       ) else {
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
         throw APIError.unauthorized
       }
       do {
@@ -371,13 +385,17 @@ actor APIClient {
         )
         let (_, retryResponse) = result
         let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
         return result
       } catch {
         if case APIError.unauthorized = error {
           throw error
         }
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
         throw error
       }
     }
@@ -4253,7 +4271,9 @@ extension APIClient {
       }
     }
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
-    return try await patch("v1/users/transcription-preferences", body: body)
+    struct StatusResponse: Decodable { let status: String }
+    let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
+    return try await getTranscriptionPreferences()
   }
 
   /// Fetches user language preference
@@ -6130,34 +6150,45 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders()
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
+    // This desktop-backend route can surface upstream OpenAI/BYOK credential
+    // failures as HTTP 401. Refresh the Firebase header once in case it is stale,
+    // but never let a voice-only provider failure invalidate the Omi session.
+    // Only remap to providerAuth when the body is OpenAI-shaped — a bare/Firebase
+    // 401 after refresh is a real login failure and must require re-auth.
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: .providerCredentialBoundary
+    )
 
     if httpResponse.statusCode == 401 {
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: false,
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: mode,
+          message: mode == .byok
+            ? "Your OpenAI key was rejected. Update it in Settings."
+            : "OpenAI authentication failed. Voice responses are using fallback."
+        )
+      }
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
         signOutOn401: true
-      ) else {
-        throw APIError.unauthorized
-      }
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
-      }
-      guard retryHttpResponse.statusCode != 401 else {
-        await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
-        throw APIError.unauthorized
-      }
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
-      }
-      return retryData
+      )
+      throw APIError.unauthorized
     }
 
+    if httpResponse.statusCode == 429 {
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        throw CredentialHealthError.providerQuota(
+          provider: .openai,
+          message: "OpenAI voice quota was exceeded. Voice responses are using fallback."
+        )
+      }
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
     }

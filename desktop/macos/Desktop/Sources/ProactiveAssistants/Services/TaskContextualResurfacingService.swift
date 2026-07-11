@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OmiSupport
 
 enum TaskContextEventKind: String, Codable, CaseIterable {
   case person
@@ -144,7 +145,7 @@ final class TaskContextSubjectMatcher {
     if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
       let decoded = try? JSONDecoder().decode([Entry].self, from: data)
     {
-      entries = Dictionary(uniqueKeysWithValues: decoded.map { ($0.referenceHash, $0) })
+      entries = Dictionary(lastWriteWins: decoded.map { ($0.referenceHash, $0) })
     } else {
       entries = [:]
     }
@@ -201,7 +202,7 @@ final class TaskContextSubjectMatcher {
     entries = entries.filter { $0.value.updatedAt > cutoff }
     if entries.count > 256 {
       let keep = entries.values.sorted { $0.updatedAt > $1.updatedAt }.prefix(256)
-      entries = Dictionary(uniqueKeysWithValues: keep.map { ($0.referenceHash, $0) })
+      entries = Dictionary(lastWriteWins: keep.map { ($0.referenceHash, $0) })
     }
     persist()
   }
@@ -222,7 +223,7 @@ final class TaskContextSubjectMatcher {
     if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
       let decoded = try? JSONDecoder().decode([Entry].self, from: data)
     {
-      entries = Dictionary(uniqueKeysWithValues: decoded.map { ($0.referenceHash, $0) })
+      entries = Dictionary(lastWriteWins: decoded.map { ($0.referenceHash, $0) })
     } else {
       entries.removeAll()
     }

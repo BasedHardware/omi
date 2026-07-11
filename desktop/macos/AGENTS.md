@@ -90,7 +90,8 @@ library targets with enforced dependency edges:
 
 - `OmiTheme` — shared colors, typography, chrome (`Sources/Theme/`)
 - `OmiWAL` — write-ahead log model + coordinator (`Sources/OmiWAL/`)
-- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g. `DesktopLocalProfile`)
+- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g.
+  `DesktopLocalProfile` and `Dictionary(lastWriteWins:)`)
 
 `Rewind/Core/` remains in the executable target for now — it still references main-app
 types (`TaskActionItem`, `PowerMonitor`, etc.) and needs a shared-models carve-out first.
@@ -101,6 +102,51 @@ enforces this via `scripts/check-sources-root-layout.py`.
 
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
+
+### Synchronous state-machine callbacks
+
+- A reducer transition is atomic through model assignment, effect delivery, UI
+  projection, and snapshot publication. A callback may request another event,
+  but it must not recursively reduce against a half-published transition.
+- Coordinators with synchronous effect/snapshot callbacks drain nested events
+  through a FIFO, non-reentrant queue. Do not fix recursion with one-off boolean
+  suppression or by dispatching after an arbitrary delay.
+- Tests for callback-driven machines must synchronously enqueue from both an
+  effect callback and an observer/snapshot callback, assert callback depth stays
+  one, and assert the resulting event order.
+
+### Collection safety
+
+- Never use `Dictionary(uniqueKeysWithValues:)` for API responses, decoded
+  persistence, runtime projections, or any other data whose key uniqueness is
+  not enforced by the Swift type system. A duplicate key traps and terminates
+  the process.
+- Use `Dictionary(lastWriteWins:)` from `OmiSupport` when the newest record in
+  input order is authoritative. Use another explicit non-trapping merge policy
+  when the domain requires different semantics.
+- A raw trapping initializer is allowed only for a statically proven uniqueness
+  contract, with a local reason:
+  `// omi-collection-safety: static-unique-keys -- <why the type guarantees uniqueness>`.
+  Runtime validation, backend expectations, and “should be unique” are not
+  static contracts.
+- Run `python3 scripts/check_desktop_test_quality.py` after changing Swift
+  collection construction.
+
+### Swift test quality
+
+- Behavior fixes require tests that call the production API and assert outcomes.
+  Reading a production `.swift` file and asserting that it contains a function
+  name or implementation string is not behavioral coverage.
+- Source inspection is reserved for narrow forbidden-pattern or static wiring
+  tripwires. New tripwires must carry a local reason:
+  `// omi-test-quality: source-inspection -- static contract: <what cannot be expressed behaviorally>`.
+  The tripwire supplements rather than replaces behavioral coverage.
+- Do not add wall-clock sleeps to unit tests. Inject a `Clock`/sleeper, drive a
+  callback/continuation, or await a deterministic state signal. An unavoidable
+  real-scheduler integration wait needs
+  `// omi-test-quality: wall-clock-wait -- <why injection cannot test this boundary>`.
+- `python3 scripts/check_desktop_test_quality.py` ratchets both legacy
+  source-inspection sites and wall-clock waits; its baselines may only decrease.
 
 ## Key Architecture Notes
 
@@ -155,6 +201,7 @@ See `.claude/settings.json` for connection details.
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
+- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`

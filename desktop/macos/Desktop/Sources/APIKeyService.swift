@@ -115,6 +115,13 @@ final class APIKeyService: ObservableObject {
                 // Set env vars so existing getenv() consumers keep working during transition
                 applyToEnvironment()
 
+                // Clear the completed task on the success path too (not just on the
+                // all-attempts-failed path below). Otherwise a stale finished task
+                // lingers; after sign-out (clear() sets isLoaded=false) the fetchTask
+                // == nil guards in startFetchingKeys()/waitForKeys() never fire, so a
+                // re-login can never refetch keys until the app is relaunched.
+                fetchTask = nil
+
                 log("APIKeyService: Fetched keys from backend (gemini=\(keys.geminiApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))")
                 return
             } catch {
@@ -141,6 +148,10 @@ final class APIKeyService: ObservableObject {
         googleCalendarApiKey = nil
         isLoaded = false
         loadError = nil
+        // Drop any completed/in-flight fetch task so the next sign-in can start a
+        // fresh fetch — the fetchTask == nil guards would otherwise block it.
+        fetchTask?.cancel()
+        fetchTask = nil
 
         unsetenv("GEMINI_API_KEY")
         // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in

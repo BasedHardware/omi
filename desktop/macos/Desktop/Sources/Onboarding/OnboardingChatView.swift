@@ -838,7 +838,8 @@ struct OnboardingChatView: View {
       isGrantingPermission = true
       Task {
         let result = await ChatToolExecutor.execute(
-          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil)
+          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil),
+          isOnboardingSurface: true
         )
         isGrantingPermission = false
 
@@ -1143,7 +1144,7 @@ struct OnboardingChatView: View {
         targetValue: config.targetValue,
         currentValue: 0,
         unit: config.unit,
-        source: "onboarding_\(source)"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)
@@ -1389,7 +1390,7 @@ struct OnboardingChatView: View {
           },
           onToolCall: { @Sendable _, name, input in
             let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-            let result = await ChatToolExecutor.execute(toolCall)
+            let result = await ChatToolExecutor.execute(toolCall, isOnboardingSurface: true)
             log("OnboardingChat: Exploration tool \(name) executed")
             return result
           },

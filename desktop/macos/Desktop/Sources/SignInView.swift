@@ -48,7 +48,7 @@ struct SignInView: View {
                             } catch AuthError.cancelled {
                                 // swallow — user initiated
                             } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
+                                let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
                                 authState.error = errorMsg
                                 NSLog("OMI Sign in error: %@", errorMsg)
                             }
@@ -79,7 +79,7 @@ struct SignInView: View {
                             } catch AuthError.cancelled {
                                 // swallow — user initiated
                             } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
+                                let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
                                 authState.error = errorMsg
                                 NSLog("OMI Sign in error: %@", errorMsg)
                             }
@@ -126,7 +126,7 @@ struct SignInView: View {
                     }
 
                     if let error = authState.error {
-                        Text(error)
+                        Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
                             .font(.caption)
                             .foregroundColor(OmiColors.error)
                             .multilineTextAlignment(.center)

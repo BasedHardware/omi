@@ -16,7 +16,6 @@ venv/
 .memory_pipeline_runs/
 .local/
 dump/
-/scripts/
 *.zip
 *.wav
 node_modules

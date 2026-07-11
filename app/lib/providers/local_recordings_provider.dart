@@ -197,7 +197,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _failedName = rec.fileName;
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await SyncUploadGate.instance.upload([file]);
+        final lane = syncUploadLaneForTimestamp(
+          rec.timerStart,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          hasServerCaptureProof: false,
+        );
+        final result = await SyncUploadGate.instance.upload([file], lane: lane);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -209,8 +214,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
         }
       }
     } on SyncRateLimitedException catch (e) {
-      outcome =
-          e.kind == SyncRateLimitKind.fairUse ? LocalUploadOutcome.fairUseLimited : LocalUploadOutcome.backendBusy;
+      outcome = e.kind == SyncRateLimitKind.fairUse
+          ? LocalUploadOutcome.fairUseLimited
+          : LocalUploadOutcome.backendBusy;
     } catch (e) {
       _failedName = rec.fileName;
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
@@ -334,16 +340,16 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// playback). Never stored anywhere. `filePath` is the relative name, which
   /// `Wal.getFilePath` resolves against the app documents dir (== batchAudioDir).
   Wal _walFor(LocalRecording r) => Wal(
-        timerStart: r.timerStart,
-        codec: r.codec,
-        seconds: r.seconds,
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        filePath: r.fileName,
-        device: batchRecordingDevice,
-      );
+    timerStart: r.timerStart,
+    codec: r.codec,
+    seconds: r.seconds,
+    sampleRate: 16000,
+    channel: 1,
+    status: WalStatus.miss,
+    storage: WalStorage.disk,
+    filePath: r.fileName,
+    device: batchRecordingDevice,
+  );
 
   String? get currentPlayingId => _audio.currentPlayingId;
   bool get isProcessingAudio => _audio.isProcessingAudio;

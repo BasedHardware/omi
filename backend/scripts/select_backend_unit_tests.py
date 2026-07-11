@@ -95,11 +95,18 @@ AREA_TESTS = (
         ('tests/unit/test_mcp_*.py', 'tests/unit/test_oauth_callback_uid_guard.py'),
     ),
     (
-        ('backend/utils/stt/', 'backend/pusher/', 'backend/routers/transcribe', 'backend/routers/listen'),
+        (
+            'backend/utils/stt/',
+            'backend/config/prerecorded_stt',
+            'backend/pusher/',
+            'backend/routers/transcribe',
+            'backend/routers/listen',
+        ),
         (),
         (
             'tests/unit/test_*audio*.py',
             'tests/unit/test_*listen*.py',
+            'tests/unit/test_parakeet_*.py',
             'tests/unit/test_*pusher*.py',
             'tests/unit/test_*speaker*.py',
             'tests/unit/test_*speech*.py',
@@ -299,6 +306,14 @@ def workflow_contract_tests_for_path(path: str, all_tests: List[str]) -> Set[str
     return selected
 
 
+def workflow_contract_matches_path(path: str) -> bool:
+    for workflow in load_workflow_contracts():
+        sources: Tuple[str, ...] = tuple(workflow.get('sources') or ())
+        if any(path_matches(path, source) for source in sources):
+            return True
+    return False
+
+
 def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> tuple[list[str], str]:
     changed_paths = [path for path in (normalize_changed_path(path) for path in changed_paths) if path]
     if not changed_paths:
@@ -320,17 +335,36 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         if backend_relative in all_tests:
             selected.add(backend_relative)
 
+    removed_or_unlisted_tests = [path for path in test_paths if path.removeprefix('backend/') not in all_tests]
+    if removed_or_unlisted_tests:
+        return all_tests, f'{removed_or_unlisted_tests[0]} was removed or is outside backend test discovery'
+
+    mapped_backend_sources: set[str] = set()
     for path in backend_paths:
+        if path in test_paths:
+            continue
+        if workflow_contract_matches_path(path):
+            mapped_backend_sources.add(path)
         for source_prefixes, source_globs, test_globs in AREA_TESTS:
             if any(path.startswith(prefix) for prefix in source_prefixes) or any(
                 path_matches(path, pattern) for pattern in source_globs
             ):
+                mapped_backend_sources.add(path)
                 selected.update(match_tests(all_tests, test_globs))
 
     if any(is_memory_policy_core_path(path) for path in backend_paths):
+        mapped_backend_sources.update(path for path in backend_paths if is_memory_policy_core_path(path))
         selected.update(test for test in MEMORY_POLICY_CORE_TESTS if test in all_tests)
 
+    unmapped_backend_sources = [
+        path for path in backend_paths if path not in test_paths and path not in mapped_backend_sources
+    ]
+    if unmapped_backend_sources:
+        return all_tests, f'{unmapped_backend_sources[0]} did not match a backend test-selection contract'
+
     if not backend_paths:
+        if selected:
+            return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
         return [], 'no backend files changed'
     if selected:
         return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'

@@ -1647,7 +1647,7 @@ struct ImportConnectorSheet: View {
                 .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.success)
         } else if let errorMessage = runState?.errorMessage {
-            Text(errorMessage)
+            Text(UserFacingErrorPresentation.message(from: errorMessage, while: .integration(connector.title)))
                 .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.warning)
         } else if snapshot.isConnected || snapshot.secondaryText != nil {

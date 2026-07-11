@@ -9,6 +9,8 @@ covers:
   - desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DashboardIntelligenceStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
 preconditions:
   - automation_bridge_ready
 

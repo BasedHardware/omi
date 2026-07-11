@@ -41,7 +41,7 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Set up desktop Rust toolchain
@@ -62,7 +62,11 @@ jobs:
 
       - name: Check desktop Rust backend
         run: |
-          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
+          FILES=$(while IFS= read -r file; do
+            if [[ "$file" =~ ^desktop/macos/Backend-Rust/.*\.rs$ ]] && [ -f "$file" ]; then
+              echo "${file#desktop/macos/Backend-Rust/}"
+            fi
+          done < /tmp/changed-files.txt)
           if [ -n "$FILES" ]; then
             (
               cd desktop/macos/Backend-Rust

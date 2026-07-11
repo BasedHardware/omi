@@ -88,6 +88,7 @@ final class ReentrancyGateTests: XCTestCase {
                 gate.exit()
                 exitCalls += 1
             }
+            XCTAssertFalse(gate.tryEnter(), "critical section should keep the gate closed")
         }
 
         // Caller A (the test itself) acquires the gate directly.

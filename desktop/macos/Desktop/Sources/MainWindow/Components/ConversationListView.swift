@@ -118,7 +118,7 @@ struct ConversationListView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func errorView(_ error: String) -> some View {
+  private func errorView(_: String) -> some View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: OmiType.hero)
@@ -128,7 +128,7 @@ struct ConversationListView: View {
         .scaledFont(size: OmiType.subheading, weight: .medium)
         .foregroundColor(OmiColors.textPrimary)
 
-      Text(error)
+      Text("Check your connection and try again.")
         .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
         .multilineTextAlignment(.center)

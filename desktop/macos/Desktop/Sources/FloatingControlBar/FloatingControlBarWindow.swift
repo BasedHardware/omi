@@ -750,11 +750,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func topCenteredOrigin(for size: NSSize, on screen: NSScreen, usesNotchIsland: Bool) -> NSPoint {
         let anchorFrame = usesNotchIsland ? screen.frame : screen.visibleFrame
-        let x = (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
-        let y = usesNotchIsland
-            ? anchorFrame.maxY - size.height
-            : anchorFrame.maxY - size.height - topInsetForPillFallback
-        return NSPoint(x: x, y: y)
+        var frame = FloatingControlBarGeometry.topCenteredFrame(size: size, anchorFrame: anchorFrame)
+        if !usesNotchIsland {
+            frame.origin.y -= topInsetForPillFallback
+        }
+        return frame.origin
     }
 
     private func growOutFromNotch(on targetScreen: NSScreen) {
@@ -1390,16 +1390,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     // MARK: - Window Geometry
 
-    /// Center-center: preserves midpoint (used by hover expand/collapse).
-    private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
-        FloatingControlBarGeometry.centerAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
-    }
-
-    /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
-    private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        return FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
-    }
-
     private func resizeAnchored(
         to size: NSSize,
         makeResizable: Bool,
@@ -1418,14 +1408,64 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             width: max(windowSize.width, FloatingControlBarWindow.minBarSize.width),
             height: max(windowSize.height, FloatingControlBarWindow.minBarSize.height)
         )
-        let newOrigin = anchorTop
-            ? originForTopCenterAnchor(newSize: constrainedSize)
-            : originForCenterAnchor(newSize: constrainedSize)
-
-        let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
+        let transitionAnchor: FloatingControlBarGeometry.TransitionAnchor
+        if anchorTop, notchModeEnabled, let screenFrame = screenForPlacement?.frame {
+            // A notch island is fixed to its display's camera housing. Never
+            // carry a transient animation offset into its next surface state.
+            transitionAnchor = .screenTopCenter(screenFrame)
+        } else if anchorTop {
+            transitionAnchor = .topCenter
+        } else {
+            transitionAnchor = .center
+        }
+        let targetFrame = FloatingControlBarGeometry.targetFrame(
+            currentFrame: frame,
+            targetSize: constrainedSize,
+            anchor: transitionAnchor
+        )
         resizeToFrame(
             targetFrame,
             makeResizable: makeResizable,
+            animated: animated,
+            animationDuration: animationDuration
+        )
+    }
+
+    /// Applies a semantic PTT/agent-switcher transition. These states must not
+    /// choose their anchor through a generic resize call: notch surfaces always
+    /// return to the display camera housing, while pill surfaces preserve or
+    /// restore the user's position according to their transition contract.
+    private func resizeSurfaceTransition(
+        _ transition: FloatingControlBarGeometry.SurfaceTransition,
+        toSurfaceSize size: NSSize,
+        animated: Bool,
+        animationDuration: TimeInterval
+    ) {
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+        updateNotchIslandState()
+        level = notchModeEnabled ? .statusBar : .floating
+
+        let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
+        let constrainedSize = NSSize(
+            width: max(windowSize.width, Self.minBarSize.width),
+            height: max(windowSize.height, Self.minBarSize.height)
+        )
+        let placement: FloatingControlBarGeometry.SurfacePlacement = notchModeEnabled
+            ? .notch(screenFrame: screenForPlacement?.frame)
+            : .pill(
+                draggable: ShortcutSettings.shared.draggableBarEnabled,
+                canonicalCompactFrame: canonicalCollapsedPillFrame()
+            )
+        let targetFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: frame,
+            targetSize: constrainedSize,
+            transition: transition,
+            placement: placement
+        )
+        resizeToFrame(
+            targetFrame,
+            makeResizable: false,
             animated: animated,
             animationDuration: animationDuration
         )
@@ -1668,27 +1708,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let expandedSize = notchModeEnabled
                 ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
                 : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-            resizeAnchored(
-                to: expandedSize,
-                makeResizable: false,
+            resizeSurfaceTransition(
+                .agentSwitcher(visible: true),
+                toSurfaceSize: expandedSize,
                 animated: true,
-                animationDuration: Self.notchHoverMenuExpandDuration,
-                anchorTop: true
-            )
-        } else if notchModeEnabled {
-            resizeAnchored(
-                to: collapsedBarSize,
-                makeResizable: false,
-                animated: true,
-                animationDuration: Self.notchHoverMenuCollapseDuration,
-                anchorTop: true
+                animationDuration: Self.notchHoverMenuExpandDuration
             )
         } else {
-            // Collapse to the canonical pill position, not the current midX —
-            // see canonicalCollapsedPillFrame.
-            resizeToFrame(
-                canonicalCollapsedPillFrame(),
-                makeResizable: false,
+            resizeSurfaceTransition(
+                .agentSwitcher(visible: false),
+                toSurfaceSize: collapsedBarSize,
                 animated: true,
                 animationDuration: Self.notchHoverMenuCollapseDuration
             )
@@ -1754,12 +1783,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 return
             }
             let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
-            resizeAnchored(
-                to: targetSize,
-                makeResizable: false,
+            resizeSurfaceTransition(
+                .pushToTalk(expanded: expanded),
+                toSurfaceSize: targetSize,
                 animated: true,
-                animationDuration: Self.askOmiAnimationDuration,
-                anchorTop: true
+                animationDuration: Self.askOmiAnimationDuration
             )
             return
         }
@@ -1767,19 +1795,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // (e.g. realtime audio received this turn), collapse to the glow-adjusted
         // compact size so the white glow/stroke is not clipped until the idle
         // timer clears it.
-        let compactSize: NSSize = state.isVoiceResponseGlowActive
-            ? responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)
-            : Self.minBarSize
-        let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
-            currentFrame: frame,
-            expanded: expanded,
-            draggable: ShortcutSettings.shared.draggableBarEnabled,
-            visibleFrame: geometryScreenVisibleFrame(),
-            topInset: Self.topInset,
-            compactSize: compactSize,
-            voiceSize: Self.voiceBarSize
+        resizeSurfaceTransition(
+            .pushToTalk(expanded: expanded),
+            toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize,
+            animated: true,
+            animationDuration: 0.18
         )
-        resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.18)
     }
 
     /// Size the notch to fit the "thinking" indicator (active width) while a PTT
@@ -2062,6 +2083,38 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    /// A floating panel can move between displays when macOS changes Spaces or
+    /// reassigns windows, without emitting a display-configuration change. Keep
+    /// the SwiftUI presentation flag and frame in lockstep with the panel's
+    /// actual screen so an idle bar cannot render as the legacy pill inside a
+    /// notch-sized window (which is visually hidden by the camera housing).
+    func windowDidChangeScreen(_ notification: Notification) {
+        guard !isUserDragging, let screen = screenForPlacement else { return }
+
+        let previousUsesNotchIsland = state.usesNotchIsland
+        updateNotchIslandState()
+
+        // An open chat owns its user-resizable response dimensions. Updating
+        // the render mode is sufficient here; rebuilding its frame from the
+        // compact-bar defaults would discard that size (and can double-count
+        // an active voice-response glow).
+        guard !state.showingAIConversation else { return }
+
+        let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
+        let requiresFrameRefresh = !Self.framesEquivalent(frame, targetFrame)
+        guard previousUsesNotchIsland != state.usesNotchIsland || requiresFrameRefresh else { return }
+
+        resizeToFrame(
+            targetFrame,
+            makeResizable: state.showingAIConversation && state.showingAIResponse,
+            animated: false
+        )
+        log(
+            "FloatingControlBarWindow: reconciled screen change to \(screen.localizedName) "
+                + "usesNotch=\(state.usesNotchIsland)"
+        )
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         // Only dismiss when the user physically clicks away.
         // Programmatic focus changes — e.g. the AI agent activating a browser
@@ -2147,6 +2200,40 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 }
 
 // MARK: - FloatingControlBarManager
+
+struct PillTerminalCompletionProjection: Equatable {
+    let idempotencyKey: String
+    let requestSnippet: String
+    let assistantText: String
+    let summary: String
+
+    static func make(
+        pillID: UUID,
+        runId: String?,
+        userText: String,
+        assistantText: String
+    ) -> PillTerminalCompletionProjection? {
+        let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAssistant.isEmpty else { return nil }
+
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let trimmedRunId = runId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stableRunId = trimmedRunId.flatMap { $0.isEmpty ? nil : $0 }
+        let idempotencyKey = "pill_completion:\(stableRunId ?? pillID.uuidString)"
+        let summary = requestSnippet.isEmpty
+            ? "[Background agent id=\(pillID.uuidString)] \(trimmedAssistant)"
+            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
+        return PillTerminalCompletionProjection(
+            idempotencyKey: idempotencyKey,
+            requestSnippet: requestSnippet,
+            assistantText: trimmedAssistant,
+            summary: summary
+        )
+    }
+}
 
 /// Singleton manager that owns the floating bar window and coordinates with AppState / ChatProvider.
 @MainActor
@@ -3843,26 +3930,13 @@ class FloatingControlBarManager {
         userText: String,
         assistantText: String
     ) async {
-        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedAssistant.isEmpty else { return }
-
-        let idempotencyKey: String
-        if let runId, !runId.isEmpty {
-            idempotencyKey = "pill_completion:\(runId)"
-        } else {
-            idempotencyKey = "pill_completion:\(pillID.uuidString)"
-        }
+        guard let completion = PillTerminalCompletionProjection.make(
+            pillID: pillID,
+            runId: runId,
+            userText: userText,
+            assistantText: assistantText
+        ) else { return }
         observeAgentCompletionContext(pillID: pillID, runId: runId)
-
-        // Assistant-only projection: the spawn handoff already recorded the user's
-        // request on main_chat; repeating it here would double-spend the voice seed budget.
-        let requestSnippet = trimmedUser.count > 120
-            ? String(trimmedUser.prefix(120)) + "…"
-            : trimmedUser
-        let summary = requestSnippet.isEmpty
-            ? "[Background agent id=\(pillID.uuidString)] \(trimmedAssistant)"
-            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
 
         let completionBlock = ChatContentBlock.agentCompletion(
             id: UUID().uuidString,
@@ -3870,29 +3944,29 @@ class FloatingControlBarManager {
             sessionId: AgentPillsManager.shared.pills.first(where: { $0.id == pillID })?.canonicalSessionId,
             runId: runId,
             title: "Background agent",
-            promptSnippet: requestSnippet.isEmpty ? "Background agent" : requestSnippet,
-            output: trimmedAssistant,
+            promptSnippet: completion.requestSnippet.isEmpty ? "Background agent" : completion.requestSnippet,
+            output: completion.assistantText,
             status: "completed"
         )
 
         guard let provider = historyChatProvider else { return }
-        if provider.hasOptimisticTurn(continuityKey: idempotencyKey)
-            || provider.messages.contains(where: { $0.clientTurnId == idempotencyKey }) {
+        if provider.hasOptimisticTurn(continuityKey: completion.idempotencyKey)
+            || provider.messages.contains(where: { $0.clientTurnId == completion.idempotencyKey }) {
             // Artifact path already staged this key; only project to kernel.
             await provider.kernelTurnProjection.projectCrossSurfaceTurn(
                 surface: provider.mainChatSurfaceReference(),
                 userText: "",
-                assistantText: summary,
+                assistantText: completion.summary,
                 origin: "pill_completion",
-                idempotencyKey: idempotencyKey
+                idempotencyKey: completion.idempotencyKey
             )
             return
         }
 
         _ = provider.stageOptimisticTurn(
-            continuityKey: idempotencyKey,
+            continuityKey: completion.idempotencyKey,
             userText: "",
-            assistantText: summary,
+            assistantText: completion.summary,
             origin: "pill_completion",
             turnOwner: .mainChat,
             contentBlocks: [completionBlock]
@@ -3900,9 +3974,9 @@ class FloatingControlBarManager {
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: "",
-            assistantText: summary,
+            assistantText: completion.summary,
             origin: "pill_completion",
-            idempotencyKey: idempotencyKey
+            idempotencyKey: completion.idempotencyKey
         )
     }
 

@@ -271,6 +271,26 @@ done
 Hermetic ratchets: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`
 and `--filter RestartRelaunchCommandTests` (non-prod relaunch re-passes the port as argv).
 
+### 2j. Prove the chat usage limiter is deterministic + dev-resettable (CHAT-05)
+The free-tier monthly chat limiter (`FloatingBarUsageLimiter`, 30 messages/month) is
+deterministic and dev-resettable. Driving it to the limit through real chat would burn
+LLM calls, so two non-prod bridge actions expose the counter directly: `usage_limiter_snapshot`
+(read `is_limit_reached` / `remaining_queries` / `limit_description`) and `reset_usage_limiter`
+(reset the counter). No LLM spend. Note: `reset_usage_limiter` is the sign-out-style
+`FloatingBarUsageLimiter.reset()` — it clears the cached quota **and** cached-plan state
+(and its `UserDefaults` key) on the non-prod bundle; the next subscription poll repopulates
+it. Assert on `is_limit_reached` (not `remaining_queries`, which reads `Int.max` when no
+quota is loaded).
+```bash
+cd desktop/macos
+./scripts/omi-ctl action usage_limiter_snapshot   # {"is_limit_reached":…, "remaining_queries":…, "limit_description":…}
+./scripts/omi-ctl action reset_usage_limiter      # {"reset":"true","is_limit_reached":"false","remaining_queries":…}
+./scripts/omi-ctl action usage_limiter_snapshot   # assert is_limit_reached=false after reset (dev-resettable proven)
+```
+Hermetic ratchets: `xcrun swift test --package-path Desktop --filter FloatingBarUsageLimiterTests`
+(deterministic counter + `testResetClearsLimitReachedState`) and `--filter UsageLimiterActionTests`
+(the non-prod actions wire to the limiter and the reset is prod-gated).
+
 ### The full loop
 ```bash
 cd desktop/macos

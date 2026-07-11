@@ -42,6 +42,8 @@ enum DefaultsKey: String {
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
     /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
     case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
+    case desktopIsPaywalled = "desktop_isPaywalled"
+    case rewindDisableContentCache = "rewindDisableContentCache"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

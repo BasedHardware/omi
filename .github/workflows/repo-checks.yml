@@ -52,7 +52,7 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Check merge conflict markers
@@ -142,9 +142,9 @@ jobs:
         if: needs.changes.outputs.has_workflows == 'true'
         run: |
           GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
-          if [ -n "$FILES" ]; then
-            /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
+          mapfile -t files < <(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
+          if [ "${#files[@]}" -gt 0 ]; then
+            /tmp/actionlint-bin/actionlint -shellcheck "" "${files[@]}"
           fi
 
   formatting:
@@ -160,7 +160,7 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Setup Flutter
@@ -178,7 +178,7 @@ jobs:
       - name: Check Dart formatting
         if: needs.changes.outputs.has_dart == 'true'
         run: |
-          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
           fi
@@ -187,7 +187,7 @@ jobs:
         if: needs.changes.outputs.has_python == 'true'
         run: |
           pip install -q black
-          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
+          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
@@ -195,7 +195,7 @@ jobs:
       - name: Check ARB formatting
         if: needs.changes.outputs.has_arb == 'true'
         run: |
-          FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
+          FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0
           for f in $FILES; do
             if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
@@ -224,7 +224,7 @@ jobs:
       - name: Check C/C++ formatting
         if: needs.changes.outputs.has_firmware == 'true'
         run: |
-          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
+          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs clang-format --dry-run --Werror
           fi

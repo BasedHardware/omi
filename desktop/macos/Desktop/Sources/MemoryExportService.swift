@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OmiSupport
 
 enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case notion
@@ -818,7 +819,7 @@ actor MemoryExportService {
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
     let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
     return Dictionary(
-      uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
+      lastWriteWins: MemoryExportDestination.allCases.map { destination in
         (destination, status(for: destination, localMCPConnections: localConnections))
       })
   }

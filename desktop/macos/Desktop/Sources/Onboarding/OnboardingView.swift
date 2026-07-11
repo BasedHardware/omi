@@ -475,6 +475,7 @@ struct OnboardingView: View {
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false
+    ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
