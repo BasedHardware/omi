@@ -67,6 +67,7 @@ SCHEMA_GROUPS = {
             'ActionItemUpdateRequest',
             'ActionItemsResponse',
             'ActionItemsSearchResponse',
+            'ConversationActionItemsCountResponse',
             'PendingSyncResponse',
             'BatchMutationResponse',
             'BatchDeleteActionItemsResponse',
