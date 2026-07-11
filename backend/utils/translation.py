@@ -789,11 +789,13 @@ class TranslationService:
             TRANSLATION_ERRORS.labels(provider="nllb", error_type="api_error").inc()
             raise
 
-    def _translate_batch(self, contents: List[str], dest_language: str, callsite: str = "") -> List[Tuple[str, str]]:
+    def _translate_batch(
+        self, contents: List[str], dest_language: str, callsite: str = "", source_language: str = ""
+    ) -> List[Tuple[str, str]]:
         """Dispatch translation to the configured provider with fallback."""
         if TRANSLATION_PROVIDER == TranslationProvider.nllb and HOSTED_TRANSLATION_API_URL:
             try:
-                results = self._translate_nllb_batch(contents, dest_language)
+                results = self._translate_nllb_batch(contents, dest_language, source_language=source_language)
                 return results
             except Exception as e:
                 logger.warning("NLLB translation failed, falling back to Google: %s", e)
@@ -963,7 +965,7 @@ class TranslationService:
             self.translation_cache.popitem(last=False)
         self.translation_cache[cache_key] = (translated_text, detected_lang)
 
-    def translate_text_by_sentence(self, dest_language: str, text: str) -> Tuple[str, str]:
+    def translate_text_by_sentence(self, dest_language: str, text: str, source_language: str = "") -> Tuple[str, str]:
         """
         Translates text by splitting into sentences, batching uncached sentences
         into a single API call, and rejoining.
@@ -1026,7 +1028,9 @@ class TranslationService:
                 chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    batch_results = self._translate_batch(chunk, dest_language, "translate_text_by_sentence")
+                    batch_results = self._translate_batch(
+                        chunk, dest_language, "translate_text_by_sentence", source_language=source_language
+                    )
 
                     for j, (trans_text, det_lang) in enumerate(batch_results):
                         idx = chunk_indices[j]
@@ -1057,7 +1061,9 @@ class TranslationService:
         TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="by_sentence").inc()
         return (translated_text, dominant_lang)
 
-    def translate_units_batch(self, dest_language: str, units: List[Tuple[str, str]]) -> List[Tuple[str, str, str]]:
+    def translate_units_batch(
+        self, dest_language: str, units: List[Tuple[str, str]], source_language: str = ""
+    ) -> List[Tuple[str, str, str]]:
         """Translate a batch of (unit_id, text) pairs in minimal GCP API calls.
 
         Splits each text into sentences, checks all cache layers PER SENTENCE,
@@ -1166,7 +1172,9 @@ class TranslationService:
                 chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    batch_results = self._translate_batch(chunk, dest_language, "translate_units_batch")
+                    batch_results = self._translate_batch(
+                        chunk, dest_language, "translate_units_batch", source_language=source_language
+                    )
 
                     for j, (trans_text, det_lang) in enumerate(batch_results):
                         sent_hash = chunk_hashes[j]
@@ -1259,7 +1267,7 @@ class TranslationService:
 
         return final_results
 
-    def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
+    def translate_text(self, dest_language: str, text: str, source_language: str = "") -> Tuple[str, str]:
         """
         Translates text to the specified destination language using Google Cloud Translation API.
         Uses multi-level cache: in-memory LRU -> Redis -> API.
@@ -1285,7 +1293,9 @@ class TranslationService:
             return result
 
         try:
-            batch_results = self._translate_batch([text], dest_language, "translate_text")
+            batch_results = self._translate_batch(
+                [text], dest_language, "translate_text", source_language=source_language
+            )
             translated_text, detected_lang = batch_results[0]
 
             self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)

@@ -662,6 +662,51 @@ class TestNllbPrimaryMode(unittest.TestCase):
             self.assertEqual(results[0], ("Hola", "en"))
             self.assertEqual(results[1], ("Mundo", "en"))
 
+    def test_nllb_batch_sends_source_language_code(self):
+        """Regression: NLLB primary must send source_language_code in the payload."""
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "translations": [{"translated_text": "Hola", "detected_language_code": "en"}],
+            "latency_ms": 10,
+        }
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            self.service._translate_nllb_batch(["Hello"], "es", source_language="en")
+            call_args = mock_client.post.call_args
+            payload = call_args[1]["json"]
+            self.assertEqual(payload["source_language_code"], "en")
+            self.assertEqual(payload["target_language_code"], "es")
+
+    def test_nllb_batch_omits_source_when_empty(self):
+        """When source_language is empty, payload should not include source_language_code."""
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "translations": [{"translated_text": "Hola", "detected_language_code": ""}],
+            "latency_ms": 10,
+        }
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            self.service._translate_nllb_batch(["Hello"], "es")
+            call_args = mock_client.post.call_args
+            payload = call_args[1]["json"]
+            self.assertNotIn("source_language_code", payload)
+
     def test_translate_batch_uses_nllb_when_mode_nllb(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
@@ -669,9 +714,18 @@ class TestNllbPrimaryMode(unittest.TestCase):
         with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
             with patch.object(self.service, '_translate_google_batch') as mock_google:
                 results = self.service._translate_batch(["Hello"], "es")
-                mock_nllb.assert_called_once_with(["Hello"], "es")
+                mock_nllb.assert_called_once_with(["Hello"], "es", source_language="")
                 mock_google.assert_not_called()
                 self.assertEqual(results, [("Hola", "en")])
+
+    def test_translate_batch_passes_source_language_to_nllb(self):
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
+            results = self.service._translate_batch(["Hello"], "es", source_language="en")
+            mock_nllb.assert_called_once_with(["Hello"], "es", source_language="en")
+            self.assertEqual(results, [("Hola", "en")])
 
     def test_translate_batch_falls_back_to_google_on_nllb_error(self):
         _set_translation_provider(_translation_module, "nllb")

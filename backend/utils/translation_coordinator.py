@@ -130,12 +130,14 @@ class TranslationCoordinator:
         translation_service: TranslationService,
         on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
         language_state: Optional[ConversationLanguageState] = None,
+        source_language: str = "en",
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
         self.translation_service = translation_service
         self.on_translation_ready = on_translation_ready
         self.language_state = language_state or ConversationLanguageState(target_language)
+        self.source_language = source_language
 
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
@@ -373,7 +375,11 @@ class TranslationCoordinator:
         try:
             # Run the sync GCP API call in a thread pool to avoid blocking the event loop
             results = await run_blocking(
-                sync_executor, self.translation_service.translate_units_batch, self.target_language, api_units
+                sync_executor,
+                self.translation_service.translate_units_batch,
+                self.target_language,
+                api_units,
+                source_language=self.source_language,
             )
 
             for seg_id, translated_text, detected_lang in results:
