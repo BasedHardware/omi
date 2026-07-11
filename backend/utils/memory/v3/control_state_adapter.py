@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_control_state_adapter`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.control_state_adapter`` (WS-G8b).
 
-Neutral ``v3_control_state_adapter`` is the source of truth. Legacy ``v3_control_state_adapter`` remains an importable alias.
+This module adapts persisted control state for the V3 read path.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from utils.memory.default_read_rollout import (
     read_write_convergence_gate,
 )
 from utils.memory.memory_read_rollout_core import extract_consumer_grants
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
     V3ControlState,

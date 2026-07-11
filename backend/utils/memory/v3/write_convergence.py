@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_write_convergence`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.write_convergence`` (WS-G8b).
 
-Neutral ``v3_write_convergence`` is the source of truth. Legacy ``v3_write_convergence`` remains an importable alias.
+This module owns V3 write-convergence decisions.
 """
 
 from __future__ import annotations

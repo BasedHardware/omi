@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_limited_rollout_config`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.limited_rollout_config`` (WS-G8b).
 
-Neutral ``v3_limited_rollout_config`` is the source of truth. Legacy ``v3_limited_rollout_config`` remains an importable alias.
+This module owns V3 limited-rollout configuration.
 """
 
 from __future__ import annotations

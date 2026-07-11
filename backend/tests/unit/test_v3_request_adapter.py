@@ -1,6 +1,6 @@
 import pytest
 
-from utils.memory.v3_request_adapter import (
+from utils.memory.v3.request_adapter import (
     V3RequestAdapterError,
     adapt_v3_request_parameters,
 )

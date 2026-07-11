@@ -1,4 +1,4 @@
-"""Canonical module for ``utils.memory.v3_archive_visibility_readiness`` (WS-G8b)."""
+"""Canonical module for ``utils.memory.v3.archive_visibility_readiness`` (WS-G8b)."""
 
 from __future__ import annotations
 
