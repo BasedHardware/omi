@@ -147,8 +147,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
     try:
         loaded: object = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
         state_data = cast(Dict[str, str], loaded) if isinstance(loaded, dict) else {}
-        # Delete after successful parse to prevent replay
-        redis_db.r.delete(state_key)
+        # GETDEL above already removed the key atomically; no separate delete needed.
         return state_data
     except Exception as e:
         logger.error(f"Error parsing state data: {e}")
