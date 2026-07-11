@@ -203,18 +203,12 @@ actor VideoChunkEncoder {
             }
         }
 
-        // Record timestamp only (CGImage is not retained - memory optimization)
-        frameTimestamps.append(timestamp)
-
-        let frameInfo = EncodedFrame(
-            videoChunkPath: currentChunkPath!,
-            frameOffset: frameOffsetInChunk,
-            timestamp: timestamp
-        )
-
-        frameOffsetInChunk += 1
-
-        // Write frame to the encoder immediately (CGImage not stored after this)
+        // Write frame to the encoder FIRST (CGImage not stored after this). Only a
+        // successful write may consume a frame index: if the write throws, the
+        // caller skips the DB insert for this frame, so advancing frameOffsetInChunk
+        // / appending a timestamp here would desync every later frame in the chunk
+        // by one (DB frameOffset N pointing at real sample N-1, and the last record
+        // pointing past the end of the video). Record the frame only after success.
         do {
             try await writeFrame(image: image)
             consecutiveWriteFailures = 0 // Reset on successful write
@@ -229,6 +223,18 @@ actor VideoChunkEncoder {
             }
             throw error
         }
+
+        // Write succeeded — now record the timestamp (CGImage is not retained) and
+        // claim this frame's offset, so offsets match real encoded sample indices.
+        frameTimestamps.append(timestamp)
+
+        let frameInfo = EncodedFrame(
+            videoChunkPath: currentChunkPath!,
+            frameOffset: frameOffsetInChunk,
+            timestamp: timestamp
+        )
+
+        frameOffsetInChunk += 1
 
         // Check if chunk duration exceeded.
         // First chunk uses the shorter `firstChunkDuration` so Rewind starts showing
