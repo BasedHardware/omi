@@ -101,8 +101,12 @@ function AppShellInner(): React.JSX.Element {
 }
 
 // Marks the root when the window was created with the Win11 Mica material so
-// the canvas goes translucent (globals.css html[data-mica]). Main window only
-// — the bar/toast/capture windows own their own transparent backgrounds.
+// the canvas goes translucent. Main window only — the bar/toast/capture windows
+// own their own transparent backgrounds (they never get data-mica). The tint
+// itself lives entirely in CSS: globals.css `html[data-mica='true']` paints
+// body/#root with `rgba(15,15,15,0.82) !important`, which outranks the inline
+// `style="background: transparent"` that index.html (shared by every window)
+// hardcodes. So this effect only has to flip the attribute.
 function useMicaChrome(): void {
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return

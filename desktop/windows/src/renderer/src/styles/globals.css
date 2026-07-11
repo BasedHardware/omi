@@ -137,14 +137,19 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Mica (Win11 22H2+): main sets data-mica on the root when the window has
-     a system background material; the canvas goes translucent so the desktop
-     tint reads through — subtly. Secondary windows (bar/toast) already force
-     their own transparent backgrounds and are unaffected. */
+  /* Mica (Win11 22H2+): main sets data-mica on the root (App.useMicaChrome, main
+     window only) when the window has a system background material; the canvas
+     goes translucent so the desktop tint reads through — subtly. Base tone is
+     --bg-primary #0f0f0f at 82% (mirrors shared/chrome APP_BG_HEX, the WCO
+     caption color). `!important` is load-bearing: index.html hardcodes inline
+     `style="background: transparent"` on <body>/<#root> (that page is shared by
+     every window; the bar/toast/capture surfaces need it transparent), and only
+     `!important` outranks a non-important inline style. Secondary windows never
+     get data-mica, so they keep their transparent page. */
   html[data-mica='true'],
   html[data-mica='true'] body,
   html[data-mica='true'] #root {
-    background: rgba(15, 15, 15, 0.82);
+    background: rgba(15, 15, 15, 0.82) !important;
   }
 
   ::selection {

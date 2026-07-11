@@ -3,6 +3,7 @@ import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { supportsMica } from './windowsVersion'
+import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import {
@@ -50,7 +51,11 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
-import { createInsightToastWindow, showWhatsNewToast, getCurrentWhatsNew } from './insight/toastWindow'
+import {
+  createInsightToastWindow,
+  showWhatsNewToast,
+  getCurrentWhatsNew
+} from './insight/toastWindow'
 import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
 import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
@@ -241,11 +246,30 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      // Matches --bg-primary / --text-tertiary. The overlay paints only the
-      // caption-button cluster, so under Mica the near-identical solid is
-      // visually seamless.
-      color: '#0f0f0f',
-      symbolColor: '#b0b0b0',
+      // The overlay paints only the caption-button cluster; it must match the
+      // app's top strip (the transparent TitleBar drag region, so the color
+      // directly behind the buttons is the page background — #0f0f0f, restored
+      // as the Mica tint base in useMicaChrome, or the flat non-Mica canvas).
+      //
+      // #0f0f0f is deliberate, not a leftover. The caption seam looked wrong ONLY
+      // because the Mica tint was dead code (the page rendered fully transparent,
+      // so the strip was raw 100%-bleed Mica — much lighter than the opaque
+      // caption). Restoring the tint (useMicaChrome) makes the strip 82%-opaque
+      // #0f0f0f, and the caption blends into it. Verified on a real composited
+      // desktop (setTitleBarOverlay sweep + CopyFromScreen sampling): Windows
+      // FLATTENS the overlay alpha (rgba(15,15,15,0.82) rendered as opaque
+      // ~#0e0e0e, no desktop bleed) so a translucent overlay is impossible, and
+      // solids #1a1a1a / #252525 both rendered as a VISIBLY LIGHTER box around
+      // the buttons — #0f0f0f was the only seamless tone. (Trade-off: the strip
+      // is translucent and the overlay is opaque, so on a very light wallpaper
+      // the 18% bleed lifts the strip slightly above #0f0f0f — a subtle, not a
+      // box-shaped, mismatch. See PR notes.)
+      // Static is fine: the app has no theme/backdrop switching (no nativeTheme/
+      // themeSource usage), so the overlay never needs a runtime setTitleBarOverlay.
+      // Both values derive from shared/chrome (single source of truth with the
+      // renderer's Mica tint + the CSS --bg-primary / --text-tertiary tokens).
+      color: APP_BG_HEX,
+      symbolColor: WCO_SYMBOL_HEX,
       height: 36
     },
     transparent: false,
@@ -459,8 +483,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
   )
-  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
-    claimConversationForPosting(id, resetAttempts)
+  ipcMain.handle(
+    'db:claimConversationForPosting',
+    async (_e, id: string, resetAttempts?: boolean) =>
+      claimConversationForPosting(id, resetAttempts)
   )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
