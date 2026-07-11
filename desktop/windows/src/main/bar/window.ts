@@ -28,6 +28,7 @@ import {
   computeBarBounds,
   computeStripBounds,
   isCursorInPeekFootprint,
+  isCursorOverPill,
   shouldSuppressStrips,
   type DisplayLike
 } from './placement'
@@ -269,9 +270,18 @@ function startPeekWatch(): void {
     }
     const display =
       screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
-    const inside =
-      peekWatchSuspended ||
-      isCursorInPeekFootprint(screen.getCursorScreenPoint(), displayLike(display))
+    const dl = displayLike(display)
+    const cursor = screen.getCursorScreenPoint()
+    // Click-through safety net: the bar window is intentionally oversized (560×…
+    // for the morph), but only the 148×36 pill should ever capture a click. If
+    // the interactive flag stuck on after the cursor left the pill (DOM
+    // mouseleave never fires once the cursor exits a forwarded-events window),
+    // force the whole window back to click-through so a control under the
+    // top-center dead space stays clickable. (Not while the E2E holds peek open.)
+    if (!peekWatchSuspended && barInteractive && !isCursorOverPill(cursor, dl)) {
+      applyClickThrough(win)
+    }
+    const inside = peekWatchSuspended || isCursorInPeekFootprint(cursor, dl)
     if (inside) {
       peekOutsideSince = null
     } else if (peekOutsideSince === null) {
@@ -430,6 +440,11 @@ function createStrip(display: Electron.Display): BrowserWindow {
     }
   })
   win.setAlwaysOnTop(true, 'screen-saver')
+  // Click-through: the strip must NEVER eat a click meant for the app underneath
+  // (a control at the very top-center — e.g. a browser's new-tab "+" — sits right
+  // under it). `forward: true` still delivers mousemove to the renderer, so the
+  // hover-reveal trigger keeps working; only clicks pass straight through.
+  win.setIgnoreMouseEvents(true, { forward: true })
   try {
     win.setContentProtection(true) // invisible helper — never in captures
   } catch {

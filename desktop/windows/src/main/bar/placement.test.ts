@@ -4,8 +4,10 @@ import {
   computeBarBounds,
   displayForPoint,
   isCursorInPeekFootprint,
+  isCursorOverPill,
   shouldSuppressStrips,
   BAR_WINDOW_WIDTH,
+  PILL_HIT_WIDTH,
   STRIP_WIDTH,
   type DisplayLike
 } from './placement'
@@ -72,6 +74,32 @@ describe('isCursorInPeekFootprint (retract watchdog — merge-blocker regression
     expect(isCursorInPeekFootprint({ x: 1280 - 300, y: 0 }, primary)).toBe(false)
     // Centered footprint on the negative-origin secondary display.
     expect(isCursorInPeekFootprint({ x: 2560 + 960, y: -190 }, secondary)).toBe(true)
+  })
+})
+
+describe('isCursorOverPill (click-through safety net — BUG 4 regression)', () => {
+  it('only the 160×44 top-center pill rect captures clicks — dead space is click-through', () => {
+    // Dead-center over the pill: interactive (the pill is clickable to expand).
+    expect(isCursorOverPill({ x: 1280, y: 0 }, primary)).toBe(true)
+    expect(isCursorOverPill({ x: 1280, y: 40 }, primary)).toBe(true)
+    // Just below the pill (a control at ~y=60 under the top-center band, e.g. a
+    // browser new-tab "+"): NOT over the pill → window stays click-through.
+    expect(isCursorOverPill({ x: 1280, y: 60 }, primary)).toBe(false)
+    // Off to the side but still inside the (larger) keep-open footprint: the bar
+    // stays revealed, yet this dead space must pass clicks through.
+    expect(isCursorInPeekFootprint({ x: 1280 + 120, y: 10 }, primary)).toBe(true)
+    expect(isCursorOverPill({ x: 1280 + 120, y: 10 }, primary)).toBe(false)
+  })
+
+  it('is narrower than the keep-open footprint (clicks pass around the pill)', () => {
+    expect(PILL_HIT_WIDTH).toBeLessThan(320) // < PEEK_FOOTPRINT_WIDTH
+    const edge = 1280 + PILL_HIT_WIDTH / 2 + 1 // just outside the pill hit-rect
+    expect(isCursorOverPill({ x: edge, y: 0 }, primary)).toBe(false)
+  })
+
+  it('centers on a negative-origin secondary display', () => {
+    expect(isCursorOverPill({ x: 2560 + 960, y: -200 }, secondary)).toBe(true)
+    expect(isCursorOverPill({ x: 2560 + 960, y: -140 }, secondary)).toBe(false) // below pill
   })
 })
 

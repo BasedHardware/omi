@@ -51,6 +51,26 @@ export function isCursorInPeekFootprint(
   )
 }
 
+/** The ACTUAL visible collapsed-pill rect (148×36, top-center) plus a small aim
+ *  margin — the ONLY region that should ever eat clicks while the bar is peeked.
+ *  Distinct from the (larger) peek footprint that merely keeps the bar open:
+ *  the dead space between the pill and the footprint edge must stay click-through
+ *  so a control right under the top-center band (e.g. a browser's new-tab "+")
+ *  is still clickable. (Merge-blocker: the whole 560×… window ate clicks whenever
+ *  the interactive flag stuck on, because DOM mouseleave never fires once the
+ *  cursor exits a forwarded-events window.) */
+export const PILL_HIT_WIDTH = 160
+export const PILL_HIT_HEIGHT = 44
+
+export function isCursorOverPill(cursor: { x: number; y: number }, display: DisplayLike): boolean {
+  const b = display.bounds
+  const width = Math.min(PILL_HIT_WIDTH, b.width)
+  const x0 = b.x + (b.width - width) / 2
+  return (
+    cursor.x >= x0 && cursor.x <= x0 + width && cursor.y >= b.y && cursor.y <= b.y + PILL_HIT_HEIGHT
+  )
+}
+
 /**
  * The bar window rect for a display: fixed size, horizontally centered, hugging
  * the physical top edge (bounds, not workArea — it floats above a top-docked
