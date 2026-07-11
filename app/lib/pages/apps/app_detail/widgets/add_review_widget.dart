@@ -234,9 +234,11 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                       }
                                       if (isSuccessful) {
                                         updateShowButton(false);
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)),
+                                          );
+                                        }
                                         bool hadReview = widget.app.userReview != null;
                                         if (!hadReview) widget.app.ratingCount += 1;
                                         widget.app.userReview = AppReview(
@@ -260,7 +262,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
 
                                         Logger.debug('Refreshed apps list.');
                                         setState(() {});
-                                      } else {
+                                      } else if (context.mounted) {
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
