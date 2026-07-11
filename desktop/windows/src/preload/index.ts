@@ -76,6 +76,11 @@ const omi: OmiBridgeApi = {
   },
   allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
   e2e: process.env.OMI_E2E === '1',
+  // Offline fake-auth for the shell E2E (survives production builds). Gated on a
+  // dedicated flag the app never sets itself, so it can never activate in normal
+  // use — and separate from OMI_E2E so the bar/meeting/lifecycle specs (which set
+  // only OMI_E2E) still boot to the signed-out screen. See lib/dev/e2eAuth.
+  e2eFakeAuth: process.env.OMI_E2E_FAKE_AUTH === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),

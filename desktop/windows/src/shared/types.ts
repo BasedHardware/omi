@@ -423,6 +423,10 @@ export type OmiBridgeApi = {
   /** True when OMI_E2E=1 — renderer-side test hooks (e.g. window.__omiVoice)
    *  attach only in harness runs, never in production. */
   e2e: boolean
+  /** True when OMI_E2E_FAKE_AUTH=1 — the shell E2E injects an offline fake user
+   *  so the authed `/*` shell mounts on the real production build. A dedicated
+   *  flag (never set by the app), so it can never activate in normal use. */
+  e2eFakeAuth: boolean
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */

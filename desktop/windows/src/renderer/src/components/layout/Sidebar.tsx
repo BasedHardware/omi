@@ -153,8 +153,20 @@ export function Sidebar(): React.JSX.Element {
       {/* Top row: orb + logo (left, logo fades out when collapsed) + collapse
           toggle pinned right. The orb is the same component the bar mounts —
           here it reflects the app's listening state (calm orbit while the
-          always-on mic is live, idle otherwise). */}
-      <div className="flex items-center justify-between px-1.5 py-1">
+          always-on mic is live, idle otherwise).
+
+          Collapsed rail (w-16): the 22px orb and the ~28px collapse button can't
+          sit side-by-side in the ~36px of header content width — the fixed-width
+          orb canvas would overflow under the button. So when collapsed we stack
+          them vertically (flex-col) with each on its own row, both centered by the
+          base `items-center` (cross-axis in a column). Expanded stays a justified
+          row, pixel-identical to before. */}
+      <div
+        className={cn(
+          'flex items-center px-1.5 py-1',
+          collapsed ? 'flex-col gap-2' : 'justify-between'
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2.5">
           <Orb size={22} preset="compact" state={micOn && user ? 'listening' : 'idle'} />
           {/* Wordmark as text (crisp at every DPI, no network fetch). */}

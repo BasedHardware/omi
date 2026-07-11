@@ -132,8 +132,16 @@ function App(): React.JSX.Element {
   // shell mounts (a returning user always is). The onboarding flag lives in
   // origin-scoped localStorage, which the file:// bench profile can't inherit
   // from the dev session, so without this the bench would stall on the wizard.
-  // DEV-gated so the bypass tree-shakes out of packaged renderer builds.
-  const onboarded = useOnboardingComplete() || (import.meta.env.DEV && !!window.omi?.isBench)
+  // DEV-gated so the bypass tree-shakes out of packaged renderer builds. The
+  // OMI_E2E_FAKE_AUTH shell E2E does the same on a fresh throwaway profile, but
+  // must survive the production build (it runs the real out/ bundle). Forcing
+  // onboarded here — rather than seeding the onboardingCompletedAt pref — also
+  // keeps the background-consent interstitial closed (it gates on that pref),
+  // so the sidebar under test is never obstructed.
+  const onboarded =
+    useOnboardingComplete() ||
+    (import.meta.env.DEV && !!window.omi?.isBench) ||
+    !!window.omi?.e2eFakeAuth
 
   // Tell main whether the summon shortcut may open the overlay. Enabled once
   // onboarding is complete; during onboarding the shortcut-setup step enables it
