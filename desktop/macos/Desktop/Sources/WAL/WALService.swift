@@ -438,7 +438,9 @@ final class WALService: ObservableObject {
 
     /// Length-prefix encode frames into the on-disk WAL chunk byte layout
     /// (`UInt32 little-endian length + frame bytes`, repeated).
-    static func encodeFrames(_ frames: [Data]) -> Data {
+    /// `nonisolated`: pure byte transform, no actor state — callable synchronously
+    /// from the off-main disk-write path and from tests.
+    nonisolated static func encodeFrames(_ frames: [Data]) -> Data {
         var fileData = Data()
         for frame in frames {
             var length = UInt32(frame.count).littleEndian
@@ -452,7 +454,7 @@ final class WALService: ObservableObject {
     /// has content, the new frames EXTEND it — a duplicate WAL id (same
     /// device+second) must never atomically overwrite the earlier frames, which
     /// destroyed the previously-recorded audio.
-    static func frameFileBytes(existing: Data?, frames: [Data], append: Bool) -> Data {
+    nonisolated static func frameFileBytes(existing: Data?, frames: [Data], append: Bool) -> Data {
         let encoded = encodeFrames(frames)
         if append, let existing, !existing.isEmpty {
             return existing + encoded
