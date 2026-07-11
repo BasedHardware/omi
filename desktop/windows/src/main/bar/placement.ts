@@ -13,21 +13,7 @@ export const BAR_WINDOW_WIDTH = 560
 export const BAR_WINDOW_MAX_HEIGHT = 640
 export const BAR_MAX_HEIGHT_FRACTION = 0.7
 
-/** Trigger-strip width (DIP): the bar's own top-center footprint (collapsed
- *  pill ≈148 + a forgiving aim margin) — NEVER the display width. A full-width
- *  strip hijacked the top edge: aiming at a maximized window's ✕/minimize or a
- *  browser's tab-close buttons summoned the bar (live bug, merge blocker). */
-export const STRIP_WIDTH = 280
-
-/** The trigger strip: 1px tall, centered over the bar's reveal position. The
- *  screen corners (window controls, tab strips) must never trigger it. */
-export function computeStripBounds(display: DisplayLike): Rect {
-  const b = display.bounds
-  const width = Math.min(STRIP_WIDTH, b.width)
-  return { x: Math.round(b.x + (b.width - width) / 2), y: b.y, width, height: 1 }
-}
-
-/** Region that keeps a hover-revealed (peek) bar open: the bar's visible
+/** Region that keeps a summoned (peek) bar open: the bar's visible
  *  top-center footprint (pill + aim margin, a little taller than the pill).
  *  Cursor ANYWHERE else — including other top-edge positions like the screen
  *  corners — must start the retract grace timer. (Live bug: hovering the
@@ -111,35 +97,4 @@ export function displayForPoint(
     }
   }
   return best
-}
-
-/**
- * Fullscreen-foreground suppression decision. `rect` is the foreground window's
- * rect in PHYSICAL pixels (Win32 GetWindowRect); display bounds are DIPs, so
- * compare against bounds × scaleFactor with a small tolerance. The Windows
- * shell's own fullscreen-sized surfaces (desktop/wallpaper hosts) must NOT
- * suppress, nor should our own process.
- */
-export function shouldSuppressStrips(
-  fg: { rect: Rect | null; className: string | null; exePath: string | null },
-  display: DisplayLike,
-  selfExePath: string,
-  tolerancePx = 2
-): boolean {
-  if (!fg.rect) return false
-  const shellClasses = ['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
-  if (fg.className && shellClasses.includes(fg.className)) return false
-  if (fg.exePath && selfExePath && fg.exePath.toLowerCase() === selfExePath.toLowerCase()) {
-    return false
-  }
-  const s = display.scaleFactor
-  const b = display.bounds
-  const px = { x: b.x * s, y: b.y * s, width: b.width * s, height: b.height * s }
-  const r = fg.rect
-  return (
-    r.x <= px.x + tolerancePx &&
-    r.y <= px.y + tolerancePx &&
-    r.x + r.width >= px.x + px.width - tolerancePx &&
-    r.y + r.height >= px.y + px.height - tolerancePx
-  )
 }

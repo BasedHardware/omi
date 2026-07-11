@@ -25,14 +25,12 @@ import { registerMemoryCleanupHandlers } from './ipc/memoryCleanup'
 import { startForegroundMonitor } from './usage/foregroundMonitor'
 import {
   registerBarIpc,
-  startBarStrips,
   destroyBar,
   handleSummonPress,
   setSummonGestureAccelerator,
   setBarEnabled,
   setPeekWatchSuspended,
   getBarWindow,
-  getStripDiagnostics,
   isBarInteractive,
   isBarVisible,
   showBar,
@@ -584,12 +582,11 @@ app.whenReady().then(async () => {
       },
       // Bar harness: drive reveal paths without the global hotkey / edge strip
       // (the harness asserts focus behavior + takes screenshots).
-      barShow: (mode: 'peek' | 'expanded' | 'ptt', reveal?: 'strip' | 'summon' | 'ptt') => {
+      barShow: (mode: 'peek' | 'expanded' | 'ptt', reveal?: 'summon' | 'ptt') => {
         setBarEnabled(true) // the hermetic harness has no onboarding to enable it
-        showBar(mode, reveal ?? (mode === 'peek' ? 'strip' : 'summon'))
+        showBar(mode, reveal ?? (mode === 'ptt' ? 'ptt' : 'summon'))
       },
       barEnable: () => setBarEnabled(true),
-      barStrips: () => getStripDiagnostics(),
       // Screenshot capture on a live desktop: the cursor is outside the peek
       // footprint, so the retract watchdog would hide the bar mid-capture.
       barHoldPeekOpen: (hold: boolean) => setPeekWatchSuspended(!!hold),
@@ -652,9 +649,6 @@ app.whenReady().then(async () => {
       const whatsNew = maybeGetWhatsNew()
       if (whatsNew) showWhatsNewToast(whatsNew)
     }, 6000)
-    // Top-edge reveal: 1px trigger strips on every display (zero polling while
-    // idle) + display tracking + fullscreen suppression.
-    startBarStrips()
     // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
     // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
     // the machine latched silent.
@@ -666,7 +660,10 @@ app.whenReady().then(async () => {
   // fires group into ONE gesture: tap toggles the expanded bar, a physical
   // hold is push-to-talk — the "bar flaps while holding the hotkey" fix).
   registerOverlayHandlers(surfaceMainWindow)
-  registerBarIpc()
+  // The bar chat is a viewport over the main window's single chat engine
+  // (INV-CHAT-1): bar IPC forwards send/state routing to the main window here,
+  // since bar/window.ts has no reference to it.
+  registerBarIpc((channel, ...args) => withMainWindow((w) => w.webContents.send(channel, ...args)))
   setSummonGestureAccelerator(OVERLAY_ACCELERATOR)
   const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, handleSummonPress)
   if (!shortcutOk) {

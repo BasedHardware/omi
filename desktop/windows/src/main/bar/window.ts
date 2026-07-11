@@ -12,12 +12,19 @@
 // doesn't have that constraint, so the tween was deliberately NOT ported —
 // expanded content sizes itself in CSS and scrolls internally.
 //
+// The bar is summoned by the hotkey ONLY (top-edge hover reveal was removed —
+// Chris disliked it). A hotkey TAP reveals the collapsed pill; clicking the pill
+// expands it to the chat surface; a hotkey HOLD is push-to-talk (auto-reveals
+// the pill). The peek retract watchdog stays as the pill's dismissal mechanism
+// (cursor leaves its footprint → grace → hide), suspended while voice/chat
+// activity is in flight (bar:keepAlive) so a spoken exchange isn't cut short.
+//
 // Focus rules (the bar must never steal keystrokes):
-//   peek (edge-hover reveal)  → focusable:false, showInactive, click-through
+//   peek (hotkey tap / PTT)   → focusable:false, showInactive, click-through
 //                               with interactive islands
-//   ptt (hotkey held)         → same as peek, expanded listening UI
-//   expanded (hotkey tap /    → focusable:true + focused — the ONLY mode that
-//             click on pill)    takes focus, because the user asked to type
+//   ptt (dead — E2E only)     → same as peek
+//   expanded (click on pill)  → focusable:true + focused — the ONLY mode that
+//                               takes focus, because the user asked to type
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -26,19 +33,16 @@ import { rendererBaseUrl } from '../rendererServer'
 import { isQuitting } from '../lifecycle'
 import {
   computeBarBounds,
-  computeStripBounds,
   isCursorInPeekFootprint,
   isCursorOverPill,
-  shouldSuppressStrips,
   type DisplayLike
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
 import { makeKeySampler } from './keyState'
-import { getForegroundWindowRect, subscribeForegroundChange } from '../usage/nativeForeground'
 import { getAppSettings, setAppSettings } from '../appSettings'
 
 export type BarMode = 'peek' | 'expanded' | 'ptt'
-export type BarReveal = 'strip' | 'summon' | 'ptt'
+export type BarReveal = 'summon' | 'ptt'
 
 let barWindow: BrowserWindow | null = null
 let barReady = false
@@ -300,6 +304,13 @@ let peekOutsideSince: number | null = null
  *  captured — on a live desktop the cursor is legitimately outside the
  *  footprint, so the watchdog would retract mid-capture. Never set in prod. */
 let peekWatchSuspended = false
+/** Renderer-driven hold: while true, the summoned pill must NOT auto-retract
+ *  even though the cursor is away from its footprint — a PTT hold / streaming
+ *  reply / spoken answer is in flight (the user is talking or listening, not
+ *  hovering). The bar renderer sets this via bar:keepAlive and drops it (after a
+ *  short grace) when the exchange ends, letting the normal cursor watchdog
+ *  reclaim the pill. */
+let barActivityHold = false
 
 export function setPeekWatchSuspended(suspended: boolean): void {
   peekWatchSuspended = suspended
@@ -327,7 +338,7 @@ function startPeekWatch(): void {
     if (!peekWatchSuspended && barInteractive && !isCursorOverPill(cursor, dl)) {
       applyClickThrough(win)
     }
-    const inside = peekWatchSuspended || isCursorInPeekFootprint(cursor, dl)
+    const inside = peekWatchSuspended || barActivityHold || isCursorInPeekFootprint(cursor, dl)
     if (inside) {
       peekOutsideSince = null
     } else if (peekOutsideSince === null) {
@@ -423,14 +434,17 @@ function onGestureStart(): void {
   broadcast('overlay:summoned')
   gestureStartedVisible = isBarVisible()
   if (samplerAvailable) {
-    // Tap-vs-hold resolves at release; open now (stable — never flaps), and
-    // arm the PTT path (the renderer's own hold threshold decides recording).
-    if (!gestureStartedVisible) showBar('expanded', 'summon')
+    // Tap-vs-hold resolves at release; reveal the PILL now (a tap peeks, never
+    // auto-opens the chat — Chris's rule), and arm the PTT path (the renderer's
+    // own hold threshold decides recording; a hold keeps the pill up + drives
+    // the orb). Click the pill to expand into the chat surface.
+    if (!gestureStartedVisible) showBar('peek', 'summon')
     sendPtt('down')
   } else {
-    // No key-state sampling (koffi unavailable): classic debounced toggle.
+    // No key-state sampling (koffi unavailable): classic debounced toggle — tap
+    // reveals the pill, tap again hides it.
     if (gestureStartedVisible) hideBar()
-    else showBar('expanded', 'summon')
+    else showBar('peek', 'summon')
   }
 }
 
@@ -460,125 +474,6 @@ export function setSummonGestureAccelerator(accelerator: string): void {
   )
 }
 
-// --- Trigger strips (1px, top edge of every display; zero polling) -----------
-
-const strips = new Map<number, BrowserWindow>()
-let stripsStarted = false
-let unsubForeground: (() => void) | null = null
-
-// A fully-transparent window is click-through on Windows (layered hit-testing
-// skips alpha-0 pixels), so the strip paints an imperceptible 1/255-alpha wash
-// to stay hit-testable. mousemove over the 1px line is the reveal trigger.
-const STRIP_HTML =
-  'data:text/html;charset=utf-8,' +
-  encodeURIComponent(
-    `<!doctype html><html><body style="margin:0;background:rgba(0,0,0,0.004)"></body>` +
-      `<script>addEventListener('mousemove',()=>{window.omiBar&&window.omiBar.stripEnter()},{passive:true})</script></html>`
-  )
-
-function createStrip(display: Electron.Display): BrowserWindow {
-  const bounds = computeStripBounds(displayLike(display))
-  const win = new BrowserWindow({
-    ...bounds,
-    show: false,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    skipTaskbar: true,
-    focusable: false,
-    hasShadow: false,
-    // No WS_THICKFRAME: a sizing frame imposes an OS minimum window size that
-    // would silently inflate the 1px strip.
-    thickFrame: false,
-    minHeight: 0,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
-  })
-  win.setAlwaysOnTop(true, 'screen-saver')
-  // The strip stays HIT-TESTABLE (NOT click-through) — it is the dedicated,
-  // ultra-thin (1px) reveal detector, decoupled from the click-blocking surface
-  // (the bar window). It must reliably catch the cursor reaching the top edge
-  // from ANY approach; forwarded mousemove on a click-through window only fired
-  // on an edge-slide, not a straight-up approach (reveal regression). Being 1px
-  // at y=0 it cannot swallow a real click meant for the app (a browser's new-tab
-  // "+" sits well below the top pixel). The click-through that BUG 4 needs lives
-  // on the bar WINDOW instead: only the visible pill captures clicks, and the
-  // peek watchdog forces the rest click-through (see isCursorOverPill).
-  try {
-    win.setContentProtection(true) // invisible helper — never in captures
-  } catch {
-    /* unsupported */
-  }
-  win.loadURL(STRIP_HTML)
-  win.setBounds(bounds) // re-assert after load (some drivers nudge 1px windows)
-  win.showInactive()
-  return win
-}
-
-function rebuildStrips(): void {
-  for (const [, w] of strips) {
-    if (!w.isDestroyed()) w.destroy()
-  }
-  strips.clear()
-  if (!stripsStarted) return
-  for (const d of screen.getAllDisplays()) {
-    strips.set(d.id, createStrip(d))
-  }
-  evaluateStripSuppression()
-}
-
-/** Hide strips on displays whose foreground window is fullscreen (never pop
- *  the bar over games/videos). Event-driven off the foreground hook. */
-function evaluateStripSuppression(): void {
-  const fg = getForegroundWindowRect()
-  for (const d of screen.getAllDisplays()) {
-    const strip = strips.get(d.id)
-    if (!strip || strip.isDestroyed()) continue
-    const suppress = shouldSuppressStrips(fg, displayLike(d), process.execPath)
-    if (suppress && strip.isVisible()) strip.hide()
-    else if (!suppress && !strip.isVisible()) strip.showInactive()
-  }
-}
-
-/** Start the edge-reveal machinery (strips + display tracking + fullscreen
- *  suppression). Call once after app ready (deferred with the other services). */
-export function startBarStrips(): void {
-  if (stripsStarted) return
-  stripsStarted = true
-  rebuildStrips()
-  screen.on('display-added', rebuildStrips)
-  screen.on('display-removed', rebuildStrips)
-  screen.on('display-metrics-changed', rebuildStrips)
-  unsubForeground = subscribeForegroundChange(() => {
-    // The WinEvent hook calls back on our thread mid-dispatch — defer the
-    // window show/hide work out of the native callback, and never throw back
-    // into the dispatcher.
-    setImmediate(() => {
-      try {
-        evaluateStripSuppression()
-      } catch {
-        /* guarded */
-      }
-    })
-  })
-}
-
-/** Diagnostics for the E2E harness: strips vs displays, with real bounds. */
-export function getStripDiagnostics(): {
-  displays: { id: number; bounds: Electron.Rectangle }[]
-  strips: { id: number; bounds: Electron.Rectangle; visible: boolean }[]
-} {
-  return {
-    displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds })),
-    strips: [...strips.values()]
-      .filter((w) => !w.isDestroyed())
-      .map((w) => ({ id: w.id, bounds: w.getBounds(), visible: w.isVisible() }))
-  }
-}
-
 /** E2E diagnostic: is real hit-testing currently enabled? Must be FALSE right
  *  after any present (even expanded) — the window starts click-through and
  *  only the cursor entering the visible surface enables interaction. */
@@ -588,7 +483,12 @@ export function isBarInteractive(): boolean {
 
 // --- IPC ----------------------------------------------------------------------
 
-export function registerBarIpc(): void {
+/**
+ * @param sendToMain forwards a channel to the MAIN app window (the bar chat is a
+ *   viewport over the main window's single chat engine — INV-CHAT-1). Injected
+ *   because window.ts has no reference to the main window (it lives in index.ts).
+ */
+export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[]) => void): void {
   ipcMain.on('bar:ready', (e) => {
     if (!barWindow || e.sender.id !== barWindow.webContents.id) return
     barReady = true
@@ -621,10 +521,28 @@ export function registerBarIpc(): void {
     if (interactive) win.setIgnoreMouseEvents(false)
     else win.setIgnoreMouseEvents(true, { forward: true })
   })
-  // Edge reveal from a trigger strip: peek on the display under the cursor.
-  ipcMain.on('bar:stripEnter', () => {
-    if (!barEnabled || isBarVisible()) return
-    showBar('peek', 'strip')
+  // Renderer-driven retract hold: keep a summoned pill open while a PTT hold /
+  // streaming reply / spoken answer is in flight (the cursor is legitimately
+  // away from the footprint the whole time). The renderer drops it after a short
+  // grace once the exchange ends, and the normal cursor watchdog reclaims the pill.
+  ipcMain.on('bar:keepAlive', (_e, active: boolean) => {
+    barActivityHold = !!active
+  })
+  // Bar chat is a VIEWPORT over the main window's single chat engine (kills the
+  // duplicate-useChat continuity bug, C3): the bar sends here, main forwards to
+  // the main window, whose ChatBridgeHost drives the ONE chat.send(); the main
+  // window broadcasts projected state back via chat:publishState → chat:state.
+  ipcMain.on('bar:sendChat', (_e, payload: { text: string; fromVoice: boolean }) => {
+    sendToMain('chat:barSend', payload)
+  })
+  // The bar (re)requests the current chat state — e.g. on first mount / each
+  // reveal — so it renders the ongoing thread even if it missed prior broadcasts.
+  ipcMain.on('bar:requestChatState', () => {
+    sendToMain('chat:barRequestState')
+  })
+  // Main window → bar: projected chat state (history + streaming + status).
+  ipcMain.on('chat:publishState', (_e, state: unknown) => {
+    send('chat:state', state)
   })
   // Screen-share privacy toggle (persisted; applied live).
   ipcMain.handle('bar:getContentProtection', () => getAppSettings().hudContentProtection)
@@ -644,16 +562,6 @@ export function destroyBar(): void {
   cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)
   hideFallback = null
-  unsubForeground?.()
-  unsubForeground = null
-  screen.removeListener('display-added', rebuildStrips)
-  screen.removeListener('display-removed', rebuildStrips)
-  screen.removeListener('display-metrics-changed', rebuildStrips)
-  stripsStarted = false
-  for (const [, w] of strips) {
-    if (!w.isDestroyed()) w.destroy()
-  }
-  strips.clear()
   if (barWindow && !barWindow.isDestroyed()) barWindow.destroy()
   barWindow = null
 }
