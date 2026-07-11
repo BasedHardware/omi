@@ -30,7 +30,10 @@ const ACTIVE_FPS = 60
 const MORPH_SECONDS = 0.28
 
 export class OrbAnimator {
+  private canvas: HTMLCanvasElement
   private renderer: OrbRenderer
+  /** True between a `webglcontextlost` and its `webglcontextrestored`. */
+  private contextLost = false
   private params: OrbParams
   private state: OrbState = 'idle'
   private stateChangedAt = 0
@@ -54,12 +57,38 @@ export class OrbAnimator {
   frameLogLimit = 600
 
   constructor(canvas: HTMLCanvasElement, params: OrbParams = DEFAULT_ORB_PARAMS) {
+    this.canvas = canvas
     this.renderer = new OrbRenderer(canvas, { powerPreference: 'low-power' })
     this.params = params
     this.stateChangedAt = this.now()
+    // Context-loss resilience: Windows GPUs really do drop the WebGL context
+    // (driver resets, TDR, sleep/wake). Without recovery the orb would throw on
+    // the dead context and stay blank forever; instead we pause on loss and
+    // rebuild the renderer (recompiling shaders) when the browser restores it.
+    canvas.addEventListener('webglcontextlost', this.onContextLost)
+    canvas.addEventListener('webglcontextrestored', this.onContextRestored)
     // Start the loop immediately (found by the throttle harness: without this
     // an animator constructed in its default state never rendered a frame).
     this.kick()
+  }
+
+  private onContextLost = (e: Event): void => {
+    // preventDefault is REQUIRED, or the browser never fires contextrestored.
+    e.preventDefault()
+    this.contextLost = true
+    this.stop()
+  }
+
+  private onContextRestored = (): void => {
+    try {
+      // Fresh context on the same canvas — recompiles the shader program. The
+      // animator keeps its logical state, so the orb resumes where it left off.
+      this.renderer = new OrbRenderer(this.canvas, { powerPreference: 'low-power' })
+      this.contextLost = false
+      this.kick()
+    } catch (err) {
+      console.warn('[orb] context restore failed:', err)
+    }
   }
 
   private now(): number {
@@ -127,13 +156,13 @@ export class OrbAnimator {
   }
 
   private kick(): void {
-    if (!this.visible || this.raf !== null) return
+    if (!this.visible || this.contextLost || this.raf !== null) return
     this.raf = requestAnimationFrame(this.tick)
   }
 
   private tick = (nowMs: number): void => {
     this.raf = null
-    if (!this.visible) return
+    if (!this.visible || this.contextLost) return
     const fps = this.isActive() ? ACTIVE_FPS : IDLE_FPS
     const minGap = 1000 / fps - 2 // small tolerance so 60Hz vsync isn't halved
     if (nowMs - this.lastFrameAt >= minGap) {
@@ -177,6 +206,8 @@ export class OrbAnimator {
 
   dispose(): void {
     this.stop()
+    this.canvas.removeEventListener('webglcontextlost', this.onContextLost)
+    this.canvas.removeEventListener('webglcontextrestored', this.onContextRestored)
     this.renderer.dispose()
   }
 }
