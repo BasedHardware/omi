@@ -1930,6 +1930,7 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -2699,7 +2700,52 @@ workflows:
             "$DMG_PATH"
 
           echo "GitHub release candidate created: $CM_TAG"
-          echo "Run desktop/macos/scripts/qualify-desktop-beta.sh $CM_TAG to execute T2 qualification and promote beta."
+
+      - name: Verify automatic beta candidate
+        script: |
+          if [[ "${DESKTOP_AUTO_BETA_ENABLED:-true}" == "false" ]]; then
+            echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false."
+            echo "AUTO_BETA_SHOULD_RUN=false" >> "$CM_ENV"
+            exit 0
+          fi
+          git fetch origin --tags --force
+          LATEST_TAG=$(git tag -l 'v*-macos' --sort=-v:refname | head -1)
+          TAG_SHA=$(git rev-list -n1 "$CM_TAG")
+          CHECKOUT_SHA=$(git rev-parse HEAD)
+          gh release view "$CM_TAG" --repo "$GITHUB_REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
+            > /tmp/desktop-auto-beta-release.json
+          python3 ../../.github/scripts/check-desktop-auto-beta-candidate.py \
+            --release-json /tmp/desktop-auto-beta-release.json \
+            --smoke-result "$BUILD_DIR/desktop-smoke-result.json" \
+            --release-tag "$CM_TAG" \
+            --latest-tag "$LATEST_TAG" \
+            --tag-sha "$TAG_SHA" \
+            --checkout-sha "$CHECKOUT_SHA" \
+            --output /tmp/desktop-auto-beta-candidate.json
+          echo "AUTO_BETA_SHOULD_RUN=true" >> "$CM_ENV"
+
+      - name: Qualify and promote newest beta automatically
+        script: |
+          if [[ "${AUTO_BETA_SHOULD_RUN:-false}" != "true" ]]; then
+            echo "Automatic desktop beta qualification is paused; candidate remains non-live."
+            exit 0
+          fi
+          for tool in docker gh python3; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "Automatic desktop beta qualification requires $tool on the release worker." >&2
+              exit 1
+            fi
+          done
+          if ! docker info >/dev/null 2>&1; then
+            echo "Automatic desktop beta qualification requires a healthy Docker runtime for the hermetic T2 stack." >&2
+            exit 1
+          fi
+          scripts/qualify-desktop-beta.sh \
+            --automatic \
+            --signed-smoke-result "$BUILD_DIR/desktop-smoke-result.json" \
+            --candidate-gate-result /tmp/desktop-auto-beta-candidate.json \
+            "$CM_TAG"
 
     artifacts:
       - build/*.app

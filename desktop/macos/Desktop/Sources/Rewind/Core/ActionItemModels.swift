@@ -23,8 +23,17 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var tagsJson: String?               // JSON array: ["work", "code"]
     var deletedBy: String?              // "user", "ai_dedup"
     var dueAt: Date?
+    var completedAt: Date?
     var recurrenceRule: String?          // "daily", "weekdays", "weekly", "biweekly", "monthly"
     var recurrenceParentId: String?      // ID of original parent task in recurrence chain
+    var canonicalTaskId: String?
+    var taskStatus: String?
+    var taskOwner: String?
+    var goalId: String?
+    var workstreamId: String?
+    var dueConfidence: Double?
+    var provenanceJson: String?
+    var supersededBy: String?
 
     // Desktop extraction fields
     var screenshotId: Int64?
@@ -81,8 +90,17 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         tagsJson: String? = nil,
         deletedBy: String? = nil,
         dueAt: Date? = nil,
+        completedAt: Date? = nil,
         recurrenceRule: String? = nil,
         recurrenceParentId: String? = nil,
+        canonicalTaskId: String? = nil,
+        taskStatus: String? = nil,
+        taskOwner: String? = nil,
+        goalId: String? = nil,
+        workstreamId: String? = nil,
+        dueConfidence: Double? = nil,
+        provenanceJson: String? = nil,
+        supersededBy: String? = nil,
         screenshotId: Int64? = nil,
         confidence: Double? = nil,
         sourceApp: String? = nil,
@@ -120,8 +138,17 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.tagsJson = tagsJson
         self.deletedBy = deletedBy
         self.dueAt = dueAt
+        self.completedAt = completedAt
         self.recurrenceRule = recurrenceRule
         self.recurrenceParentId = recurrenceParentId
+        self.canonicalTaskId = canonicalTaskId
+        self.taskStatus = taskStatus
+        self.taskOwner = taskOwner
+        self.goalId = goalId
+        self.workstreamId = workstreamId
+        self.dueConfidence = dueConfidence
+        self.provenanceJson = provenanceJson
+        self.supersededBy = supersededBy
         self.screenshotId = screenshotId
         self.confidence = confidence
         self.sourceApp = sourceApp
@@ -283,6 +310,8 @@ extension ActionItemRecord {
             tagsJson = nil
         }
 
+        let provenanceJson = item.provenance.flatMap { try? JSONEncoder().encode($0) }
+            .flatMap { String(data: $0, encoding: .utf8) }
         return ActionItemRecord(
             backendId: item.id,
             backendSynced: true,
@@ -296,8 +325,17 @@ extension ActionItemRecord {
             tagsJson: tagsJson,
             deletedBy: item.deletedBy,
             dueAt: item.dueAt,
+            completedAt: item.completedAt,
             recurrenceRule: item.recurrenceRule,
             recurrenceParentId: item.recurrenceParentId,
+            canonicalTaskId: item.taskId,
+            taskStatus: item.taskStatus,
+            taskOwner: item.taskOwner,
+            goalId: item.goalId,
+            workstreamId: item.workstreamId,
+            dueConfidence: item.dueConfidence,
+            provenanceJson: provenanceJson,
+            supersededBy: item.supersededBy,
             screenshotId: nil,
             confidence: nil,
             sourceApp: item.sourceApp,
@@ -339,8 +377,18 @@ extension ActionItemRecord {
         self.priority = item.priority
         self.category = item.category
         self.dueAt = item.dueAt
+        self.completedAt = item.completedAt
         self.recurrenceRule = item.recurrenceRule
         self.recurrenceParentId = item.recurrenceParentId
+        self.canonicalTaskId = item.taskId
+        self.taskStatus = item.taskStatus
+        self.taskOwner = item.taskOwner
+        self.goalId = item.goalId
+        self.workstreamId = item.workstreamId
+        self.dueConfidence = item.dueConfidence
+        self.provenanceJson = item.provenance.flatMap { try? JSONEncoder().encode($0) }
+            .flatMap { String(data: $0, encoding: .utf8) }
+        self.supersededBy = item.supersededBy
         self.metadataJson = item.metadata
         if let staged = item.fromStaged {
             self.fromStaged = staged
@@ -417,7 +465,7 @@ extension ActionItemRecord {
             createdAt: createdAt,
             updatedAt: updatedAt,
             dueAt: dueAt,
-            completedAt: nil,  // Not stored locally
+            completedAt: completedAt,
             conversationId: conversationId,
             source: source,
             priority: priority,
@@ -428,9 +476,18 @@ extension ActionItemRecord {
             deletedAt: nil,  // Not stored locally
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
+            goalId: goalId,
             fromStaged: fromStaged,
             recurrenceRule: recurrenceRule,
             recurrenceParentId: recurrenceParentId,
+            taskId: canonicalTaskId,
+            taskStatus: taskStatus,
+            taskOwner: taskOwner,
+            workstreamId: workstreamId,
+            dueConfidence: dueConfidence,
+            provenance: provenanceJson.flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONDecoder().decode([OmiAPI.EvidenceRef].self, from: $0) },
+            supersededBy: supersededBy,
             sortOrder: sortOrder,
             indentLevel: indentLevel,
             relevanceScore: relevanceScore,

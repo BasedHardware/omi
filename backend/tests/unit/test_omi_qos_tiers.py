@@ -1076,7 +1076,14 @@ class TestStructuredOutputFeatureTracking:
     """Verify structured output feature set matches actual usage."""
 
     def test_expected_features_tracked(self):
-        expected = {'chat_extraction', 'proactive_notification', 'conv_app_select', 'external_structure', 'trends'}
+        expected = {
+            'chat_extraction',
+            'proactive_notification',
+            'conv_app_select',
+            'external_structure',
+            'trends',
+            'what_matters_now',
+        }
         assert _STRUCTURED_OUTPUT_FEATURES == expected
 
     def test_tracked_features_exist_in_all_profiles(self):

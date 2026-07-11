@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, cast
 import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -53,6 +53,14 @@ _auth_module = cast(Any, auth)
 
 class MemoryMutationResponse(BaseModel):
     status: str
+
+
+class MemoryValueRequest(BaseModel):
+    """Canonical body for single-value memory mutations."""
+
+    model_config = {"extra": "forbid"}
+
+    value: str
 
 
 class ReviewResolutionResponse(BaseModel):
@@ -837,25 +845,38 @@ def review_memory(
 @router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def edit_memory(
     memory_id: str,
-    value: str,
+    request: Optional[MemoryValueRequest] = Body(default=None),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
+    mutation_value = request.value if request is not None else value
+    if mutation_value is None:
+        raise HTTPException(status_code=422, detail="Missing memory mutation value")
+
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_content(uid, memory_id, value)
+        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
         return {'status': 'ok'}
 
     memory = _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.edit_memory(uid, memory_id, value)
+    memories_db.edit_memory(uid, memory_id, mutation_value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
     # "constantly updated brain" (search would still surface the pre-edit fact).
     try:
         upsert_memory_vector(
-            uid, memory_id, value, memory.get('category', 'system'), subject_entity_id=memory.get('subject_entity_id')
+            uid,
+            memory_id,
+            mutation_value,
+            memory.get('category', 'system'),
+            subject_entity_id=memory.get('subject_entity_id'),
         )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
@@ -865,19 +886,27 @@ def edit_memory(
 @router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
 def update_memory_visibility(
     memory_id: str,
-    value: str,
+    request: Optional[MemoryValueRequest] = Body(default=None),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
-    if value not in ['public', 'private']:
+    mutation_value = request.value if request is not None else value
+    if mutation_value is None:
+        raise HTTPException(status_code=422, detail="Missing memory mutation value")
+    if mutation_value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
         submit_with_context(postprocess_executor, update_personas_async, uid)
         return {'status': 'ok'}
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.change_memory_visibility(uid, memory_id, value)
+    memories_db.change_memory_visibility(uid, memory_id, mutation_value)
     return {'status': 'ok'}

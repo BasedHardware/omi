@@ -1,5 +1,7 @@
 """Hermetic sync v2 lifecycle coverage."""
 
+from testing.e2e.sync_helpers import patch_fresh_sync_lane
+
 import time
 import asyncio
 from datetime import datetime, timezone
@@ -59,7 +61,11 @@ def _patch_sync_pipeline(
         return wav_paths
 
     def fake_retrieve_vad_segments(path, segmented_paths, vad_errors):
-        segmented_paths.add(path)
+        from utils.sync.files import get_timestamp_from_path
+
+        segment_path = f"{Path(path).parent}/{int(get_timestamp_from_path(path))}.wav"
+        Path(segment_path).write_bytes(b"fake wav bytes")
+        segmented_paths.add(segment_path)
 
     def fake_prerecorded(*args, **kwargs):
         return (
@@ -149,10 +155,12 @@ def _patch_sync_pipeline(
     monkeypatch.setattr(sync_pipeline, "process_conversation", fake_process_conversation)
     monkeypatch.setattr(sync_pipeline, "_reprocess_conversation_after_update", fake_reprocess_after_update)
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
+    monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
     return pending_coroutines
 
 
 def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
     reprocessed = []
     pending_coroutines = _patch_sync_pipeline(
         monkeypatch,
@@ -190,6 +198,7 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
 
 
 def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 
     target_id = "sync-target-conversation"

@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "policy_version": "capture.v1",
+  "cases": [
+    {
+      "id": "explicit_create",
+      "inputs": {
+        "transcript": {"text": "Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
+        "screen": {"text": "User typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
+      },
+      "expected": {"outcome": "create_direct", "interruption": "invoking_surface_only"}
+    },
+    {
+      "id": "clear_commitment",
+      "inputs": {
+        "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}},
+        "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}}
+      },
+      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+    },
+    {
+      "id": "immediate_commitment",
+      "inputs": {
+        "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}},
+        "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}}
+      },
+      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+    },
+    {
+      "id": "clear_commitment_low_confidence",
+      "inputs": {
+        "transcript": {"text": "I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}},
+        "screen": {"text": "Me: I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "clear_commitment_without_deliverable",
+      "inputs": {
+        "transcript": {"text": "I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}},
+        "screen": {"text": "Me: I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "unaccepted_request",
+      "inputs": {
+        "transcript": {"text": "Sarah asked whether you could send the budget.", "stub_output": {"direct_request": true, "owner": "unknown", "concrete_deliverable": true}},
+        "screen": {"text": "Sarah: Could you send the budget?", "stub_output": {"direct_request": true, "owner": "unknown", "concrete_deliverable": true}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "inferred_next_step",
+      "inputs": {
+        "transcript": {"text": "The pricing discussion may benefit from a written recap.", "stub_output": {"inferred_next_step": true, "owner": "unknown"}},
+        "screen": {"text": "Pricing discussion open; a recap could be useful.", "stub_output": {"inferred_next_step": true, "owner": "unknown"}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "duplicate_commitment",
+      "inputs": {
+        "transcript": {"text": "I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "duplicate_of": "task-budget"}},
+        "screen": {"text": "Me: I will send the budget Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "duplicate_of": "task-budget"}}
+      },
+      "expected": {"outcome": "propose_enrichment", "interruption": "none"}
+    },
+    {
+      "id": "refinement",
+      "inputs": {
+        "transcript": {"text": "Make that the revised budget with pricing notes.", "stub_output": {"owner": "user", "concrete_deliverable": true, "refines_task": "task-budget"}},
+        "screen": {"text": "Me: Make that the revised budget with pricing notes.", "stub_output": {"owner": "user", "concrete_deliverable": true, "refines_task": "task-budget"}}
+      },
+      "expected": {"outcome": "propose_update", "interruption": "none"}
+    },
+    {
+      "id": "already_done",
+      "inputs": {
+        "transcript": {"text": "I already sent Sarah the budget.", "stub_output": {"already_done": true, "owner": "user"}},
+        "screen": {"text": "Me: Sent the budget to Sarah.", "stub_output": {"already_done": true, "owner": "user"}}
+      },
+      "expected": {"outcome": "propose_completion", "interruption": "inline_review"}
+    },
+    {
+      "id": "public_channel_not_owned",
+      "inputs": {
+        "transcript": {"text": "Someone should update the public roadmap.", "stub_output": {"public_broadcast": true, "direct_mention": false, "owner": "unknown"}},
+        "screen": {"text": "#general: Someone should update the public roadmap.", "stub_output": {"public_broadcast": true, "direct_mention": false, "owner": "unknown"}}
+      },
+      "expected": {"outcome": "ignore", "interruption": "none"}
+    }
+  ]
+}
