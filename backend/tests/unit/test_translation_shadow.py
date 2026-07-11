@@ -23,6 +23,12 @@ os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
+_saved_modules = {}
+_mock_translate_client = None
+_mock_redis = None
+_TranslationService = None
+_translation_module = None
+
 
 def _ensure_mock_module(name):
     if name not in sys.modules:
@@ -95,42 +101,57 @@ def _install_langdetect_stub():
     sys.modules['langdetect.lang_detect_exception'] = exception_mod
 
 
-_restore_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
-_restore_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
-_install_langdetect_stub()
+def setUpModule():
+    global _saved_modules, _mock_translate_client, _mock_redis, _TranslationService, _translation_module
 
-_ensure_mock_module("database")
-sys.modules["database"].__path__ = getattr(sys.modules["database"], '__path__', [])
-for sub in ["_client", "redis_db", "auth", "users", "memories", "conversations", "apps", "vector_db"]:
-    _ensure_mock_module(f"database.{sub}")
+    _saved_modules = dict(sys.modules)
 
-mock_redis = MagicMock()
-sys.modules["database.redis_db"].r = mock_redis
+    _restore_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+    _restore_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+    _install_langdetect_stub()
 
-_ensure_mock_module("google")
-sys.modules["google"].__path__ = []
-_ensure_mock_module("google.cloud")
-sys.modules["google.cloud"].__path__ = []
-_ensure_mock_module("google.cloud.translate_v3")
-sys.modules["google.cloud"].translate_v3 = sys.modules["google.cloud.translate_v3"]
+    _ensure_mock_module("database")
+    sys.modules["database"].__path__ = getattr(sys.modules["database"], '__path__', [])
+    for sub in ["_client", "redis_db", "auth", "users", "memories", "conversations", "apps", "vector_db"]:
+        _ensure_mock_module(f"database.{sub}")
 
-mock_translate_client = MagicMock()
-sys.modules["google.cloud.translate_v3"].TranslationServiceClient = MagicMock(return_value=mock_translate_client)
+    _mock_redis = MagicMock()
+    sys.modules["database.redis_db"].r = _mock_redis
 
-_restore_real_backend_package("utils")
-_restore_real_backend_package("models")
-for mod_name in list(sys.modules.keys()):
-    if 'translation' in mod_name and 'test' not in mod_name:
-        del sys.modules[mod_name]
+    _ensure_mock_module("google")
+    sys.modules["google"].__path__ = []
+    _ensure_mock_module("google.cloud")
+    sys.modules["google.cloud"].__path__ = []
+    _ensure_mock_module("google.cloud.translate_v3")
+    sys.modules["google.cloud"].translate_v3 = sys.modules["google.cloud.translate_v3"]
 
-from utils.translation import TranslationService
-import utils.translation as translation_module
+    _mock_translate_client = MagicMock()
+    sys.modules["google.cloud.translate_v3"].TranslationServiceClient = MagicMock(return_value=_mock_translate_client)
+
+    _restore_real_backend_package("utils")
+    _restore_real_backend_package("models")
+    for mod_name in list(sys.modules.keys()):
+        if 'translation' in mod_name and 'test' not in mod_name:
+            del sys.modules[mod_name]
+
+    from utils.translation import TranslationService
+    import utils.translation as tm
+
+    _TranslationService = TranslationService
+    _translation_module = tm
+
+
+def tearDownModule():
+    added = set(sys.modules.keys()) - set(_saved_modules.keys())
+    for key in added:
+        del sys.modules[key]
+    sys.modules.update(_saved_modules)
 
 
 class TestTranslateGoogleBatchHelper(unittest.TestCase):
 
     def setUp(self):
-        self.service = TranslationService()
+        self.service = _TranslationService()
 
     def test_google_batch_returns_tuples(self):
         mock_response = MagicMock()
@@ -141,7 +162,7 @@ class TestTranslateGoogleBatchHelper(unittest.TestCase):
         t2.translated_text = "Mundo"
         t2.detected_language_code = "en"
         mock_response.translations = [t1, t2]
-        mock_translate_client.translate_text.return_value = mock_response
+        _mock_translate_client.translate_text.return_value = mock_response
 
         results = self.service._translate_google_batch(["Hello", "World"], "es")
         self.assertEqual(len(results), 2)
@@ -154,7 +175,7 @@ class TestTranslateGoogleBatchHelper(unittest.TestCase):
         t1.translated_text = "Test"
         t1.detected_language_code = None
         mock_response.translations = [t1]
-        mock_translate_client.translate_text.return_value = mock_response
+        _mock_translate_client.translate_text.return_value = mock_response
 
         results = self.service._translate_google_batch(["Test"], "en")
         self.assertEqual(results[0], ("Test", ""))
@@ -163,49 +184,49 @@ class TestTranslateGoogleBatchHelper(unittest.TestCase):
 class TestShadowCompareIsolation(unittest.TestCase):
 
     def setUp(self):
-        self.service = TranslationService()
+        self.service = _TranslationService()
 
     def test_shadow_not_called_in_google_mode(self):
-        original = translation_module.TRANSLATION_MODE
-        translation_module.TRANSLATION_MODE = "google"
+        original = _translation_module.TRANSLATION_MODE
+        _translation_module.TRANSLATION_MODE = "google"
         try:
             with patch.object(self.service, '_run_shadow_compare') as mock_shadow:
                 self.service._schedule_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
                 mock_shadow.assert_not_called()
         finally:
-            translation_module.TRANSLATION_MODE = original
+            _translation_module.TRANSLATION_MODE = original
 
     def test_shadow_not_called_without_url(self):
-        original_mode = translation_module.TRANSLATION_MODE
-        original_url = translation_module.HOSTED_TRANSLATION_API_URL
-        translation_module.TRANSLATION_MODE = "shadow"
-        translation_module.HOSTED_TRANSLATION_API_URL = ""
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = ""
         try:
             with patch.object(self.service, '_run_shadow_compare') as mock_shadow:
                 self.service._schedule_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
                 mock_shadow.assert_not_called()
         finally:
-            translation_module.TRANSLATION_MODE = original_mode
-            translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
     def test_shadow_error_does_not_propagate(self):
-        original_mode = translation_module.TRANSLATION_MODE
-        original_url = translation_module.HOSTED_TRANSLATION_API_URL
-        translation_module.TRANSLATION_MODE = "shadow"
-        translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
         try:
             self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
         except Exception:
             self.fail("Shadow compare should not propagate exceptions")
         finally:
-            translation_module.TRANSLATION_MODE = original_mode
-            translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
 class TestShadowNeverWritesCache(unittest.TestCase):
 
     def setUp(self):
-        self.service = TranslationService()
+        self.service = _TranslationService()
 
     def test_translate_text_returns_google_in_shadow_mode(self):
         mock_response = MagicMock()
@@ -213,13 +234,13 @@ class TestShadowNeverWritesCache(unittest.TestCase):
         t1.translated_text = "Hola mundo"
         t1.detected_language_code = "en"
         mock_response.translations = [t1]
-        mock_translate_client.translate_text.return_value = mock_response
-        mock_redis.get.return_value = None
+        _mock_translate_client.translate_text.return_value = mock_response
+        _mock_redis.get.return_value = None
 
-        original_mode = translation_module.TRANSLATION_MODE
-        original_url = translation_module.HOSTED_TRANSLATION_API_URL
-        translation_module.TRANSLATION_MODE = "shadow"
-        translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
         try:
             with patch.object(self.service, '_schedule_shadow_compare') as mock_shadow:
                 result = self.service.translate_text("es", "Hello world")
@@ -230,20 +251,20 @@ class TestShadowNeverWritesCache(unittest.TestCase):
                 self.assertEqual(call_args[0][0], "translate_text")
                 self.assertEqual(call_args[0][1], "es")
         finally:
-            translation_module.TRANSLATION_MODE = original_mode
-            translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
 class TestShadowCompareLogging(unittest.TestCase):
 
     def setUp(self):
-        self.service = TranslationService()
+        self.service = _TranslationService()
 
     def test_shadow_compare_logs_without_raw_text(self):
-        original_mode = translation_module.TRANSLATION_MODE
-        original_url = translation_module.HOSTED_TRANSLATION_API_URL
-        translation_module.TRANSLATION_MODE = "shadow"
-        translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
         self.service._shadow_client = None
 
         mock_client = MagicMock()
@@ -265,15 +286,15 @@ class TestShadowCompareLogging(unittest.TestCase):
                         call_str = str(call)
                         self.assertNotIn("Hello world", call_str)
         finally:
-            translation_module.TRANSLATION_MODE = original_mode
-            translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
     def test_shadow_compare_exact_match_ratio(self):
-        original_mode = translation_module.TRANSLATION_MODE
-        original_url = translation_module.HOSTED_TRANSLATION_API_URL
-        translation_module.TRANSLATION_MODE = "shadow"
-        translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
         self.service._shadow_client = None
 
         mock_client = MagicMock()
@@ -301,8 +322,8 @@ class TestShadowCompareLogging(unittest.TestCase):
                     self.assertIn("exact_match_ratio", call_args[0][0])
                     self.assertAlmostEqual(call_args[0][5], 1.0)
         finally:
-            translation_module.TRANSLATION_MODE = original_mode
-            translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
 
