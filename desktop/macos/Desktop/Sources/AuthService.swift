@@ -2461,6 +2461,13 @@ class AuthService {
             await ProactiveStorage.shared.invalidateCache()
             await NoteStorage.shared.invalidateCache()
             await AIUserProfileService.shared.invalidateCache()
+            // These per-user storages cache a DatabasePool bound to the previous
+            // user's omi.db. Without invalidation the next signed-in user reads and
+            // writes the prior account's staged tasks, goals, and task-chat history
+            // until the app is relaunched (cross-account data leak).
+            await StagedTaskStorage.shared.invalidateCache()
+            await GoalStorage.shared.invalidateCache()
+            await TaskChatMessageStorage.shared.invalidateCache()
         }
 
         // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.
