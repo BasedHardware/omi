@@ -202,7 +202,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 #### Building & Running
 
 - `cd desktop/macos && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
-- `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
+- `cd desktop/macos && ./run.sh --yolo` — quick start against the dev backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
 - **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
 - **`run.sh` build lock is per-worktree, launch-phase only.** It serializes same-checkout builds that share `Desktop/.build/` + `build/$APP_NAME.app`, holds through install/seed/`open`, then releases before the long-running backend wait — never a per-user global mutex. Cross-worktree `./run.sh` must not block each other. Do not point two worktrees at the same explicit `OMI_APP_NAME` (shared `/Applications` path is not cross-locked).
