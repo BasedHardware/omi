@@ -125,10 +125,12 @@ def test_endpoint_empty_upstream_is_200_empty():
 
 
 def test_endpoint_wraps_unexpected_error_as_500():
-    # _get_live_desktop_releases returns [] on upstream failure; if an unexpected error still
+    # _get_legacy_live_desktop_releases returns [] on upstream failure; if an unexpected error still
     # escapes it, the endpoint answers 500 rather than a raw 500 traceback, matching the
     # appcast sibling's try/except contract.
-    with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+    with patch(
+        "routers.updates._get_legacy_live_desktop_releases", new_callable=AsyncMock, side_effect=RuntimeError("boom")
+    ):
         with pytest.raises(HTTPException) as exc:
             _call()
     assert exc.value.status_code == 500

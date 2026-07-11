@@ -664,7 +664,11 @@ async def get_desktop_whats_new(
     Returns 200 with an empty items list when nothing is newer, so the client can show "up to date".
     """
     try:
-        entries = await _get_live_desktop_releases(platform)
+        # A "What's New" feed needs release history (newest-first, up to `limit`), so it reads the
+        # full live-release list. The pointer resolver (_get_live_desktop_releases) intentionally
+        # collapses to the single current release per channel and is for update/download resolution,
+        # not history.
+        entries = await _get_legacy_live_desktop_releases(platform)
         return {
             "platform": platform,
             "channel": channel,
