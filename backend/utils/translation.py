@@ -1,6 +1,7 @@
 import os
 import hashlib
 import json
+import random
 import re
 import time
 from collections import Counter, OrderedDict
@@ -20,6 +21,7 @@ import httpx
 
 from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
+from utils.executors import postprocess_executor, submit_with_context
 
 logger = logging.getLogger(__name__)
 
@@ -588,7 +590,6 @@ class TranslationService:
     ) -> None:
         if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
             return
-        import random
 
         if TRANSLATION_SHADOW_SAMPLE_RATE < 1.0 and random.random() > TRANSLATION_SHADOW_SAMPLE_RATE:
             return
@@ -670,7 +671,6 @@ class TranslationService:
     ) -> None:
         if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
             return
-        from utils.executors import postprocess_executor, submit_with_context
 
         submit_with_context(
             postprocess_executor,
