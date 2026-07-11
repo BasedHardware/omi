@@ -914,7 +914,8 @@ actor ActionItemStorage {
         clearDueAt: Bool = false,
         priority: String? = nil,
         metadata: [String: Any]? = nil,
-        recurrenceRule: String? = nil
+        recurrenceRule: String? = nil,
+        workstreamId: String? = nil
     ) async throws {
         let db = try await ensureInitialized()
 
@@ -940,6 +941,9 @@ actor ActionItemStorage {
             }
             if let recurrenceRule = recurrenceRule {
                 record.recurrenceRule = recurrenceRule.isEmpty ? nil : recurrenceRule
+            }
+            if let workstreamId {
+                record.workstreamId = workstreamId
             }
             record.updatedAt = Date()
             try record.update(database)

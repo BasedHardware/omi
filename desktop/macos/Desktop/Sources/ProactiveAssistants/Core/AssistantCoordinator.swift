@@ -95,6 +95,19 @@ class AssistantCoordinator {
         lastTrackedApp = newApp
         lastTrackedWindowTitle = newWindowTitle
 
+        // Context is an input to canonical re-evaluation, never permission to
+        // notify. Privacy-excluded apps do not even produce a normalized hash.
+        if AuthService.shared.isSignedIn,
+          !RewindSettings.shared.isAppExcluded(newApp),
+          let event = TaskLocalContextEvent.appWindow(
+            appName: newApp,
+            windowTitle: newWindowTitle
+          )
+        {
+          let matched = TaskContextSubjectMatcher.shared.resolve(event)
+          Task { await TaskContextualResurfacingService.shared.observe(matched) }
+        }
+
         // Fire on all assistants
         for (_, assistant) in assistants {
             Task {

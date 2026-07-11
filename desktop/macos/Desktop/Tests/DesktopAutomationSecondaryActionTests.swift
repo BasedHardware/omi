@@ -1,5 +1,7 @@
 import XCTest
 
+@testable import Omi_Computer
+
 /// Hermetic source-contract tests for secondary-surface bridge actions added in Waves 1–2.
 final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testSecondarySnapshotActionsAreRegistered() throws {
@@ -75,7 +77,81 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
         body.contains("ensureConversationsTabVisibleForAutomation"),
         "\(action) should navigate to Conversations before posting open request"
       )
+      XCTAssertTrue(body.contains("ConversationDetailAutomationState.shared.openConversationId != conversationId"))
+      XCTAssertTrue(body.contains("detail_open"))
     }
+  }
+
+  func testQualificationActionsRespectBackendContracts() throws {
+    let source = try bridgeSource()
+    let appsBody = try actionBody(named: "apps_catalog_snapshot", in: source)
+    XCTAssertTrue(appsBody.contains("installedOnly: true, limit: 100"))
+    XCTAssertFalse(appsBody.contains("installedOnly: true, limit: 200"))
+
+    let goalBody = try actionBody(named: "create_test_goal", in: source)
+    XCTAssertTrue(goalBody.contains("source: \"user\""))
+    XCTAssertFalse(goalBody.contains("source: \"harness\""))
+  }
+
+  func testMemoryLogFixtureUsesRealConnectorOperationWithInjectedExtractionOnly() throws {
+    let body = try actionBody(named: "memory_log_import_probe", in: try bridgeSource())
+    XCTAssertTrue(body.contains("params[\"fixture\"] == \"structured\""))
+    XCTAssertTrue(body.contains("AppBuild.isNonProduction"))
+    XCTAssertTrue(body.contains("ConnectorImportOperations.importMemoryLog"))
+    XCTAssertTrue(body.contains("extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog"))
+    XCTAssertFalse(body.contains("OnboardingImportEvidenceService.save"))
+    XCTAssertFalse(body.contains("ConnectorImportOperations.memoryLogOutcome"))
+  }
+
+  func testFloatingIdleWaitRequiresObservedSubmission() throws {
+    let source = try bridgeSource()
+    let askBody = try actionBody(named: "ask", in: source)
+    XCTAssertTrue(askBody.contains("pendingFloatingBarSubmission"))
+    XCTAssertTrue(askBody.contains("baselineMessageCount"))
+
+    let waitBody = try actionBody(named: "wait_floating_bar_chat_idle", in: source)
+    XCTAssertTrue(waitBody.contains("observedSubmission"))
+    XCTAssertTrue(waitBody.contains("messageCount > submission.baselineMessageCount"))
+    XCTAssertTrue(waitBody.contains("submission_observed"))
+  }
+
+  func testReconciliationUsesNormalizedServerRevision() throws {
+    let source = try bridgeSource()
+    XCTAssertTrue(source.contains("matchesAtMillisecondPrecision"))
+    XCTAssertTrue(source.contains("timeIntervalSince1970 * 1_000"))
+    let body = try actionBody(named: "conversation_reconciliation_snapshot", in: source)
+    XCTAssertTrue(body.contains("DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision("))
+  }
+
+  func testRevisionComparisonNormalizesSubMillisecondStorageDrift() {
+    XCTAssertTrue(
+      DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(
+        Date(timeIntervalSince1970: 1_000.12340),
+        Date(timeIntervalSince1970: 1_000.12349)
+      )
+    )
+    XCTAssertFalse(
+      DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(
+        Date(timeIntervalSince1970: 1_000.123),
+        Date(timeIntervalSince1970: 1_000.125)
+      )
+    )
+    XCTAssertFalse(DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(Date(), nil))
+  }
+
+  func testVocabularyMutationFinishesWithCanonicalBackendValue() throws {
+    let body = try actionBody(named: "vocabulary_set_terms", in: try bridgeSource())
+    let update = try XCTUnwrap(body.range(of: "updateTranscriptionPreferences"))
+    let assignment = try XCTUnwrap(body.range(of: "AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary"))
+    XCTAssertLessThan(update.lowerBound, assignment.lowerBound)
+  }
+
+  func testActionHTTPFailuresKeepStatusAndSanitizedDetail() throws {
+    let source = try bridgeSource()
+    XCTAssertTrue(source.contains("api_http_error status="))
+    XCTAssertTrue(source.contains("automationSafeErrorDetail"))
+    XCTAssertTrue(source.contains("[redacted-jwt]"))
+    XCTAssertTrue(source.contains("error: automationActionErrorDescription(error)"))
   }
 
   func testMemoryAutomationWaitsForAsyncSearchAndFilter() throws {
