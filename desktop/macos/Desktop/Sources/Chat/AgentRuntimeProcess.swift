@@ -187,6 +187,7 @@ actor AgentRuntimeProcess {
     let clientId: String
     let requestId: String
     let surfaceRef: AgentSurfaceReference?
+    let originatingUserText: String?
     let onTextDelta: AgentBridge.TextDeltaHandler
     let onToolCall: AgentBridge.ToolCallHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
@@ -855,6 +856,7 @@ actor AgentRuntimeProcess {
         clientId: clientId,
         requestId: requestId,
         surfaceRef: surfaceRef,
+        originatingUserText: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
         onTextDelta: onTextDelta,
         onToolCall: onToolCall,
         onToolActivity: onToolActivity,
@@ -1426,7 +1428,9 @@ actor AgentRuntimeProcess {
     }
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
-      let result = await request.onToolCall(callId, name, input)
+      let result = await ChatToolExecutor.withOriginatingUserText(request.originatingUserText) {
+        await request.onToolCall(callId, name, input)
+      }
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
   }

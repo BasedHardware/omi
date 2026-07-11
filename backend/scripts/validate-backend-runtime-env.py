@@ -615,6 +615,7 @@ def _validate_cloud_run_workflows(
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
         extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
+        errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
         workflow_jobs.update(extracted['jobs'])
 
@@ -861,27 +862,117 @@ def _extract_workflow_cloud_run_targets(
         if steps is None:
             continue
         for step in steps:
-            if not _is_cloud_run_deploy_step(step):
-                continue
-            step_dict = _as_config_dict(step) or {}
-            step_with = _as_config_dict(step_dict.get('with')) or {}
-            env_vars = _parse_workflow_env_vars(
-                _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
-            )
-            secrets = _parse_workflow_env_vars(
-                _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
-            )
-            flags = _parse_workflow_flags(_resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env))
-            if not (env_vars or secrets or flags):
-                continue
-            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
-            job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
-            payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
-            if service is not None:
-                services[service] = payload
-            if job_name is not None:
-                jobs[job_name] = payload
+            for deploy_step in _expand_cloud_run_deploy_steps(step):
+                step_dict = _as_config_dict(deploy_step) or {}
+                step_with = _as_config_dict(step_dict.get('with')) or {}
+                env_vars = _parse_workflow_env_vars(
+                    _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
+                )
+                secrets = _parse_workflow_env_vars(
+                    _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
+                )
+                flags = _parse_workflow_flags(
+                    _resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env)
+                )
+                if not (env_vars or secrets or flags):
+                    continue
+                service = _resolve_workflow_string(step_with.get('service'), workflow_env)
+                job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
+                payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
+                if service is not None:
+                    services[service] = payload
+                if job_name is not None:
+                    jobs[job_name] = payload
     return {'services': services, 'jobs': jobs}
+
+
+def _validate_sync_backfill_co_deploy(workflow_file: str, services: dict[str, ConfigDict]) -> list[ValidationError]:
+    """Fail when a workflow deploys backend-sync without its bounded backfill worker.
+
+    Union-across-workflow_files validation can mask this: manual deploy of
+    backend-sync-backfill would otherwise hide an auto-dev omission.
+    """
+    if 'backend-sync' not in services:
+        return []
+    if 'backend-sync-backfill' in services:
+        return []
+    return [
+        ValidationError(
+            f'cloud_run_workflow/{workflow_file}',
+            'deploys backend-sync without backend-sync-backfill',
+        )
+    ]
+
+
+def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
+    step_dict = _as_config_dict(step)
+    if step_dict is None:
+        return []
+    if _is_cloud_run_deploy_step(step_dict):
+        return [step_dict]
+    uses = step_dict.get('uses')
+    if not isinstance(uses, str) or not uses.startswith('./'):
+        return []
+    action = _load_local_composite_action(uses)
+    if action is None:
+        return []
+    runs = _as_config_dict(action.get('runs')) or {}
+    nested_steps = _as_config_list(runs.get('steps'))
+    if nested_steps is None:
+        return []
+    caller_with = _as_config_dict(step_dict.get('with')) or {}
+    expanded: list[ConfigDict] = []
+    for nested in nested_steps:
+        nested_dict = _as_config_dict(nested)
+        if nested_dict is None or not _is_cloud_run_deploy_step(nested_dict):
+            continue
+        if not _composite_step_active_for_caller(nested_dict, caller_with):
+            continue
+        nested_with = _as_config_dict(nested_dict.get('with')) or {}
+        expanded.append(
+            {
+                **nested_dict,
+                'with': {
+                    key: _resolve_composite_input_reference(value, caller_with) for key, value in nested_with.items()
+                },
+            }
+        )
+    return expanded
+
+
+def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: ConfigDict) -> bool:
+    """Skip composite steps gated on inputs.mode when the caller uses another mode."""
+    condition = nested_step.get('if')
+    if not isinstance(condition, str) or 'inputs.mode' not in condition:
+        return True
+    mode = str(caller_with.get('mode', ''))
+    if "inputs.mode == 'worker'" in condition:
+        return mode == 'worker'
+    if "inputs.mode == 'platform'" in condition:
+        return mode == 'platform'
+    return True
+
+
+def _load_local_composite_action(uses: str) -> ConfigDict | None:
+    action_dir = ROOT / uses[2:]
+    for name in ('action.yml', 'action.yaml'):
+        path = action_dir / name
+        if path.is_file():
+            action = _load_yaml(path)
+            runs = _as_config_dict(action.get('runs')) or {}
+            if runs.get('using') == 'composite':
+                return action
+            return None
+    return None
+
+
+def _resolve_composite_input_reference(value: object, caller_with: ConfigDict) -> object:
+    if not isinstance(value, str):
+        return value
+    resolved = value
+    for name, raw in caller_with.items():
+        resolved = resolved.replace('${{ inputs.' + str(name) + ' }}', str(raw))
+    return resolved
 
 
 def _is_cloud_run_deploy_step(step: object) -> bool:
@@ -976,6 +1067,7 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
     # The backfill worker clones backend-sync's live runtime contract and then
     # overlays the manifest-rendered lane settings. Static validation checks
     # that guaranteed overlay; the deploy step separately tests the live clone.
+    # Support both inline workflow steps and the sync-backfill-lifecycle composite.
     resolved = resolved.replace(
         '${{ steps.backfill-runtime.outputs.env_vars }}',
         rendered_outputs.get('backend_sync_backfill_env_vars', ''),
@@ -983,6 +1075,15 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
     resolved = resolved.replace(
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
+    )
+    sync_backfill_overlay = (
+        'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
+    )
+    resolved = resolved.replace(
+        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        sync_backfill_overlay,
     )
     return resolved
 

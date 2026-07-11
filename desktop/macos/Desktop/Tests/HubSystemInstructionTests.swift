@@ -55,7 +55,7 @@ final class HubSystemInstructionTests: XCTestCase {
             RealtimeHubTools.directPermissionRedirect(
                 forDelegationBrief: "Request Screen Recording permission for Omi in Mac System Settings."
             ),
-            .init(tool: .requestPermission, type: "screen_recording")
+            .init(tool: .requestPermission, type: "screen_recording", recoveredFromDelegation: true)
         )
         XCTAssertNil(
             RealtimeHubTools.directPermissionRedirect(
@@ -74,11 +74,76 @@ final class HubSystemInstructionTests: XCTestCase {
             RealtimeHubTools.directPermissionRedirect(
                 forDelegationBrief: "Check whether Omi has Screen Recording permission granted."
             ),
-            .init(tool: .checkPermissionStatus, type: "screen_recording")
+            .init(tool: .checkPermissionStatus, type: "screen_recording", recoveredFromDelegation: true)
         )
         XCTAssertNil(
             RealtimeHubTools.directPermissionRedirect(
                 forDelegationBrief: "Check whether Chrome has Screen Recording permission granted."
+            )
+        )
+    }
+
+    func testRealtimePermissionRedirectUsesCanonicalChatRoutingContract() {
+        let cases: [(String, HubTool, String)] = [
+            ("Request microphone permission for Omi.", .requestPermission, "microphone"),
+            ("Enable Omi notifications.", .requestPermission, "notifications"),
+            ("Check whether Omi has Accessibility permission granted.", .checkPermissionStatus, "accessibility"),
+            ("Check whether Omi has Automation permission granted.", .checkPermissionStatus, "automation"),
+            ("Request Full Disk Access for this app.", .requestPermission, "full_disk_access"),
+        ]
+
+        for (brief, tool, type) in cases {
+            let chatRoute = ChatToolExecutor.permissionExecutionRoute(
+                toolName: HubTool.spawnAgent.rawValue,
+                arguments: ["brief": brief]
+            )
+            XCTAssertEqual(
+                chatRoute,
+                .directNative(toolName: tool.rawValue, type: type, recoveredFromDelegation: true)
+            )
+            XCTAssertEqual(
+                RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief),
+                .init(tool: tool, type: type, recoveredFromDelegation: true)
+            )
+        }
+    }
+
+    func testRealtimeExplicitOtherAppAndAmbiguousPermissionRequestsNeverRedirect() {
+        for brief in [
+            "Request Screen Recording permission for Chrome.",
+            "Check whether Zoom has microphone permission granted.",
+            "Request Screen Recording permission for Chromium.",
+            "Check Google Chrome Screen Recording permission.",
+            "Allow Microsoft Teams to use microphone access.",
+            "Request Screen Recording permission.",
+            "Check microphone permission status.",
+        ] {
+            XCTAssertNil(RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief), brief)
+        }
+    }
+
+    func testRealtimePermissionExecutorRoutesBothToolsToCanonicalChatExecutor() {
+        XCTAssertEqual(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .checkPermissionStatus, arguments: ["type": "microphone"]),
+            .init(toolName: "check_permission_status", type: "microphone")
+        )
+        XCTAssertEqual(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .requestPermission, arguments: ["permission": "screen_recording"]),
+            .init(toolName: "request_permission", type: "screen_recording")
+        )
+        XCTAssertNil(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .spawnAgent, arguments: ["type": "screen_recording"])
+        )
+    }
+
+    func testRealtimeRedirectTrustsUserTurnOverMalformedBrief() {
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Request Screen Recording permission for Omi.",
+                originatingUserText: "Request Screen Recording permission for Chromium."
             )
         )
     }

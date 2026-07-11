@@ -5,6 +5,60 @@ import XCTest
 @MainActor
 final class KernelTurnRecordedProjectionTests: XCTestCase {
 
+  func testCanonicalCompletedRunFixtureUsesProductionPillProjectionBoundary() throws {
+    struct Fixture: Decodable {
+      let runId: String
+      let pillId: UUID
+      let prompt: String
+      let finalText: String
+    }
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("agent/tests/fixtures/completed-agent-recall.json")
+    let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtureURL))
+
+    let completion = try XCTUnwrap(
+      PillTerminalCompletionProjection.make(
+        pillID: fixture.pillId,
+        runId: fixture.runId,
+        userText: fixture.prompt,
+        assistantText: fixture.finalText
+      ))
+
+    XCTAssertEqual(completion.idempotencyKey, "pill_completion:\(fixture.runId)")
+    XCTAssertEqual(completion.assistantText, fixture.finalText)
+    XCTAssertEqual(completion.requestSnippet, fixture.prompt)
+    XCTAssertEqual(
+      completion.summary,
+      "[Background agent id=\(fixture.pillId.uuidString) — \(fixture.prompt)] \(fixture.finalText)"
+    )
+  }
+
+  func testTerminalPillCallerRemainsBoundToProjectionAndKernelWrite() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let start = try XCTUnwrap(
+      source.range(of: "func recordPillTerminalCompletion("),
+      "terminal pill projection entrypoint must exist")
+    let end = try XCTUnwrap(
+      source.range(
+        of: "private func observeAgentCompletionContext(",
+        range: start.upperBound..<source.endIndex),
+      "terminal pill projection boundary must remain isolated")
+    let body = String(source[start.lowerBound..<end.lowerBound])
+
+    XCTAssertTrue(body.contains("PillTerminalCompletionProjection.make("))
+    XCTAssertTrue(body.contains("provider.kernelTurnProjection.projectCrossSurfaceTurn("))
+    XCTAssertTrue(body.contains("assistantText: completion.summary"))
+    XCTAssertTrue(body.contains("origin: \"pill_completion\""))
+    XCTAssertTrue(body.contains("idempotencyKey: completion.idempotencyKey"))
+  }
+
   func testApplyKernelTurnRecordedAppendsMainChatMessages() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection
