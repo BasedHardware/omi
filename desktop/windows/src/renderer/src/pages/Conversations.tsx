@@ -366,7 +366,7 @@ export function Conversations(): React.JSX.Element {
           )}
         </div>
 
-        <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
+        <div className="surface-panel flex items-center gap-1 p-1">
           <button
             onClick={() => setFilter('all')}
             className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${

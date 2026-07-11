@@ -186,11 +186,17 @@
     }
   }
 
+  /* Page header panel (shared by every page via PageHeader). Previously a
+     white-4% tint sitting only a hair above the #0f0f0f canvas — LOWER than the
+     lifted utility rows beneath it, so the hierarchy read inverted. Raise it onto
+     the same elevated-panel family as .surface-panel / .widget-card so the header
+     reads as the top of the page. Opaque fill, so the old backdrop blur (dead
+     under an opaque background) is dropped. */
   .panel-header {
-    @apply rounded-2xl border border-white/10 px-7 py-5;
-    background: rgba(255, 255, 255, 0.04);
-    -webkit-backdrop-filter: blur(12px) saturate(1.2);
-    backdrop-filter: blur(12px) saturate(1.2);
+    @apply rounded-2xl border px-7 py-5;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
   .page-outlet {
