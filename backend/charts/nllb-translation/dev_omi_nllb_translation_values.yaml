@@ -77,29 +77,41 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 1
 
-nodeSelector: {}
+nodeSelector:
+  cloud.google.com/gke-accelerator: nvidia-l4
 
-tolerations: []
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
 
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: service
-              operator: In
-              values:
-                - nllb-translation
-            - key: env
-              operator: In
-              values:
-                - dev
+affinity: {}
 
 strategy:
   type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+initContainers:
+  - name: model-downloader
+    image: python:3.11-slim
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /models/nllb-200-distilled-600M-ct2-int8/model.bin ]; then
+          echo "Model already exists, skipping download"
+          exit 0
+        fi
+        pip install -q huggingface_hub
+        python3 -c "
+        from huggingface_hub import snapshot_download
+        snapshot_download('JustFrederik/nllb-200-distilled-600M-ct2-int8', local_dir='/models/nllb-200-distilled-600M-ct2-int8')
+        "
+    volumeMounts:
+      - name: model-data
+        mountPath: /models
 
 volumeMounts:
   - name: model-data
@@ -108,5 +120,5 @@ volumeMounts:
 
 volumes:
   - name: model-data
-    persistentVolumeClaim:
-      claimName: nllb-model-pvc
+    emptyDir:
+      sizeLimit: 2Gi
