@@ -71,6 +71,12 @@ def search_conversations(
     end_date: Optional[int] = None,
     speaker_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # page/per_page arrive from SearchRequest where both are Optional and unbounded, so None, 0,
+    # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
+    # Typesense RequestMalformed and 500 the request. Clamp at this shared boundary, mirroring the
+    # clamps in routers/memories.py and routers/mcp.py. Typesense caps a single page at 250 hits.
+    page = max(1, page or 1)
+    per_page = max(1, min(per_page or 10, 250))
     try:
         stripped_query = query.strip() if query else ''
         has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
