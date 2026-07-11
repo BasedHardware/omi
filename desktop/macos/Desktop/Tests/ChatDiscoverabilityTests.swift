@@ -126,7 +126,12 @@ final class ChatDiscoverabilityTests: XCTestCase {
         let names = Set(DesktopCapabilityRegistry.desktopToolNames)
         XCTAssertTrue(names.contains("check_permission_status"))
         XCTAssertTrue(names.contains("request_permission"))
-        XCTAssertTrue(DesktopCapabilityRegistry.desktopToolPrompt.contains("User asks to grant/check app permissions"))
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.desktopToolPrompt.contains(
+                "User explicitly asks to grant/check app permissions"))
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.desktopToolPrompt.contains(
+                "only after explicit current-turn consent"))
     }
 
     func testDesktopPromptMentionsListAgentSessionsForSubagents() {
