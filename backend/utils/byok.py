@@ -156,7 +156,7 @@ def validate_custom_base_url(base_url: str) -> str:
     covered. Connect-time pinning would route the custom client through a dedicated
     transport and is a follow-up.
     """
-    if not base_url or not isinstance(base_url, str):
+    if not base_url:
         raise ValueError('custom base URL is required')
     url = base_url.strip()
     parsed = urlparse(url)
