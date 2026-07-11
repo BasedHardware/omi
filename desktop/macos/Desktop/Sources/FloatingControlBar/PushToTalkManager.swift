@@ -33,6 +33,26 @@ extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
 
+/// Consumes the one transition that hands a buffered PTT turn from a warming
+/// realtime hub to an active hub. Recording the new route before returning is
+/// critical: beginning the hub turn can synchronously publish another voice-turn
+/// snapshot, which must not resolve the same warm wait again.
+struct RealtimeHubWarmWaitResolutionGate {
+  private(set) var route: VoiceTurnRoute?
+
+  mutating func observe(_ nextRoute: VoiceTurnRoute?) -> Bool {
+    let wasWaitingForHub = route == .hubWarmWait
+    route = nextRoute
+    guard wasWaitingForHub else { return false }
+    if case .hub = nextRoute { return true }
+    return false
+  }
+
+  var isWaitingForHub: Bool {
+    route == .hubWarmWait
+  }
+}
+
 /// Push-to-talk manager for voice input via the Option (⌥) key.
 ///
 /// State machine:
@@ -57,7 +77,7 @@ class PushToTalkManager: ObservableObject {
   private let voiceTurnCoordinator = VoiceTurnCoordinator.shared
   private var currentVoiceTurnID: VoiceTurnID?
   private var finalizationTurnID: VoiceTurnID?
-  private var lastCoordinatorRoute: VoiceTurnRoute?
+  private var hubWarmWaitResolutionGate = RealtimeHubWarmWaitResolutionGate()
 
   // MARK: - Private Properties
 
@@ -216,11 +236,8 @@ class PushToTalkManager: ObservableObject {
       state = nextState
     }
 
-    let route = model.turn?.route
-    defer { lastCoordinatorRoute = route }
-    guard lastCoordinatorRoute == .hubWarmWait else { return }
-    if case .hub = route {
-      resolveRealtimeHubWarmWait(ready: true)
+    if hubWarmWaitResolutionGate.observe(model.turn?.route) {
+      resolveRealtimeHubWarmWait(ready: true, consumedReadyTransition: true)
     }
   }
 
@@ -1346,8 +1363,8 @@ class PushToTalkManager: ObservableObject {
     // with a typed session ID; expiry emits fallbackToTranscription.
   }
 
-  private func resolveRealtimeHubWarmWait(ready: Bool) {
-    guard lastCoordinatorRoute == .hubWarmWait else { return }
+  private func resolveRealtimeHubWarmWait(ready: Bool, consumedReadyTransition: Bool = false) {
+    guard consumedReadyTransition || hubWarmWaitResolutionGate.isWaitingForHub else { return }
     guard state == .listening || state == .lockedListening || state == .pendingLockDecision || state == .finalizing else {
       return
     }

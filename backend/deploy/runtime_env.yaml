@@ -174,8 +174,28 @@ environments:
             STT_PRERECORDED_MODEL:
               secret: STT_PRERECORDED_MODEL
               version: latest
-        backend-sync:
+        backend-sync: &dev_backend_sync
           env:
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              value: '21600'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              value: '2592000'
+              category: rollout
+              provisional: true
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              value: '300'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              value: '4'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              value: '555'
+              category: rollout
+              provisional: true
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_ENV_STAGE:
@@ -233,6 +253,10 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_BACKFILL_ENABLED:
+              value: 'true'
+              category: rollout
+              provisional: true
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -255,6 +279,9 @@ environments:
             STT_PRERECORDED_MODEL:
               secret: STT_PRERECORDED_MODEL
               version: latest
+        backend-sync-backfill:
+          <<: *dev_backend_sync
+          provisional: true
         backend-integration:
           env:
             GOOGLE_CLOUD_PROJECT:
@@ -534,8 +561,28 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-        backend-sync:
+        backend-sync: &prod_backend_sync
           env:
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              value: '21600'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              value: '2592000'
+              category: rollout
+              provisional: true
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              value: '300'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              value: '4'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              value: '555'
+              category: rollout
+              provisional: true
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -560,6 +607,10 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_BACKFILL_ENABLED:
+              value: 'true'
+              category: rollout
+              provisional: true
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -570,6 +621,9 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
+        backend-sync-backfill:
+          <<: *prod_backend_sync
+          provisional: true
         backend-integration:
           env:
             OMI_ENV_STAGE:

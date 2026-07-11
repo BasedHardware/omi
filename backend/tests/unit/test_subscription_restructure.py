@@ -309,6 +309,8 @@ def test_plan_features_differentiate_operator_neo(monkeypatch, load_subscription
 
     assert "600 chat questions per month" in op_features
     assert "300 chat questions per month" in neo_features
+    assert "Desktop capture with Free-tier allowance" in neo_features
+    assert "No desktop access" not in neo_features
 
 
 def test_plan_display_names(load_subscription):

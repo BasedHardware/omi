@@ -535,6 +535,8 @@ def _validate_cloud_run(
         service_config = _as_config_dict(raw_service_config) or {}
         service_state = _as_config_dict(state_services.get(service))
         if service_state is None:
+            if service_config.get('provisional') and not strict_provisional:
+                continue
             errors.append(ValidationError(f'cloud_run/{service}', 'missing service state'))
             continue
         actual_env = _env_entries_by_name(service_state.get('env', []))
@@ -947,6 +949,17 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
     resolved = raw_value
     for output_name, output_value in rendered_outputs.items():
         resolved = resolved.replace(f'{prefix}{output_name}{suffix}', output_value)
+    # The backfill worker clones backend-sync's live runtime contract and then
+    # overlays the manifest-rendered lane settings. Static validation checks
+    # that guaranteed overlay; the deploy step separately tests the live clone.
+    resolved = resolved.replace(
+        '${{ steps.backfill-runtime.outputs.env_vars }}',
+        rendered_outputs.get('backend_sync_backfill_env_vars', ''),
+    )
+    resolved = resolved.replace(
+        '${{ steps.backfill-runtime.outputs.secrets }}',
+        rendered_outputs.get('backend_sync_backfill_secrets', ''),
+    )
     return resolved
 
 
