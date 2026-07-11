@@ -14,6 +14,13 @@
 #     baseline in analysis_baseline.json. A rule may not regress above its
 #     baseline count; rules with fewer occurrences than baseline are reported
 #     as an improvement opportunity but do not fail the build.
+#   - Fail closed on analyzer crash: if dart analyze exits non-zero without
+#     producing a single machine-format diagnostic line, the invocation
+#     itself failed (crash, bad SDK, unparseable output) and the script
+#     exits 1 instead of treating the empty output as "zero issues". The
+#     check is structural (nonzero exit + zero parseable diagnostics), not
+#     tied to specific exit codes, which vary across Dart versions. A clean
+#     run (exit 0, no diagnostics) still passes.
 #
 #   Deviation from the original design note ("ERROR or WARNING always
 #   fails"): dart analyze on this codebase currently reports 138 pre-existing
@@ -71,10 +78,27 @@ echo "Running: dart analyze --format=machine ."
 # so capture output without letting set -e kill the script on that line.
 set +e
 ANALYZE_OUTPUT=$(dart analyze --format=machine . 2>&1)
+ANALYZE_EXIT=$?
 set -e
 
 # Machine format is pipe-delimited:
 #   SEVERITY|TYPE|RULE|FILE|LINE|COLUMN|LENGTH|MESSAGE
+
+# Fail closed on analyzer crash: a nonzero exit with zero parseable
+# machine-format lines means the analyzer invocation itself failed, not that
+# the tree is clean. Don't check specific exit codes — they vary across Dart
+# versions; the structural check is the contract. Count with awk rather than
+# grep -q: under pipefail, grep -q exits at the first match and printf takes
+# a SIGPIPE on large outputs, turning a healthy run into a false failure.
+PARSEABLE_COUNT=$(printf '%s\n' "$ANALYZE_OUTPUT" | awk '/^(ERROR|WARNING|INFO)\|/ { n++ } END { print n + 0 }')
+if [[ $ANALYZE_EXIT -ne 0 && $PARSEABLE_COUNT -eq 0 ]]; then
+  echo "" >&2
+  echo "dart analyze did not produce parseable results — failing closed." >&2
+  echo "Exit code: $ANALYZE_EXIT" >&2
+  echo "Raw output:" >&2
+  printf '%s\n' "$ANALYZE_OUTPUT" >&2
+  exit 1
+fi
 
 SEVERE_LINES=$(printf '%s\n' "$ANALYZE_OUTPUT" | awk -F'|' '$1 == "ERROR"')
 if [[ -n "$SEVERE_LINES" ]]; then
