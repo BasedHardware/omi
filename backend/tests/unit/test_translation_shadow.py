@@ -327,6 +327,119 @@ class TestShadowCompareLogging(unittest.TestCase):
             self.service._shadow_client = None
 
 
+class TestShadowCallsitesCoverage(unittest.TestCase):
+
+    def setUp(self):
+        self.service = _TranslationService()
+
+    def test_translate_text_by_sentence_schedules_shadow(self):
+        mock_response = MagicMock()
+        t1 = MagicMock()
+        t1.translated_text = "Hola."
+        t1.detected_language_code = "en"
+        t2 = MagicMock()
+        t2.translated_text = "Mundo."
+        t2.detected_language_code = "en"
+        mock_response.translations = [t1, t2]
+        _mock_translate_client.translate_text.return_value = mock_response
+        _mock_redis.get.return_value = None
+
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        try:
+            with patch.object(self.service, '_schedule_shadow_compare') as mock_shadow:
+                self.service.translate_text_by_sentence("es", "Hello. World.")
+                mock_shadow.assert_called()
+                call_args = mock_shadow.call_args
+                self.assertEqual(call_args[0][0], "translate_text_by_sentence")
+                self.assertEqual(call_args[0][1], "es")
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+
+    def test_translate_units_batch_schedules_shadow(self):
+        mock_response = MagicMock()
+        t1 = MagicMock()
+        t1.translated_text = "Hola mundo"
+        t1.detected_language_code = "en"
+        mock_response.translations = [t1]
+        _mock_translate_client.translate_text.return_value = mock_response
+        _mock_redis.get.return_value = None
+
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        try:
+            with patch.object(self.service, '_schedule_shadow_compare') as mock_shadow:
+                units = [{"segment_id": 1, "text": "Hello world"}]
+                self.service.translate_units_batch("es", units)
+                mock_shadow.assert_called()
+                call_args = mock_shadow.call_args
+                self.assertEqual(call_args[0][0], "translate_units_batch")
+                self.assertEqual(call_args[0][1], "es")
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+
+
+class TestShadowTimeoutHandling(unittest.TestCase):
+
+    def setUp(self):
+        self.service = _TranslationService()
+
+    def test_shadow_timeout_does_not_propagate(self):
+        import httpx as _httpx
+
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        self.service._shadow_client = None
+
+        mock_client = MagicMock()
+        mock_client.post.side_effect = _httpx.TimeoutException("read timeout")
+
+        try:
+            with patch("utils.translation.httpx.Client", return_value=mock_client):
+                self.service._shadow_client = None
+                self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
+        except Exception:
+            self.fail("Shadow timeout should not propagate")
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            self.service._shadow_client = None
+
+    def test_shadow_timeout_logs_warning(self):
+        import httpx as _httpx
+
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        self.service._shadow_client = None
+
+        mock_client = MagicMock()
+        mock_client.post.side_effect = _httpx.TimeoutException("read timeout")
+
+        try:
+            with patch("utils.translation.httpx.Client", return_value=mock_client):
+                with patch("utils.translation.logger") as mock_logger:
+                    self.service._shadow_client = None
+                    self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
+                    mock_logger.warning.assert_called()
+                    warning_call = mock_logger.warning.call_args
+                    self.assertIn("translation_shadow_error", warning_call[0][0])
+                    self.assertIn("TimeoutException", str(warning_call))
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            self.service._shadow_client = None
+
+
 class TestNLLBLanguageMapping(unittest.TestCase):
 
     def test_nllb_service_language_mapping(self):
