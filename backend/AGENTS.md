@@ -97,7 +97,7 @@ backend/
   nllb_translation/      # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
                           #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
                           #   - Prometheus metrics at /metrics, health at /health, readiness at /ready
-                          #   - Shadow mode: runs alongside Google Cloud Translation V3 for quality comparison
+                          #   - Fallback to Google Cloud Translation V3 when NLLB is unavailable
   modal/                 # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
                           #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
                           #   - VAD: voice activity detection (pyannote/voice-activity-detection)

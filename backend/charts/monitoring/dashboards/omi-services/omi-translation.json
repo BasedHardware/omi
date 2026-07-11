@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Omi Translation Pipeline — NLLB self-hosted service + backend TranslationService metrics",
+  "description": "Omi Translation Pipeline — NLLB self-hosted service + backend TranslationService metrics (google or nllb provider)",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -378,73 +378,6 @@
       "type": "timeseries",
       "targets": [
         { "expr": "sum(rate(omi_translation_chars_total[$__rate_interval])) by (provider)", "legendFormat": "{{ provider }}" }
-      ]
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
-      "id": 30,
-      "panels": [],
-      "title": "Shadow Comparison (NLLB vs Google)",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never", "stacking": { "mode": "none" } },
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
-      "id": 31,
-      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Shadow Exact Match Ratio (NLLB vs Google)",
-      "type": "timeseries",
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(omi_translation_shadow_exact_match_ratio_bucket[$__rate_interval])) by (le, target_lang))", "legendFormat": "{{ target_lang }} p50" }
-      ]
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never", "stacking": { "mode": "none" } },
-          "unit": "s"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 56 },
-      "id": 32,
-      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Shadow NLLB Latency by Language",
-      "type": "timeseries",
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(omi_translation_shadow_nllb_latency_seconds_bucket[$__rate_interval])) by (le, target_lang))", "legendFormat": "{{ target_lang }} p50" },
-        { "expr": "histogram_quantile(0.99, sum(rate(omi_translation_shadow_nllb_latency_seconds_bucket[$__rate_interval])) by (le, target_lang))", "legendFormat": "{{ target_lang }} p99" }
-      ]
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never", "stacking": { "mode": "none" } },
-          "unit": "short",
-          "min": 0,
-          "max": 2
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 64 },
-      "id": 33,
-      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Shadow Length Ratio (NLLB/Google chars)",
-      "type": "timeseries",
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(omi_translation_shadow_length_ratio_bucket[$__rate_interval])) by (le, target_lang))", "legendFormat": "{{ target_lang }} p50" }
       ]
     },
     {

@@ -182,7 +182,7 @@ env:
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://dev-omi-nllb-translation:8080"
   - name: TRANSLATION_SERVICE_MODELS
-    value: "shadow"
+    value: "nllb,google"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:

@@ -1,7 +1,6 @@
 import os
 import hashlib
 import json
-import random
 import re
 import time
 from collections import Counter, OrderedDict
@@ -22,21 +21,17 @@ from prometheus_client import Counter as PromCounter, Histogram, Info, REGISTRY
 
 from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
-from utils.executors import postprocess_executor, submit_with_context
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
 HOSTED_TRANSLATION_API_URL = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
-TRANSLATION_SHADOW_SAMPLE_RATE = float(os.environ.get("TRANSLATION_SHADOW_SAMPLE_RATE", "1.0"))
-TRANSLATION_SHADOW_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_SHADOW_TIMEOUT_SECONDS", "2.0"))
 TRANSLATION_NLLB_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_NLLB_TIMEOUT_SECONDS", "5.0"))
 
 
 class TranslationProvider(str, Enum):
     google = "google"
     nllb = "nllb"
-    shadow = "shadow"
 
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
@@ -44,8 +39,6 @@ class TranslationProvider(str, Enum):
             return 'Google Cloud Translation V3'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
-        if value == TranslationProvider.shadow:
-            return 'Google primary + NLLB shadow'
         return str(value)
 
 
@@ -54,14 +47,12 @@ class TranslationProvider(str, Enum):
 #   The first provider whose requirements are met wins.
 #   - "nllb"   requires HOSTED_TRANSLATION_API_URL to be set
 #   - "google" always available (needs GCP credentials at runtime)
-#   - "shadow" requires HOSTED_TRANSLATION_API_URL; Google primary + NLLB shadow comparison
 #
 # Default (unset or empty): google — never auto-switch provider based on URL alone.
 # Deploy strategy:
 #   1. google              — current production (default)
-#   2. shadow              — Google primary, NLLB comparison in background
-#   3. nllb,google         — NLLB primary with Google fallback
-#   4. nllb                — NLLB only (no fallback)
+#   2. nllb,google         — NLLB primary with Google fallback
+#   3. nllb                — NLLB only (no fallback)
 _TRANSLATION_SERVICE_MODELS_RAW = os.environ.get("TRANSLATION_SERVICE_MODELS", "")
 
 
@@ -76,8 +67,6 @@ def _resolve_translation_provider() -> TranslationProvider:
             return TranslationProvider.nllb
         if model == "google":
             return TranslationProvider.google
-        if model == "shadow" and HOSTED_TRANSLATION_API_URL:
-            return TranslationProvider.shadow
 
     logger.warning(
         "TRANSLATION_SERVICE_MODELS=%s: no provider matched (HOSTED_TRANSLATION_API_URL=%s), defaulting to google",
@@ -146,24 +135,6 @@ TRANSLATION_ERRORS = _counter(
     "omi_translation_errors_total",
     "Translation errors",
     ["provider", "error_type"],
-)
-TRANSLATION_SHADOW_COMPARISON = _histogram(
-    "omi_translation_shadow_exact_match_ratio",
-    "Shadow comparison exact match ratio between Google and NLLB",
-    ["target_lang"],
-    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-)
-TRANSLATION_SHADOW_LEN_RATIO = _histogram(
-    "omi_translation_shadow_length_ratio",
-    "Shadow comparison length ratio (NLLB/Google chars)",
-    ["target_lang"],
-    buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 2.0],
-)
-TRANSLATION_SHADOW_LATENCY = _histogram(
-    "omi_translation_shadow_nllb_latency_seconds",
-    "NLLB shadow call latency",
-    ["target_lang"],
-    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
 )
 TRANSLATION_BATCH_SIZE = _histogram(
     "omi_translation_batch_size",
@@ -723,16 +694,7 @@ class TranslationService:
     def __init__(self) -> None:
         self.translation_cache: OrderedDict[str, Tuple[str, str]] = OrderedDict()
         self.MAX_CACHE_SIZE = 1000
-        self._shadow_client: Optional[httpx.Client] = None
         self._nllb_client: Optional[httpx.Client] = None
-
-    def _get_shadow_client(self) -> httpx.Client:
-        if self._shadow_client is None:
-            self._shadow_client = httpx.Client(
-                base_url=HOSTED_TRANSLATION_API_URL,
-                timeout=TRANSLATION_SHADOW_TIMEOUT_SECONDS,
-            )
-        return self._shadow_client
 
     def _get_nllb_client(self) -> httpx.Client:
         if self._nllb_client is None:
@@ -791,7 +753,7 @@ class TranslationService:
             raise
 
     def _translate_batch(
-        self, contents: List[str], dest_language: str, callsite: str = "", source_language: str = ""
+        self, contents: List[str], dest_language: str, source_language: str = ""
     ) -> List[Tuple[str, str]]:
         """Dispatch translation to the configured provider with fallback."""
         if TRANSLATION_PROVIDER == TranslationProvider.nllb and HOSTED_TRANSLATION_API_URL:
@@ -809,10 +771,7 @@ class TranslationService:
                     log=logger,
                 )
                 return self._translate_google_batch(contents, dest_language)
-        results = self._translate_google_batch(contents, dest_language)
-        if TRANSLATION_PROVIDER == TranslationProvider.shadow:
-            self._schedule_shadow_compare(callsite or "_translate_batch", dest_language, contents, results)
-        return results
+        return self._translate_google_batch(contents, dest_language)
 
     def _translate_google_batch(self, contents: List[str], dest_language: str) -> List[Tuple[str, str]]:
         TRANSLATION_BATCH_SIZE.labels(provider="google").observe(len(contents))
@@ -838,112 +797,6 @@ class TranslationService:
         except Exception:
             TRANSLATION_ERRORS.labels(provider="google", error_type="api_error").inc()
             raise
-
-    def _run_shadow_compare(
-        self,
-        callsite: str,
-        dest_language: str,
-        source_texts: List[str],
-        google_results: List[Tuple[str, str]],
-    ) -> None:
-        if TRANSLATION_PROVIDER != TranslationProvider.shadow or not HOSTED_TRANSLATION_API_URL:
-            return
-
-        if TRANSLATION_SHADOW_SAMPLE_RATE < 1.0 and random.random() > TRANSLATION_SHADOW_SAMPLE_RATE:
-            return
-        try:
-            source_lang = ""
-            if google_results:
-                lang_counts: Counter[str] = Counter(det for _, det in google_results if det)
-                if lang_counts:
-                    source_lang = lang_counts.most_common(1)[0][0]
-
-            client = self._get_shadow_client()
-            t0 = time.monotonic()
-            resp = client.post(
-                "/v1/translate",
-                json={
-                    "contents": source_texts,
-                    "target_language_code": dest_language,
-                    "source_language_code": source_lang or None,
-                },
-            )
-            nllb_latency = time.monotonic() - t0
-
-            if resp.status_code != 200:
-                record_fallback(
-                    component='other',
-                    from_mode='shadow',
-                    to_mode='google',
-                    reason='other',
-                    outcome='degraded',
-                    log=logger,
-                )
-                return
-
-            nllb_data = resp.json()
-            nllb_translations = nllb_data.get("translations", [])
-
-            exact_matches = 0
-            total = min(len(google_results), len(nllb_translations))
-            total_google_chars = 0
-            total_nllb_chars = 0
-            for i in range(total):
-                g_text = google_results[i][0]
-                n_text = nllb_translations[i].get("translated_text", "")
-                total_google_chars += len(g_text)
-                total_nllb_chars += len(n_text)
-                if g_text.strip() == n_text.strip():
-                    exact_matches += 1
-
-            exact_match_ratio = exact_matches / total if total > 0 else 0.0
-            len_ratio = total_nllb_chars / total_google_chars if total_google_chars > 0 else 0.0
-
-            TRANSLATION_SHADOW_LATENCY.labels(target_lang=dest_language).observe(nllb_latency)
-            TRANSLATION_SHADOW_COMPARISON.labels(target_lang=dest_language).observe(exact_match_ratio)
-            TRANSLATION_SHADOW_LEN_RATIO.labels(target_lang=dest_language).observe(len_ratio)
-
-            logger.info(
-                "translation_shadow_compare callsite=%s target=%s count=%d "
-                "google_detected=%s exact_match_ratio=%.2f len_ratio=%.2f "
-                "nllb_latency_ms=%.1f nllb_model=%s",
-                callsite,
-                dest_language,
-                total,
-                source_lang,
-                exact_match_ratio,
-                len_ratio,
-                nllb_latency * 1000,
-                nllb_data.get("model", "unknown"),
-            )
-        except Exception:
-            record_fallback(
-                component='other',
-                from_mode='shadow',
-                to_mode='google',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
-
-    def _schedule_shadow_compare(
-        self,
-        callsite: str,
-        dest_language: str,
-        source_texts: List[str],
-        google_results: List[Tuple[str, str]],
-    ) -> None:
-        if TRANSLATION_PROVIDER != TranslationProvider.shadow or not HOSTED_TRANSLATION_API_URL:
-            return
-
-        submit_with_context(
-            postprocess_executor,
-            self._run_shadow_compare,
-            callsite,
-            dest_language,
-            source_texts,
-            google_results,
-        )
 
     def _get_cache_key(self, text_hash: str, dest_language: str) -> str:
         return f"{text_hash}:{dest_language}"

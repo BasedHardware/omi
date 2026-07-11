@@ -129,17 +129,14 @@ The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.p
 # 1. Google only (default — no config needed)
 # TRANSLATION_SERVICE_MODELS is unset
 
-# 2. Shadow mode: Google primary, NLLB comparison in background
-TRANSLATION_SERVICE_MODELS=shadow
-
-# 3. NLLB primary with Google fallback
+# 2. NLLB primary with Google fallback (recommended)
 TRANSLATION_SERVICE_MODELS=nllb,google
 
-# 4. NLLB only
+# 3. NLLB only (no fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-`HOSTED_TRANSLATION_API_URL` must also be set for `nllb` or `shadow` to activate.
+`HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate.
 
 ## Deploy
 
@@ -174,7 +171,7 @@ After NLLB is deployed, set `HOSTED_TRANSLATION_API_URL` in the backend-listen H
   value: "http://dev-omi-nllb-translation:8080"
 ```
 
-Then restart the backend to pick up the new env var. The backend auto-detects NLLB mode and uses it as primary with Google fallback.
+Then set `TRANSLATION_SERVICE_MODELS=nllb,google` and restart the backend.
 
 ## Local Development
 
