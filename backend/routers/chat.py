@@ -430,9 +430,10 @@ def send_message(
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
+    message, msg_doc_id = result
     if message.sender != 'ai':
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
@@ -1160,9 +1161,10 @@ def upload_file_chat(
 
 @router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
+    message, msg_doc_id = result
     if message.sender != 'ai':
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
