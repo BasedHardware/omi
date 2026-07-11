@@ -17,6 +17,7 @@ jobs:
     outputs:
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
+      has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
       has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
       has_flutter_generated: ${{ steps.changes.outputs.has_flutter_generated }}
     steps:
@@ -79,6 +80,46 @@ jobs:
             git ls-files --others --exclude-standard -- lib/l10n
             exit 1
           fi
+
+  analyze:
+    name: Dart Analyze (ratchet)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_app_dart == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
+          cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Run analyzer ratchet
+        working-directory: app
+        run: bash scripts/analyze_ratchet.sh
 
   android-compile-smoke:
     name: Android Compile Smoke
