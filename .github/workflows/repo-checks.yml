@@ -74,6 +74,9 @@ jobs:
         if: github.event_name != 'pull_request'
         run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
 
+      - name: Test package architecture map guardrail
+        run: python3 .github/scripts/test_check_package_architecture_maps.py
+
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 

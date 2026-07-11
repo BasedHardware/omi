@@ -91,6 +91,7 @@ Improve the code you touch — within your blast radius:
 
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
+- Packages over 12 source files need a package-root `ARCHITECTURE.md` or `README.md`; `.github/scripts/check_arch_guardrails.py` enforces the baseline ratchet.
 
 ### Fallback / resilience telemetry
 

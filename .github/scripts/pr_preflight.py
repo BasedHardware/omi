@@ -99,6 +99,8 @@ def command_for_check(
             ".github/scripts/check_arch_guardrails.py",
             "--changed-files",
             str(files_path),
+            "--base",
+            base,
         ],
         "product-invariants": [
             python,
