@@ -72,28 +72,24 @@ for arg in "$@"; do
 done
 suite="${filter%/}"
 
-if [ "$suite" = "AlphaTests" ] || [ "$suite" = "BetaTests" ]; then
-  peer="AlphaTests"
-  if [ "$suite" = "AlphaTests" ]; then
-    peer="BetaTests"
+if [[ "$*" == *"swift test"* ]]; then
+  active_dir="$FAKE_XCRUN_SYNC_DIR/active"
+  mkdir -p "$active_dir"
+  active_marker="$active_dir/$$"
+  trap 'rm -f "$active_marker"' EXIT
+  touch "$active_marker"
+
+  # Two workers are concurrent when two suite processes are alive at once.
+  # Do not rendezvous on specific suite names: xargs -P 2 starts the first two
+  # suites alphabetically, which are not guaranteed to be AlphaTests/BetaTests.
+  active_count="$(find "$active_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  if [ "$active_count" -ge 2 ]; then
+    touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
   fi
 
-  entered_path="$FAKE_XCRUN_SYNC_DIR/$suite.entered"
-  peer_entered_path="$FAKE_XCRUN_SYNC_DIR/$peer.entered"
-  trap 'rm -f "$entered_path"' EXIT
-  touch "$entered_path"
-
-  # This is a deadlock guard, not the concurrency oracle. Reaching the peer's
-  # marker proves it entered while this process was still active and waiting.
-  deadline=$((SECONDS + 10))
-  while [ ! -f "$peer_entered_path" ]; do
-    if [ "$SECONDS" -ge "$deadline" ]; then
-      echo "rendezvous timed out waiting for $peer" >&2
-      exit 1
-    fi
-    sleep 0.05
-  done
-  touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
+  # Hold the worker briefly so a fast peer suite cannot finish before overlap
+  # is observed when only two suites are in flight.
+  sleep 0.1
 fi
 
 if [ "$suite" = "AlphaTests" ]; then
@@ -118,7 +114,7 @@ if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
 fi
 
 if [ ! -f "$FAKE_XCRUN_SYNC_DIR/overlap-proven" ]; then
-  fail "runner did not execute AlphaTests and BetaTests concurrently"
+  fail "runner did not execute suites concurrently with two workers"
 fi
 if ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/runner.out"; then
   fail "runner did not print the failed suite heading"
