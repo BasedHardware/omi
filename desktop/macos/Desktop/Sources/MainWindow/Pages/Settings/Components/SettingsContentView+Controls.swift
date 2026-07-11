@@ -66,10 +66,10 @@ extension SettingsContentView {
                   .fill(
                     i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
                   )
-                  .frame(width: 8, height: 8)
+                  .frame(width: 12, height: 12)
                   .position(
                     x: trackWidth * CGFloat(i) / segmentCount,
-                    y: 3
+                    y: geo.size.height / 2
                   )
               }
 
@@ -80,7 +80,7 @@ extension SettingsContentView {
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                 .position(
                   x: trackWidth * CGFloat(currentIndex) / segmentCount,
-                  y: 3
+                  y: geo.size.height / 2
                 )
                 .gesture(
                   DragGesture(minimumDistance: 0)
@@ -158,10 +158,10 @@ extension SettingsContentView {
               .fill(
                 i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
               )
-              .frame(width: 8, height: 8)
+              .frame(width: 12, height: 12)
               .position(
                 x: trackWidth * CGFloat(i) / segmentCount,
-                y: 3
+                y: geo.size.height / 2
               )
           }
 
@@ -171,7 +171,7 @@ extension SettingsContentView {
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             .position(
               x: trackWidth * CGFloat(currentIndex) / segmentCount,
-              y: 3
+              y: geo.size.height / 2
             )
             .gesture(
               DragGesture(minimumDistance: 0)
