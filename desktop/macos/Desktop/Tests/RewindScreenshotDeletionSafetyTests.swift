@@ -42,6 +42,31 @@ final class RewindScreenshotDeletionSafetyTests: XCTestCase {
     XCTAssertNil(RewindStorage.screenshotDeletionURL(relativePath: "day/..", in: root))
   }
 
+  func testPathEscapingRootIsRefused() throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+    // A traversal that standardizes to a sibling/parent of the Screenshots root
+    // must be refused so retention cleanup can never delete files outside the
+    // store (`!= root` alone did not catch these).
+    XCTAssertNil(RewindStorage.screenshotDeletionURL(relativePath: "../outside.jpg", in: root))
+    XCTAssertNil(RewindStorage.screenshotDeletionURL(relativePath: "../../etc/passwd", in: root))
+    XCTAssertNil(RewindStorage.screenshotDeletionURL(relativePath: "day/../../outside.jpg", in: root))
+  }
+
+  func testWhitespacePaddedPathResolvesFromTrimmedValue() throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+    // A whitespace-padded stored path must resolve from the trimmed value, not the
+    // raw string, and must land inside the root.
+    let resolved = RewindStorage.screenshotDeletionURL(
+      relativePath: "  2026-04-09/120000_001.jpg  ", in: root)
+    XCTAssertEqual(
+      resolved?.standardizedFileURL,
+      root.appendingPathComponent("2026-04-09/120000_001.jpg").standardizedFileURL)
+  }
+
   func testLegitimateRelativePathIsResolved() throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
