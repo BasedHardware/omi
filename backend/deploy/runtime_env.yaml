@@ -508,6 +508,7 @@ environments:
           --subnet:
             env_var: CLOUD_RUN_VPC_SUBNET
           --vpc-egress: private-ranges-only
+          --remove-secrets: GOOGLE_APPLICATION_CREDENTIALS
       services:
         backend:
           env:
