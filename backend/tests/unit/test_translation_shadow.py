@@ -753,7 +753,7 @@ class TestNllbPrimaryMode(unittest.TestCase):
             result = self.service._detect_source_language(["This is enough text for detection but unreliable"])
             self.assertEqual(result, "")
 
-    def test_nllb_batch_malformed_response_raises(self):
+    def test_nllb_batch_malformed_response_returns_empty(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
 
