@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# Git exports repository-local variables while invoking hooks. They must not
+# leak into pytest: tests that create temporary repositories would otherwise
+# keep operating on the outer worktree. The runner is already anchored at the
+# backend directory, so normal Git discovery remains available after scrubbing.
+while IFS= read -r git_env_name; do
+  [[ -n "$git_env_name" ]] && unset "$git_env_name"
+done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x ".venv/bin/python" ]]; then

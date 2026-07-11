@@ -29,6 +29,8 @@ The runner also defaults the common BLAS/OpenMP thread-pool variables to `1`: pr
 already available, while nested native pools oversubscribe the machine and make CPU attribution depend on which
 test first initializes a numerical library. Explicit environment overrides remain available for native-kernel
 tests outside the fast unit lane.
+It also removes Git's repository-local hook variables after anchoring itself in `backend/`, so tests that create
+temporary repositories cannot accidentally mutate or inspect the outer worktree during a pre-push run.
 When a file fails, the runner prints a copyable command to rerun only the failed files with the same environment
 and timing guard. Use that command instead of a bare `pytest` rerun when investigating a timing failure.
 
