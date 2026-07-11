@@ -202,7 +202,24 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         Self.screenHasCameraHousing(screenForPlacement)
     }
     private var screenForPlacement: NSScreen? {
-        self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        Self.preferredPlacementScreen(
+            panelScreen: self.screen,
+            keyWindowScreen: NSApp.keyWindow?.screen,
+            mainScreen: NSScreen.main,
+            firstScreen: NSScreen.screens.first
+        )
+    }
+
+    /// Prefer the panel's own screen over the key window's. Multi-monitor
+    /// revalidation and notch geometry must follow where the bar actually is —
+    /// not whichever app window currently holds keyboard focus.
+    static func preferredPlacementScreen(
+        panelScreen: NSScreen?,
+        keyWindowScreen: NSScreen?,
+        mainScreen: NSScreen?,
+        firstScreen: NSScreen?
+    ) -> NSScreen? {
+        panelScreen ?? keyWindowScreen ?? mainScreen ?? firstScreen
     }
     private var notchSideWidth: CGFloat {
         if state.showingAIConversation {
@@ -1999,7 +2016,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func geometryScreenVisibleFrame() -> NSRect {
-        let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        let targetScreen = screenForPlacement
         return targetScreen?.visibleFrame ?? .zero
     }
 
@@ -2007,11 +2024,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         Self.topInsetWhenNotchModeFallsBackToPill
     }
 
-    /// Center the bar near the top of the main screen.
+    /// Center the bar near the top of the screen that owns this panel.
     private func centerOnMainScreen() {
-        // Use the screen that has the key window, or fall back to main screen
-        let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen = targetScreen else {
+        guard let screen = screenForPlacement else {
             self.center()
             return
         }
@@ -2094,11 +2109,28 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let previousUsesNotchIsland = state.usesNotchIsland
         updateNotchIslandState()
 
-        // An open chat owns its user-resizable response dimensions. Updating
-        // the render mode is sufficient here; rebuilding its frame from the
-        // compact-bar defaults would discard that size (and can double-count
-        // an active voice-response glow).
-        guard !state.showingAIConversation else { return }
+        // An open chat owns its user-resizable response dimensions. Reposition
+        // onto the new screen while keeping the current size so a Spaces /
+        // multi-monitor move cannot leave the panel stranded off-notch, without
+        // rebuilding from compact-bar defaults (which would discard width).
+        if state.showingAIConversation {
+            let targetFrame = NSRect(
+                origin: topCenteredOrigin(for: frame.size, on: screen, usesNotchIsland: state.usesNotchIsland),
+                size: frame.size
+            )
+            let requiresFrameRefresh = !Self.framesEquivalent(frame, targetFrame)
+            guard previousUsesNotchIsland != state.usesNotchIsland || requiresFrameRefresh else { return }
+            resizeToFrame(
+                targetFrame,
+                makeResizable: state.showingAIResponse,
+                animated: false
+            )
+            log(
+                "FloatingControlBarWindow: repositioned open chat on \(screen.localizedName) "
+                    + "usesNotch=\(state.usesNotchIsland)"
+            )
+            return
+        }
 
         let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
         let requiresFrameRefresh = !Self.framesEquivalent(frame, targetFrame)
@@ -2106,7 +2138,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         resizeToFrame(
             targetFrame,
-            makeResizable: state.showingAIConversation && state.showingAIResponse,
+            makeResizable: false,
             animated: false
         )
         log(

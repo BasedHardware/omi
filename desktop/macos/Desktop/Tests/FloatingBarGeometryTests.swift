@@ -63,9 +63,49 @@ final class FloatingBarGeometryTests: XCTestCase {
         let method = String(source[methodStart.lowerBound..<nextMethod.lowerBound])
         XCTAssertTrue(method.contains("let previousUsesNotchIsland = state.usesNotchIsland"))
         XCTAssertTrue(method.contains("updateNotchIslandState()"))
-        XCTAssertTrue(method.contains("guard !state.showingAIConversation else { return }"))
+        XCTAssertTrue(method.contains("if state.showingAIConversation"))
+        XCTAssertTrue(method.contains("topCenteredOrigin(for: frame.size, on: screen, usesNotchIsland: state.usesNotchIsland)"))
         XCTAssertTrue(method.contains("frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)"))
         XCTAssertTrue(method.contains("resizeToFrame("))
+        // Open-chat path must reposition without discarding the current size.
+        XCTAssertFalse(method.contains("guard !state.showingAIConversation else { return }"))
+    }
+
+    func testPreferredPlacementScreenFallsBackThroughNilChain() {
+        // NSScreen instances are not injectable here; the multi-monitor
+        // precedence contract (panel → keyWindow → main → first) is enforced by
+        // testCenterOnMainScreenUsesPlacementScreenHelper. This covers the
+        // empty-fallback terminal of the same helper.
+        XCTAssertNil(
+            FloatingControlBarWindow.preferredPlacementScreen(
+                panelScreen: nil,
+                keyWindowScreen: nil,
+                mainScreen: nil,
+                firstScreen: nil
+            )
+        )
+    }
+
+    func testCenterOnMainScreenUsesPlacementScreenHelper() throws {
+        // omi-test-quality: source-inspection -- static contract: display revalidation must not prefer keyWindow over the panel screen
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
+            encoding: .utf8
+        )
+        guard let methodStart = source.range(of: "private func centerOnMainScreen()") else {
+            return XCTFail("Expected centerOnMainScreen")
+        }
+        guard let nextMethod = source.range(of: "func resetPosition()", range: methodStart.upperBound..<source.endIndex) else {
+            return XCTFail("Expected centerOnMainScreen to precede resetPosition")
+        }
+        let method = String(source[methodStart.lowerBound..<nextMethod.lowerBound])
+        XCTAssertTrue(method.contains("screenForPlacement"))
+        XCTAssertFalse(method.contains("NSApp.keyWindow?.screen"))
+        XCTAssertTrue(source.contains("static func preferredPlacementScreen("))
+        XCTAssertTrue(source.contains("panelScreen ?? keyWindowScreen ?? mainScreen ?? firstScreen"))
     }
 
     func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed ghost sign-in after session expiry on several settings and sync actions, and kept the notch bar on the correct display when monitors or Spaces change"
+}

@@ -125,7 +125,7 @@ fi
 if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
   fail "runner did not report suite count and worker count"
 fi
-if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
+if ! grep -q -- "--skip ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi
 
