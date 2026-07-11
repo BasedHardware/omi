@@ -51,12 +51,32 @@ jobs:
             exit 1
           fi
 
-      - name: Validate runtime GCP project
+      - name: Validate deployment topology
         env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment || 'development' }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          ENV: ${{ vars.ENV }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
         run: |
-          if [[ -z "$RUNTIME_GCP_PROJECT_ID" ]]; then
-            echo "RUNTIME_GCP_PROJECT_ID must be set before backend-listen Helm deployment" >&2
+          if [[ "$INPUT_ENVIRONMENT" == "development" ]]; then
+            EXPECTED_GCP_PROJECT_ID="based-hardware-dev"
+            EXPECTED_ENV="dev"
+            EXPECTED_GKE_CLUSTER="dev-omi-gke"
+          elif [[ "$INPUT_ENVIRONMENT" == "prod" ]]; then
+            EXPECTED_GCP_PROJECT_ID="based-hardware"
+            EXPECTED_ENV="prod"
+            EXPECTED_GKE_CLUSTER="prod-omi-gke"
+          else
+            echo "Invalid environment: $INPUT_ENVIRONMENT" >&2
+            exit 1
+          fi
+          if [[ "$GCP_PROJECT_ID" != "$EXPECTED_GCP_PROJECT_ID" || "$ENV" != "$EXPECTED_ENV" || "$GKE_CLUSTER" != "$EXPECTED_GKE_CLUSTER" ]]; then
+            echo "deployment topology does not match the selected environment" >&2
+            exit 1
+          fi
+          if [[ "$RUNTIME_GCP_PROJECT_ID" != "based-hardware" ]]; then
+            echo "RUNTIME_GCP_PROJECT_ID must be exactly based-hardware before backend-listen Helm deployment" >&2
             exit 1
           fi
 

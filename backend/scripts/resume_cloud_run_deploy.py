@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import secrets
 import shlex
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from typing import Any, cast
-from urllib import error, request
+from urllib import error, parse, request
 
 DEFAULT_REGION = 'us-central1'
 DEFAULT_SMOKE_PATH = '/v1/health'
@@ -24,6 +25,13 @@ EXISTING_CANDIDATE_SERVICES = frozenset(EXISTING_CANDIDATE_ORDER)
 SOURCE_SHA_RE = re.compile(r'^[0-9a-f]{40}$')
 DIGEST_RE = re.compile(r'^sha256:[0-9a-f]{64}$')
 TAG_RE = re.compile(r'^[a-z][a-z0-9-]{0,61}[a-z0-9]$')
+DNS_LABEL_RE = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$')
+DEFAULT_URL_DISABLED_ANNOTATION = 'run.googleapis.com/default-url-disabled'
+PRODUCTION_CONTROL_PLANE_URL = 'https://api.omi.me'
+BACKEND_PROBE_QUERY_PARAM = 'omi_deploy_probe'
+CLOUD_RUN_REVISION_RE = re.compile(r'^[a-z][a-z0-9-]{0,62}$')
+GCP_PROJECT_ID_RE = re.compile(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+PROBE_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{32}$')
 
 
 @dataclass(frozen=True)
@@ -253,17 +261,25 @@ def validate_candidates(
                     '--quiet',
                 ]
             )
-            service = _describe_service(candidate.service, project=project, region=region)
-            _verify_serving_revision(service, candidate.service, previous[candidate.service])
-            tagged_url = _tagged_url(service, candidate_tag, candidate.revision)
-            base_url = str(service.get('status', {}).get('url') or '')
-            if not tagged_url or not base_url:
-                raise RuntimeError(f'{candidate.service} did not expose the candidate tag URL')
+            base_url, tagged_url = _wait_for_candidate_tag(
+                candidate,
+                project=project,
+                region=region,
+                candidate_tag=candidate_tag,
+                previous_revision=previous[candidate.service],
+            )
+            if candidate.service == 'backend':
+                if base_url is not None or tagged_url is not None:
+                    raise RuntimeError('backend default-URL-disabled candidate unexpectedly exposed a URL')
+                print(f'{candidate.service}: {candidate.revision} identity and warmup passed')
+                continue
+            if base_url is None or tagged_url is None:
+                raise RuntimeError(f'{candidate.service} URL-enabled candidate did not expose validated URLs')
             token = _identity_token(base_url)
             status = _http_status(f'{tagged_url.rstrip("/")}{smoke_path}', token=token)
             if status != 200:
                 raise RuntimeError(f'{candidate.service} candidate health returned HTTP {status}')
-            if candidate.service == 'backend':
+            if candidate.service == 'backend-integration':
                 verify_control_plane(tagged_url, token=token)
             print(f'{candidate.service}: {candidate.revision} identity and candidate smoke passed')
     except Exception as exc:
@@ -296,6 +312,8 @@ def promote_candidates(
     control_plane_url: str,
     smoke_path: str = DEFAULT_SMOKE_PATH,
 ) -> None:
+    if control_plane_url != PRODUCTION_CONTROL_PLANE_URL:
+        raise ValueError(f'control plane URL must be exactly {PRODUCTION_CONTROL_PLANE_URL}')
     previous = _validate_candidate_set(
         candidates,
         project=project,
@@ -306,17 +324,32 @@ def promote_candidates(
     try:
         for candidate in candidates:
             _set_traffic(candidate.service, candidate.revision, project=project, region=region)
-            service = _describe_service(candidate.service, project=project, region=region)
-            _verify_serving_revision(service, candidate.service, candidate.revision)
-            base_url = str(service.get('status', {}).get('url') or '')
-            if not base_url:
-                raise RuntimeError(f'{candidate.service} is missing its service URL')
-            token = _identity_token(base_url)
-            status = _http_status(f'{base_url.rstrip("/")}{smoke_path}', token=token)
-            if status != 200:
-                raise RuntimeError(f'{candidate.service} post-shift health returned HTTP {status}')
+            service = _wait_for_serving_revision(
+                candidate.service,
+                candidate.revision,
+                project=project,
+                region=region,
+            )
+            if candidate.service == 'backend':
+                base_url = control_plane_url
+                probe_token = secrets.token_urlsafe(24)
+                _wait_for_backend_probe_attribution(
+                    project=project,
+                    revision=candidate.revision,
+                    probe_token=probe_token,
+                    control_plane_url=base_url,
+                )
+                verify_control_plane(base_url)
+            else:
+                service_status = cast(dict[str, Any], service.get('status') or {})
+                base_url = _validate_cloud_run_origin(
+                    str(service_status.get('url') or ''), description=f'{candidate.service} canonical service URL'
+                )
+                token = _identity_token(base_url)
+                status = _http_status(f'{base_url.rstrip("/")}{smoke_path}', token=token)
+                if status != 200:
+                    raise RuntimeError(f'{candidate.service} post-shift health returned HTTP {status}')
             print(f'{candidate.service}: shifted 100% traffic to {candidate.revision}')
-        verify_control_plane(control_plane_url)
     except Exception as exc:
         # Reconcile every service from the pre-mutation snapshot. The currently
         # attempted gcloud command may have applied remotely before returning an
@@ -347,6 +380,110 @@ def verify_control_plane(base_url: str, *, token: str | None = None) -> None:
     print('desktop release-control API smoke passed')
 
 
+def _backend_probe_url(control_plane_url: str, probe_token: str) -> str:
+    if control_plane_url != PRODUCTION_CONTROL_PLANE_URL:
+        raise ValueError(f'control plane URL must be exactly {PRODUCTION_CONTROL_PLANE_URL}')
+    if not PROBE_TOKEN_RE.fullmatch(probe_token):
+        raise ValueError('backend attribution probe token must be 32 URL-safe characters')
+    query = parse.urlencode({BACKEND_PROBE_QUERY_PARAM: probe_token}, quote_via=parse.quote)
+    return f'{control_plane_url}{DEFAULT_SMOKE_PATH}?{query}'
+
+
+def _wait_for_backend_probe_attribution(
+    *,
+    project: str,
+    revision: str,
+    probe_token: str,
+    control_plane_url: str,
+    attempts: int = 18,
+    poll_interval_seconds: float = 10,
+) -> None:
+    if not GCP_PROJECT_ID_RE.fullmatch(project):
+        raise ValueError(f'invalid GCP project ID: {project!r}')
+    if not CLOUD_RUN_REVISION_RE.fullmatch(revision):
+        raise ValueError(f'invalid Cloud Run revision name: {revision!r}')
+    if not PROBE_TOKEN_RE.fullmatch(probe_token):
+        raise ValueError('backend attribution probe token must be 32 URL-safe characters')
+    if attempts <= 0 or poll_interval_seconds < 0:
+        raise ValueError('backend attribution polling values must be positive')
+    probe_url = _backend_probe_url(control_plane_url, probe_token)
+    request_log_name = f'projects/{project}/logs/run.googleapis.com%2Frequests'
+    log_filter = ' AND '.join(
+        (
+            f'logName="{request_log_name}"',
+            'resource.type="cloud_run_revision"',
+            'resource.labels.service_name="backend"',
+            f'resource.labels.revision_name="{revision}"',
+            'httpRequest.status=200',
+            f'httpRequest.requestUrl:"{BACKEND_PROBE_QUERY_PARAM}={probe_token}"',
+        )
+    )
+    for attempt in range(attempts):
+        probe_status = _http_status(probe_url, attempts=1)
+        if probe_status != 200:
+            raise RuntimeError(f'backend post-shift attribution probe returned HTTP {probe_status}')
+        entries = _read_logging_entries(
+            [
+                'gcloud',
+                'logging',
+                'read',
+                log_filter,
+                f'--project={project}',
+                '--freshness=10m',
+                '--order=desc',
+                '--limit=20',
+                '--format=json',
+            ]
+        )
+        if any(
+            _is_backend_probe_log_entry(
+                entry,
+                project=project,
+                revision=revision,
+                probe_token=probe_token,
+            )
+            for entry in entries
+        ):
+            print(f'backend probe attributed to exact revision {revision}')
+            return
+        if attempt + 1 < attempts:
+            time.sleep(poll_interval_seconds)
+    raise RuntimeError(f'no 200 Cloud Run request-log evidence attributed the backend probe to {revision}')
+
+
+def _read_logging_entries(command: list[str]) -> list[dict[str, Any]]:
+    output = _run_text(command)
+    try:
+        parsed = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError('gcloud logging read returned invalid JSON') from exc
+    if not isinstance(parsed, list):
+        raise RuntimeError('gcloud logging read did not return a JSON list')
+    return [cast(dict[str, Any], entry) for entry in parsed if isinstance(entry, dict)]
+
+
+def _is_backend_probe_log_entry(entry: dict[str, Any], *, project: str, revision: str, probe_token: str) -> bool:
+    resource = cast(dict[str, Any], entry.get('resource') or {})
+    labels = cast(dict[str, Any], resource.get('labels') or {})
+    http_request = cast(dict[str, Any], entry.get('httpRequest') or {})
+    try:
+        status = int(http_request.get('status') or 0)
+    except (TypeError, ValueError):
+        return False
+    request_url = str(http_request.get('requestUrl') or '')
+    parsed_url = parse.urlsplit(request_url)
+    query = parse.parse_qs(parsed_url.query, keep_blank_values=True)
+    return (
+        entry.get('logName') == f'projects/{project}/logs/run.googleapis.com%2Frequests'
+        and resource.get('type') == 'cloud_run_revision'
+        and labels.get('service_name') == 'backend'
+        and labels.get('revision_name') == revision
+        and status == 200
+        and parsed_url.path == DEFAULT_SMOKE_PATH
+        and query == {BACKEND_PROBE_QUERY_PARAM: [probe_token]}
+    )
+
+
 def gate_gke_rollout(
     *,
     namespace: str,
@@ -363,7 +500,7 @@ def gate_gke_rollout(
         raise ValueError('GKE gate timing values must be positive')
     deadline = time.monotonic() + timeout_seconds
     healthy_since: float | None = None
-    stable_signature: tuple[Any, ...] | None = None
+    previous_restart_counts: dict[str, int] | None = None
     last_errors: list[str] = ['no GKE sample collected']
 
     while True:
@@ -373,23 +510,28 @@ def gate_gke_rollout(
             expected_image=expected_image,
             expected_runtime_project=expected_runtime_project,
         )
-        signature = _gke_stability_signature(*documents)
+        restart_counts = _container_restart_counts(documents[3])
+        restart_increases = _restart_count_increases(previous_restart_counts, restart_counts)
         now = time.monotonic()
         if errors:
             healthy_since = None
-            stable_signature = None
             last_errors = errors
-        elif signature != stable_signature:
-            stable_signature = signature
+        elif restart_increases:
+            healthy_since = now
+            last_errors = restart_increases
+        elif healthy_since is None:
             healthy_since = now
             last_errors = []
-        elif healthy_since is not None and now - healthy_since >= dwell_seconds:
+        elif now - healthy_since >= dwell_seconds:
             print(f'backend-listen remained fully healthy for {dwell_seconds:g}s at image {expected_image}')
             return
+        previous_restart_counts = restart_counts
 
         if now >= deadline:
             detail = (
-                '; '.join(last_errors) if last_errors else 'healthy state did not remain stable for the dwell window'
+                '; '.join(last_errors)
+                if last_errors
+                else 'healthy state did not remain continuously restart-free for the dwell window'
             )
             raise RuntimeError(f'GKE rollout gate timed out: {detail}')
         time.sleep(min(poll_interval_seconds, max(0.0, deadline - now)))
@@ -490,6 +632,8 @@ def _validate_candidate_set(
         raise ValueError('candidates must be the exact required set in promotion order')
     previous: dict[str, str] = {}
     for candidate in candidates:
+        if not CLOUD_RUN_REVISION_RE.fullmatch(candidate.revision):
+            raise ValueError(f'invalid Cloud Run revision name: {candidate.revision!r}')
         revision = _describe_revision(candidate.revision, project=project, region=region)
         service = _describe_service(candidate.service, project=project, region=region)
         _validate_candidate_identity(
@@ -559,15 +703,47 @@ def _remove_candidate_tags(
             f'--remove-tags={candidate_tag}',
             '--quiet',
         ]
+        command_error: RuntimeError | None = None
         try:
             _run(command)
-            service = _describe_service(candidate.service, project=project, region=region)
-            _verify_serving_revision(service, candidate.service, previous[candidate.service])
-            if _tagged_url(service, candidate_tag, candidate.revision):
-                raise RuntimeError('candidate tag still exists after cleanup')
         except RuntimeError as exc:
-            errors.append(f'{candidate.service}: {exc}; manual recovery: {shlex.join(command)}')
+            command_error = exc
+        try:
+            _wait_for_tag_cleanup(
+                candidate,
+                project=project,
+                region=region,
+                candidate_tag=candidate_tag,
+                previous_revision=previous[candidate.service],
+            )
+        except RuntimeError as exc:
+            detail = f'{command_error}; {exc}' if command_error is not None else str(exc)
+            errors.append(f'{candidate.service}: {detail}; manual recovery: {shlex.join(command)}')
     return errors
+
+
+def _wait_for_tag_cleanup(
+    candidate: Candidate,
+    *,
+    project: str,
+    region: str,
+    candidate_tag: str,
+    previous_revision: str,
+    attempts: int = 12,
+    poll_interval_seconds: float = 5,
+) -> None:
+    if attempts <= 0 or poll_interval_seconds < 0:
+        raise ValueError('candidate tag cleanup polling values must be positive')
+    for attempt in range(attempts):
+        service = _describe_service(candidate.service, project=project, region=region)
+        _verify_serving_revision(service, candidate.service, previous_revision)
+        spec_target = _tag_target(service, candidate_tag, section='spec')
+        status_target = _tag_target(service, candidate_tag, section='status')
+        if spec_target is None and status_target is None:
+            return
+        if attempt + 1 < attempts:
+            time.sleep(poll_interval_seconds)
+    raise RuntimeError(f'candidate tag {candidate_tag} still exists in spec or status traffic after cleanup')
 
 
 def _rollback_candidates(
@@ -581,12 +757,21 @@ def _rollback_candidates(
     for candidate in reversed(candidates):
         old_revision = previous[candidate.service]
         command = _traffic_command(candidate.service, old_revision, project=project, region=region)
+        command_error: RuntimeError | None = None
         try:
             _run(command)
-            service = _describe_service(candidate.service, project=project, region=region)
-            _verify_serving_revision(service, candidate.service, old_revision)
         except RuntimeError as exc:
-            errors.append(f'{candidate.service}: {exc}; manual recovery: {shlex.join(command)}')
+            command_error = exc
+        try:
+            _wait_for_serving_revision(
+                candidate.service,
+                old_revision,
+                project=project,
+                region=region,
+            )
+        except RuntimeError as exc:
+            detail = f'{command_error}; {exc}' if command_error is not None else str(exc)
+            errors.append(f'{candidate.service}: {detail}; manual recovery: {shlex.join(command)}')
     return errors
 
 
@@ -602,31 +787,33 @@ def _load_gke_documents(
     )
 
 
-def _gke_stability_signature(
-    deployment: dict[str, Any], hpa: dict[str, Any], replica_sets: dict[str, Any], pods: dict[str, Any]
-) -> tuple[Any, ...]:
-    del replica_sets
-    metadata = cast(dict[str, Any], deployment.get('metadata') or {})
-    hpa_status = cast(dict[str, Any], hpa.get('status') or {})
-    pod_signature: list[tuple[str, int]] = []
+def _container_restart_counts(pods: dict[str, Any]) -> dict[str, int]:
+    restart_counts: dict[str, int] = {}
     for raw_pod in cast(list[Any], pods.get('items') or []):
         if not isinstance(raw_pod, dict):
             continue
         pod = cast(dict[str, Any], raw_pod)
         name = str(cast(dict[str, Any], pod.get('metadata') or {}).get('name') or '')
-        restarts = sum(
-            int(container.get('restartCount') or 0)
-            for container in cast(
-                list[Any], cast(dict[str, Any], pod.get('status') or {}).get('containerStatuses') or []
-            )
-            if isinstance(container, dict)
-        )
-        pod_signature.append((name, restarts))
-    return (
-        int(metadata.get('generation') or 0),
-        int(hpa_status.get('desiredReplicas') or 0),
-        tuple(sorted(pod_signature)),
-    )
+        if not name:
+            continue
+        raw_containers = cast(list[Any], cast(dict[str, Any], pod.get('status') or {}).get('containerStatuses') or [])
+        for index, raw_container in enumerate(raw_containers):
+            if not isinstance(raw_container, dict):
+                continue
+            container = cast(dict[str, Any], raw_container)
+            container_name = str(container.get('name') or index)
+            restart_counts[f'{name}/{container_name}'] = int(container.get('restartCount') or 0)
+    return restart_counts
+
+
+def _restart_count_increases(previous: dict[str, int] | None, current: dict[str, int]) -> list[str]:
+    if previous is None:
+        return []
+    return [
+        f'container {name} restart count increased from {previous.get(name, 0)} to {count}'
+        for name, count in current.items()
+        if count > previous.get(name, 0)
+    ]
 
 
 def _deployment_image(document: dict[str, Any]) -> str:
@@ -721,12 +908,119 @@ def _describe_service(service: str, *, project: str, region: str) -> dict[str, A
     )
 
 
-def _tagged_url(service: dict[str, Any], tag: str, revision: str) -> str:
-    traffic = cast(list[Any], cast(dict[str, Any], service.get('status') or {}).get('traffic') or [])
+def _tag_target(service: dict[str, Any], tag: str, *, section: str) -> dict[str, Any] | None:
+    traffic = cast(list[Any], cast(dict[str, Any], service.get(section) or {}).get('traffic') or [])
+    matches: list[dict[str, Any]] = []
     for raw_target in traffic:
-        if isinstance(raw_target, dict) and raw_target.get('tag') == tag and raw_target.get('revisionName') == revision:
-            return str(raw_target.get('url') or '')
-    return ''
+        if not isinstance(raw_target, dict):
+            continue
+        target = cast(dict[str, Any], raw_target)
+        if target.get('tag') == tag:
+            matches.append(target)
+    if len(matches) > 1:
+        raise RuntimeError(f'Cloud Run returned duplicate {section} traffic targets for tag {tag}')
+    return matches[0] if matches else None
+
+
+def _wait_for_candidate_tag(
+    candidate: Candidate,
+    *,
+    project: str,
+    region: str,
+    candidate_tag: str,
+    previous_revision: str,
+    attempts: int = 12,
+    poll_interval_seconds: float = 5,
+) -> tuple[str | None, str | None]:
+    if attempts <= 0 or poll_interval_seconds < 0:
+        raise ValueError('candidate tag polling values must be positive')
+    for attempt in range(attempts):
+        service = _describe_service(candidate.service, project=project, region=region)
+        _verify_serving_revision(service, candidate.service, previous_revision)
+        spec_target = _tag_target(service, candidate_tag, section='spec')
+        status_target = _tag_target(service, candidate_tag, section='status')
+        for section, target in (('spec', spec_target), ('status', status_target)):
+            if target is None:
+                continue
+            observed_revision = str(target.get('revisionName') or '')
+            if observed_revision != candidate.revision:
+                raise RuntimeError(
+                    f'{candidate.service} {section} tag {candidate_tag} targets '
+                    f'{observed_revision or "missing"}, expected {candidate.revision}'
+                )
+        if spec_target is not None and status_target is not None:
+            revision = _describe_revision(candidate.revision, project=project, region=region)
+            if _condition_status(revision, 'Ready') != 'True' or _condition_status(revision, 'Active') != 'True':
+                if attempt + 1 < attempts:
+                    time.sleep(poll_interval_seconds)
+                    continue
+                break
+            annotations = cast(
+                dict[str, Any], cast(dict[str, Any], service.get('metadata') or {}).get('annotations') or {}
+            )
+            default_url_disabled = str(annotations.get(DEFAULT_URL_DISABLED_ANNOTATION) or '')
+            status = cast(dict[str, Any], service.get('status') or {})
+            canonical_url = str(status.get('url') or '')
+            spec_tag_url = str(spec_target.get('url') or '')
+            status_tag_url = str(status_target.get('url') or '')
+            if candidate.service == 'backend':
+                if default_url_disabled != 'true':
+                    raise RuntimeError(
+                        f'backend must set {DEFAULT_URL_DISABLED_ANNOTATION}=true for URL-disabled validation'
+                    )
+                if canonical_url or spec_tag_url or status_tag_url:
+                    raise RuntimeError('backend default-URL-disabled candidate must not expose canonical or tag URLs')
+                return None, None
+            if default_url_disabled == 'true':
+                raise RuntimeError(f'only backend may set {DEFAULT_URL_DISABLED_ANNOTATION}=true')
+            if spec_tag_url:
+                raise RuntimeError(f'{candidate.service} spec traffic unexpectedly contains an output URL')
+            base_url = _validate_cloud_run_origin(
+                canonical_url, description=f'{candidate.service} canonical service URL'
+            )
+            tagged_url = _validate_reported_tag_url(base_url, status_tag_url, candidate_tag)
+            return base_url, tagged_url
+        if attempt + 1 < attempts:
+            time.sleep(poll_interval_seconds)
+    raise RuntimeError(
+        f'{candidate.service} tag {candidate_tag} and Ready=True/Active=True revision did not converge in spec/status '
+        f'for {candidate.revision}'
+    )
+
+
+def _validate_reported_tag_url(base_url: str, reported_url: str, tag: str) -> str:
+    _validate_candidate_tag(tag)
+    canonical_origin = _validate_cloud_run_origin(base_url, description='canonical Cloud Run service URL')
+    reported_origin = _validate_cloud_run_origin(reported_url, description=f'reported Cloud Run tag URL for {tag}')
+    canonical_host = parse.urlsplit(canonical_origin).hostname
+    reported_host = parse.urlsplit(reported_origin).hostname
+    if canonical_host is None or reported_host != f'{tag}---{canonical_host}':
+        raise RuntimeError(f'reported Cloud Run tag URL host does not match tag {tag} and canonical service host')
+    return reported_origin
+
+
+def _validate_cloud_run_origin(value: str, *, description: str) -> str:
+    try:
+        parsed = parse.urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError(f'{description} is malformed') from exc
+    hostname = parsed.hostname or ''
+    labels = hostname.split('.') if hostname else []
+    if (
+        parsed.scheme != 'https'
+        or not hostname.endswith('.run.app')
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.netloc != hostname
+        or any(not DNS_LABEL_RE.fullmatch(label) for label in labels)
+    ):
+        raise RuntimeError(f'{description} must be an origin-only https://*.run.app URL')
+    return f'https://{hostname}'
 
 
 def _traffic_percent(service: dict[str, Any], revision: str, *, section: str = 'status') -> int:
@@ -758,6 +1052,30 @@ def _verify_serving_revision(service: dict[str, Any], service_name: str, expecte
         raise RuntimeError(
             f'{service_name} traffic did not converge to {expected}: spec={spec_revision} status={status_revision}'
         )
+
+
+def _wait_for_serving_revision(
+    service_name: str,
+    revision: str,
+    *,
+    project: str,
+    region: str,
+    attempts: int = 12,
+    poll_interval_seconds: float = 5,
+) -> dict[str, Any]:
+    if attempts <= 0 or poll_interval_seconds < 0:
+        raise ValueError('traffic convergence polling values must be positive')
+    last_error = 'no traffic state observed'
+    for attempt in range(attempts):
+        try:
+            service = _describe_service(service_name, project=project, region=region)
+            _verify_serving_revision(service, service_name, revision)
+            return service
+        except RuntimeError as exc:
+            last_error = str(exc)
+        if attempt + 1 < attempts:
+            time.sleep(poll_interval_seconds)
+    raise RuntimeError(f'{service_name} traffic did not converge after bounded polling: {last_error}')
 
 
 def _traffic_command(service: str, revision: str, *, project: str, region: str) -> list[str]:
