@@ -1314,10 +1314,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ResourceMonitor.shared.stop()
 
     if !AnalyticsManager.isDevBuild {
-      SentrySDK.capture(message: "App Terminating") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "lifecycle", key: "event_type")
-      }
+      let breadcrumb = Breadcrumb(level: .info, category: "lifecycle")
+      breadcrumb.message = "App Terminating"
+      SentrySDK.addBreadcrumb(breadcrumb)
     }
   }
 

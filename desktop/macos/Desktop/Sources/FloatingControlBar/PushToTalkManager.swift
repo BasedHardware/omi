@@ -1204,7 +1204,7 @@ class PushToTalkManager: ObservableObject {
       if q.isEmpty {
         log("PushToTalkManager: voice follow-up empty — not sending")
       } else {
-        log("PushToTalkManager: routing voice follow-up → agent \(pill.title): \"\(q.prefix(60))\"")
+        log("PushToTalkManager: routing voice follow-up → agent (\(q.count) chars)")
         AgentPillsManager.shared.continueAgent(from: pill, text: q)
       }
       if let turnID = currentVoiceTurnID {
@@ -1220,10 +1220,10 @@ class PushToTalkManager: ObservableObject {
     activeTracer = nil
     let dispatch = {
       if wasFollowUp {
-        log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
+        log("PushToTalkManager: sending follow-up query (\(query.count) chars)")
         FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
       } else {
-        log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
+        log("PushToTalkManager: sending query (\(query.count) chars)")
         FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
       }
     }

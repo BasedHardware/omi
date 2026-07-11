@@ -43,6 +43,7 @@ def main() -> int:
         errors.append('gateway service token env has no value or valid secret reference')
 
     _require('OPENAI_API_KEY', gateway_env, errors, 'gateway')
+    _require('ANTHROPIC_API_KEY', gateway_env, errors, 'gateway')
 
     for error in errors:
         print(f'ERROR: {error}')
