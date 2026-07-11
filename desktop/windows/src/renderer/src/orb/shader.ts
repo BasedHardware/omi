@@ -123,11 +123,21 @@ void main() {
   float nspan = 1.0 + o2;
   dDots += (n / nspan - 0.5) * u_noiseAmp * u_merge * u_disc * 2.0;
 
-  // Antialias width from screen-space derivative of the (scaled) field.
-  float aa = fwidth(length(q)) * 1.2 + 1e-4;
+  // Antialias width from the screen-space derivative of EACH field itself, not
+  // of length(q). fwidth(field) is the field's change per pixel, so
+  // smoothstep(-aa, aa, field) always spans ~2px regardless of how steep or
+  // flat the field's gradient is. The merged blob's field is NOT unit-gradient
+  // (the pool/dot smin blends and the additive noise flatten it in places);
+  // keying the AA off length(q)'s constant unit gradient therefore stretched
+  // the transition across many pixels wherever the field was flat — the misty
+  // rim. Deriving aa from the field makes the edge a crisp, uniform ~2px
+  // wherever it lands. dSurf is a clean SDF, so it gets its own (near-identical)
+  // aa rather than borrowing the blob's.
+  float aaSurf = fwidth(dSurf) + 1e-4;
+  float aaDots = fwidth(dDots) + 1e-4;
 
-  float surfMask = 1.0 - smoothstep(-aa, aa, dSurf);
-  float dotMask = (1.0 - smoothstep(-aa, aa, dDots)) * surfMask;
+  float surfMask = 1.0 - smoothstep(-aaSurf, aaSurf, dSurf);
+  float dotMask = (1.0 - smoothstep(-aaDots, aaDots, dDots)) * surfMask;
 
   // Hide entirely at (near-)zero genesis — no sub-pixel residue.
   surfMask *= smoothstep(0.0, 0.02, u_genesis);
