@@ -56,34 +56,34 @@ class TranslationProvider(str, Enum):
 #   - "google" always available (needs GCP credentials at runtime)
 #   - "shadow" requires HOSTED_TRANSLATION_API_URL; Google primary + NLLB shadow comparison
 #
-# When TRANSLATION_SERVICE_MODELS is not set, auto-detect:
-#   HOSTED_TRANSLATION_API_URL set  → nllb (with google fallback)
-#   HOSTED_TRANSLATION_API_URL empty → google
+# Default (unset or empty): google — never auto-switch provider based on URL alone.
+# Deploy strategy:
+#   1. google              — current production (default)
+#   2. shadow              — Google primary, NLLB comparison in background
+#   3. nllb,google         — NLLB primary with Google fallback
+#   4. nllb                — NLLB only (no fallback)
 _TRANSLATION_SERVICE_MODELS_RAW = os.environ.get("TRANSLATION_SERVICE_MODELS", "")
 
 
 def _resolve_translation_provider() -> TranslationProvider:
     """Resolve translation provider from config, following the STT provider pattern."""
-    # Explicit ordered preference list (new pattern)
-    if _TRANSLATION_SERVICE_MODELS_RAW:
-        for model in _TRANSLATION_SERVICE_MODELS_RAW.split(","):
-            model = model.strip().lower()
-            if model == "nllb" and HOSTED_TRANSLATION_API_URL:
-                return TranslationProvider.nllb
-            if model == "google":
-                return TranslationProvider.google
-            if model == "shadow" and HOSTED_TRANSLATION_API_URL:
-                return TranslationProvider.shadow
-        # No valid provider matched — fall through to auto-detect
-        logger.warning(
-            "TRANSLATION_SERVICE_MODELS=%s: no provider matched (HOSTED_TRANSLATION_API_URL=%s), using auto-detect",
-            _TRANSLATION_SERVICE_MODELS_RAW,
-            "set" if HOSTED_TRANSLATION_API_URL else "unset",
-        )
+    if not _TRANSLATION_SERVICE_MODELS_RAW:
+        return TranslationProvider.google
 
-    # Auto-detect
-    if HOSTED_TRANSLATION_API_URL:
-        return TranslationProvider.nllb
+    for model in _TRANSLATION_SERVICE_MODELS_RAW.split(","):
+        model = model.strip().lower()
+        if model == "nllb" and HOSTED_TRANSLATION_API_URL:
+            return TranslationProvider.nllb
+        if model == "google":
+            return TranslationProvider.google
+        if model == "shadow" and HOSTED_TRANSLATION_API_URL:
+            return TranslationProvider.shadow
+
+    logger.warning(
+        "TRANSLATION_SERVICE_MODELS=%s: no provider matched (HOSTED_TRANSLATION_API_URL=%s), defaulting to google",
+        _TRANSLATION_SERVICE_MODELS_RAW,
+        "set" if HOSTED_TRANSLATION_API_URL else "unset",
+    )
     return TranslationProvider.google
 
 

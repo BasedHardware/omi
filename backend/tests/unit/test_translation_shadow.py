@@ -856,8 +856,8 @@ class TestNllbPrimaryMode(unittest.TestCase):
             mock_batch.assert_called()
 
 
-class TestTranslationProviderAutoDetect(unittest.TestCase):
-    """Tests for auto-detection of TRANSLATION_PROVIDER based on HOSTED_TRANSLATION_API_URL."""
+class TestTranslationProviderDefault(unittest.TestCase):
+    """Tests that default provider is always google — URL alone never changes provider."""
 
     def _reimport(self):
         for mod_name in list(sys.modules.keys()):
@@ -884,7 +884,7 @@ class TestTranslationProviderAutoDetect(unittest.TestCase):
         globals()['_TranslationService'] = TranslationService
         globals()['_translation_module'] = tm_restored
 
-    def test_auto_detect_nllb_when_url_set(self):
+    def test_default_google_even_with_nllb_url(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
@@ -893,17 +893,30 @@ class TestTranslationProviderAutoDetect(unittest.TestCase):
             os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
             os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
             tm_fresh = self._reimport()
-            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "nllb")
+            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
         finally:
             self._cleanup(orig)
 
-    def test_auto_detect_google_when_no_url(self):
+    def test_default_google_without_url(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
         }
         try:
             os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
+            os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
+            tm_fresh = self._reimport()
+            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
+        finally:
+            self._cleanup(orig)
+
+    def test_unmatched_service_models_defaults_to_google(self):
+        orig = {
+            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
+            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
+        }
+        try:
+            os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb"
             os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
             tm_fresh = self._reimport()
             self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
