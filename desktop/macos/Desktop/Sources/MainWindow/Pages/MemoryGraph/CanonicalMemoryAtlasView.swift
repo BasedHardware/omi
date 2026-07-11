@@ -42,6 +42,14 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
     }
   }
 
+  var symbolName: String {
+    switch self {
+    case .projects: return "folder.fill"
+    case .collaborators: return "person.2.fill"
+    case .tools: return "wrench.and.screwdriver.fill"
+    }
+  }
+
   var center: CGPoint {
     switch self {
     case .projects: return CGPoint(x: 0.24, y: 0.45)
@@ -782,9 +790,14 @@ private struct CanonicalMemoryAtlasPage: View {
         }
         .buttonStyle(.plain)
 
-        Text("Memory atlas")
-          .scaledFont(size: 17, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Memory atlas")
+            .scaledFont(size: 17, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("A living map of what you know")
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+        }
 
         Spacer()
 
@@ -824,9 +837,14 @@ private struct MemoryAtlasEmptyState: View {
     ZStack {
       OmiColors.backgroundPrimary
       VStack(spacing: 8) {
-        Image(systemName: "point.3.connected.trianglepath.dotted")
-          .scaledFont(size: 22)
-          .foregroundColor(OmiColors.textTertiary)
+        ZStack {
+          Circle()
+            .fill(OmiColors.backgroundRaised)
+            .frame(width: 52, height: 52)
+          Image(systemName: "point.3.connected.trianglepath.dotted")
+            .scaledFont(size: 21)
+            .foregroundColor(OmiColors.textSecondary)
+        }
         Text("Your memory atlas is taking shape")
           .scaledFont(size: 14, weight: .medium)
           .foregroundColor(OmiColors.textPrimary)
@@ -910,6 +928,8 @@ private struct CanonicalMemoryAtlasSurface: View {
         ZStack {
           OmiColors.backgroundPrimary
 
+          atlasField(size: proxy.size)
+
           atlasCanvas(size: proxy.size, plan: plan)
 
           if zoom < 1.9 && !isCameraMoving {
@@ -982,6 +1002,17 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var atlasToolbar: some View {
     HStack(spacing: 12) {
+      if !compact {
+        HStack(spacing: 7) {
+          Image(systemName: "circle.hexagongrid.fill")
+            .scaledFont(size: 12)
+          Text(atlasLevelLabel)
+            .scaledFont(size: 11, weight: .semibold)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+        .frame(width: 92, alignment: .leading)
+      }
+
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass")
           .scaledFont(size: 12)
@@ -1013,6 +1044,16 @@ private struct CanonicalMemoryAtlasSurface: View {
 
       Spacer()
 
+      if let matchingNodeIDs {
+        Text("\(matchingNodeIDs.count) match\(matchingNodeIDs.count == 1 ? "" : "es")")
+          .scaledFont(size: 10, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
+      } else if !compact {
+        Text("Drag to move  ·  Pinch to explore")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+
       if recentConnectionCount > 0 {
         HStack(spacing: 6) {
           Circle()
@@ -1029,6 +1070,23 @@ private struct CanonicalMemoryAtlasSurface: View {
     .background(OmiColors.backgroundPrimary)
   }
 
+  private func atlasField(size: CGSize) -> some View {
+    Canvas(opaque: false, colorMode: .linear) { context, _ in
+      let spacing: CGFloat = compact ? 28 : 32
+      let dot = OmiColors.textQuaternary.opacity(0.11)
+      let offsetX = pan.width.truncatingRemainder(dividingBy: spacing)
+      let offsetY = pan.height.truncatingRemainder(dividingBy: spacing)
+      var path = Path()
+      for x in stride(from: offsetX, through: size.width, by: spacing) {
+        for y in stride(from: offsetY, through: size.height, by: spacing) {
+          path.addEllipse(in: CGRect(x: x, y: y, width: 1.2, height: 1.2))
+        }
+      }
+      context.fill(path, with: .color(dot))
+    }
+    .accessibilityHidden(true)
+  }
+
   private func atlasCanvas(size: CGSize, plan: MemoryAtlasRenderPlan) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
       drawClusterContours(context: &context, size: size)
@@ -1043,20 +1101,21 @@ private struct CanonicalMemoryAtlasSurface: View {
       let center = point(for: cluster.center, in: size)
       let width = size.width * 0.29 * zoom
       let height = size.height * 0.64 * zoom
-      for inset in 0..<3 {
-        let amount = CGFloat(inset) * 10
-        let rect = CGRect(
-          x: center.x - width / 2 + amount,
-          y: center.y - height / 2 + amount,
-          width: width - amount * 2,
-          height: height - amount * 2
+      let rect = CGRect(
+        x: center.x - width / 2,
+        y: center.y - height / 2,
+        width: width,
+        height: height
+      )
+      context.fill(
+        Path(ellipseIn: rect),
+        with: .radialGradient(
+          Gradient(colors: [cluster.color.opacity(0.065), cluster.color.opacity(0)]),
+          center: center,
+          startRadius: 0,
+          endRadius: max(width, height) / 2
         )
-        context.stroke(
-          Path(ellipseIn: rect),
-          with: .color(cluster.color.opacity(0.08 - Double(inset) * 0.018)),
-          lineWidth: 1
-        )
-      }
+      )
     }
   }
 
@@ -1176,8 +1235,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func clusterTitles(size: CGSize) -> some View {
     ForEach(MemoryAtlasCluster.allCases) { cluster in
       Text(cluster.title)
-        .scaledFont(size: compact ? 10 : 12, weight: .medium)
-        .foregroundColor(cluster.color.opacity(0.82))
+        .scaledFont(size: compact ? 10 : 11, weight: .semibold)
+        .textCase(.uppercase)
+        .tracking(0.7)
+        .foregroundColor(OmiColors.textTertiary)
         .position(
           x: point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).x,
           y: max(18, point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).y)
@@ -1204,17 +1265,21 @@ private struct CanonicalMemoryAtlasSurface: View {
         ZStack {
           if selected {
             Circle()
-              .stroke(color.opacity(0.22), lineWidth: 7)
+              .stroke(color.opacity(0.16), lineWidth: 8)
               .frame(width: diameter + 14, height: diameter + 14)
           }
           Circle()
             .fill(OmiColors.backgroundRaised)
-            .overlay(Circle().stroke(color, lineWidth: selected ? 2.2 : 1.4))
+            .overlay(Circle().stroke(color.opacity(selected ? 1 : 0.72), lineWidth: selected ? 2.2 : 1.2))
             .frame(width: diameter, height: diameter)
           if placement.id == snapshot.anchorNodeID {
             Image(systemName: "person.fill")
               .scaledFont(size: max(9, diameter * 0.38))
               .foregroundColor(OmiColors.textPrimary)
+          } else if (isFocusMode || isInspectMode), let cluster = placement.cluster {
+            Image(systemName: cluster.symbolName)
+              .scaledFont(size: max(8, diameter * 0.3), weight: .medium)
+              .foregroundColor(color.opacity(0.9))
           }
         }
 
@@ -1229,6 +1294,9 @@ private struct CanonicalMemoryAtlasSurface: View {
             .truncationMode(.tail)
             .multilineTextAlignment(.center)
             .frame(maxWidth: compact ? 110 : 150)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(OmiColors.backgroundPrimary.opacity(0.9), in: Capsule())
         }
       }
       .contentShape(Rectangle())
@@ -1260,9 +1328,20 @@ private struct CanonicalMemoryAtlasSurface: View {
         .frame(width: 34, height: 34)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(placement.node.label)
-          .scaledFont(size: compact ? 12 : 14, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+        HStack(spacing: 7) {
+          Text(placement.node.label)
+            .scaledFont(size: compact ? 12 : 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          if !compact {
+            Text(placement.node.nodeType.rawValue.replacingOccurrences(of: "_", with: " ").uppercased())
+              .scaledFont(size: 8, weight: .semibold)
+              .tracking(0.5)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(.horizontal, 6)
+              .padding(.vertical, 3)
+              .background(OmiColors.backgroundRaised, in: Capsule())
+          }
+        }
         Text(relationshipText)
           .scaledFont(size: compact ? 10 : 12)
           .foregroundColor(OmiColors.textTertiary)
@@ -1270,6 +1349,17 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
 
       Spacer()
+
+      if !compact {
+        VStack(alignment: .trailing, spacing: 2) {
+          Text("\(placement.degree)")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Text("connections")
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textQuaternary)
+        }
+      }
 
       if !compact {
         Button {
@@ -1309,9 +1399,9 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var atlasLegend: some View {
     HStack(spacing: 18) {
-      Text(atlasLevelLabel)
-        .scaledFont(size: 11, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+      Text("Select a node to reveal its neighborhood")
+        .scaledFont(size: 10)
+        .foregroundColor(OmiColors.textQuaternary)
 
       Spacer()
 
