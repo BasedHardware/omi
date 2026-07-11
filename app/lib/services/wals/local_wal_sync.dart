@@ -80,7 +80,7 @@ List<Wal> nextSyncUploadBatch(
 }
 
 class LocalWalSyncImpl implements LocalWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
 
   List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];

@@ -15,7 +15,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 class SDCardWalSyncImpl implements SDCardWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
 
   StreamSubscription? _storageStream;
