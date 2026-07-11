@@ -254,10 +254,20 @@ def get_messages(
 
 
 def get_message_count(uid: str) -> int:
-    """Return the total number of chat messages for a user."""
-    user_ref = db.collection('users').document(uid)
-    docs = user_ref.collection('messages').count().get()
-    return int(docs[0][0].value) if docs and docs[0] else 0
+    """Return the number of chat messages visible to the user.
+
+    Reported messages are hidden from every chat view (``get_messages`` and ``get_app_messages``
+    skip ``reported == True``), so this stat excludes them too; otherwise it would exceed the number
+    of messages the user can actually see anywhere. Uses count() aggregation (total minus the
+    reported subset) rather than streaming every message. A ``reported == False`` count would be
+    wrong because legacy messages may omit the field.
+    """
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    total_res = messages_ref.count().get()
+    total = int(total_res[0][0].value) if total_res and total_res[0] else 0
+    reported_res = messages_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_res[0][0].value) if reported_res and reported_res[0] else 0
+    return max(0, total - reported)
 
 
 def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, Any]]:
