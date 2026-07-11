@@ -153,6 +153,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: backfill-service' in action
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
+    assert 'id: backfill-service-exists' in action
+    assert "no_traffic: ${{ steps.backfill-service-exists.outputs.exists }}" in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
     assert '--min-instances=0' in action

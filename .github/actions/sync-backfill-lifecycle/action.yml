@@ -98,6 +98,24 @@ runs:
         python3 backend/scripts/render_cloud_run_clone_env.py \
           --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
 
+    - name: Detect existing ${{ inputs.service }}-sync-backfill service
+      if: ${{ inputs.mode == 'worker' }}
+      id: backfill-service-exists
+      shell: bash
+      run: |
+        set -o pipefail
+        if gcloud run services describe "${{ inputs.service }}-sync-backfill" \
+          --region="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --format='value(metadata.name)' >/tmp/backfill-service-name 2>/tmp/backfill-service-error; then
+          echo 'exists=true' >> "$GITHUB_OUTPUT"
+        elif grep -Eqi 'cannot find service|not found' /tmp/backfill-service-error; then
+          echo 'exists=false' >> "$GITHUB_OUTPUT"
+        else
+          cat /tmp/backfill-service-error >&2
+          exit 1
+        fi
+
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
       id: deploy-backend-sync-backfill
@@ -107,7 +125,7 @@ runs:
         region: ${{ inputs.region }}
         project_id: ${{ inputs.project_id }}
         image: ${{ inputs.image }}
-        no_traffic: true
+        no_traffic: ${{ steps.backfill-service-exists.outputs.exists }}
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
           --min-instances=0
