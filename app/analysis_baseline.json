@@ -9,7 +9,6 @@
   "depend_on_referenced_packages": 4,
   "deprecated_member_use": 34,
   "experimental_member_use": 13,
-  "invalid_use_of_visible_for_testing_member": 2,
   "library_private_types_in_public_api": 4,
   "no_leading_underscores_for_local_identifiers": 5,
   "non_constant_identifier_names": 1,
