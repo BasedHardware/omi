@@ -101,7 +101,7 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   })
 
   // (a) PEEK: revealed inactive, unfocusable, and the previously-focused
-  // window keeps focus — a hover reveal must never interrupt typing.
+  // window keeps focus — a summoned pill must never interrupt typing.
   const peek = await barShow(app, 'peek')
   assert.equal(peek.visible, true, 'peek should reveal the bar')
   assert.equal(peek.focusable, false, 'peek bar must be unfocusable')
@@ -117,7 +117,7 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   // the user's own focus changes are environment noise, and getFocusedWindow
   // only reports this app's windows anyway.)
   assert.notEqual(afterPeek.focusedNow, afterPeek.barId, 'peek must not move focus to the bar')
-  assert.equal(afterPeek.barFocusEvents, 0, 'bar fired a focus event on a hover reveal')
+  assert.equal(afterPeek.barFocusEvents, 0, 'bar fired a focus event on a summon reveal')
 
   // (b) PTT mode: same contract — expanded listening WITHOUT focus.
   await app.evaluate(() => globalThis.__omiE2E.barHide())
@@ -141,16 +141,14 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   )
 })
 
-test('bar hide returns cleanly and can re-reveal; strips exist per display', async (t) => {
+test('bar hide returns cleanly and can re-reveal', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
   await app.firstWindow()
 
   await barShow(app, 'peek')
   // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback
-  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility —
-  // on a live desktop the user's cursor can cross the top edge and legitimately
-  // re-reveal the bar via a trigger strip right after the hide.
+  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility.
   const didHide = await app.evaluate(({ BrowserWindow }) => {
     return new Promise((resolve) => {
       const win = BrowserWindow.fromId(globalThis.__omiE2E.barState().id)
@@ -162,33 +160,31 @@ test('bar hide returns cleanly and can re-reveal; strips exist per display', asy
   assert.equal(didHide, true, 'bar should hide after the slide-out (event observed)')
   const again = await barShow(app, 'expanded')
   assert.equal(again.visible, true, 'bar should re-reveal after a hide')
+})
 
-  // Trigger strips: one thin window per display (they exist even while the
-  // bar is hidden — that IS the zero-poll reveal path), CENTERED over the
-  // bar's footprint and far from the screen corners (merge-blocker
-  // regression: a full-width strip hijacked ✕/minimize/tab-close targets).
-  const diag = await app.evaluate(() => globalThis.__omiE2E.barStrips())
-  assert.equal(diag.strips.length, diag.displays.length, 'one trigger strip per display')
-  for (const s of diag.strips) {
-    assert.ok(s.bounds.height <= 2, `strip ${s.id} is ${s.bounds.height}px tall (want 1px)`)
-    // Find the display this strip belongs to (same y origin, x within bounds).
-    const d = diag.displays.find(
-      (dd) => s.bounds.x >= dd.bounds.x && s.bounds.x < dd.bounds.x + dd.bounds.width
-    )
-    assert.ok(d, `strip ${s.id} not on any display`)
-    assert.ok(
-      s.bounds.width < d.bounds.width / 2,
-      `strip ${s.id} spans ${s.bounds.width}px of a ${d.bounds.width}px display — too wide`
-    )
-    assert.ok(
-      s.bounds.x > d.bounds.x + d.bounds.width * 0.25,
-      `strip ${s.id} reaches the top-left corner region`
-    )
-    assert.ok(
-      s.bounds.x + s.bounds.width < d.bounds.x + d.bounds.width * 0.75,
-      `strip ${s.id} reaches the top-right corner region`
-    )
+// C5 regression: pressing the summon hotkey must reveal the minimal PILL, NOT
+// the expanded chat panel (Chris: "hotkey tap → pill; click the pill to expand").
+// Top-edge hover reveal was removed entirely, so the summon gesture is the only
+// reveal path. A pill is unfocusable (peek); the expanded chat is the one
+// focusable mode — asserting !focusable proves the hotkey did NOT open the chat.
+test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  await findBarPage(app) // ensure the bar renderer has mounted (bar:ready)
+  await app.evaluate(() => globalThis.__omiE2E.barSummonFire())
+
+  let s = null
+  for (let i = 0; i < 100; i++) {
+    s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (s.visible) break
+    await new Promise((r) => setTimeout(r, 50))
   }
+  assert.ok(s && s.visible, 'summon hotkey should reveal the bar')
+  assert.equal(s.focusable, false, 'summon reveals the unfocusable PILL, not the focusable chat')
+  assert.equal(s.focused, false, 'the summoned pill must not steal focus')
 })
 
 // Regression for the blank-bar paint race (C11): main used to showInactive()
