@@ -43,6 +43,46 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("work product, investigation, or"))
     }
 
+    func testInstructionKeepsPermissionsAsDirectVoiceActions() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("check_permission_status"))
+        XCTAssertTrue(instr.contains("request_permission"))
+        XCTAssertTrue(instr.contains("NEVER use spawn_agent for a permission request"))
+    }
+
+    func testDelegatedPermissionRequestIsRedirectedToDirectTool() {
+        XCTAssertEqual(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Request Screen Recording permission for Omi in Mac System Settings."
+            ),
+            .init(tool: .requestPermission, type: "screen_recording")
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Research whether screen recording APIs support WebP."
+            )
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Research how our Chrome extension should request Screen Recording permission."
+            )
+        )
+    }
+
+    func testDelegatedPermissionStatusIsCheckedWithoutOpeningSettings() {
+        XCTAssertEqual(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Check whether Omi has Screen Recording permission granted."
+            ),
+            .init(tool: .checkPermissionStatus, type: "screen_recording")
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Check whether Chrome has Screen Recording permission granted."
+            )
+        )
+    }
+
     func testRealtimeToolSurfaceMatchesCapabilityRegistry() {
         let toolNames = Set(RealtimeHubTools.openAITools.compactMap { $0["name"] as? String })
         XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))
@@ -96,6 +136,19 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNotNil(properties?["end_time"])
         XCTAssertNotNil(properties?["attendees"])
         XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
+    }
+
+    func testRealtimePermissionToolsAreExposedForDirectHandling() {
+        let tools = RealtimeHubTools.openAITools
+        let names = Set(tools.compactMap { $0["name"] as? String })
+        XCTAssertTrue(names.contains(HubTool.checkPermissionStatus.rawValue))
+        XCTAssertTrue(names.contains(HubTool.requestPermission.rawValue))
+
+        let request = tools.first { ($0["name"] as? String) == HubTool.requestPermission.rawValue }
+        let parameters = request?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["type"])
+        XCTAssertTrue((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
     }
 
     func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {
