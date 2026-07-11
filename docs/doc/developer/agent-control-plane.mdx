@@ -1093,6 +1093,10 @@ Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agen
 and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
 until realtime has an equally explicit creation UX, control envelope, and correlation policy.
 
+For PTT/realtime, `AgentControlService` resolves an opaque `agentRef` to only the canonical `runId` required by
+strict run-scoped tools. A completed `get_agent_run` result supplies its bounded final output as untrusted data for
+the coordinator to summarize; raw canonical identifiers remain hidden from user-facing speech.
+
 ### 16.3 Delegation semantics
 
 - `call`: create a child session/run and suspend the parent until a structured result is available.
