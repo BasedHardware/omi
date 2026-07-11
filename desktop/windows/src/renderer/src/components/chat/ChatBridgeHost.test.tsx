@@ -14,6 +14,7 @@ let chat = {
   history: [] as ChatMsg[],
   sending: false,
   speaking: false,
+  agentActive: false,
   send: sendSpy,
   reset: vi.fn()
 }
@@ -30,7 +31,14 @@ beforeEach(() => {
   barSendCb = null
   reqStateCb = null
   published = []
-  chat = { history: [], sending: false, speaking: false, send: sendSpy, reset: vi.fn() }
+  chat = {
+    history: [],
+    sending: false,
+    speaking: false,
+    agentActive: false,
+    send: sendSpy,
+    reset: vi.fn()
+  }
   ;(window as unknown as { omi: unknown }).omi = {
     onBarChatSend: (cb: (p: { text: string; fromVoice: boolean }) => void) => {
       barSendCb = cb
@@ -73,7 +81,12 @@ describe('ChatBridgeHost', () => {
 
   it('publishes the projected state to the bar on mount (idle)', () => {
     render(<ChatBridgeHost />)
-    expect(published[0]).toEqual({ messages: [], sending: false, status: 'idle' })
+    expect(published[0]).toEqual({
+      messages: [],
+      sending: false,
+      status: 'idle',
+      agentsActive: false
+    })
   })
 
   it('projects streaming → sending and TTS playback → speaking', async () => {
@@ -102,7 +115,56 @@ describe('ChatBridgeHost', () => {
     expect(published.at(-1)).toEqual({
       messages: [{ id: 'u1', role: 'user', content: 'hi' }],
       sending: false,
-      status: 'idle'
+      status: 'idle',
+      agentsActive: false
     })
+  })
+
+  it('does NOT truncate a long agent task — a bar send stays queued past the ordinary cap, then delivers', async () => {
+    // A coding-agent task holds the engine busy for minutes. Before the fix, the
+    // 15s idle-wait cap fired mid-task and the deferred send hit useChat's private
+    // re-entrancy latch → silently dropped (the Major regression this guards).
+    vi.useFakeTimers()
+    try {
+      chat = { ...chat, sending: true, agentActive: true }
+      const { rerender } = render(<ChatBridgeHost />)
+      barSendCb?.({ text: 'queued during agent task', fromVoice: false })
+      // Advance WELL past both the old 15s cap and the 60s ordinary-stream cap.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(90_000)
+      })
+      // agentActive exempts the task from the cap → still queued, not dropped.
+      expect(sendSpy).not.toHaveBeenCalled()
+      // Agent finishes → engine idle → the queued send finally delivers.
+      chat = { ...chat, sending: false, agentActive: false }
+      rerender(<ChatBridgeHost />)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      expect(sendSpy).toHaveBeenCalledWith('queued during agent task', { fromVoice: false })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds an ordinary wedged stream — the cap fires so the bar queue never blocks forever', async () => {
+    // A NON-agent send that never clears (wedged SSE) must not block the bar's
+    // send queue indefinitely: the cap fires (with a warning) and the queued send
+    // is delivered best-effort rather than lost or stuck.
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      chat = { ...chat, sending: true, agentActive: false }
+      render(<ChatBridgeHost />)
+      barSendCb?.({ text: 'behind a wedged stream', fromVoice: false })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000)
+      })
+      expect(sendSpy).toHaveBeenCalledWith('behind a wedged stream', { fromVoice: false })
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })

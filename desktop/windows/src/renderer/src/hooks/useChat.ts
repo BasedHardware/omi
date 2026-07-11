@@ -107,6 +107,18 @@ export function useChat(): UseChat {
   // overlay's Esc) can actually stop the agent subprocess, not just the UI.
   const activeAgentTaskRef = useRef<string | null>(null)
 
+  // The single engine-busy latch. `sendingRef` is the SYNCHRONOUS mirror the
+  // re-entrancy guard + infinite-load effect read; `sending` is the REACTIVE
+  // projection the UI and the bar↔main bridge (ChatBridgeHost) observe. Always
+  // move them together through this helper so the bridge never sees the engine
+  // idle while a send still holds the latch — a minutes-long coding-agent task
+  // holds it the whole time, and a bar/PTT message that raced a false "idle" gap
+  // would be silently dropped by the re-entrancy guard (the C3 loss class).
+  const setBusy = (busy: boolean): void => {
+    sendingRef.current = busy
+    setSending(busy)
+  }
+
   // In infinite mode the ongoing thread is loaded once on mount (and legacy
   // id-less messages get backfilled ids so the merge can match them). This hook
   // is the app's single chat engine now (the bar is a viewport over it via the
@@ -241,8 +253,7 @@ export function useChat(): UseChat {
       const msg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content }
       setHistory((h) => [...h, msg])
       void persistChat([...baseHistory, userMsg, msg])
-      sendingRef.current = false
-      setSending(false)
+      setBusy(false)
     }
 
     if (detection.agentId) {
@@ -262,7 +273,6 @@ export function useChat(): UseChat {
       return true
     }
 
-    setSending(true)
     setAgentActive(true)
     const taskId = crypto.randomUUID()
     activeAgentTaskRef.current = taskId
@@ -349,8 +359,7 @@ export function useChat(): UseChat {
         userMsg,
         { id: assistantId, role: 'assistant', content: compose(true) }
       ])
-      sendingRef.current = false
-      setSending(false)
+      setBusy(false)
     }
     return true
   }
@@ -359,7 +368,7 @@ export function useChat(): UseChat {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     if (!text.trim() || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
-    sendingRef.current = true
+    setBusy(true)
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
     const baseHistory = history
     // Show the user's message immediately, BEFORE the (potentially ~2s) action-
@@ -389,7 +398,7 @@ export function useChat(): UseChat {
       setHistory((h) => [...h, outMsg])
       void persistChat([...baseHistory, userMsg, outMsg])
       maybeSpeak(outMsg.content, fromVoice)
-      sendingRef.current = false
+      setBusy(false)
       return
     }
     if (verdict.kind === 'error') {
@@ -402,7 +411,7 @@ export function useChat(): UseChat {
       setHistory((h) => [...h, errMsg])
       void persistChat([...baseHistory, userMsg, errMsg])
       maybeSpeak(errMsg.content, fromVoice)
-      sendingRef.current = false
+      setBusy(false)
       return
     }
     const assistantId = crypto.randomUUID()
@@ -412,7 +421,6 @@ export function useChat(): UseChat {
       { id: assistantId, role: 'assistant', content: assistant }
     ]
     setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: '' }])
-    setSending(true)
 
     void persistChat(buildThread(''))
     let lastPersist = Date.now()
@@ -519,8 +527,7 @@ export function useChat(): UseChat {
         return next
       })
     } finally {
-      sendingRef.current = false
-      setSending(false)
+      setBusy(false)
       await persistChat(buildThread(assistantText))
     }
   }
@@ -537,8 +544,10 @@ export function useChat(): UseChat {
       activeAgentTaskRef.current = null
     }
     setHistory([])
-    setSending(false)
-    sendingRef.current = false
+    setBusy(false)
+    // Esc also drops the 'agents' orb pose immediately — the cancel above tears
+    // the task down, so don't wait for the in-flight codingAgentRun to resolve.
+    setAgentActive(false)
     // Per-launch: forget the id so the next send creates a NEW conversation.
     // Infinite: keep the shared id — reset is only a fresh on-screen view of the
     // same ongoing thread, not a new conversation.
