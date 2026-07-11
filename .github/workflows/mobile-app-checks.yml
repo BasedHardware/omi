@@ -121,6 +121,26 @@ jobs:
         working-directory: app
         run: bash scripts/analyze_ratchet.sh
 
+  flutter-test:
+    name: Flutter Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_app_dart == 'true'
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Run Flutter tests
+        working-directory: app
+        run: bash test.sh
+
   android-compile-smoke:
     name: Android Compile Smoke
     runs-on: ubuntu-latest
