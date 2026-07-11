@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Print every changed path that can affect validation, including both sides of
+# renames. Disabling rename detection deliberately represents a move as a
+# deletion plus an addition so a risky source cannot escape a path gate merely
+# by moving out of its watched directory. Type changes are retained as well so
+# replacing a watched regular file with a symlink cannot bypass validation.
+set -euo pipefail
+
+exec git diff --name-only --no-renames --diff-filter=ACMRTD "$@"
