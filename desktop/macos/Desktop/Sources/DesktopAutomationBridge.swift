@@ -1971,19 +1971,21 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "capture_main_window_png",
       summary: "Write PNG of the frontmost Omi window (in-process capture)",
-      params: ["path"]
+      params: ["path", "surface"]
     ) { params in
       guard let path = params["path"], !path.isEmpty else {
         return ["error": "missing 'path'"]
       }
       return await MainActor.run { () -> [String: String] in
-        guard
-          let window = NSApp.windows.first(where: {
+        guard let window = NSApp.windows.first(where: {
             $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
-          }),
-          let contentView = window.contentView
-        else {
+          }) else {
           return ["error": "no_visible_window"]
+        }
+        let requestedSheet = params["surface"] == "sheet"
+        let captureWindow = requestedSheet ? (window.attachedSheet ?? window) : window
+        guard let contentView = captureWindow.contentView else {
+          return ["error": "no_content_view"]
         }
         let bounds = contentView.bounds
         guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
@@ -1995,7 +1997,26 @@ final class DesktopAutomationActionRegistry {
         }
         do {
           try data.write(to: URL(fileURLWithPath: path))
-          return ["path": path, "bytes": "\(data.count)"]
+          var result = [
+            "path": path,
+            "bytes": "\(data.count)",
+            "captured_surface": requestedSheet && window.attachedSheet != nil ? "sheet" : "window",
+            "frame_x": "\(Int(window.frame.origin.x.rounded()))",
+            "frame_y": "\(Int(window.frame.origin.y.rounded()))",
+            "frame_width": "\(Int(window.frame.width.rounded()))",
+            "frame_height": "\(Int(window.frame.height.rounded()))",
+            "backing_scale": String(format: "%.1f", window.backingScaleFactor),
+          ]
+          if let sheet = window.attachedSheet {
+            result["has_sheet"] = "true"
+            result["sheet_frame_x"] = "\(Int(sheet.frame.origin.x.rounded()))"
+            result["sheet_frame_y"] = "\(Int(sheet.frame.origin.y.rounded()))"
+            result["sheet_frame_width"] = "\(Int(sheet.frame.width.rounded()))"
+            result["sheet_frame_height"] = "\(Int(sheet.frame.height.rounded()))"
+          } else {
+            result["has_sheet"] = "false"
+          }
+          return result
         } catch {
           return ["error": error.localizedDescription]
         }
@@ -2804,6 +2825,46 @@ final class DesktopAutomationActionRegistry {
           "error_message": error.localizedDescription,
         ]
       }
+    }
+
+    register(
+      name: "open_memory_atlas",
+      summary: "Open the canonical memory atlas sheet for non-production UI and performance harnesses"
+    ) { _ in
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationOpenMemoryAtlasRequested,
+          object: nil
+        )
+      }
+      return ["opened": "true", "target": "expanded"]
+    }
+
+    register(
+      name: "memory_atlas_set_viewport",
+      summary: "Set memory atlas zoom and pan for deterministic non-production performance sweeps",
+      params: ["target", "zoom", "pan_x", "pan_y", "reset"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "expanded"
+      var userInfo: [String: Any] = ["target": target]
+      if let zoom = params["zoom"].flatMap(Double.init) { userInfo["zoom"] = zoom }
+      if let panX = params["pan_x"].flatMap(Double.init) { userInfo["pan_x"] = panX }
+      if let panY = params["pan_y"].flatMap(Double.init) { userInfo["pan_y"] = panY }
+      if let reset = params["reset"] { userInfo["reset"] = reset == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasViewportRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "zoom": params["zoom"] ?? "unchanged",
+        "pan_x": params["pan_x"] ?? "unchanged",
+        "pan_y": params["pan_y"] ?? "unchanged",
+      ]
     }
 
     register(
