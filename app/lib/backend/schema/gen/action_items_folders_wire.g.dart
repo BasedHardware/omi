@@ -788,6 +788,26 @@ class GeneratedFolderMutationResponse {
   }
 }
 
+class GeneratedFolderConversationsCountResponse {
+  final int count;
+
+  const GeneratedFolderConversationsCountResponse({
+    required this.count,
+  });
+
+  factory GeneratedFolderConversationsCountResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedFolderConversationsCountResponse(
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'count': count,
+    };
+  }
+}
+
 class GeneratedBulkMoveConversationsResponse {
   final int movedCount;
   final String status;

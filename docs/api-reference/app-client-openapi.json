@@ -10821,6 +10821,20 @@
         "title": "Folder",
         "type": "object"
       },
+      "FolderConversationsCountResponse": {
+        "description": "Number of (non-discarded) conversations assigned to a folder.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "FolderConversationsCountResponse",
+        "type": "object"
+      },
       "FolderMutationResponse": {
         "description": "Status response for folder mutation endpoints.",
         "properties": {
@@ -36395,6 +36409,96 @@
           }
         ],
         "summary": "Bulk Move Conversations",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/conversations/count": {
+      "get": {
+        "description": "Return how many non-discarded conversations are in a folder.\n\nA lightweight badge source that mirrors the folder conversations list\n(folder_id match, discarded excluded) via a Firestore count() aggregation,\nso a client does not have to page every conversation just to show a count.",
+        "operationId": "get_folder_conversations_count_v1_folders__folder_id__conversations_count_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderConversationsCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Folder Conversations Count",
         "tags": [
           "folders"
         ]

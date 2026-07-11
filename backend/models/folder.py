@@ -80,6 +80,12 @@ class FolderMutationResponse(BaseModel):
     status: str
 
 
+class FolderConversationsCountResponse(BaseModel):
+    """Number of (non-discarded) conversations assigned to a folder."""
+
+    count: int
+
+
 class BulkMoveConversationsResponse(FolderMutationResponse):
     """Response for bulk folder conversation moves."""
 

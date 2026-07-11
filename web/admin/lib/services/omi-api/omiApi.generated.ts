@@ -1730,6 +1730,10 @@ export interface Folder {
   updated_at: string;
 }
 
+export interface FolderConversationsCountResponse {
+  count: number;
+}
+
 export interface FolderMutationResponse {
   status: string;
 }
@@ -3922,6 +3926,7 @@ export interface OmiApiSchemas {
   "FloatingBarSettings": FloatingBarSettings;
   "FocusAssistantSettings": FocusAssistantSettings;
   "Folder": Folder;
+  "FolderConversationsCountResponse": FolderConversationsCountResponse;
   "FolderMutationResponse": FolderMutationResponse;
   "FullConversation": FullConversation;
   "GenerateAppIconRequest": GenerateAppIconRequest;
@@ -5818,6 +5823,17 @@ export interface OmiApiPaths {
       responses: {
         "200": BulkMoveConversationsResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/folders/{folder_id}/conversations/count": {
+    get: {
+      operationId: "get_folder_conversations_count_v1_folders__folder_id__conversations_count_get";
+      responses: {
+        "200": FolderConversationsCountResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -11189,6 +11205,25 @@ export async function bulk_move_conversations_v1_folders__folder_id__conversatio
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_folder_conversations_count_v1_folders__folder_id__conversations_count_get(path: { folder_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<FolderConversationsCountResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/folders/${path.folder_id}/conversations/count`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_current_goal_v1_goals_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<GoalResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals`;
@@ -15539,4 +15574,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.

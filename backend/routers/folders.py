@@ -14,6 +14,7 @@ from models.folder import (
     BulkMoveConversationsRequest,
     ReorderFoldersRequest,
     FolderMutationResponse,
+    FolderConversationsCountResponse,
     BulkMoveConversationsResponse,
 )
 from models.conversation import Conversation, ConversationMutationResponse
@@ -142,6 +143,26 @@ def get_folder_conversations(
             logger.warning(f"Skipping invalid conversation in folder {folder_id} for uid {uid}: {invalid_fields}")
             continue
     return valid_conversations
+
+
+@router.get(
+    '/v1/folders/{folder_id}/conversations/count',
+    response_model=FolderConversationsCountResponse,
+    tags=['folders'],
+)
+def get_folder_conversations_count(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Return how many non-discarded conversations are in a folder.
+
+    A lightweight badge source that mirrors the folder conversations list
+    (folder_id match, discarded excluded) via a Firestore count() aggregation,
+    so a client does not have to page every conversation just to show a count.
+    """
+    folder = folders_db.get_folder(uid, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    count = conversations_db.get_conversations_count(uid, folder_id=folder_id)
+    return {'count': count}
 
 
 @router.patch(

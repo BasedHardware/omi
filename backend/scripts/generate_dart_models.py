@@ -78,6 +78,7 @@ SCHEMA_GROUPS = {
             'AcceptSharedActionItemsResponse',
             'Folder',
             'FolderMutationResponse',
+            'FolderConversationsCountResponse',
             'BulkMoveConversationsResponse',
         ),
     },
