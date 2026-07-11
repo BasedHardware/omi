@@ -28,13 +28,78 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 
 HOSTED_TRANSLATION_API_URL = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
-_TRANSLATION_MODE_RAW = os.environ.get("TRANSLATION_MODE", "")
-TRANSLATION_MODE = (
-    _TRANSLATION_MODE_RAW if _TRANSLATION_MODE_RAW else ("nllb" if HOSTED_TRANSLATION_API_URL else "google")
-)
 TRANSLATION_SHADOW_SAMPLE_RATE = float(os.environ.get("TRANSLATION_SHADOW_SAMPLE_RATE", "1.0"))
 TRANSLATION_SHADOW_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_SHADOW_TIMEOUT_SECONDS", "2.0"))
 TRANSLATION_NLLB_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_NLLB_TIMEOUT_SECONDS", "5.0"))
+
+
+class TranslationProvider(str, Enum):
+    google = "google"
+    nllb = "nllb"
+    shadow = "shadow"
+
+    @staticmethod
+    def get_display_name(value: 'TranslationProvider') -> str:
+        if value == TranslationProvider.google:
+            return 'Google Cloud Translation V3'
+        if value == TranslationProvider.nllb:
+            return 'NLLB-200 (self-hosted)'
+        if value == TranslationProvider.shadow:
+            return 'Google primary + NLLB shadow'
+        return str(value)
+
+
+# Provider selection follows the STT pattern (STT_SERVICE_MODELS):
+#   TRANSLATION_SERVICE_MODELS env var is a comma-separated ordered preference list.
+#   The first provider whose requirements are met wins.
+#   - "nllb"   requires HOSTED_TRANSLATION_API_URL to be set
+#   - "google" always available (needs GCP credentials at runtime)
+#   - "shadow" requires HOSTED_TRANSLATION_API_URL; Google primary + NLLB shadow comparison
+#
+# When TRANSLATION_SERVICE_MODELS is not set, auto-detect:
+#   HOSTED_TRANSLATION_API_URL set  → nllb (with google fallback)
+#   HOSTED_TRANSLATION_API_URL empty → google
+_TRANSLATION_SERVICE_MODELS_RAW = os.environ.get("TRANSLATION_SERVICE_MODELS", "")
+
+# Legacy env var support: TRANSLATION_MODE maps to the new enum
+_TRANSLATION_MODE_RAW = os.environ.get("TRANSLATION_MODE", "")
+
+
+def _resolve_translation_provider() -> TranslationProvider:
+    """Resolve translation provider from config, following the STT provider pattern."""
+    # Explicit ordered preference list (new pattern)
+    if _TRANSLATION_SERVICE_MODELS_RAW:
+        for model in _TRANSLATION_SERVICE_MODELS_RAW.split(","):
+            model = model.strip().lower()
+            if model == "nllb" and HOSTED_TRANSLATION_API_URL:
+                return TranslationProvider.nllb
+            if model == "google":
+                return TranslationProvider.google
+            if model == "shadow" and HOSTED_TRANSLATION_API_URL:
+                return TranslationProvider.shadow
+        # No valid provider matched — fall through to auto-detect
+        logger.warning(
+            "TRANSLATION_SERVICE_MODELS=%s: no provider matched (HOSTED_TRANSLATION_API_URL=%s), using auto-detect",
+            _TRANSLATION_SERVICE_MODELS_RAW,
+            "set" if HOSTED_TRANSLATION_API_URL else "unset",
+        )
+
+    # Legacy env var (TRANSLATION_MODE)
+    if _TRANSLATION_MODE_RAW:
+        try:
+            return TranslationProvider(_TRANSLATION_MODE_RAW)
+        except ValueError:
+            logger.warning("Unknown TRANSLATION_MODE=%s, using auto-detect", _TRANSLATION_MODE_RAW)
+
+    # Auto-detect
+    if HOSTED_TRANSLATION_API_URL:
+        return TranslationProvider.nllb
+    return TranslationProvider.google
+
+
+TRANSLATION_PROVIDER = _resolve_translation_provider()
+# Keep TRANSLATION_MODE for backward compatibility in metrics/logging
+TRANSLATION_MODE = TRANSLATION_PROVIDER.value
 
 # --- Prometheus metrics ---
 # Metric constructors are idempotent w.r.t. the default registry: if the module
@@ -128,7 +193,18 @@ TRANSLATION_MODE_INFO = _info(
     "Current translation mode configuration",
 )
 
-TRANSLATION_MODE_INFO.info({"mode": TRANSLATION_MODE, "nllb_url": HOSTED_TRANSLATION_API_URL or "none"})
+TRANSLATION_MODE_INFO.info(
+    {
+        "mode": TRANSLATION_MODE,
+        "provider": TRANSLATION_PROVIDER.value,
+        "nllb_url": HOSTED_TRANSLATION_API_URL or "none",
+        "config_source": (
+            "TRANSLATION_SERVICE_MODELS"
+            if _TRANSLATION_SERVICE_MODELS_RAW
+            else "TRANSLATION_MODE" if _TRANSLATION_MODE_RAW else "auto_detect"
+        ),
+    }
+)
 
 
 # LRU Cache for language detection (local, free via langdetect)
@@ -715,7 +791,7 @@ class TranslationService:
 
     def _translate_batch(self, contents: List[str], dest_language: str, callsite: str = "") -> List[Tuple[str, str]]:
         """Dispatch translation to the configured provider with fallback."""
-        if TRANSLATION_MODE == "nllb" and HOSTED_TRANSLATION_API_URL:
+        if TRANSLATION_PROVIDER == TranslationProvider.nllb and HOSTED_TRANSLATION_API_URL:
             try:
                 results = self._translate_nllb_batch(contents, dest_language)
                 return results
@@ -731,7 +807,7 @@ class TranslationService:
                 )
                 return self._translate_google_batch(contents, dest_language)
         results = self._translate_google_batch(contents, dest_language)
-        if TRANSLATION_MODE == "shadow":
+        if TRANSLATION_PROVIDER == TranslationProvider.shadow:
             self._schedule_shadow_compare(callsite or "_translate_batch", dest_language, contents, results)
         return results
 
@@ -767,7 +843,7 @@ class TranslationService:
         source_texts: List[str],
         google_results: List[Tuple[str, str]],
     ) -> None:
-        if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
+        if TRANSLATION_PROVIDER != TranslationProvider.shadow or not HOSTED_TRANSLATION_API_URL:
             return
 
         if TRANSLATION_SHADOW_SAMPLE_RATE < 1.0 and random.random() > TRANSLATION_SHADOW_SAMPLE_RATE:
@@ -854,7 +930,7 @@ class TranslationService:
         source_texts: List[str],
         google_results: List[Tuple[str, str]],
     ) -> None:
-        if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
+        if TRANSLATION_PROVIDER != TranslationProvider.shadow or not HOSTED_TRANSLATION_API_URL:
             return
 
         submit_with_context(
