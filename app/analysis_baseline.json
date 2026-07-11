@@ -34,8 +34,6 @@
   "unnecessary_string_interpolations": 2,
   "unnecessary_to_list_in_spreads": 4,
   "unreachable_switch_default": 2,
-  "unused_element": 8,
-  "unused_element_parameter": 5,
   "unused_field": 6,
   "use_super_parameters": 6
 }

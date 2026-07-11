@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -26,14 +25,6 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
     super.initState();
-  }
-
-  void _pushNewConversation(BuildContext context, conversation) async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
-    });
   }
 
   @override
