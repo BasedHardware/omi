@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import OmiTheme
 
 /// One pending on-behalf reply drafted by the AI clone, awaiting the user's review.
 struct CloneReviewItem: Identifiable {

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import OmiTheme
 
 // Clone test API models live in CloneTestModels.swift (Foundation-only so the
 // request/response contract can be validated without the SwiftUI layer).
