@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
@@ -22,6 +23,8 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -216,7 +219,11 @@ def list_candidates(
     query = query.limit(limit)
     records: list[CandidateRecord] = []
     for snapshot in query.stream():
-        records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
+        try:
+            records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
+        except Exception:
+            # One malformed/legacy candidate doc must not 500 the whole list.
+            logger.warning('Skipping malformed candidate record %s', getattr(snapshot, 'id', None))
     return records
 
 
