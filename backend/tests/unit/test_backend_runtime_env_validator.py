@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import re
 import sys
@@ -655,10 +656,17 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
     validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
     services = manifest['environments']['dev']['cloud_run']['services']
-    for service in services.values():
-        del service['env']['HOSTED_PARAKEET_API_URL']
+    parakeet_services: list[str] = []
+    for service_name, service in services.items():
+        env = service.setdefault('env', {})
+        configured_models = validator._manifest_literal_env_value(env, 'STT_PRERECORDED_MODEL') or ''
+        selected_models = {model.strip().lower() for model in configured_models.split(',') if model.strip()}
+        if 'parakeet' not in selected_models:
+            continue
+        parakeet_services.append(service_name)
+        env.pop('HOSTED_PARAKEET_API_URL', None)
 
     manifest_path = tmp_path / 'runtime_env.yaml'
     write_yaml(manifest_path, manifest)
@@ -670,8 +678,11 @@ def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_valida
         for error in errors
         if error.message == 'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing'
     } == {
-        (f'dev/cloud_run/{service}', 'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing')
-        for service in services
+        (
+            f'dev/cloud_run/{service_name}',
+            'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing',
+        )
+        for service_name in parakeet_services
     }
 
 
