@@ -166,6 +166,14 @@ export class OrbAnimator {
     if (this.summonedAt !== null && !genesisSettled(this.now() - this.summonedAt, this.params)) {
       return true
     }
+    // A state change's settle is still animating: the merge cross-fade (e.g. the
+    // blob dissolving back to the ring after thinking) or the spin-speed ease
+    // into idle. Render those at 60fps too, matching the speech dissolve above.
+    const stateTime = this.now() - this.stateChangedAt
+    const steadyMerge = mergeAmount(this.state, Number.MAX_SAFE_INTEGER, this.speechMerge)
+    const curMerge = mergeAmount(this.state, stateTime, this.speechMerge, this.enterMerge)
+    if (Math.abs(curMerge - steadyMerge) > 0.005) return true
+    if (Math.abs(this.spinMult - spinTargetFor(this.state, this.params)) > 0.01) return true
     return false
   }
 
