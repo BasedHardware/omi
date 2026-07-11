@@ -1098,7 +1098,7 @@ routes:
       timeout_class: default_method
       surface: first_party_app
       visibility: first_party
-      data_domain: unknown
+      data_domain: conversations
       deprecation:
         state: active
       owner: backend
