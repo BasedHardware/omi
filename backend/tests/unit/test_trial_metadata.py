@@ -505,6 +505,18 @@ class TestTrialBoundaryDynamic:
     def setup_method(self):
         self.fn, self.ns = _get_trial_metadata_fn()
         self.trial_length = self.ns['TRIAL_LENGTH_SECONDS']
+        # Freeze wall-clock so _mock_user_at_age and the function under test observe the SAME
+        # instant. Otherwise the seconds elapsed between computing creation_timestamp and the
+        # function's own time.time() call push a boundary case (age == trial_length - 1) across
+        # the expiry line on a slow runner, flaking assert trial_expired is False. The function
+        # reads time via the same `time` module injected into its namespace, so patching the
+        # module attribute freezes both sides.
+        self._frozen_now = 1_700_000_000.0
+        self._time_patcher = patch.object(time, 'time', return_value=self._frozen_now)
+        self._time_patcher.start()
+
+    def teardown_method(self):
+        self._time_patcher.stop()
 
     def _mock_user_at_age(self, age_seconds):
         """Mock a basic-plan user at a specific account age."""
