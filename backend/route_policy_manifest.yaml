@@ -183,7 +183,7 @@ routes:
       timeout_class: default_method
       surface: first_party_app
       visibility: first_party
-      data_domain: unknown
+      data_domain: action_items
       deprecation:
         state: active
       owner: backend
