@@ -179,6 +179,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(voiceServiceSource.contains("\"I'm kicking off an agent now.\""))
     XCTAssertTrue(voiceServiceSource.contains("background-agent-kickoff-v1"))
     XCTAssertTrue(voiceServiceSource.contains("cachedOrSynthesizedBackgroundAgentKickoffAudio"))
+    XCTAssertTrue(voiceServiceSource.contains("DesktopLocalProfile.applicationSupportURL()"))
+    XCTAssertFalse(voiceServiceSource.contains(".appendingPathComponent(\"Omi\", isDirectory: true)"))
+    XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.canUseBYOK"))
+    XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.recordProviderFailure"))
+    XCTAssertTrue(voiceServiceSource.contains("context: \"openai_tts\""))
   }
 
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
