@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -13,6 +14,8 @@ from database.memory_app_key_grants import (
 from models.dev_api_key import DevApiKey
 from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
 from utils.scopes import READ_ONLY_SCOPES, Scopes
+
+logger = logging.getLogger(__name__)
 
 
 def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, DevApiKey]:
@@ -82,7 +85,11 @@ def get_dev_keys_for_user(user_id: str) -> List[DevApiKey]:
         # Ensure scopes field is present (None for backward compat)
         if "scopes" not in key_dict:
             key_dict["scopes"] = None
-        keys.append(DevApiKey.model_validate(key_dict))
+        try:
+            keys.append(DevApiKey.model_validate(key_dict))
+        except Exception:
+            # One malformed/legacy key doc must not 500 the whole key list.
+            logger.warning("Skipping malformed developer API key %s", getattr(doc, "id", None))
     return keys
 
 
