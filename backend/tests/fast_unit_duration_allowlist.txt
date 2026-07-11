@@ -35,6 +35,7 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_gke_values_match_man
 tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_matches_manifest
 tests/unit/test_byok_security.py::TestBYOKActivationValidation::test_valid_activation_persists_fingerprints
 tests/unit/test_byok_security.py::TestCacheKeyHashing::test_hash_key_returns_sha256
+tests/unit/test_byok_security.py::TestBYOKCustomProvider::test_enrollment_accepts_optional_custom
 tests/unit/test_byok_security.py::TestChatQuotaBYOKBypass::test_enforce_chat_quota_bypasses_for_byok_with_openai_key
 tests/unit/test_byok_security.py::TestContextVarSafety::test_default_is_none
 tests/unit/test_byok_llm_logging.py::test_classify_byok_llm_error_authentication
