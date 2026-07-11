@@ -785,7 +785,11 @@ def _person_http_error(error: mcp_people.PersonError) -> HTTPException:
 
 
 # Declared before /{person_id} so "by-name" is not captured as a person_id.
-@router.get("/v1/mcp/people/by-name", tags=["mcp"])
+class McpPersonByNameResponse(BaseModel):
+    person: Optional[SimplePerson] = None
+
+
+@router.get("/v1/mcp/people/by-name", response_model=McpPersonByNameResponse, tags=["mcp"])
 def mcp_find_person_by_name(name: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         person = mcp_people.find_person_by_name(uid, name)
@@ -794,7 +798,7 @@ def mcp_find_person_by_name(name: str, uid: str = Depends(get_uid_from_mcp_api_k
     return {"person": clean_person(person) if person else None}
 
 
-@router.get("/v1/mcp/people/{person_id}", tags=["mcp"])
+@router.get("/v1/mcp/people/{person_id}", response_model=SimplePerson, tags=["mcp"])
 def mcp_get_person(person_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         return clean_person(mcp_people.get_person(uid, person_id))
@@ -802,7 +806,7 @@ def mcp_get_person(person_id: str, uid: str = Depends(get_uid_from_mcp_api_key))
         raise _person_http_error(e)
 
 
-@router.post("/v1/mcp/people", tags=["mcp"])
+@router.post("/v1/mcp/people", response_model=SimplePerson, tags=["mcp"])
 def mcp_create_person(request: McpCreatePerson, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         return clean_person(mcp_people.create_person(uid, request.name))
@@ -810,7 +814,7 @@ def mcp_create_person(request: McpCreatePerson, uid: str = Depends(get_uid_from_
         raise _person_http_error(e)
 
 
-@router.patch("/v1/mcp/people/{person_id}", tags=["mcp"])
+@router.patch("/v1/mcp/people/{person_id}", response_model=SimplePerson, tags=["mcp"])
 def mcp_update_person(person_id: str, request: McpUpdatePerson, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         return clean_person(mcp_people.update_person(uid, person_id, request.name))
@@ -818,7 +822,7 @@ def mcp_update_person(person_id: str, request: McpUpdatePerson, uid: str = Depen
         raise _person_http_error(e)
 
 
-@router.delete("/v1/mcp/people/{person_id}", tags=["mcp"])
+@router.delete("/v1/mcp/people/{person_id}", response_model=McpStatusResponse, tags=["mcp"])
 def mcp_delete_person(person_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         mcp_people.delete_person(uid, person_id)

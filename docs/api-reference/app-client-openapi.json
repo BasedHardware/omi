@@ -12616,6 +12616,22 @@
         "title": "McpOauthGrantsResponse",
         "type": "object"
       },
+      "McpPersonByNameResponse": {
+        "properties": {
+          "person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimplePerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "McpPersonByNameResponse",
+        "type": "object"
+      },
       "McpRefreshToolsResponse": {
         "properties": {
           "tool_names": {
@@ -40523,7 +40539,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SimplePerson"
+                }
               }
             },
             "description": "Successful Response"
@@ -40571,7 +40589,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpPersonByNameResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40619,7 +40639,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40668,7 +40690,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SimplePerson"
+                }
               }
             },
             "description": "Successful Response"
@@ -40727,7 +40751,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SimplePerson"
+                }
               }
             },
             "description": "Successful Response"

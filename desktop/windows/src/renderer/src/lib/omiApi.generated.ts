@@ -2052,6 +2052,10 @@ export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
 }
 
+export interface McpPersonByNameResponse {
+  person?: SimplePerson | null;
+}
+
 export interface McpRefreshToolsResponse {
   tool_names?: Array<string>;
   tools_count: number;
@@ -3939,6 +3943,7 @@ export interface OmiApiSchemas {
   "McpCreateActionItem": McpCreateActionItem;
   "McpCreatePerson": McpCreatePerson;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
+  "McpPersonByNameResponse": McpPersonByNameResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
   "McpScreenActivityRow": McpScreenActivityRow;
@@ -6318,7 +6323,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "mcp_create_person_v1_mcp_people_post";
       responses: {
-        "200": unknown;
+        "200": SimplePerson;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6328,7 +6333,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "mcp_find_person_by_name_v1_mcp_people_by_name_get";
       responses: {
-        "200": unknown;
+        "200": McpPersonByNameResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6338,7 +6343,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "mcp_get_person_v1_mcp_people__person_id__get";
       responses: {
-        "200": unknown;
+        "200": SimplePerson;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6347,7 +6352,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "mcp_update_person_v1_mcp_people__person_id__patch";
       responses: {
-        "200": unknown;
+        "200": SimplePerson;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6356,7 +6361,7 @@ export interface OmiApiPaths {
     delete: {
       operationId: "mcp_delete_person_v1_mcp_people__person_id__delete";
       responses: {
-        "200": unknown;
+        "200": McpStatusResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -12195,7 +12200,7 @@ export async function get_people_v1_mcp_people_get(init?: OmiApiClientInit): Pro
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_create_person_v1_mcp_people_post(body: McpCreatePerson, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_create_person_v1_mcp_people_post(body: McpCreatePerson, init?: OmiApiClientInit): Promise<SimplePerson> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/people`;
   const _search = "";
@@ -12212,7 +12217,7 @@ export async function mcp_create_person_v1_mcp_people_post(body: McpCreatePerson
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_find_person_by_name_v1_mcp_people_by_name_get(query: { name: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_find_person_by_name_v1_mcp_people_by_name_get(query: { name: string }, init?: OmiApiClientInit): Promise<McpPersonByNameResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/people/by-name`;
   const _params = query ? Object.entries(query)
@@ -12230,7 +12235,7 @@ export async function mcp_find_person_by_name_v1_mcp_people_by_name_get(query: {
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_get_person_v1_mcp_people__person_id__get(path: { person_id: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_get_person_v1_mcp_people__person_id__get(path: { person_id: string }, init?: OmiApiClientInit): Promise<SimplePerson> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/people/${path.person_id}`;
   const _search = "";
@@ -12245,7 +12250,7 @@ export async function mcp_get_person_v1_mcp_people__person_id__get(path: { perso
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_update_person_v1_mcp_people__person_id__patch(path: { person_id: string }, body: McpUpdatePerson, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_update_person_v1_mcp_people__person_id__patch(path: { person_id: string }, body: McpUpdatePerson, init?: OmiApiClientInit): Promise<SimplePerson> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/people/${path.person_id}`;
   const _search = "";
@@ -12262,7 +12267,7 @@ export async function mcp_update_person_v1_mcp_people__person_id__patch(path: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_delete_person_v1_mcp_people__person_id__delete(path: { person_id: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_delete_person_v1_mcp_people__person_id__delete(path: { person_id: string }, init?: OmiApiClientInit): Promise<McpStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/people/${path.person_id}`;
   const _search = "";
