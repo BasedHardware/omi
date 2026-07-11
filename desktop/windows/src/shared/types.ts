@@ -334,9 +334,24 @@ export type OverlayVisibility = { open: boolean; active: boolean }
  *  interactive islands), expanded (chat, the only focused mode), ptt (expanded
  *  listening for a hotkey hold, unfocused). */
 export type BarMode = 'peek' | 'expanded' | 'ptt'
-/** What triggered a reveal — drives the renderer's entrance motion (strip =
- *  slide-in; summon/ptt = orb genesis). */
-export type BarReveal = 'strip' | 'summon' | 'ptt'
+/** What triggered a reveal (hotkey tap/hold — top-edge hover reveal was
+ *  removed). Both drive the same entrance motion (slide-in + orb genesis). */
+export type BarReveal = 'summon' | 'ptt'
+
+/** A single chat message projected across the bar↔main bridge. Structurally the
+ *  renderer's `ChatMsg` (hooks/useChat) — kept here so the shared preload types
+ *  don't import renderer code. */
+export type BarChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+/** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
+ *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
+export type BarChatStatus = 'idle' | 'sending' | 'speaking'
+/** Projected chat state the main window broadcasts to the bar (viewport over the
+ *  ONE chat engine — INV-CHAT-1). The bar renders this; it never owns a thread. */
+export type BarChatState = {
+  messages: BarChatMessage[]
+  sending: boolean
+  status: BarChatStatus
+}
 /** `token` is a per-reveal monotonic id: the renderer echoes it back via
  *  `showAck` once it has painted the revealed frame, so main can reject a stale
  *  ack from a reveal that was cancelled/superseded (see the paint-ack handshake
@@ -358,8 +373,19 @@ export type OmiBarApi = {
   collapse: () => void
   /** Interactive-island hit-testing toggle (peek/ptt modes). */
   setInteractive: (interactive: boolean) => void
-  /** Fired by the 1px trigger-strip pages on mousemove (edge reveal). */
-  stripEnter: () => void
+  /** Keep the summoned pill open (suppress the cursor retract watchdog) while a
+   *  PTT hold / streaming reply / spoken answer is in flight; dropped after a
+   *  short grace so the pill retracts once the exchange ends. */
+  keepAlive: (active: boolean) => void
+  /** Send a chat message through the bar→main bridge (the main window's single
+   *  chat engine owns the thread). `fromVoice` requests a spoken reply. */
+  sendChat: (text: string, fromVoice: boolean) => void
+  /** Ask the main window to (re)broadcast the current chat state — called on
+   *  mount / each reveal so the bar shows the ongoing thread. */
+  requestChatState: () => void
+  /** Projected chat state pushed from the main window (history + streaming +
+   *  status). Returns an unsubscribe fn. */
+  onChatState: (cb: (state: BarChatState) => void) => () => void
   onShow: (cb: (p: BarShowPayload) => void) => () => void
   onMode: (cb: (mode: BarMode) => void) => () => void
   onWillHide: (cb: () => void) => () => void
@@ -587,6 +613,14 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
+  /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
+   *  chat.send() (with fromVoice). Main-window renderer only. */
+  onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => () => void
+  /** The bar (re)requested current chat state — ChatBridgeHost publishes now. */
+  onBarRequestChatState: (cb: () => void) => () => void
+  /** Broadcast the projected chat state to the bar (history + streaming + status). */
+  publishChatState: (state: BarChatState) => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void

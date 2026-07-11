@@ -6,6 +6,7 @@ import type {
   OmiBarApi,
   BarMode,
   BarShowPayload,
+  BarChatState,
   LocalConversation,
   ConversationSyncPatch,
   CaptureChoice,
@@ -206,6 +207,21 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
   },
+  // --- Bar chat bridge (main-window side) ---
+  onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { text: string; fromVoice: boolean }
+    ): void => cb(payload)
+    ipcRenderer.on('chat:barSend', listener)
+    return () => ipcRenderer.removeListener('chat:barSend', listener)
+  },
+  onBarRequestChatState: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barRequestState', listener)
+    return () => ipcRenderer.removeListener('chat:barRequestState', listener)
+  },
+  publishChatState: (state: BarChatState) => ipcRenderer.send('chat:publishState', state),
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {
@@ -290,7 +306,15 @@ const omiBar: OmiBarApi = {
   expand: () => ipcRenderer.send('bar:expand'),
   collapse: () => ipcRenderer.send('bar:collapse'),
   setInteractive: (interactive: boolean) => ipcRenderer.send('bar:setInteractive', interactive),
-  stripEnter: () => ipcRenderer.send('bar:stripEnter'),
+  keepAlive: (active: boolean) => ipcRenderer.send('bar:keepAlive', active),
+  sendChat: (text: string, fromVoice: boolean) =>
+    ipcRenderer.send('bar:sendChat', { text, fromVoice }),
+  requestChatState: () => ipcRenderer.send('bar:requestChatState'),
+  onChatState: (cb: (state: BarChatState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: BarChatState): void => cb(state)
+    ipcRenderer.on('chat:state', listener)
+    return () => ipcRenderer.removeListener('chat:state', listener)
+  },
   onShow: (cb: (p: BarShowPayload) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, p: BarShowPayload): void => cb(p)
     ipcRenderer.on('bar:show', listener)
