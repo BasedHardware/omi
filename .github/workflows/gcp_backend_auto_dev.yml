@@ -105,6 +105,20 @@ jobs:
         run: |
           echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
+      - name: Deploy sync-backfill worker
+        id: sync-backfill
+        uses: ./.github/actions/sync-backfill-lifecycle
+        with:
+          mode: worker
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          service: ${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
+          cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
+
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
         uses: google-github-actions/deploy-cloudrun@v2
@@ -117,13 +131,25 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+          env_vars: |-
+            ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+            ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
       - name: Capture ${{ env.SERVICE }}-sync revision
         id: capture-backend-sync-revision
         run: |
           echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+      - name: Provision sync-backfill platform
+        uses: ./.github/actions/sync-backfill-lifecycle
+        with:
+          mode: platform
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          service: ${{ env.SERVICE }}
+          provision_sync_ledger_ttl: 'true'
+          provision_budget_alerts: 'false'
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -188,6 +214,7 @@ jobs:
             --region ${{ env.REGION }} \
             --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
@@ -198,12 +225,14 @@ jobs:
         run: |
           test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
           test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
           test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
       - name: Cloud Run deploy status report
@@ -216,9 +245,11 @@ jobs:
             --include-cloud-run \
             --cloud-run-service backend \
             --cloud-run-service backend-sync \
+            --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration \
             --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
             --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Show Output
