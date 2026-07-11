@@ -27,6 +27,7 @@ import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
+import { ChatBridgeHost } from './components/chat/ChatBridgeHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
@@ -96,6 +97,11 @@ function AppShellInner(): React.JSX.Element {
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
+      {/* Bridges the bar's chat viewport to this window's single chat engine
+          (INV-CHAT-1): drives chat.send on bar:sendChat, broadcasts projected
+          state back to the bar. Main window only (this shell never mounts in the
+          bar/capture windows). */}
+      <ChatBridgeHost />
     </div>
   )
 }
