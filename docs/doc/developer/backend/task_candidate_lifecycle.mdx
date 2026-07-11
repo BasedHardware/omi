@@ -1,0 +1,68 @@
+---
+title: Task and Candidate lifecycle
+description: Canonical backend contracts, resolution rules, and rollout compatibility for smart tasks.
+---
+
+The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and reviewable Candidates in
+`users/{uid}/candidates/{candidate_id}`. Existing action-item clients continue to receive `id`, `completed`,
+and the other compatibility fields while the same response also carries typed status, owner, source,
+provenance, goal/workstream links, due confidence, priority, and recurrence fields.
+
+Candidate payloads are discriminated by `subject_kind`. A task Candidate has either a typed create payload or
+a typed mutation payload. A workstream Candidate has only a workstream proposal with an anchor-task payload.
+Goal links, evidence, source surface, and confidence remain on the Candidate envelope and are never duplicated
+inside either payload.
+
+Every Candidate write requires an idempotency key and account generation. The route and the write transaction
+both compare that generation with the per-user control record, and `off`/`shadow` modes reject visible writes.
+List and point reads expose only the current account generation, including legacy staged by-ID projections, so
+an identifier retained across an account reset cannot retrieve prior evidence.
+Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
+one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
+When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance
+is merged with the Candidate evidence using structural deduplication; review feedback never rewrites origin history.
+Accepted task-create integrations are written to a durable outbox in that transaction, then leased and marked
+complete only by the matching lease token after delivery or a terminal no-op. Account generation fences claims
+and completion, and a late completion from an expired lease cannot resolve its replacement attempt. Failed
+delivery remains retryable through the bounded drain endpoint, including crash-after-commit and expired-lease
+recovery. Rejection and expiry are also idempotent
+terminal transitions. Task/workstream goal links are resolved against the canonical workstream store, and
+workstream Candidate acceptance atomically creates its workstream and anchor task.
+
+The per-user universal-contract mode controls compatibility behavior:
+
+- `off`: staged and action-item behavior remains legacy-only.
+- `shadow`: canonical extraction and the shared capture policy evaluate without Candidate product mutations.
+- `write`: legacy reads/writes remain authoritative while Candidate sidecars and reconciliation run.
+- `read`: Candidates and canonical tasks are authoritative; staged endpoints are compatibility projections and
+  never write `staged_tasks`.
+
+Staged reconciliation is resumable by checkpoint. It imports active rows as pending Candidates and terminal
+promotion history as accepted, rejected, or expired without replaying task mutations or notifications. Reports
+contain stable IDs and counts only—never task content.
+
+Write-mode conversation projections derive task IDs from normalized semantic content rather than extraction
+order. Reorder and insertion therefore preserve identity; removed projections remain as hidden terminal records
+so accepted receipts do not dangle, and only an extraction-provided update target links the old record to its
+replacement—text similarity alone never establishes identity. A legacy staged promotion returns `503` until its Candidate sidecar reconciles; retrying the same
+promotion heals the already-terminal legacy row instead of returning a permanent `404`.
+Before any write-mode staged promotion creates or deduplicates an action item, it transactionally claims the
+pending Candidate resolution with a single-owner lease. Immediately before the deterministic legacy write, the
+claim advances from `pre_mutation` to `mutation_started` and reserves the exact task ID. A pre-mutation crash is
+reclaimable after lease expiry; once mutation has started, the non-expiring phase fence continues to block
+accept/reject/expire even if the owner lease expires. Recovery rotates the owner token, retries the reserved task
+ID idempotently, and consumes the claim only with matching Candidate acceptance. A semantic-dedup target is
+revalidated in that transaction and stored as an `existing` reservation; if it is later completed or deleted,
+recovery closes the staged projection without recreating it. Terminal Candidates close the legacy staged row
+without a task, and score-based promotion skips forward rather than starving behind that row.
+
+Released action-item request shapes are accepted through an explicit compatibility adapter. The canonical task
+and Candidate models remain strict; legacy-only fields are ignored at the old route boundary, and
+`clear_due_at` is projected to an explicit `due_at: null` update.
+
+What Matters Now projections, interventions, feedback, outcomes, attention overrides, and device snapshots are
+all account-generation scoped. Their Firestore mutations re-read workflow control in the commit transaction, so
+a reset during model judgment or feedback handling cannot publish or link stale state. Context and open-loop
+snapshot PUTs require both mutation headers; evaluation reads only the captured generation and publication fails
+closed if it changes. Derived workstream association vectors carry the same generation and authority is rehydrated
+with that fence before the journal transaction appends evidence.

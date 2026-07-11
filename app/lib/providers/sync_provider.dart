@@ -238,7 +238,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _walsProcessedCount = 0;
   Timer? _autoUploadTimer;
   bool _isDisposed = false;
-  late bool _rateLimitWasActive;
+  late bool _freshRateLimitWasActive;
+  late bool _backfillRateLimitWasActive;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -297,7 +298,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _startBackgroundSync = startBackgroundSync {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
-    _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
+    _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
+    _backfillRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
     SyncRateLimiter.instance.addListener(_onRateLimiterChanged);
     initialized = _initializeProvider();
   }
@@ -319,9 +321,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _onRateLimiterChanged() {
     if (_isDisposed) return;
-    final active = SyncRateLimiter.instance.isLimited;
-    final cooldownEnded = _rateLimitWasActive && !active;
-    _rateLimitWasActive = active;
+    final freshActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
+    final backfillActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
+    final cooldownEnded =
+        (_freshRateLimitWasActive && !freshActive) || (_backfillRateLimitWasActive && !backfillActive);
+    _freshRateLimitWasActive = freshActive;
+    _backfillRateLimitWasActive = backfillActive;
     notifyListeners();
     if (cooldownEnded && _startBackgroundSync) _scheduleAutoUploadPendingPhoneFiles();
   }
@@ -380,10 +385,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem))
         .toList();
     if (phoneWals.isEmpty) return;
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return;
-    }
     if (_isDisposed) return;
     Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
     _isAutoUploading = true;
@@ -443,10 +444,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals() async {
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return;
-    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -458,10 +455,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
-    if (!await _uploadGate.prepareToUpload()) {
-      notifyListeners();
-      return;
-    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(

@@ -84,9 +84,23 @@ FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS
 FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
 
 
-def _redis_key(uid: str) -> str:
+LIVE_SPEECH_SOURCES = ('realtime', 'sync_fresh')
+_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill'))
+
+
+def _normalize_speech_source(source: str) -> str:
+    # Compatibility for deprecated callers while keeping new Redis keys lane-specific.
+    normalized = 'sync_fresh' if source == 'sync' else source
+    return normalized if normalized in _VALID_SPEECH_SOURCES else 'realtime'
+
+
+def _redis_key(uid: str, source: str) -> str:
     """Redis sorted set key for a user's speech minute buckets."""
-    return f'fair_use:speech:{uid}'
+    return f'fair_use:v2:speech:{source}:{uid}'
+
+
+def _bucket_key(uid: str, source: str) -> str:
+    return f'fair_use:v2:bucket:{source}:{uid}'
 
 
 def _classifier_lock_key(uid: str) -> str:
@@ -114,31 +128,65 @@ def _release_lock(key: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None:
+_RECORD_SPEECH_ONCE_SCRIPT = """
+if redis.call('set', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
+    redis.call('hincrby', KEYS[2], ARGV[1], ARGV[2])
+    redis.call('expire', KEYS[2], ARGV[4])
+    redis.call('zadd', KEYS[3], ARGV[3], ARGV[1])
+    redis.call('expire', KEYS[3], ARGV[4])
+    return 1
+end
+return 0
+"""
+
+
+def record_speech_ms(
+    uid: str,
+    speech_ms: int,
+    source: str = 'realtime',
+    idempotency_key: Optional[str] = None,
+    raise_on_error: bool = False,
+) -> None:
     """Record speech milliseconds into the current minute bucket.
 
     Uses a Redis sorted set where:
       - member = Unix minute timestamp (as string)
       - score = Unix minute timestamp (for range queries)
     The speech_ms is stored in a separate hash keyed by minute.
-    The source param is for logging/traceability only — it does not affect Redis keys.
+    Source is part of the Redis key. Live enforcement reads only realtime and
+    sync_fresh; sync_backfill is deliberately isolated from live hard caps.
     """
     if not FAIR_USE_ENABLED or speech_ms <= 0:
         return
 
     try:
+        normalized_source = _normalize_speech_source(source)
         now = int(time.time())
         bucket_minute = now // FAIR_USE_BUCKET_SECONDS
-        logger.info(f'fair_use: record_speech_ms uid={uid} ms={speech_ms} source={source}')
+        logger.info(f'fair_use: record_speech_ms uid={uid} ms={speech_ms} source={normalized_source}')
 
         pipe = redis_client.pipeline(transaction=False)
         # Increment speech_ms for this minute bucket
-        bucket_key = f'fair_use:bucket:{uid}'
+        bucket_key = _bucket_key(uid, normalized_source)
+        zset_key = _redis_key(uid, normalized_source)
+        if idempotency_key:
+            once_key = f'fair_use:v2:once:speech:{normalized_source}:{uid}:{idempotency_key}'
+            redis_client.eval(
+                _RECORD_SPEECH_ONCE_SCRIPT,
+                3,
+                once_key,
+                bucket_key,
+                zset_key,
+                str(bucket_minute),
+                speech_ms,
+                bucket_minute * FAIR_USE_BUCKET_SECONDS,
+                FAIR_USE_REDIS_RETENTION_SECONDS,
+            )
+            return
         pipe.hincrby(bucket_key, str(bucket_minute), speech_ms)
         pipe.expire(bucket_key, FAIR_USE_REDIS_RETENTION_SECONDS)
 
         # Add minute to sorted set (score = timestamp for range queries)
-        zset_key = _redis_key(uid)
         pipe.zadd(zset_key, {str(bucket_minute): bucket_minute * FAIR_USE_BUCKET_SECONDS})
         pipe.expire(zset_key, FAIR_USE_REDIS_RETENTION_SECONDS)
 
@@ -155,9 +203,11 @@ def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None
         pipe.execute()
     except Exception as e:
         logger.error(f'fair_use: Redis error recording speech for {uid}: {e}')
+        if raise_on_error:
+            raise
 
 
-def get_rolling_speech_ms(uid: str) -> Dict[str, Any]:
+def get_rolling_speech_ms(uid: str, sources: Optional[tuple[str, ...]] = None) -> Dict[str, Any]:
     """Get speech totals for rolling windows: daily (24h), 3-day (72h), weekly (168h).
 
     Returns dict with keys: daily_ms, three_day_ms, weekly_ms.
@@ -168,39 +218,48 @@ def get_rolling_speech_ms(uid: str) -> Dict[str, Any]:
 
     try:
         now = int(time.time())
-        bucket_key = f'fair_use:bucket:{uid}'
-        zset_key = _redis_key(uid)
-
-        # Get all minutes in the last 7 days from sorted set
         cutoff_weekly = now - (7 * 24 * 3600)
-        members = redis_client.zrangebyscore(zset_key, cutoff_weekly, '+inf')
-
-        if not members:
-            return result
-
-        # Fetch all bucket values in one HMGET
-        bucket_values = redis_client.hmget(bucket_key, [m.decode() if isinstance(m, bytes) else m for m in members])
-
         cutoff_daily = now - (24 * 3600)
         cutoff_3day = now - (3 * 24 * 3600)
 
-        for member, value in zip(members, bucket_values):
-            if value is None:
+        selected_sources = sources or LIVE_SPEECH_SOURCES
+        source_keys = [
+            (_bucket_key(uid, _normalize_speech_source(source)), _redis_key(uid, _normalize_speech_source(source)))
+            for source in selected_sources
+        ]
+        if sources is None:
+            # Transitional compatibility: retain the previous combined meter
+            # in live enforcement until its seven-day TTL naturally expires.
+            # New backfill is written only to the isolated v2 key.
+            source_keys.append((f'fair_use:bucket:{uid}', f'fair_use:speech:{uid}'))
+        for bucket_key, zset_key in source_keys:
+            members = redis_client.zrangebyscore(zset_key, cutoff_weekly, '+inf')
+            if not members:
                 continue
-            ms = int(value)
-            member_str = member.decode() if isinstance(member, bytes) else member
-            bucket_ts = int(member_str) * FAIR_USE_BUCKET_SECONDS
+            fields = [m.decode() if isinstance(m, bytes) else m for m in members]
+            bucket_values = redis_client.hmget(bucket_key, fields)
+            for member, value in zip(members, bucket_values):
+                if value is None:
+                    continue
+                ms = int(value)
+                member_str = member.decode() if isinstance(member, bytes) else member
+                bucket_ts = int(member_str) * FAIR_USE_BUCKET_SECONDS
 
-            result['weekly_ms'] += ms
-            if bucket_ts >= cutoff_3day:
-                result['three_day_ms'] += ms
-            if bucket_ts >= cutoff_daily:
-                result['daily_ms'] += ms
+                result['weekly_ms'] += ms
+                if bucket_ts >= cutoff_3day:
+                    result['three_day_ms'] += ms
+                if bucket_ts >= cutoff_daily:
+                    result['daily_ms'] += ms
 
         return result
     except Exception as e:
         logger.error(f'fair_use: Redis error reading speech for {uid}: {e}')
         return result
+
+
+def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
+    """Return historical recovery usage without including it in live enforcement."""
+    return get_rolling_speech_ms(uid, sources=('sync_backfill',))
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +590,17 @@ def _dg_budget_key(uid: str) -> str:
     return f'fair_use:dg_budget:{uid}:{day}'
 
 
-def record_dg_usage_ms(uid: str, ms: int) -> None:
+_RECORD_COUNTER_ONCE_SCRIPT = """
+if redis.call('set', KEYS[1], '1', 'EX', ARGV[2], 'NX') then
+    redis.call('incrby', KEYS[2], ARGV[1])
+    redis.call('expire', KEYS[2], ARGV[2])
+    return 1
+end
+return 0
+"""
+
+
+def record_dg_usage_ms(uid: str, ms: int, idempotency_key: Optional[str] = None, raise_on_error: bool = False) -> None:
     """Atomically increment today's DG usage counter."""
     if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 or ms <= 0:
         return
@@ -543,10 +612,23 @@ def record_dg_usage_ms(uid: str, ms: int) -> None:
         now = datetime.now(timezone.utc)
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = int((tomorrow - now).total_seconds())
+        if idempotency_key:
+            ttl = seconds_until_midnight + 3600
+            redis_client.eval(
+                _RECORD_COUNTER_ONCE_SCRIPT,
+                2,
+                f'fair_use:v2:once:dg:{uid}:{idempotency_key}',
+                key,
+                ms,
+                ttl,
+            )
+            return
         pipe.expire(key, seconds_until_midnight + 3600)
         pipe.execute()
     except Exception as e:
         logger.error(f'fair_use: Redis error recording DG usage for {uid}: {e}')
+        if raise_on_error:
+            raise
 
 
 def get_dg_budget_status(uid: str) -> Dict[str, Any]:

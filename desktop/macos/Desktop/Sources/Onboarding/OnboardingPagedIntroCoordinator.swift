@@ -355,7 +355,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         )
       }
     } catch {
-      lastActionError = error.localizedDescription
+      lastActionError = UserFacingErrorPresentation.message(for: error, while: .onboarding)
       appleNotesInsightsFailed = true
     }
   }
@@ -1270,7 +1270,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         "Too many requests right now. Skip this step or try again in a moment."
     } catch {
       logError("OnboardingPagedIntroCoordinator: Failed to save onboarding goal", error: error)
-      lastActionError = error.localizedDescription
+      lastActionError = UserFacingErrorPresentation.message(for: error, while: .onboarding)
     }
   }
 

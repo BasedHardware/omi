@@ -21,6 +21,8 @@ def test_build_client_device_id_null_when_missing():
     assert build_client_device_id(None, "abc") is None
     assert build_client_device_id("ios", None) is None
     assert build_client_device_id("ios", "default") is None
+    assert build_client_device_id("ios", "nothex!!") is None
+    assert build_client_device_id("unknown", "a1b2c3d4") is None
 
 
 def test_resolve_client_device_from_headers():

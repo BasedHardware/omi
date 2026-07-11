@@ -9,6 +9,7 @@ export type OmiToolCondition =
   | "always"
   | "onboardingOnly"
   | "nonOnboarding"
+  | "coordinatorOnly"
   | "screenContext"
   | "screenContextOrOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
@@ -97,6 +98,7 @@ interface OmiToolSurfacePatch {
 export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export interface OmiToolAvailabilitySnapshot {
@@ -1404,10 +1406,16 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
 };
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
+  const coordinatorOnly = new Set([
+    "send_agent_message",
+    "spawn_background_agent",
+    "spawn_agent",
+    "run_agent_and_wait",
+  ]);
   const adapters =
     tool.name === "resolve_desktop_dispatch" || tool.name === "spawn_background_agent"
       ? trustedDirectControlOnly()
-      : piAndStdio();
+      : piAndStdio(coordinatorOnly.has(tool.name) ? "coordinatorOnly" : "always");
   return {
     name: tool.name,
     label: tool.label,
@@ -1448,6 +1456,7 @@ export function isToolAvailableForContext(
   if (!availability?.advertised) return false;
   if (availability.condition === "onboardingOnly") return context.onboarding === true;
   if (availability.condition === "nonOnboarding") return context.onboarding !== true;
+  if (availability.condition === "coordinatorOnly") return context.executionRole !== "leaf";
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   return true;

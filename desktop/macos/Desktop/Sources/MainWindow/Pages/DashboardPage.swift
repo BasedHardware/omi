@@ -219,7 +219,9 @@ struct DashboardPage: View {
     @ObservedObject var appProvider: AppProvider
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
+    var taskChatCoordinator: TaskChatCoordinator? = nil
     @ObservedObject private var deviceProvider = DeviceProvider.shared
+    @StateObject private var intelligenceStore = DashboardIntelligenceStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var selectedCatalogApp: OmiApp?
@@ -234,6 +236,8 @@ struct DashboardPage: View {
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
+    @State private var showingAllGoals = false
+    @State private var showingGoalDetail = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
@@ -356,6 +360,10 @@ struct DashboardPage: View {
     }
 
     var body: some View {
+        applyHomeLifecycle(to: applyHomeSheets(to: homeSurface))
+    }
+
+    private var homeSurface: some View {
         Group {
             if useLegacyHomeDesign {
                 legacyHome
@@ -365,6 +373,10 @@ struct DashboardPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
+    }
+
+    private func applyHomeSheets<Content: View>(to content: Content) -> some View {
+        content
         .sheet(item: $citedConversation) { conversation in
             ConversationDetailView(
                 conversation: conversation,
@@ -373,6 +385,31 @@ struct DashboardPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
+        }
+        .sheet(isPresented: $showingAllGoals) {
+            AllGoalsSheet(
+                store: intelligenceStore,
+                onOpenGoal: { goalID in await openGoal(goalID) },
+                onDismiss: { showingAllGoals = false }
+            )
+        }
+        .sheet(isPresented: $showingGoalDetail) {
+            if let detail = intelligenceStore.selectedGoalDetail {
+                CanonicalGoalDetailSheet(
+                    detail: detail,
+                    error: intelligenceStore.error,
+                    onResumeThread: { workstreamID in
+                        _ = await resumeThread(workstreamID: workstreamID, taskID: nil)
+                    },
+                    onStartWork: { await startWorkFromSelectedGoal() },
+                    onDismiss: {
+                        showingGoalDetail = false
+                        intelligenceStore.clearGoalDetail()
+                    }
+                )
+            } else {
+                ProgressView().frame(width: 300, height: 180)
+            }
         }
         .dismissableSheet(item: legacySelectedCatalogApp) { app in
             AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
@@ -418,22 +455,51 @@ struct DashboardPage: View {
                 }
             }
         }
+    }
+
+    private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
+        content
         .onAppear {
             if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
             reportHomeAutomationMode()
+            intelligenceStore.setRecommendationActionHandler { recommendation in
+                await openRecommendation(recommendation)
+            }
+            intelligenceStore.registerAutomationActions()
+            Task { await intelligenceStore.load() }
+            Task {
+                if let recommendationID = ContextualTaskNavigationRouter.shared.consume() {
+                    _ = await intelligenceStore.openRecommendation(id: recommendationID)
+                }
+            }
             Task { await homeStatusStore.refreshIfNeeded() }
+        }
+        .onDisappear {
+            intelligenceStore.setRecommendationActionHandler(nil)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
+            Task { await intelligenceStore.load() }
             appState.checkAllPermissions()
             syncCaptureState()
             Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .whatMattersNowContextDidRefresh)) { notification in
+            guard let projection = notification.object as? OmiAPI.WhatMattersNowProjection else { return }
+            intelligenceStore.applyContextProjection(projection)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openWhatMattersNowRecommendation)) { notification in
+            guard let recommendationID = notification.userInfo?[
+                TaskContextualResurfacingService.recommendationIDUserInfoKey
+            ] as? String else { return }
+            guard ContextualTaskNavigationRouter.shared.consume(requestedID: recommendationID) != nil else { return }
+            Task { _ = await intelligenceStore.openRecommendation(id: recommendationID) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
             syncCaptureState()
@@ -498,7 +564,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onOpenAgent: { agentID, completion in
@@ -654,7 +722,7 @@ struct DashboardPage: View {
         // Overestimating only lifts the wordmark slightly early; it never lets
         // the cluster clip.
         let wordmarkHeight: CGFloat = 76
-        let clusterHeight: CGFloat = 340
+        let clusterHeight: CGFloat = intelligenceStore.recommendations.isEmpty ? 390 : 570
         let minGap: CGFloat = 24
         let contentHeight = stageHeight - Self.homeStageTopPadding - Self.homeStageBottomPadding
 
@@ -666,14 +734,37 @@ struct DashboardPage: View {
             Spacer(minLength: 0)
                 .frame(height: topInset)
 
-            homeHubWordmark
-                .transition(.homeHubFade)
+            if intelligenceStore.recommendations.isEmpty {
+                homeHubWordmark
+                    .transition(.homeHubFade)
 
-            // Flexible gap absorbs the remaining height, docking the cluster at
-            // the bottom while keeping at least `minGap` below the wordmark.
-            Spacer(minLength: minGap)
+                // Flexible gap absorbs the remaining height, docking the cluster at
+                // the bottom while keeping at least `minGap` below the wordmark.
+                Spacer(minLength: minGap)
+            } else {
+                Spacer(minLength: 0)
+            }
 
             VStack(spacing: 0) {
+                WhatMattersNowSection(
+                    store: intelligenceStore,
+                    onOpen: { recommendation in await openRecommendation(recommendation) }
+                )
+                .frame(width: askBarWidth)
+                .padding(.bottom, intelligenceStore.recommendations.isEmpty ? 0 : 10)
+
+                dashboardIntelligenceError
+                    .frame(width: askBarWidth)
+                    .padding(.bottom, intelligenceStore.error == nil ? 0 : 8)
+
+                FocusedGoalsSection(
+                    store: intelligenceStore,
+                    onOpenGoal: { goalID in await openGoal(goalID) },
+                    onShowAll: { showingAllGoals = true }
+                )
+                .frame(width: askBarWidth)
+                .padding(.bottom, intelligenceStore.goals.isEmpty ? 0 : 10)
+
                 homeStatRibbon
                     .frame(width: askBarWidth)
                     .padding(.bottom, 14)
@@ -778,7 +869,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
@@ -1592,6 +1685,80 @@ struct DashboardPage: View {
         }
     }
 
+    private func openRecommendation(_ recommendation: DashboardRecommendation) async -> Bool {
+        switch recommendation.destination {
+        case .suggested(let candidateID):
+            guard let candidate = await intelligenceStore.candidateForNavigation(candidateID: candidateID) else {
+                return false
+            }
+            TaskNavigationRequestStore.shared.request(candidate: candidate)
+            selectedIndex = 4
+            return true
+        case .task(let taskID, let workstreamID):
+            if let workstreamID {
+                return await resumeThread(workstreamID: workstreamID, taskID: taskID)
+            } else {
+                guard let task = await intelligenceStore.taskForNavigation(taskID: taskID) else {
+                    return false
+                }
+                TaskNavigationRequestStore.shared.request(task: task)
+                selectedIndex = 4
+                return true
+            }
+        case .thread(let workstreamID, let taskID):
+            return await resumeThread(workstreamID: workstreamID, taskID: taskID)
+        case .unavailable:
+            intelligenceStore.error = "This review target is no longer available."
+            return false
+        }
+    }
+
+    private func openGoal(_ goalID: String) async {
+        await intelligenceStore.loadGoalDetail(goalID: goalID)
+        guard intelligenceStore.selectedGoalDetail != nil else { return }
+        showingAllGoals = false
+        showingGoalDetail = true
+    }
+
+    @discardableResult
+    private func resumeThread(workstreamID: String, taskID: String?) async -> Bool {
+        guard let taskChatCoordinator else {
+            intelligenceStore.error = "The task thread is unavailable."
+            return false
+        }
+        if await taskChatCoordinator.openExistingThread(
+            workstreamID: workstreamID,
+            preferredTaskID: taskID
+        ) {
+            showingGoalDetail = false
+            showingAllGoals = false
+            selectedIndex = 4
+            return true
+        } else {
+            intelligenceStore.error = taskChatCoordinator.errorMessage ?? "The task thread could not be opened."
+            return false
+        }
+    }
+
+    private func startWorkFromSelectedGoal() async {
+        guard let detail = intelligenceStore.selectedGoalDetail, let taskChatCoordinator else {
+            intelligenceStore.error = "The goal thread is unavailable."
+            return
+        }
+        do {
+            let receipt = try await taskChatCoordinator.resolveGoalOrigin(
+                goalId: detail.goal.goalId,
+                occurrenceId: "goal-detail-primary-v1",
+                title: detail.goal.title,
+                objective: detail.goal.desiredOutcome,
+                anchorTaskDescription: "Make progress on \(detail.goal.title)"
+            )
+            await resumeThread(workstreamID: receipt.workstreamId, taskID: receipt.taskId)
+        } catch {
+            intelligenceStore.error = "Omi could not start work on this goal."
+        }
+    }
+
     // MARK: - Summary counts for collapsed bar
 
     private var incompleteTaskCount: Int {
@@ -1599,7 +1766,9 @@ struct DashboardPage: View {
     }
 
     private var activeGoalCount: Int {
-        viewModel.goals.count
+        intelligenceStore.accountGeneration == nil
+            ? viewModel.goals.count
+            : intelligenceStore.currentGoals.count
     }
 
     // MARK: - Dashboard Widgets (collapsible)
@@ -1618,6 +1787,19 @@ struct DashboardPage: View {
                 )
             }
 
+            WhatMattersNowSection(
+                store: intelligenceStore,
+                onOpen: { recommendation in await openRecommendation(recommendation) }
+            )
+
+            dashboardIntelligenceError
+
+            FocusedGoalsSection(
+                store: intelligenceStore,
+                onOpenGoal: { goalID in await openGoal(goalID) },
+                onShowAll: { showingAllGoals = true }
+            )
+
             if widgetsCollapsed {
                 // Collapsed: slim summary bar
                 collapsedWidgetBar
@@ -1633,6 +1815,38 @@ struct DashboardPage: View {
         .padding(.top, widgetsCollapsed ? 20 : 32)
         .padding(.bottom, 8)
         .animation(.easeInOut(duration: 0.25), value: widgetsCollapsed)
+    }
+
+    @ViewBuilder
+    private var dashboardIntelligenceError: some View {
+        if let error = intelligenceStore.error, !error.isEmpty {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.warning)
+                Text(error)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textSecondary)
+                Spacer(minLength: 8)
+                Button("Retry") {
+                    Task { await intelligenceStore.load() }
+                }
+                .buttonStyle(.plain)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(OmiColors.backgroundSecondary.opacity(0.88))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
+            )
+            .accessibilityIdentifier("dashboard-intelligence-error")
+        }
     }
 
     private var collapsedWidgetBar: some View {
@@ -1708,44 +1922,75 @@ struct DashboardPage: View {
                 )
                 .frame(minWidth: 0, maxWidth: .infinity)
 
-                GoalsWidget(
-                    goals: viewModel.goals,
-                    onCreateGoal: { title, current, target in
-                        Task {
-                            await viewModel.createGoal(
-                                title: title,
-                                goalType: .numeric,
-                                targetValue: target,
-                                unit: nil
-                            )
+                if intelligenceStore.accountGeneration != nil {
+                    canonicalGoalsWidget
+                } else {
+                    GoalsWidget(
+                        goals: viewModel.goals,
+                        onCreateGoal: { title, current, target in
+                            Task {
+                                await viewModel.createGoal(
+                                    title: title,
+                                    goalType: .numeric,
+                                    targetValue: target,
+                                    unit: nil
+                                )
+                            }
+                        },
+                        onUpdateGoal: { goal, title, current, target in
+                            Task {
+                                await viewModel.updateGoal(
+                                    goal,
+                                    title: title,
+                                    currentValue: current,
+                                    targetValue: target
+                                )
+                            }
+                        },
+                        onUpdateProgress: { goal, value in
+                            Task { await viewModel.updateGoalProgress(goal, currentValue: value) }
+                        },
+                        onDeleteGoal: { goal in
+                            Task { await viewModel.deleteGoal(goal) }
                         }
-                    },
-                    onUpdateGoal: { goal, title, current, target in
-                        Task {
-                            await viewModel.updateGoal(
-                                goal,
-                                title: title,
-                                currentValue: current,
-                                targetValue: target
-                            )
-                        }
-                    },
-                    onUpdateProgress: { goal, value in
-                        Task {
-                            await viewModel.updateGoalProgress(goal, currentValue: value)
-                        }
-                    },
-                    onDeleteGoal: { goal in
-                        Task {
-                            await viewModel.deleteGoal(goal)
-                        }
-                    }
-                )
-                .frame(minWidth: 0, maxWidth: .infinity)
+                    )
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                }
             }
         }
         .fixedSize(horizontal: false, vertical: true)
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var canonicalGoalsWidget: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Goals")
+                    .scaledFont(size: 15, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Spacer()
+                Button("All goals") { showingAllGoals = true }
+                    .buttonStyle(.plain)
+                    .scaledFont(size: 10, weight: .medium)
+            }
+            FocusedGoalsSection(
+                store: intelligenceStore,
+                onOpenGoal: { goalID in await openGoal(goalID) },
+                onShowAll: { showingAllGoals = true }
+            )
+            if intelligenceStore.focusedGoals.isEmpty {
+                Text("Keep a few outcomes in focus.")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundSecondary.opacity(0.65))
+        )
     }
 
     private var collapseButton: some View {
