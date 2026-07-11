@@ -101,6 +101,9 @@ actor OnboardingMemoryLogImportService {
 
     let extracted: ExtractedMemoryLog
     if let extractedFixture {
+      guard AppBuild.isNonProduction else {
+        return .failed
+      }
       extracted = extractedFixture
     } else {
       do {

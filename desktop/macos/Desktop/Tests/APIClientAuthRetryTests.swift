@@ -18,9 +18,10 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
     lock.unlock()
   }
 
-  static func returnUnauthorizedForEveryAttempt() {
+  static func returnUnauthorizedForEveryAttempt(body: String = "") {
     lock.lock()
     alwaysUnauthorized = true
+    forcedBody = Data(body.utf8)
     lock.unlock()
   }
 
@@ -130,7 +131,9 @@ final class APIClientAuthRetryTests: XCTestCase {
   }
 
   func testTTSProvider401RetriesWithoutInvalidatingFirebaseSession() async throws {
-    AuthRetryURLStub.returnUnauthorizedForEveryAttempt()
+    AuthRetryURLStub.returnUnauthorizedForEveryAttempt(
+      body: "{\"error\":\"OpenAI TTS request failed: Incorrect API key provided\"}"
+    )
     setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
     setenv("FIREBASE_API_KEY", "test-key", 1)
     defer {
@@ -193,6 +196,68 @@ final class APIClientAuthRetryTests: XCTestCase {
     let retainedToken = try await auth.getIdToken()
     XCTAssertEqual(retainedToken, "new-id")
     XCTAssertFalse(try healthSnapshots().contains { $0["area"] as? String == "api_auth" })
+  }
+
+  func testTTSBare401DoesNotRemapToProviderAuth() async throws {
+    AuthRetryURLStub.returnUnauthorizedForEveryAttempt(body: "{\"error\":\"Unauthorized\"}")
+    setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+    setenv("FIREBASE_API_KEY", "test-key", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_API_URL")
+      unsetenv("FIREBASE_API_KEY")
+    }
+
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [AuthRetryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+
+    let auth = AuthService.shared
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { false },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in true },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+    try auth.saveTokens(
+      idToken: "id-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+      userId: "user-1"
+    )
+    UserDefaults.standard.set("user-1", forKey: .authUserId)
+    auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
+      dataForRequest: { _ in
+        let body = Data(
+          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}".utf8)
+        let response = HTTPURLResponse(
+          url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: nil
+        )!
+        return (body, response)
+      }
+    )
+
+    do {
+      _ = try await client.synthesizeSpeech(
+        request: APIClient.TtsSynthesizeRequest(
+          text: "Hello",
+          voiceId: "onyx",
+          instructions: nil
+        )
+      )
+      XCTFail("Expected unauthorized failure")
+    } catch APIError.unauthorized {
+      // Bare/Firebase-shaped 401 must not become providerAuth (BYOK poison).
+    } catch {
+      XCTFail("Unexpected error: \(error)")
+    }
+
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+    XCTAssertNil(UserDefaults.standard.string(forKey: .authUserId))
   }
 
   func testTTSProvider429ReturnsTypedQuotaFailure() async throws {
