@@ -501,6 +501,34 @@ actor RewindDatabase {
     /// Migrate data from the legacy shared path (Omi/) or from the anonymous fallback
     /// (Omi/users/anonymous/) to the per-user path (Omi/users/{userId}/).
     /// Handles both first-time migration (DB move) and partial re-runs (directory merges).
+    /// Fold a directory's `omi.db-wal` into its `omi.db` so committed-but-
+    /// uncheckpointed writes survive the migration cleanup that deletes WAL/SHM.
+    /// Returns `true` when there is nothing to checkpoint or the checkpoint
+    /// succeeded, and `false` when a non-empty WAL exists but could not be
+    /// checkpointed — the caller MUST abort (not delete the WAL) in that case to
+    /// avoid a silent rollback / data loss.
+    private func checkpointWALBeforeMigration(in dir: URL, label: String, fileManager: FileManager) -> Bool {
+        let db = dir.appendingPathComponent("omi.db")
+        let wal = dir.appendingPathComponent("omi.db-wal")
+        guard fileManager.fileExists(atPath: db.path),
+            fileManager.fileExists(atPath: wal.path)
+        else {
+            return true // no WAL to fold in — nothing can be lost by the cleanup loop
+        }
+        do {
+            let pool = try DatabasePool(path: db.path, configuration: Configuration())
+            try pool.write { db in
+                try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+            }
+            try pool.close()
+            log("RewindDatabase: Checkpointed WAL at \(label) before migration")
+            return true
+        } catch {
+            log("RewindDatabase: \(label) WAL checkpoint failed, aborting migration to avoid data loss: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -547,49 +575,21 @@ actor RewindDatabase {
             "omi.db", "Screenshots", "Videos", "backups",
         ]
 
-        // Checkpoint WAL at destination before deleting — preserves recent writes
-        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
-        let destDB = userDir.appendingPathComponent("omi.db")
-        if fileManager.fileExists(atPath: destDB.path) {
-            let destWAL = userDir.appendingPathComponent("omi.db-wal")
-            if fileManager.fileExists(atPath: destWAL.path) {
-                do {
-                    let config = Configuration()
-                    let pool = try DatabasePool(path: destDB.path, configuration: config)
-                    try pool.write { db in
-                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
-                    }
-                    try pool.close()
-                    log("RewindDatabase: Checkpointed WAL at dest before migration")
-                } catch {
-                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
-                }
-            }
-        }
-
-        // Checkpoint the SOURCE WAL into the source omi.db BEFORE deleting it, so
-        // committed-but-uncheckpointed transactions fold into omi.db and migrate
-        // with it. An unclean prior shutdown leaves a non-empty WAL (a clean close
-        // checkpoints and removes it); deleting that WAL outright — as the loop
-        // below does — would roll the DB back to its last checkpoint and silently
-        // drop up to wal_autocheckpoint (1000 pages, ~4MB) of recent writes. We
-        // still must not MOVE the path-bound WAL/SHM, only fold-then-delete.
-        let sourceDB = sourceDir.appendingPathComponent("omi.db")
-        let sourceWAL = sourceDir.appendingPathComponent("omi.db-wal")
-        if fileManager.fileExists(atPath: sourceDB.path),
-            fileManager.fileExists(atPath: sourceWAL.path)
-        {
-            do {
-                let pool = try DatabasePool(path: sourceDB.path, configuration: Configuration())
-                try pool.write { db in
-                    try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
-                }
-                try pool.close()
-                log("RewindDatabase: Checkpointed WAL at source before migration")
-            } catch {
-                log("RewindDatabase: Source WAL checkpoint failed: \(error.localizedDescription)")
-            }
-        }
+        // Fold each directory's WAL into its omi.db BEFORE the cleanup loop below
+        // deletes the path-bound WAL/SHM. An unclean prior shutdown leaves a
+        // non-empty WAL holding committed-but-uncheckpointed transactions (a clean
+        // close checkpoints and removes it); deleting that WAL outright would roll
+        // the DB back to its last checkpoint and silently drop up to
+        // wal_autocheckpoint (1000 pages, ~4MB) of recent writes:
+        //   - dest WAL: recent writes such as the knowledge graph saved during
+        //     onboarding, before the app restart for permissions.
+        //   - source WAL: the legacy data being migrated.
+        // If a checkpoint FAILS, those writes are still only in the WAL, so we must
+        // NOT proceed to delete it — abort the whole migration and leave source +
+        // dest intact. initialize() retries migration on the next launch, once the
+        // transient cause (locked DB, momentary IO error) has likely cleared.
+        guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
+        guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
 
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
