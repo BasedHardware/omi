@@ -12588,6 +12588,68 @@
         "title": "McpCreateActionItem",
         "type": "object"
       },
+      "McpFetchResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "McpFetchResponse",
+        "type": "object"
+      },
       "McpOauthGrantsResponse": {
         "properties": {
           "grants": {
@@ -12769,6 +12831,70 @@
           "query"
         ],
         "title": "McpSearchRequest",
+        "type": "object"
+      },
+      "McpSearchResponse": {
+        "properties": {
+          "results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/McpSearchResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "title": "McpSearchResponse",
+        "type": "object"
+      },
+      "McpSearchResultItem": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "McpSearchResultItem",
         "type": "object"
       },
       "McpServerRequest": {
@@ -39851,7 +39977,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpFetchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40723,7 +40851,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpSearchResponse"
+                }
               }
             },
             "description": "Successful Response"

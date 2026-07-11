@@ -2044,6 +2044,14 @@ export interface McpCreateActionItem {
   due_at?: string | null;
 }
 
+export interface McpFetchResponse {
+  id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  text?: string | null;
+  title?: string | null;
+  url?: string | null;
+}
+
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
 }
@@ -2076,6 +2084,17 @@ export interface McpScreenActivitySummaryResponse {
 export interface McpSearchRequest {
   limit?: number | null;
   query: string;
+}
+
+export interface McpSearchResponse {
+  results?: Array<McpSearchResultItem>;
+}
+
+export interface McpSearchResultItem {
+  id?: string | null;
+  text?: string | null;
+  title?: string | null;
+  url?: string | null;
 }
 
 export interface McpServerRequest {
@@ -3934,12 +3953,15 @@ export interface OmiApiSchemas {
   "McpApiKeyCreate": McpApiKeyCreate;
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
+  "McpFetchResponse": McpFetchResponse;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
   "McpScreenActivityRow": McpScreenActivityRow;
   "McpScreenActivitySummaryResponse": McpScreenActivitySummaryResponse;
   "McpSearchRequest": McpSearchRequest;
+  "McpSearchResponse": McpSearchResponse;
+  "McpSearchResultItem": McpSearchResultItem;
   "McpServerRequest": McpServerRequest;
   "McpSseAuthMethodResponse": McpSseAuthMethodResponse;
   "McpSseAuthenticationResponse": McpSseAuthenticationResponse;
@@ -6201,7 +6223,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "mcp_fetch_endpoint_v1_mcp_fetch_get";
       responses: {
-        "200": unknown;
+        "200": McpFetchResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6345,7 +6367,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "mcp_search_endpoint_v1_mcp_search_post";
       responses: {
-        "200": unknown;
+        "200": McpSearchResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11968,7 +11990,7 @@ export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { li
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_fetch_endpoint_v1_mcp_fetch_get(query: { id: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_fetch_endpoint_v1_mcp_fetch_get(query: { id: string }, init?: OmiApiClientInit): Promise<McpFetchResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/fetch`;
   const _params = query ? Object.entries(query)
@@ -12215,7 +12237,7 @@ export async function get_screen_activity_v1_mcp_screen_activity_get(query: { st
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_search_endpoint_v1_mcp_search_post(body: McpSearchRequest, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_search_endpoint_v1_mcp_search_post(body: McpSearchRequest, init?: OmiApiClientInit): Promise<McpSearchResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/search`;
   const _search = "";

@@ -241,7 +241,26 @@ def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
 
 
 # POST (not GET) so the search query stays out of the URL and access logs.
-@router.post("/v1/mcp/search", tags=["mcp"])
+class McpSearchResultItem(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    text: Optional[str] = None
+
+
+class McpSearchResponse(BaseModel):
+    results: List[McpSearchResultItem] = []
+
+
+class McpFetchResponse(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    text: Optional[str] = None
+    url: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@router.post("/v1/mcp/search", response_model=McpSearchResponse, tags=["mcp"])
 def mcp_search_endpoint(
     request: McpSearchRequest,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
@@ -257,7 +276,7 @@ def mcp_search_endpoint(
         raise _search_http_error(e)
 
 
-@router.get("/v1/mcp/fetch", tags=["mcp"])
+@router.get("/v1/mcp/fetch", response_model=McpFetchResponse, tags=["mcp"])
 def mcp_fetch_endpoint(
     id: str,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
