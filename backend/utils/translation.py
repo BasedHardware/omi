@@ -18,6 +18,7 @@ from enum import Enum
 import logging
 
 import httpx
+from prometheus_client import Counter as PromCounter, Histogram, Info, REGISTRY
 
 from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
@@ -30,6 +31,100 @@ TRANSLATION_MODE = os.environ.get("TRANSLATION_MODE", "google")
 HOSTED_TRANSLATION_API_URL = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
 TRANSLATION_SHADOW_SAMPLE_RATE = float(os.environ.get("TRANSLATION_SHADOW_SAMPLE_RATE", "1.0"))
 TRANSLATION_SHADOW_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_SHADOW_TIMEOUT_SECONDS", "2.0"))
+
+# --- Prometheus metrics ---
+# Metric constructors are idempotent w.r.t. the default registry: if the module
+# is re-imported (e.g. tests that manipulate sys.modules), we silently reuse
+# the previously registered collector instead of raising ValueError.
+
+
+def _counter(name: str, doc: str, labels: List[str]) -> PromCounter:
+    try:
+        return PromCounter(name, doc, labels)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _histogram(name: str, doc: str, labels: List[str], buckets: List[float]) -> Histogram:
+    try:
+        return Histogram(name, doc, labels, buckets=buckets)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _info(name: str, doc: str) -> Info:
+    try:
+        return Info(name, doc)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+TRANSLATION_REQUESTS = _counter(
+    "omi_translation_requests_total",
+    "Total translation requests",
+    ["provider", "target_lang", "method"],
+)
+TRANSLATION_LATENCY = _histogram(
+    "omi_translation_latency_seconds",
+    "End-to-end translation latency",
+    ["provider", "target_lang"],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+)
+TRANSLATION_CHARS = _counter(
+    "omi_translation_chars_total",
+    "Characters translated",
+    ["provider", "target_lang"],
+)
+TRANSLATION_SENTENCES = _counter(
+    "omi_translation_sentences_total",
+    "Sentences translated",
+    ["provider", "target_lang"],
+)
+TRANSLATION_CACHE_OPS = _counter(
+    "omi_translation_cache_ops_total",
+    "Cache operations",
+    ["layer", "result"],
+)
+TRANSLATION_ERRORS = _counter(
+    "omi_translation_errors_total",
+    "Translation errors",
+    ["provider", "error_type"],
+)
+TRANSLATION_SHADOW_COMPARISON = _histogram(
+    "omi_translation_shadow_exact_match_ratio",
+    "Shadow comparison exact match ratio between Google and NLLB",
+    ["target_lang"],
+    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+)
+TRANSLATION_SHADOW_LEN_RATIO = _histogram(
+    "omi_translation_shadow_length_ratio",
+    "Shadow comparison length ratio (NLLB/Google chars)",
+    ["target_lang"],
+    buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 2.0],
+)
+TRANSLATION_SHADOW_LATENCY = _histogram(
+    "omi_translation_shadow_nllb_latency_seconds",
+    "NLLB shadow call latency",
+    ["target_lang"],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
+)
+TRANSLATION_BATCH_SIZE = _histogram(
+    "omi_translation_batch_size",
+    "Sentences per API batch call",
+    ["provider"],
+    buckets=[1, 2, 5, 10, 20, 50, 100, 200],
+)
+TRANSLATION_SKIP = _counter(
+    "omi_translation_skip_total",
+    "Translations skipped (already in target language)",
+    ["target_lang", "reason"],
+)
+TRANSLATION_MODE_INFO = _info(
+    "omi_translation_mode",
+    "Current translation mode configuration",
+)
+
+TRANSLATION_MODE_INFO.info({"mode": TRANSLATION_MODE, "nllb_url": HOSTED_TRANSLATION_API_URL or "none"})
 
 
 # LRU Cache for language detection (local, free via langdetect)
@@ -517,7 +612,9 @@ def get_negative_cache(text_hash: str, dest_lang: str) -> bool:
     """Check if text is negatively cached (known to not need translation). Returns True if cached."""
     try:
         key = _redis_negative_cache_key(text_hash, dest_lang)
-        return r.exists(key) == 1
+        found = r.exists(key) == 1
+        TRANSLATION_CACHE_OPS.labels(layer="negative", result="hit" if found else "miss").inc()
+        return found
     except Exception as e:
         logger.warning(f"Redis negative cache read error: {e}")
     return False
@@ -540,7 +637,9 @@ def get_cached_translation(text_hash: str, dest_lang: str) -> Optional[Dict[str,
         if cached:
             loaded: object = json.loads(cached)
             if isinstance(loaded, dict):
+                TRANSLATION_CACHE_OPS.labels(layer="redis", result="hit").inc()
                 return cast(Dict[str, str], loaded)
+        TRANSLATION_CACHE_OPS.labels(layer="redis", result="miss").inc()
     except Exception as e:
         logger.warning(f"Redis translation cache read error: {e}")
     return None
@@ -571,16 +670,29 @@ class TranslationService:
         return self._shadow_client
 
     def _translate_google_batch(self, contents: List[str], dest_language: str) -> List[Tuple[str, str]]:
-        response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]
-            contents=contents,
-            parent=_parent,
-            mime_type=_mime_type,
-            target_language_code=dest_language,
-        )
-        return [
-            (translation.translated_text, translation.detected_language_code or "")
-            for translation in response.translations
-        ]
+        TRANSLATION_BATCH_SIZE.labels(provider="google").observe(len(contents))
+        t0 = time.monotonic()
+        try:
+            response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]
+                contents=contents,
+                parent=_parent,
+                mime_type=_mime_type,
+                target_language_code=dest_language,
+            )
+            results = [
+                (translation.translated_text, translation.detected_language_code or "")
+                for translation in response.translations
+            ]
+            elapsed = time.monotonic() - t0
+            TRANSLATION_LATENCY.labels(provider="google", target_lang=dest_language).observe(elapsed)
+            TRANSLATION_REQUESTS.labels(provider="google", target_lang=dest_language, method="batch").inc()
+            total_chars = sum(len(c) for c in contents)
+            TRANSLATION_CHARS.labels(provider="google", target_lang=dest_language).inc(total_chars)
+            TRANSLATION_SENTENCES.labels(provider="google", target_lang=dest_language).inc(len(contents))
+            return results
+        except Exception:
+            TRANSLATION_ERRORS.labels(provider="google", error_type="api_error").inc()
+            raise
 
     def _run_shadow_compare(
         self,
@@ -642,6 +754,10 @@ class TranslationService:
             exact_match_ratio = exact_matches / total if total > 0 else 0.0
             len_ratio = total_nllb_chars / total_google_chars if total_google_chars > 0 else 0.0
 
+            TRANSLATION_SHADOW_LATENCY.labels(target_lang=dest_language).observe(nllb_latency)
+            TRANSLATION_SHADOW_COMPARISON.labels(target_lang=dest_language).observe(exact_match_ratio)
+            TRANSLATION_SHADOW_LEN_RATIO.labels(target_lang=dest_language).observe(len_ratio)
+
             logger.info(
                 "translation_shadow_compare callsite=%s target=%s count=%d "
                 "google_detected=%s exact_match_ratio=%.2f len_ratio=%.2f "
@@ -693,7 +809,9 @@ class TranslationService:
         if cache_key in self.translation_cache:
             entry = self.translation_cache.pop(cache_key)
             self.translation_cache[cache_key] = entry
+            TRANSLATION_CACHE_OPS.labels(layer="memory", result="hit").inc()
             return entry
+        TRANSLATION_CACHE_OPS.labels(layer="memory", result="miss").inc()
         return None
 
     def _set_memory_cache(self, text_hash: str, dest_language: str, translated_text: str, detected_lang: str):
@@ -713,10 +831,14 @@ class TranslationService:
             detected_language_code is the dominant detected language from the batch.
         """
         if not text:
+            TRANSLATION_SKIP.labels(target_lang=dest_language, reason="empty").inc()
             return ("", "")
+
+        t0 = time.monotonic()
 
         sentences = split_into_sentences(text)
         if not sentences:
+            TRANSLATION_SKIP.labels(target_lang=dest_language, reason="empty").inc()
             return ("", "")
 
         # Phase 1: Check caches (memory -> Redis) for each sentence
@@ -789,6 +911,10 @@ class TranslationService:
                 dominant_lang = lang_counts.most_common(1)[0][0]
 
         translated_text = ' '.join(r for r in results if r is not None)
+        elapsed = time.monotonic() - t0
+        provider = "google" if uncached_indices else "cache"
+        TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
+        TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="by_sentence").inc()
         return (translated_text, dominant_lang)
 
     def translate_units_batch(self, dest_language: str, units: List[Tuple[str, str]]) -> List[Tuple[str, str, str]]:
@@ -806,6 +932,8 @@ class TranslationService:
         """
         if not units:
             return []
+
+        t0 = time.monotonic()
 
         # Phase -1: Check full-text caches for each unit before sentence splitting.
         # This preserves hits from the pre-DD-008 batch path and from
@@ -986,6 +1114,11 @@ class TranslationService:
                 uid, orig_text = units[idx]
                 final_results.append((uid, orig_text, ''))
 
+        elapsed = time.monotonic() - t0
+        provider = "google" if uncached_sent_hashes else "cache"
+        TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
+        TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="units_batch").inc()
+
         return final_results
 
     def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
@@ -996,11 +1129,13 @@ class TranslationService:
         Returns:
             (translated_text, detected_language_code) tuple.
         """
+        t0 = time.monotonic()
         text_hash = hashlib.md5(text.encode()).hexdigest()
 
         # Check memory cache
         cached = self._check_memory_cache(text_hash, dest_language)
         if cached:
+            TRANSLATION_REQUESTS.labels(provider="cache", target_lang=dest_language, method="translate_text").inc()
             return cached
 
         # Check Redis cache
@@ -1008,6 +1143,7 @@ class TranslationService:
         if redis_cached:
             result: Tuple[str, str] = (redis_cached["text"], redis_cached.get("detected_lang", ""))
             self._set_memory_cache(text_hash, dest_language, result[0], result[1])
+            TRANSLATION_REQUESTS.labels(provider="cache", target_lang=dest_language, method="translate_text").inc()
             return result
 
         try:
@@ -1019,7 +1155,12 @@ class TranslationService:
 
             self._schedule_shadow_compare("translate_text", dest_language, [text], google_results)
 
+            elapsed = time.monotonic() - t0
+            TRANSLATION_LATENCY.labels(provider="google", target_lang=dest_language).observe(elapsed)
+            TRANSLATION_REQUESTS.labels(provider="google", target_lang=dest_language, method="translate_text").inc()
+
             return (translated_text, detected_lang)
         except Exception as e:
             logger.error(f"Translation error: {e}")
+            TRANSLATION_ERRORS.labels(provider="google", error_type="translate_text_error").inc()
             return (text, "")

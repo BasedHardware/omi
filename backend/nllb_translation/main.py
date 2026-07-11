@@ -66,8 +66,25 @@ TRANSLATION_LATENCY = Histogram(
     buckets=[0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0],
 )
 CHARS_TRANSLATED = Counter("nllb_chars_translated_total", "Total characters translated", ["target_lang"])
+SENTENCES_TRANSLATED = Counter("nllb_sentences_translated_total", "Total sentences translated", ["target_lang"])
 ACTIVE_REQUESTS = Gauge("nllb_active_requests", "Active translation requests")
 MODEL_LOADED = Gauge("nllb_model_loaded", "Whether model is loaded (1=yes, 0=no)")
+BATCH_SIZE = Histogram(
+    "nllb_batch_size",
+    "Number of sentences per translate request",
+    buckets=[1, 2, 5, 10, 20, 32, 50, 64, 100],
+)
+INFERENCE_LATENCY = Histogram(
+    "nllb_inference_latency_seconds",
+    "Pure CTranslate2 inference latency (excludes tokenization)",
+    ["target_lang"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
+)
+TOKENIZATION_LATENCY = Histogram(
+    "nllb_tokenization_latency_seconds",
+    "SentencePiece tokenization latency",
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25],
+)
 
 _translator: Optional[ctranslate2.Translator] = None
 _tokenizer: Optional[spm.SentencePieceProcessor] = None
@@ -143,23 +160,26 @@ def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> Li
     if not _translator or not _tokenizer:
         raise RuntimeError("Model not loaded")
 
+    t_tok = time.monotonic()
     tokenized = [_tokenizer.Encode(text, out_type=str) for text in texts]
 
-    # NLLB requires: source = [src_lang] + tokens + [</s>]
-    #                target_prefix = [</s>, tgt_lang]
     if source_nllb:
         tokenized = [[source_nllb] + tokens + ["</s>"] for tokens in tokenized]
     else:
         tokenized = [tokens + ["</s>"] for tokens in tokenized]
 
     target_prefix = [["</s>", target_nllb]] * len(texts)
+    TOKENIZATION_LATENCY.observe(time.monotonic() - t_tok)
 
+    t_inf = time.monotonic()
     results = _translator.translate_batch(
         tokenized,
         target_prefix=target_prefix,
         max_input_length=MAX_INPUT_LENGTH,
         beam_size=4,
     )
+    target_bcp47 = NLLB_TO_BCP47.get(target_nllb, target_nllb.split("_")[0])
+    INFERENCE_LATENCY.labels(target_lang=target_bcp47).observe(time.monotonic() - t_inf)
 
     special_tokens = {"</s>", target_nllb}
     translations = []
@@ -205,6 +225,8 @@ async def translate(req: TranslateRequest):
         REQUESTS_TOTAL.labels(target_lang=req.target_language_code, status="ok").inc()
         TRANSLATION_LATENCY.labels(target_lang=req.target_language_code).observe(latency)
         CHARS_TRANSLATED.labels(target_lang=req.target_language_code).inc(total_chars)
+        SENTENCES_TRANSLATED.labels(target_lang=req.target_language_code).inc(len(req.contents))
+        BATCH_SIZE.observe(len(req.contents))
 
         return TranslateResponse(
             translations=translations,
