@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,9 +10,31 @@ from models.structured import ActionItem, Event, Structured
 class ExtractedActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
+    capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
+        None
+    )
+    capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    concrete_deliverable: Optional[bool] = Field(
+        default=None,
+        description='True only when the commitment names a concrete deliverable or outcome',
+    )
+    candidate_action: Optional[Literal['create', 'update', 'complete']] = None
+    target_task_id: Optional[str] = None
 
     def to_action_item(self) -> ActionItem:
-        return ActionItem(description=self.description, due_at=self.due_at)
+        return ActionItem(
+            description=self.description,
+            due_at=self.due_at,
+            capture_kind=self.capture_kind,
+            capture_confidence=self.capture_confidence,
+            ownership_confidence=self.ownership_confidence,
+            capture_owner=self.capture_owner,
+            concrete_deliverable=self.concrete_deliverable,
+            candidate_action=self.candidate_action,
+            target_task_id=self.target_task_id,
+        )
 
 
 class ActionItemsExtraction(BaseModel):

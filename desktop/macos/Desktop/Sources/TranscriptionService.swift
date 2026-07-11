@@ -32,6 +32,13 @@ class TranscriptionService {
         let text: String
     }
 
+    /// The backend-selected provider for one pre-recorded PTT request.
+    struct BatchTranscriptionResult: Equatable {
+        let transcript: String?
+        let provider: String?
+        let model: String?
+    }
+
     /// Transcript segment from Python backend
     /// Matches `models.transcript_segment.TranscriptSegment` on the backend
     struct BackendSegment: Decodable {
@@ -679,13 +686,13 @@ enum WebSocketConnectionAttempt {
 
 extension TranscriptionService {
     /// Transcribe a complete audio buffer using the Python backend `/v2/voice-message/transcribe`.
-    /// Returns the transcript string, or nil if transcription failed.
+    /// Returns the transcript plus the provider/model selected by the backend.
     static func batchTranscribe(
         audioData: Data,
         language: String = "en",
         apiKey: String? = nil,
         contextKeywords: [String] = []
-    ) async throws -> String? {
+    ) async throws -> BatchTranscriptionResult {
         // Always use Firebase auth + Python backend
         let authService = await MainActor.run { AuthService.shared }
         let authHeader = try await authService.getAuthHeader()
@@ -733,11 +740,17 @@ extension TranscriptionService {
             throw TranscriptionError.invalidResponse
         }
 
-        // Parse Python backend response: {"transcript": "...", "language": "..."}
+        // Parse Python backend response, including the provider selected by routed STT.
         let json = try JSONDecoder().decode(PythonTranscribeResponse.self, from: data)
         let transcript = json.transcript.isEmpty ? nil : json.transcript
-        log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
-        return transcript
+        let result = BatchTranscriptionResult(
+            transcript: transcript,
+            provider: json.stt_provider,
+            model: json.stt_model)
+        log(
+            "TranscriptionService: Batch transcription result provider=\(result.provider ?? "unknown") "
+                + "model=\(result.model ?? "unknown") transcriptCharacters=\(transcript?.count ?? 0)")
+        return result
     }
 
 }
@@ -746,4 +759,6 @@ extension TranscriptionService {
 private struct PythonTranscribeResponse: Decodable {
     let transcript: String
     let language: String?
+    let stt_provider: String?
+    let stt_model: String?
 }

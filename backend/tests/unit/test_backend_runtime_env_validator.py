@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import re
 import sys
@@ -30,6 +31,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
+        {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
@@ -37,6 +39,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,dg-nova-3"},
+        {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
@@ -53,7 +57,8 @@ def with_memory_env(payload: str) -> str:
 
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
-        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},'''
+        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
+        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
@@ -111,6 +116,63 @@ def test_repo_cloud_run_workflows_match_manifest():
     errors = validator.validate_runtime_env(env='dev', check_workflows=True)
 
     assert errors == []
+
+
+def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
+    validator = load_validator()
+    env_config = {
+        'gke': {},
+        'cloud_run': {
+            'services': {
+                service: {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'}},
+                    'secrets': {
+                        'STT_PRERECORDED_MODEL': {
+                            'secret': 'STT_PRERECORDED_MODEL',
+                            'version': 'latest',
+                        }
+                    },
+                }
+                for service in ('backend', 'backend-sync', 'backend-integration')
+            }
+        },
+    }
+    del env_config['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+
+    assert errors == [
+        validator.ValidationError(
+            'dev/cloud_run/backend',
+            'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+        )
+    ]
+
+
+def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
+    validator = load_validator()
+    env_config = {
+        'cloud_run': {
+            'services': {
+                'backend': {'env': {}, 'secrets': {}},
+                'backend-sync': {'env': {}, 'secrets': {}},
+                'backend-integration': {'env': {}, 'secrets': {}},
+            }
+        }
+    }
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+
+    assert len(errors) == 6
+    assert {error.scope for error in errors} == {
+        'dev/cloud_run/backend',
+        'dev/cloud_run/backend-sync',
+        'dev/cloud_run/backend-integration',
+    }
+    assert {error.message for error in errors} == {
+        'required Cloud Run service is missing STT_PRERECORDED_MODEL',
+        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+    }
 
 
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
@@ -355,9 +417,16 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
+                                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
-                                'secrets': STANDARD_CLOUD_RUN_SECRETS,
+                                'secrets': {
+                                    **STANDARD_CLOUD_RUN_SECRETS,
+                                    'STT_PRERECORDED_MODEL': {
+                                        'secret': 'STT_PRERECORDED_MODEL',
+                                        'version': 'latest',
+                                    },
+                                },
                             }
                         },
                         'jobs': {
@@ -649,6 +718,45 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
+    validator = load_validator()
+    manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
+    services = manifest['environments']['dev']['cloud_run']['services']
+    required_dev_services = {'backend', 'backend-sync', 'backend-integration'}
+    affected_services: list[str] = []
+    for service_name, service in services.items():
+        env = service.setdefault('env', {})
+        secrets = service.get('secrets') or {}
+        has_prerecorded_binding = (
+            'HOSTED_PARAKEET_API_URL' in env or 'STT_PRERECORDED_MODEL' in env or 'STT_PRERECORDED_MODEL' in secrets
+        )
+        if not has_prerecorded_binding:
+            continue
+        affected_services.append(service_name)
+        env.pop('HOSTED_PARAKEET_API_URL', None)
+
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(manifest_path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_rendered_cloud_run=True)
+
+    missing_endpoint_messages = {
+        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+        'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+    }
+    assert {(error.scope, error.message) for error in errors if error.message in missing_endpoint_messages} == {
+        (
+            f'dev/cloud_run/{service_name}',
+            (
+                'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL'
+                if service_name in required_dev_services
+                else 'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL'
+            ),
+        )
+        for service_name in affected_services
+    }
 
 
 def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():

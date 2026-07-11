@@ -49,6 +49,8 @@ Continuity persistence resolves the user transcript at the write boundary. A pro
 
 Barge-in replacement awaits that immutable resolution and acknowledgement before refreshing the kernel seed and opening the new provider session. OpenAI can keep its session because input-item and response IDs map callbacks to an Omi turn. Gemini input-transcription events have no equivalent item ID, so every completed Gemini turn creates a fresh-session boundary before the next PTT; an event that is ambiguous across that boundary is dropped. Audio captured while a replacement connects is capped at 120 seconds of 16 kHz PCM. Agent delegation follows the same ownership rule: resolution must still own the tool turn immediately before the canonical spawn side effect, and only a successful spawn may produce the success acknowledgement and durable handoff.
 
+Permission checks and requests are direct desktop actions on both main chat and PTT. `check_permission_status` and `request_permission` execute in the signed-in app process through the shared Swift handler; they must not create a child agent. The PTT adapter treats an accidental permission-focused `spawn_agent` call as a direct `request_permission` request so a malformed model call cannot create a non-functional worker.
+
 ## UI and error signals
 
 `VoiceTurnUIProjection` is the semantic source for listening, lock, transcript, thinking, response-waiting, response-active, and terminal hints. `PTTBarPresenter` is the only writer for those floating-bar fields. User-facing failures stay visible briefly as actionable hints; developer signals remain available through typed terminal diagnostics, stale-event and invalid-transition counts, and the bounded event timeline.
