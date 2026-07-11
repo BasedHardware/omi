@@ -204,7 +204,9 @@ class _MemoryDialogState extends State<MemoryDialog> {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
       widget.provider.deleteMemory(widget.memory!);
-      Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 }
