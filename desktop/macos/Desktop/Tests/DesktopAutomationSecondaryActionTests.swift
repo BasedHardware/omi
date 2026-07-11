@@ -28,6 +28,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "set_transcription_language",
       "transcription_language_snapshot",
       "memory_graph_snapshot",
+      "open_memory_atlas",
+      "memory_atlas_set_viewport",
       "open_quick_note",
       "about_snapshot",
       "settings_notifications_snapshot",
@@ -236,6 +238,17 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       XCTAssertTrue(body.contains("\"\(key)\""), "memory_graph_snapshot should return \(key)")
     }
     XCTAssertTrue(body.contains("getKnowledgeGraph"))
+  }
+
+  func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {
+    let openBody = try actionBody(named: "open_memory_atlas", in: try bridgeSource())
+    XCTAssertTrue(openBody.contains("desktopAutomationOpenMemoryAtlasRequested"))
+
+    let viewportBody = try actionBody(named: "memory_atlas_set_viewport", in: try bridgeSource())
+    XCTAssertTrue(viewportBody.contains("desktopAutomationMemoryAtlasViewportRequested"))
+    for parameter in ["target", "zoom", "pan_x", "pan_y", "reset"] {
+      XCTAssertTrue(viewportBody.contains("\"\(parameter)\""))
+    }
   }
 
   func testNavigateViaShortcutPostsSidebarNotification() throws {

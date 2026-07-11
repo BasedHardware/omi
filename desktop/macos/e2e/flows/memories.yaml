@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
 preconditions:
   - automation_bridge_ready
