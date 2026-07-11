@@ -1,0 +1,102 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/nllb-translation
+  pullPolicy: IfNotPresent
+  tag: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+
+env:
+  - name: NLLB_MODEL_DIR
+    value: "/models/nllb-200-distilled-600M-ct2-int8"
+  - name: CT2_DEVICE
+    value: "cuda"
+  - name: CT2_COMPUTE_TYPE
+    value: "int8_float16"
+  - name: CT2_INTER_THREADS
+    value: "1"
+  - name: CT2_INTRA_THREADS
+    value: "4"
+  - name: NLLB_MAX_BATCH_SIZE
+    value: "64"
+
+resources:
+  requests:
+    cpu: 1
+    memory: 4Gi
+    nvidia.com/gpu: 1
+  limits:
+    cpu: 2
+    memory: 8Gi
+    nvidia.com/gpu: 1
+
+livenessProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 120
+  periodSeconds: 10
+
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics
+  serviceMonitor:
+    enabled: true
+    interval: "15s"
+    labels:
+      release: dev-kube-prometheus-stack
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - nllb-translation
+            - key: env
+              operator: In
+              values:
+                - dev
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
