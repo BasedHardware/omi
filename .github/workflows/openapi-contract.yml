@@ -53,6 +53,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -64,6 +66,14 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Fetch released app-client contract baseline
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
+
+      - name: Reject released app-client breaking changes
+        if: github.event_name == 'pull_request'
+        run: python backend/scripts/check_app_client_openapi_compatibility.py --base-ref FETCH_HEAD
 
       - name: Check committed OpenAPI contract
         working-directory: backend

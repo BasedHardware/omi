@@ -1,8 +1,9 @@
 import AppKit
-import SwiftUI
 import Combine
-import UniformTypeIdentifiers
+import OmiSupport
 import OmiTheme
+import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Task Category (by due date)
 
@@ -843,7 +844,7 @@ class TasksViewModel: ObservableObject {
         // Fallback: legacy UserDefaults categoryOrder (transitional for users who haven't synced yet)
         if let order = categoryOrder[category], !order.isEmpty {
             var orderedTasks: [TaskActionItem] = []
-            var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+            var taskMap = Dictionary(lastWriteWins: tasks.map { ($0.id, $0) })
 
             for id in order {
                 if let task = taskMap[id] {

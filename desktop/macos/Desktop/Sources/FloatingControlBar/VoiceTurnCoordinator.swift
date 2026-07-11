@@ -127,6 +127,8 @@ final class VoiceTurnCoordinator {
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
+  private var pendingEvents: [VoiceTurnEvent] = []
+  private var isDrainingEvents = false
 
   private(set) var model: VoiceTurnModel
 
@@ -170,6 +172,30 @@ final class VoiceTurnCoordinator {
   }
 
   func send(_ event: VoiceTurnEvent) {
+    pendingEvents.append(event)
+    guard !isDrainingEvents else { return }
+
+    isDrainingEvents = true
+    defer {
+      pendingEvents.removeAll(keepingCapacity: true)
+      isDrainingEvents = false
+    }
+
+    var nextEventIndex = 0
+    while nextEventIndex < pendingEvents.count {
+      let nextEvent = pendingEvents[nextEventIndex]
+      nextEventIndex += 1
+      apply(nextEvent)
+    }
+  }
+
+  /// Applies one event atomically before any callback can advance the machine.
+  ///
+  /// Effect and snapshot handlers are allowed to synchronously call `send`.
+  /// Those nested events join `pendingEvents` and are drained FIFO after this
+  /// event has finished publishing, instead of recursively reducing against a
+  /// half-published transition.
+  private func apply(_ event: VoiceTurnEvent) {
     let before = model
     let reduction = reducer.reduce(model, event)
     model = reduction.model

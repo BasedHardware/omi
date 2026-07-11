@@ -2,6 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("macOS release CI", () => {
+  it("runs the complete agent runtime suite instead of a hand-picked test list", () => {
+    const toolSurfaceScript = readFileSync(
+      new URL("../../scripts/test-tool-surfaces.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(toolSurfaceScript).toContain('"$NODE22" node_modules/vitest/vitest.mjs run');
+    expect(toolSurfaceScript).not.toContain("tests/control-tools.test.ts");
+    expect(toolSurfaceScript).not.toContain("tests/runtime-adapter.test.ts");
+  });
+
   it("runs the shared desktop tool-surface guardrail before packaging", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");

@@ -18,7 +18,30 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
-7. **PR contracts pass before opening the PR** — draft the PR body to a file, then run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` to get the paste-ready invariant IDs). Pre-push runs the same cheap contracts; Hygiene will fail if you skip this.
+7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
+8. **PR contracts pass before opening the PR** — draft the PR body to a file, then run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` to get the paste-ready invariant IDs). Pre-push runs the same cheap contracts; Hygiene will fail if you skip this.
+
+## Bug Fixes: Close the Failure Class
+
+Before implementing a bug fix, inspect recent fixes in the same subsystem. The
+unit of work is the violated contract, not only the line where the symptom
+appeared.
+
+- Identify the authoritative owner, identity, state transition, or boundary
+  contract that failed. Avoid adding another observer, fallback boolean, status
+  string heuristic, or call-site exception when ownership is the real problem.
+- If two or more recent fixes share the cause, add a reusable guard surface in
+  the same PR: a typed state/policy model, behavioral contract test, fault
+  harness, compatibility check, or narrow static checker.
+- A regression test must execute production behavior through a controllable
+  seam. Reading production source and asserting that strings occur in a certain
+  order is a static tripwire, not behavioral coverage; label and test static
+  checkers as such.
+- Record the root cause, recurrence evidence, durable guard, real-path exercise,
+  and any deliberately deferred high-blast-radius follow-up in the PR body.
+- Do not broaden a safe bug-fix PR into an unreviewable migration. Land the
+  enforceable guard now and track schema, data-migration, or deploy-rollout work
+  explicitly when it requires its own rollback plan.
 
 ## Leave It Better Than You Found It
 
