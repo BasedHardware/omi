@@ -1,4 +1,5 @@
 import { generateAgentId } from "./sqlite-store.js";
+import { providerBoundaryForAdapter } from "./execution-policy.js";
 import type { AgentExecutionRole, AgentStore, ProviderBoundary } from "./types.js";
 
 export interface SurfaceRef {
@@ -84,6 +85,51 @@ function touchSurfaceConversation(store: AgentStore, input: ResolveSurfaceSessio
   );
 }
 
+/**
+ * The pre-kernel main-chat migration persisted every legacy session as ACP.
+ * A migrated session that has never created a run or adapter binding has no
+ * provider-owned execution state yet, so it may safely adopt the active main
+ * chat route before its first query. Once either exists, the stored provider
+ * boundary remains immutable and execution-policy.ts continues to enforce it.
+ */
+function repairEmptyLegacyMainChatProvider(
+  store: AgentStore,
+  input: ResolveSurfaceSessionInput,
+  resolved: ResolveSurfaceSessionResult,
+  now: number,
+): void {
+  const requestedAdapterId = input.defaultAdapterId?.trim();
+  if (input.surfaceRef.surfaceKind !== "main_chat" || !requestedAdapterId) return;
+
+  const session = store.getOptionalRow(
+    "SELECT default_adapter_id, provider_boundary FROM sessions WHERE session_id = ?",
+    [resolved.agentSessionId],
+  );
+  if (!session) return;
+
+  const requestedBoundary = input.providerBoundary ?? providerBoundaryForAdapter(requestedAdapterId);
+  if (
+    String(session.default_adapter_id) === requestedAdapterId
+    && String(session.provider_boundary) === requestedBoundary
+  ) {
+    return;
+  }
+
+  const hasRun = store.getOptionalRow("SELECT 1 FROM runs WHERE session_id = ? LIMIT 1", [resolved.agentSessionId]);
+  const hasBinding = store.getOptionalRow(
+    "SELECT 1 FROM adapter_bindings WHERE session_id = ? LIMIT 1",
+    [resolved.agentSessionId],
+  );
+  if (hasRun || hasBinding) return;
+
+  store.execute(
+    `UPDATE sessions
+     SET default_adapter_id = ?, provider_boundary = ?, updated_at_ms = ?
+     WHERE session_id = ?`,
+    [requestedAdapterId, requestedBoundary, now, resolved.agentSessionId],
+  );
+}
+
 function createSurfaceConversationMapping(
   store: AgentStore,
   input: ResolveSurfaceSessionInput,
@@ -139,12 +185,15 @@ export function resolveSurfaceSession(
     const mapped = readSurfaceConversation(store, input);
     if (mapped) {
       touchSurfaceConversation(store, input, now);
+      repairEmptyLegacyMainChatProvider(store, input, mapped, now);
       return mapped;
     }
 
     const existingSessionId = readSessionIdByExternalRef(store, input);
     if (existingSessionId) {
-      return createSurfaceConversationMapping(store, input, existingSessionId, now);
+      const resolved = createSurfaceConversationMapping(store, input, existingSessionId, now);
+      repairEmptyLegacyMainChatProvider(store, input, resolved, now);
+      return resolved;
     }
 
     try {
