@@ -98,5 +98,15 @@ affinity:
 strategy:
   type: RollingUpdate
   rollingUpdate:
-    maxUnavailable: 0
-    maxSurge: 1
+    maxUnavailable: 1
+    maxSurge: 0
+
+volumeMounts:
+  - name: model-data
+    mountPath: /models
+    readOnly: true
+
+volumes:
+  - name: model-data
+    persistentVolumeClaim:
+      claimName: nllb-model-pvc
