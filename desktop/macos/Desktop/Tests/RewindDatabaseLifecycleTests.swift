@@ -26,4 +26,37 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: runningFlag.path))
     RewindDatabase.currentUserId = nil
   }
+
+  func testPoolGenerationAdvancesAcrossReopen() async throws {
+    let testUserId = "rewind-db-pool-generation-\(UUID().uuidString)"
+    let userDir = FileManager.default
+      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+      .appendingPathComponent("Omi", isDirectory: true)
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(testUserId, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: userDir) }
+
+    await RewindDatabase.shared.close()
+    RewindDatabase.currentUserId = testUserId
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+
+    let first = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    XCTAssertNotNil(first.pool)
+
+    await RewindDatabase.shared.close()
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+
+    let reopened = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    XCTAssertNotNil(reopened.pool)
+    XCTAssertGreaterThan(
+      reopened.generation,
+      first.generation,
+      "storage actors use this generation to drop stale cached pools after recovery or reopen"
+    )
+
+    await RewindDatabase.shared.close()
+    RewindDatabase.currentUserId = nil
+  }
 }

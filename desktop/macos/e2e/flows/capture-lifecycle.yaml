@@ -20,6 +20,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
   - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift
