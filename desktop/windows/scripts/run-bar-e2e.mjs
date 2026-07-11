@@ -1,7 +1,8 @@
 // Build the app, then run the bar E2E against the real built main process.
 // Hermetic: the spec launches out/main/index.js with a throwaway --user-data-dir
-// and asserts the bar's focus contract, reveal machinery, and strips; it also
-// captures the screenshot set (.orb-out/bar-shots) for the skeptical review.
+// and asserts the bar's focus contract, paint-ack reveal, and the hotkey-tap →
+// pill (C5) summon; it also captures the screenshot set (.orb-out/bar-shots) for
+// the skeptical review.
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
