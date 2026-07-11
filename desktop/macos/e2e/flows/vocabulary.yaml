@@ -11,15 +11,6 @@ preconditions:
 
 steps:
   - id: S1
-    name: Open Settings Transcription section
-    bridge.navigate:
-      target: settings
-      settingsSection: Transcription
-      activateApp: false
-    wait:
-      state.selectedSettingsSection: Transcription
-
-  - id: S2
     name: Set hermetic vocabulary terms
     bridge.action:
       name: vocabulary_set_terms
@@ -28,6 +19,15 @@ steps:
     expect:
       result.detail.saved: "true"
       result.detail.term_count: "2"
+
+  - id: S2
+    name: Open Settings Transcription section after the backend mutation settles
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
 
   - id: S3
     name: Vocabulary snapshot
