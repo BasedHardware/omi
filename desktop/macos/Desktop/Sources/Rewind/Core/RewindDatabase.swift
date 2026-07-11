@@ -567,6 +567,30 @@ actor RewindDatabase {
             }
         }
 
+        // Checkpoint the SOURCE WAL into the source omi.db BEFORE deleting it, so
+        // committed-but-uncheckpointed transactions fold into omi.db and migrate
+        // with it. An unclean prior shutdown leaves a non-empty WAL (a clean close
+        // checkpoints and removes it); deleting that WAL outright — as the loop
+        // below does — would roll the DB back to its last checkpoint and silently
+        // drop up to wal_autocheckpoint (1000 pages, ~4MB) of recent writes. We
+        // still must not MOVE the path-bound WAL/SHM, only fold-then-delete.
+        let sourceDB = sourceDir.appendingPathComponent("omi.db")
+        let sourceWAL = sourceDir.appendingPathComponent("omi.db-wal")
+        if fileManager.fileExists(atPath: sourceDB.path),
+            fileManager.fileExists(atPath: sourceWAL.path)
+        {
+            do {
+                let pool = try DatabasePool(path: sourceDB.path, configuration: Configuration())
+                try pool.write { db in
+                    try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                }
+                try pool.close()
+                log("RewindDatabase: Checkpointed WAL at source before migration")
+            } catch {
+                log("RewindDatabase: Source WAL checkpoint failed: \(error.localizedDescription)")
+            }
+        }
+
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
         // also cause SQLITE_IOERR_CORRUPTFS when SQLite opens the migrated DB.
