@@ -55,6 +55,22 @@ describe('ChatBridgeHost', () => {
     expect(sendSpy).toHaveBeenCalledWith('what is next', { fromVoice: true })
   })
 
+  it('defers a bar send while the engine is busy, then delivers it when idle (no cross-surface drop)', async () => {
+    // Engine already streaming a Home-initiated reply.
+    chat = { ...chat, sending: true }
+    const { rerender } = render(<ChatBridgeHost />)
+    barSendCb?.({ text: 'spoken while busy', fromVoice: true })
+    await settle()
+    // Busy → the bar/PTT message is QUEUED, not dropped by useChat's re-entrancy
+    // latch, and not delivered yet.
+    expect(sendSpy).not.toHaveBeenCalled()
+    // Engine goes idle → the queued send is delivered (against the latest send).
+    chat = { ...chat, sending: false }
+    rerender(<ChatBridgeHost />)
+    await settle()
+    expect(sendSpy).toHaveBeenCalledWith('spoken while busy', { fromVoice: true })
+  })
+
   it('publishes the projected state to the bar on mount (idle)', () => {
     render(<ChatBridgeHost />)
     expect(published[0]).toEqual({ messages: [], sending: false, status: 'idle' })

@@ -35,14 +35,40 @@ export function ChatBridgeHost(): null {
   // eslint-disable-next-line react-hooks/refs -- latest-ref: the once-registered bar listener must call the newest send
   sendRef.current = chat.send
   const sendChainRef = useRef<Promise<void>>(Promise.resolve())
+  // Latest-ref mirror of the engine's `sending` flag so the stable bar-send
+  // listener can tell when the shared engine is busy.
+  const sendingStateRef = useRef(sending)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref: the send chain reads the freshest sending flag
+  sendingStateRef.current = sending
+
+  // Defer a bar send until the shared engine is idle. useChat.send() no-ops a
+  // re-entrant call via a PRIVATE latch the bridge can't observe, so a bar/PTT
+  // message that lands while a Home-initiated send is still streaming would be
+  // dropped silently — the C3 message-loss class, across surfaces. Waiting for
+  // `sending` to clear ENQUEUES it instead; sendRef always points at the newest
+  // send, so the deferred call runs against fresh history. Capped so a wedged
+  // stream can't block the bar's send queue forever.
+  const waitUntilEngineIdle = useCallback((): Promise<void> => {
+    if (!sendingStateRef.current) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const startedAt = Date.now()
+      const iv = setInterval(() => {
+        if (!sendingStateRef.current || Date.now() - startedAt > 15000) {
+          clearInterval(iv)
+          resolve()
+        }
+      }, 50)
+    })
+  }, [])
 
   useEffect(() => {
     return window.omi?.onBarChatSend?.(({ text, fromVoice }) => {
       sendChainRef.current = sendChainRef.current
+        .then(() => waitUntilEngineIdle())
         .then(() => sendRef.current(text, { fromVoice }))
         .catch(() => {})
     })
-  }, [])
+  }, [waitUntilEngineIdle])
 
   // The bar pulls state on mount / each reveal — answer with the current snapshot.
   useEffect(() => {
