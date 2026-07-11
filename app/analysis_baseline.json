@@ -9,7 +9,6 @@
   "dead_null_aware_expression": 18,
   "depend_on_referenced_packages": 4,
   "deprecated_member_use": 34,
-  "duplicate_import": 1,
   "experimental_member_use": 13,
   "invalid_null_aware_operator": 5,
   "invalid_use_of_visible_for_testing_member": 2,
@@ -38,7 +37,6 @@
   "unused_element": 8,
   "unused_element_parameter": 5,
   "unused_field": 6,
-  "unused_import": 40,
   "unused_local_variable": 12,
   "use_super_parameters": 6
 }

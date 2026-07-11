@@ -22,7 +22,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
