@@ -1395,9 +1395,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         FloatingControlBarGeometry.centerAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
-    /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
+    /// Top-center: keeps top edge fixed. A notch island is fixed to its display's
+    /// hardware camera housing, so it re-centers on the display rather than
+    /// preserving a potentially stale panel midpoint.
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        return FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
+        FloatingControlBarGeometry.topAnchoredFrame(
+            currentFrame: frame,
+            targetSize: newSize,
+            screenFrame: screenForPlacement?.frame,
+            pinsToScreenCenter: notchModeEnabled
+        ).origin
     }
 
     private func resizeAnchored(
