@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 import database.action_items as action_items_db
 from database._client import db
@@ -221,9 +222,11 @@ def list_candidates(
     for snapshot in query.stream():
         try:
             records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
-        except Exception:
-            # One malformed/legacy candidate doc must not 500 the whole list.
-            logger.warning('Skipping malformed candidate record %s', getattr(snapshot, 'id', None))
+        except ValidationError as e:
+            # One malformed/legacy candidate doc must not 500 the whole list. Catch only the pydantic
+            # validation failure (from_storage is model_validate) so unexpected runtime errors still
+            # surface; log the exception detail so the offending legacy shape is diagnosable.
+            logger.warning('Skipping malformed candidate record %s: %s', getattr(snapshot, 'id', None), e)
     return records
 
 

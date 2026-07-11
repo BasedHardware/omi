@@ -1,12 +1,16 @@
 """Regression: list_candidates skips a malformed candidate instead of 500ing the whole list.
 
-CandidateRecord.from_storage is model_validate with extra='forbid', so a single legacy or
-malformed candidate doc raised ValidationError and crashed the entire GET /v1/candidates list.
-It is now skipped (and logged) so the rest of the user's candidates still return. No live services.
+CandidateRecord.from_storage is model_validate with extra='forbid', so a single legacy or malformed
+candidate doc raised ValidationError and crashed the entire GET /v1/candidates list. It is now skipped
+(and logged) so the rest of the user's candidates still return. The catch is narrowed to ValidationError
+so an unexpected runtime error still surfaces instead of being hidden as a skip. No live services.
 """
 
 import os
 from unittest.mock import MagicMock, patch
+
+import pytest
+from pydantic import BaseModel, ValidationError
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -14,6 +18,19 @@ os.environ.setdefault(
 )
 
 import database.candidates as candidates_db  # noqa: E402
+
+
+class _Probe(BaseModel):
+    x: int
+
+
+def _fake_candidates_db(stream):
+    fake_db = MagicMock()
+    q = fake_db.collection.return_value.document.return_value.collection.return_value
+    for method in ("where", "order_by", "offset", "limit"):
+        getattr(q, method).return_value = q
+    q.stream.return_value = stream
+    return fake_db
 
 
 def test_list_candidates_skips_malformed(monkeypatch):
@@ -24,21 +41,32 @@ def test_list_candidates_skips_malformed(monkeypatch):
     bad.id = "bad"
     bad.to_dict.return_value = {"bad": True}
 
-    fake_db = MagicMock()
-    q = fake_db.collection.return_value.document.return_value.collection.return_value
-    for method in ("where", "order_by", "offset", "limit"):
-        getattr(q, method).return_value = q
-    q.stream.return_value = [good, bad]
-
     def fake_from_storage(data):
         if data.get("bad"):
-            raise ValueError("malformed candidate")
+            _Probe(x=data)  # a dict is not an int -> raises a genuine pydantic ValidationError
         return data  # stand-in for a parsed CandidateRecord
 
     monkeypatch.setattr(candidates_db, "_snapshot_dict", lambda snap: snap.to_dict())
     monkeypatch.setattr(candidates_db.CandidateRecord, "from_storage", staticmethod(fake_from_storage))
 
-    with patch.object(candidates_db, "db", fake_db):
+    with patch.object(candidates_db, "db", _fake_candidates_db([good, bad])):
         result = candidates_db.list_candidates("u1")
 
     assert result == [{"ok": True}]  # malformed candidate skipped, good one kept
+
+
+def test_list_candidates_does_not_swallow_unexpected_error(monkeypatch):
+    # An unexpected (non-validation) error must propagate, not be hidden as a skipped candidate.
+    good = MagicMock()
+    good.id = "x"
+    good.to_dict.return_value = {"ok": True}
+
+    def boom(_data):
+        raise RuntimeError("unexpected parsing failure")
+
+    monkeypatch.setattr(candidates_db, "_snapshot_dict", lambda snap: snap.to_dict())
+    monkeypatch.setattr(candidates_db.CandidateRecord, "from_storage", staticmethod(boom))
+
+    with patch.object(candidates_db, "db", _fake_candidates_db([good])):
+        with pytest.raises(RuntimeError):
+            candidates_db.list_candidates("u1")
