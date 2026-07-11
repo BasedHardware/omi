@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+# Runtime account metadata written by the lifespan on connect.
+# Contains phone + name — personal PII, must NEVER be committed.
+account.json
+chats_data.json
