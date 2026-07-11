@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "policy_version": "ranking.v1",
+  "minimum_capture_confidence": 0.8,
+  "cases": [
+    {
+      "id": "stale_draft_beats_weak_goal_match",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "stale_investor_draft",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "ev-stale-draft", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true, "focused_goal_linked": true}
+        },
+        {
+          "subject_id": "weak_goal_match",
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 0.4, "has_concrete_next_action": false, "focused_goal_linked": true}
+        },
+        {
+          "subject_id": "blocked_agent_run",
+          "evidence_refs": [{"kind": "external", "id": "ev-blocked-run", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true, "someone_blocked": true}
+        }
+      ],
+      "recorded_judgment": ["stale_investor_draft", "blocked_agent_run"],
+      "must_not_select": ["weak_goal_match"]
+    },
+    {
+      "id": "empty_is_valid",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "low_confidence_non_actionable",
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 0.2, "has_concrete_next_action": false}
+        }
+      ],
+      "recorded_judgment": [],
+      "must_not_select": ["low_confidence_non_actionable"]
+    },
+    {
+      "id": "missing_evidence_excluded",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "grounded_with_evidence",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "ev-grounded", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "no_evidence_but_otherwise_eligible",
+          "recent_material_activity": true,
+          "evidence_refs": [],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        }
+      ],
+      "recorded_judgment": ["grounded_with_evidence"],
+      "must_not_select": ["no_evidence_but_otherwise_eligible"]
+    }
+  ]
+}

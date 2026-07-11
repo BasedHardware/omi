@@ -21,7 +21,7 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 ## Release lifecycle
 
-The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`.
+The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`. It then automatically verifies the published ZIP/DMG digests against the signed-smoke result, runs static release checks, hermetic T2, and the fault-injection suite, and promotes only the newest passing candidate to beta.
 
 | State | How to identify it | Customer visibility |
 | --- | --- | --- |
@@ -30,13 +30,15 @@ The daily/manual candidate workflow batches changes on `main` and tags one candi
 | Stable candidate | Qualified beta plus complete `stableCandidate*` nomination metadata | Still beta only |
 | Stable | `channel: stable`, written only by `desktop_promote_prod.yml` after `confirm=promote-stable` | Stable |
 
-Run:
+Manual recovery or evidence-only qualification remains available:
 
 ```bash
 desktop/macos/scripts/qualify-desktop-beta.sh vX.Y.Z+BUILD-macos
 ```
 
-The script rebuilds the exact tag, runs the hermetic T2 desktop core harness, uploads evidence, and writes canonical `qualifiedBeta*` metadata before dispatching beta promotion. Promotion validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
+The automatic path calls the same script with `--automatic`, adding signed-artifact digest validation, static checks, and the hermetic fault suite to T2. The combined evidence asset records every gate. Before writing qualification metadata it rechecks that no newer tag exists. Promotion repeats the newest-tag check for automatic requests, validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
+
+Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
 
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
@@ -65,7 +67,7 @@ Merging this control-plane change does not make a beta live. For the first rollo
 1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
 2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
 3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
-4. Run `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` on macOS. A successful T2 run dispatches beta promotion.
+4. Let Codemagic run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
 5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Nominate a stable candidate only after reviewing soak, telemetry, and the stable release-note rollup; leave stable unchanged until the separately planned stable rollout.
 
 After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.

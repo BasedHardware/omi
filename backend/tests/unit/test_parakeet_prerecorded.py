@@ -110,6 +110,16 @@ class TestFactoryRouting:
 
 class TestTranscribeBytes:
 
+    def test_missing_endpoint_raises_controlled_configuration_error(self, monkeypatch):
+        wav = _make_wav()
+        monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
+
+        with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
+            pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+        assert exc_info.value.provider == pr.PrerecordedSTTService.PARAKEET
+        assert exc_info.value.missing_env == 'HOSTED_PARAKEET_API_URL'
+
     def test_basic_transcription(self):
         wav = _make_wav()
         mock_resp = _mock_parakeet_response("Hello world", [{"text": "Hello world", "start": 0.0, "end": 1.0}])
@@ -266,12 +276,6 @@ class TestTranscribeBytes:
             mock_client_cls.return_value = mock_client
 
             with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
-                pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
-
-    def test_missing_api_url(self):
-        wav = _make_wav()
-        with patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': ''}):
-            with pytest.raises(ValueError, match='HOSTED_PARAKEET_API_URL'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
 
 

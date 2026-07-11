@@ -327,7 +327,7 @@ final class ConversationRepository {
       guard generation == requestGeneration else { return }
       isLoading = false
       if conversations.isEmpty {
-        self.error = error.localizedDescription
+        self.error = UserFacingErrorPresentation.message(for: error, while: .conversations)
       }
       emit(conversations.isEmpty ? .server : .cache)
     }

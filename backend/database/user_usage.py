@@ -133,6 +133,48 @@ def update_hourly_usage(uid: str, date: datetime, updates: Dict[str, Any], platf
     hourly_usage_ref.set(update_doc, merge=True)
 
 
+@firestore.transactional
+def _update_hourly_usage_once_transaction(
+    transaction: Any,
+    marker_ref: Any,
+    usage_ref: Any,
+    update_doc: Dict[str, Any],
+) -> bool:
+    marker_snapshot = marker_ref.get(transaction=transaction)
+    marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
+    if marker_data.get('usage_committed_at') is not None:
+        return False
+    transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
+    transaction.set(usage_ref, update_doc, merge=True)
+    return True
+
+
+def update_hourly_usage_once(uid: str, date: datetime, updates: Dict[str, Any], idempotency_key: str) -> bool:
+    """Atomically increment hourly usage once for a stable sync content key."""
+    user_ref = db.collection('users').document(uid)
+    doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
+    usage_ref = user_ref.collection('hourly_usage').document(doc_id)
+    marker_ref = user_ref.collection('sync_content_ledger').document(idempotency_key)
+    update_doc: Dict[str, Any] = {
+        'last_updated': datetime.now(timezone.utc),
+        'year': date.year,
+        'month': date.month,
+        'day': date.day,
+        'hour': date.hour,
+        'id': doc_id,
+    }
+    for key, value in updates.items():
+        if (
+            key
+            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
+            and value > 0
+        ):
+            update_doc[key] = firestore.Increment(value)
+    if len(update_doc) == 6:
+        return False
+    return _update_hourly_usage_once_transaction(db.transaction(), marker_ref, usage_ref, update_doc)
+
+
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
     """Batch updates or creates usage stats for multiple hours."""
     batch_size = 400

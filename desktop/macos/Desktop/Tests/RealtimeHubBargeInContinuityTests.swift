@@ -60,6 +60,48 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       PendingBargeInReplacementTurn.maxBufferedAudioBytes)
   }
 
+  func testNoSessionReconnectBuffersAudioInOrderUntilCommit() throws {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("reconnect")
+    var pending = PendingRealtimeSessionReconnectTurn(
+      turnID: turnID,
+      responseID: responseID,
+      interrupting: false)
+    let firstChunk = Data([1, 2])
+    let secondChunk = Data([3, 4])
+
+    XCTAssertTrue(pending.appendAudio(firstChunk))
+    XCTAssertTrue(pending.appendAudio(secondChunk))
+    pending.pendingCommit = true
+
+    XCTAssertEqual(pending.turnID, turnID)
+    XCTAssertEqual(pending.responseID, responseID)
+    XCTAssertTrue(pending.pendingCommit)
+    XCTAssertEqual(pending.audioBuffer, [firstChunk, secondChunk])
+
+    let source = try realtimeHubControllerSource()
+    XCTAssertTrue(source.contains("private var pendingSessionReconnect: PendingRealtimeSessionReconnectTurn?"))
+    XCTAssertTrue(source.contains("finishSessionReconnectAfterReady()"))
+    XCTAssertTrue(source.contains("for pcm16k in pending.audioBuffer"))
+    XCTAssertTrue(source.contains("return .deferredForReconnect"))
+  }
+
+  func testRapidBargeInCannotCoalesceReconnectAudioAcrossTurns() {
+    var firstTurn = PendingRealtimeSessionReconnectTurn(
+      turnID: VoiceTurnID(),
+      responseID: VoiceResponseID("first"),
+      interrupting: false)
+    var replacementTurn = PendingBargeInReplacementTurn(
+      turnID: VoiceTurnID(), responseID: VoiceResponseID("replacement"))
+
+    XCTAssertTrue(firstTurn.appendAudio(Data([1, 2])))
+    XCTAssertTrue(replacementTurn.appendAudio(Data([3, 4])))
+
+    XCTAssertNotEqual(firstTurn.turnID, replacementTurn.turnID)
+    XCTAssertEqual(firstTurn.audioBuffer, [Data([1, 2])])
+    XCTAssertEqual(replacementTurn.audioBuffer, [Data([3, 4])])
+  }
+
   func testAudioIngressClosesAtCommitAndCannotRebindToNextTurn() {
     let turnA = VoiceTurnID()
     let turnB = VoiceTurnID()
