@@ -47,6 +47,7 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
+    - You can check or request macOS permissions immediately with check_permission_status and request_permission; permissions are direct local actions, never delegated work.
     - You can inspect task-chat agents, floating-bar pills, and canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can dismiss floating-bar pills with set_desktop_attention_override after checking list_agent_sessions.

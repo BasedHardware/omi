@@ -56,7 +56,7 @@ import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
@@ -85,6 +85,7 @@ import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-stor
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 import { failureFromError } from "./runtime/failures.js";
 import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
+import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -288,22 +289,42 @@ function startOmiToolsRelay(): Promise<string> {
               }
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
-                  const controlToolContext = agentControlToolContext
-                    ? {
+                  const controlOwnerId = activeControlToolOwnerId({
+                    requestKey: controlRequestKey({ requestId, clientId }),
+                    ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                  });
+                  let result: string;
+                  try {
+                    if (!agentControlToolContext) {
+                      throw new Error("Agent runtime kernel is not ready");
+                    }
+                    const activeSession = requireControlSessionPolicy(
+                      resolvedCorrelation.sessionId,
+                      controlOwnerId,
+                    );
+                    result = await handleAgentControlToolCall(
+                      {
                         ...agentControlToolContext,
-                        getOwnerId: () =>
-                          activeControlToolOwnerId({
-                            requestKey: controlRequestKey({ requestId, clientId }),
-                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                          }),
-                      }
-                    : undefined;
-                  const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
-                    : JSON.stringify({
-                        ok: false,
-                        error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-                      });
+                        callerSessionId: resolvedCorrelation.sessionId,
+                        executionRole: activeSession.executionRole,
+                        providerBoundary: activeSession.providerBoundary,
+                        defaultAdapterId: activeSession.defaultAdapterId,
+                        getOwnerId: () => controlOwnerId,
+                      },
+                      msg.name,
+                      msg.input ?? {},
+                    );
+                  } catch (error) {
+                    result = JSON.stringify({
+                      ok: false,
+                      error: {
+                        code: error instanceof Error && error.message === "Agent runtime kernel is not ready"
+                          ? "runtime_not_ready"
+                          : "control_tool_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                      },
+                    });
+                  }
                   try {
                     client.write(
                       JSON.stringify({
@@ -638,6 +659,10 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
+    omiToolsEnv.push({
+      name: "OMI_EXECUTION_ROLE",
+      value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
+    });
     servers.push({
       name: "omi-tools",
       command: process.execPath,
@@ -701,6 +726,13 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   const defaultFromInput =
     typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
+}
+
+function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
+  if (!sessionId || !ownerId || !agentControlToolContext) {
+    throw new Error("missing active control session policy");
+  }
+  return agentControlToolContext.kernel.executionPolicyForOwnedSession(sessionId, ownerId);
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
@@ -833,10 +865,29 @@ async function main(): Promise<void> {
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
-  registry.register("acp", () => acpAdapter, 1);
+  // ACP reads the user's local Claude Code credential.  Do not even expose it
+  // to managed Omi runs; switching to User Claude restarts the bridge with
+  // `defaultAdapterId === "acp"` and registers it there.
+  if (defaultAdapterId === "acp") {
+    registry.register("acp", () => acpAdapter, 1);
+  }
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
+  const recoverRunInput = (adapterId: string) => {
+    if (adapterId !== "acp") return {};
+    let recoveries = 0;
+    return {
+      maxAttempts: 3,
+      recoverAfterError: async (error: unknown) => {
+        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
+        recoveries += 1;
+        logErr("ACP auth required during run; starting OAuth flow before retry");
+        await startAuthFlow();
+        return true;
+      },
+    };
+  };
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -932,11 +983,13 @@ async function main(): Promise<void> {
   };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
+  } else if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+    logErr("Pi-mono adapter unavailable; starting the non-production control-only runtime");
   }
   if (!hermesAvailable && defaultAdapterId === "hermes") {
     const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
@@ -952,8 +1005,12 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    defaultAdapterId,
+    providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
+    executionRole: "coordinator",
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
+    recoverRunInput,
   };
   const transport = new JsonlTransport({
     kernel,
@@ -961,8 +1018,9 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error) => error instanceof AcpError && error.code === -32000,
-    onRecoverableError: async () => {
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    onRecoverableError: async (_error, adapterId) => {
+      if (adapterId !== "acp") return;
       logErr("ACP auth required during query; starting OAuth flow before retry");
       await startAuthFlow();
     },
@@ -1312,9 +1370,72 @@ async function main(): Promise<void> {
           break;
         }
 
+        let directControlRunCorrelation: { requestId?: string; clientId?: string } = {};
+        let directControlRunOwnerKey: string | undefined;
+        let preserveDirectControlRunOwner = false;
+        let directControlRunOwnerInserted = false;
+        try {
+          // A direct Swift spawn does not have a model-owned query context to
+          // inherit. Mint and retain a run-scoped context so the leaf worker's
+          // Swift-backed tools can relay through the shared daemon.
+          const directRunClientId =
+            typeof controlInput.clientId === "string" && controlInput.clientId.trim()
+              ? controlInput.clientId.trim()
+              : control.clientId;
+          const correlated = withControlRunCorrelation(control.name, controlInput, directRunClientId);
+          controlInput = correlated.input;
+          directControlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
+          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
+          if (adapterId && correlated.requestId && correlated.clientId) {
+            directControlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
+            if (directControlRunOwnerKey) {
+              directControlRunOwnerInserted = registerActiveControlOwner(
+                directControlRunOwnerKey,
+                controlContext.activeOwnerId,
+              );
+            }
+            transport.registerExternalRequestContext({
+              requestId: correlated.requestId,
+              clientId: correlated.clientId,
+              ownerId: controlContext.activeOwnerId,
+              adapterId,
+            });
+          }
+        } catch (error) {
+          if (directControlRunOwnerKey && directControlRunOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
+          }
+          if (
+            directControlRunCorrelation.requestId &&
+            directControlRunCorrelation.clientId &&
+            directControlRunOwnerInserted
+          ) {
+            transport.releaseExternalRequestContext(
+              directControlRunCorrelation.requestId,
+              directControlRunCorrelation.clientId,
+            );
+          }
+          releaseDirectControlOwner();
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "control_context_conflict",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+
         const result = await (async () => {
           try {
-            return agentControlToolContext
+            const toolResult = agentControlToolContext
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
@@ -1328,7 +1449,24 @@ async function main(): Promise<void> {
                   ok: false,
                   error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
                 });
+            preserveDirectControlRunOwner =
+              isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
+            return toolResult;
           } finally {
+            if (directControlRunOwnerKey && !preserveDirectControlRunOwner && directControlRunOwnerInserted) {
+              activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
+            }
+            if (
+              !preserveDirectControlRunOwner &&
+              directControlRunCorrelation.requestId &&
+              directControlRunCorrelation.clientId &&
+              directControlRunOwnerInserted
+            ) {
+              transport.releaseExternalRequestContext(
+                directControlRunCorrelation.requestId,
+                directControlRunCorrelation.clientId,
+              );
+            }
             releaseDirectControlOwner();
           }
         })();
@@ -1373,6 +1511,9 @@ async function main(): Promise<void> {
         const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
         const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
         const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        if (surfaceKind === "workstream" && externalRefKind === "workstream" && externalRefId.trim()) {
+          kernel.resolveWorkstreamSession({ ownerId, workstreamId: externalRefId });
+        }
         const turns = Array.isArray(msg.turns) ? msg.turns : [];
         const imported = kernel.importConversationTurns({
           ownerId,

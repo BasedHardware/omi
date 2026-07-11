@@ -104,6 +104,19 @@ Cloud Run env and secret bindings are declared in `backend/deploy/runtime_env.ya
 
 Prod Cloud Run intentionally omits `SERVICE_ACCOUNT_JSON` and `POSTHOG_PROJECT_API_KEY` bindings (#9164): those secrets are absent in prod Secret Manager and the runtime falls back to ADC / disables PostHog telemetry.
 
+### Dev batch STT topology
+
+The dev `backend`, `backend-sync`, and `backend-integration` services own their routed pre-recorded STT selection in `backend/deploy/runtime_env.yaml`. When Parakeet is selected, they must use the isolated dev endpoint `http://parakeet.omiapi.com`—never the production `parakeet.omi.me` endpoint. The runtime validator rejects a Parakeet selection without `HOSTED_PARAKEET_API_URL` for rendered and live Cloud Run revisions.
+
+After a dev revision is serving, run the opt-in smoke check with a valid dev authorization header:
+
+```bash
+python3 backend/scripts/smoke_dev_cloud_run_parakeet_batch_stt.py \
+  --execute --authorization "Bearer <dev-token>"
+```
+
+It is dry-run by default, rejects production hosts, synthesizes a deterministic spoken fixture on macOS (or accepts `--pcm-file` elsewhere), and requires the batch endpoint to report a Parakeet transcript.
+
 ## Related issue
 
 Deploy hardening tracked in [GitHub issue #9164](https://github.com/BasedHardware/omi/issues/9164).

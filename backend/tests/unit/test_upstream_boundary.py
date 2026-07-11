@@ -115,6 +115,7 @@ def _ensure_process_conversation_importable():
         "utils.apps",
         "utils.executors",
         "utils.subscription",
+        "utils.task_intelligence.workstream_association",
     ]
     for mod_name in stubs:
         if mod_name not in sys.modules:
@@ -149,6 +150,7 @@ def _ensure_process_conversation_importable():
         GOALS=MagicMock(),
         CONVERSATION_FOLDER=MagicMock(),
     )
+    sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
     sys.modules.pop("utils.conversations.process_conversation", None)
     return importlib.import_module("utils.conversations.process_conversation")

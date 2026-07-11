@@ -1,0 +1,39 @@
+name: What Matters Now Live Eval
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-eval:
+    name: Versioned ranking fixture eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+
+      - name: Run live evaluation
+        working-directory: backend
+        env:
+          CI: 'true'
+          GITHUB_EVENT_NAME: workflow_dispatch
+          OMI_TASK_RECOMMENDATION_LIVE_EVAL: '1'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: .venv/bin/python scripts/task_recommendation_live_eval.py --live

@@ -176,3 +176,24 @@ def test_beta_pointer_advances_before_legacy_visibility():
     bridge = workflow.index("      - name: Bridge beta for legacy desktop clients")
 
     assert manifest < pointer < github < bridge
+
+
+def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
+    workflow = PROMOTE_BETA_WORKFLOW.read_text()
+    automatic_gate = workflow.index("      - name: Validate automatic beta request")
+    candidate_download = workflow.index("      - name: Download and validate qualified candidate")
+
+    assert "automatic:" in workflow
+    assert "DESKTOP_AUTO_BETA_ENABLED" in workflow
+    assert "newest is $LATEST_TAG" in workflow
+    assert automatic_gate < candidate_download
+
+
+def test_stable_promotion_remains_manual_only():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml").read_text()
+
+    assert "on:\n  workflow_dispatch:" in workflow
+    assert "\n  schedule:" not in workflow
+    assert "\n  push:" not in workflow
+    assert "confirm:" in workflow
+    assert "promote-stable" in workflow

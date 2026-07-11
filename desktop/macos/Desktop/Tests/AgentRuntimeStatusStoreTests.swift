@@ -41,6 +41,31 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNil(projection?.completedAt)
   }
 
+  func testRestoresActiveWorkstreamRunFromKernelSnapshot() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.workstream(workstreamId: "workstream-1")
+    let updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+    store.restoreKernelProjection(
+      surface: surface,
+      sessionId: "sess-workstream",
+      runId: "run-workstream",
+      status: .running,
+      statusText: "Revising draft",
+      errorMessage: nil,
+      updatedAt: updatedAt,
+      completedAt: nil
+    )
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.sessionId, "sess-workstream")
+    XCTAssertEqual(projection?.runId, "run-workstream")
+    XCTAssertEqual(projection?.status, .running)
+    XCTAssertEqual(projection?.statusText, "Revising draft")
+    XCTAssertEqual(projection?.updatedAt, updatedAt)
+    XCTAssertNil(projection?.completedAt)
+  }
+
   func testErrorProjectionUsesStructuredFailure() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.floatingPill(pillId: UUID())

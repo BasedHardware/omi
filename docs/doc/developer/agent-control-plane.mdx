@@ -790,19 +790,72 @@ For every compatibility query, the facade resolves a session in this order:
 
 A `sessionKey` is never an adapter-native session ID. It is only a compatibility alias.
 
+Legacy main-chat mappings created before provider boundaries were persisted may
+initially carry the old ACP default. Before their first run or adapter binding,
+the resolver MAY repair that empty mapping to the active main-chat provider
+boundary. Once either execution record exists, the persisted boundary remains
+immutable and mismatched provider requests fail closed.
+
 ### 13.4 Stable surface references
 
-The three initial surfaces MUST supply:
+Canonical surfaces MUST supply:
 
 | Surface | `surface_kind` | External reference |
 |---|---|---|
 | Main chat | `main_chat` | `chat:<backend-chat-session-id>` or `chat:default` |
 | Task chat | `task_chat` | `task:<task_id>` |
 | Floating pill | `floating_pill` | `pill:<pill-uuid>` |
+| Workstream thread | `workstream` | `workstream:<workstream_id>` |
+
+Once a task has a workstream, task chat is a scoped view into the workstream
+conversation. Multiple tasks in the same workstream MUST NOT resolve separate
+sessions. `task:<task_id>` mappings may remain only as migration shims and are
+scheduled for removal with the smart-tasks compatibility burn-down.
 
 Onboarding, Chat Lab, and other surfaces MAY temporarily use legacy aliases until migrated.
 
-### 13.5 Wire protocol v2
+### 13.5 Workstream product continuity
+
+The local TypeScript kernel remains execution authority. Backend workstream
+state supplies bounded context: current-state summary, selected material events,
+current task, logical artifact heads, and provenance. A continuation checkpoint
+may reconstruct that product context on another runtime, but MUST NOT copy an
+adapter transcript or claim the source runtime's run/attempt status.
+
+Context provenance uses the backend `EvidenceRef` vocabulary (`kind`, `id`,
+optional `version`, `scope`, optional `device_id`, and optional
+`excerpt_hash`). Local-screen refs are device-local. Cross-runtime export fails
+closed unless device-local or sensitive evidence has a resolved
+`export_workstream_continuation` dispatch. The exported checkpoint replaces
+sensitive content with its redacted representation and strips source-runtime
+approval state. Redacted previews do not repeat private summaries, and
+sensitive snippets require a resolved matching context dispatch. `lastEventSequence` is the canonical
+workstream-journal sequence; it is never derived from local runtime events.
+
+Logical workstream artifacts are immutable versions. A head identifies the
+current version; each new version cites evidence and records the artifact it
+supersedes. Prior versions remain inspectable. Supplied run/attempt IDs must
+belong to the resolved workstream; an attempt-only artifact derives and stores
+its run ID so run inspection and events remain connected.
+
+Desktop task Candidates are delivery outbox rows until the backend returns a
+canonical Candidate ID and receipt. The stable local delivery key is the
+idempotency key. After receipt, the row becomes `forwarded` (or reflects a
+terminal backend resolution), leaves the local review queue, and only projects
+subsequent canonical resolution.
+
+The delivery proposal matches the strict backend Candidate union, including
+`supersede`; legacy `delete` maps to canonical `cancel`. Pre-contract local rows
+start blocked until account-generation reconciliation, and terminal historical
+rows never become deliverable. Creation and resolution receipts are stored
+separately so projection does not erase delivery evidence.
+
+Task-session migration moves turns and inspectable artifact history to the
+workstream conversation, stales legacy native bindings so reconstruction is
+truthful, and returns legacy session IDs plus compatibility mappings for the
+Ticket 14 removal pass. Re-running a completed mapping is a no-op.
+
+### 13.6 Wire protocol v2
 
 Inbound query:
 
@@ -912,8 +965,9 @@ Rules:
 - Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
 - `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
 - Swift app surfaces that manage existing agents outside an active query MUST use the dedicated `direct_control_tool`
-  JSONL envelope. It requires a signed-in `ownerId` guard and is limited to observe/manage tools; request-scoped
-  `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
+  JSONL envelope. It requires a signed-in `ownerId` guard. If it starts a long-lived run, it MUST mint and retain a
+  distinct `(clientId, requestId)` context through that run's terminal event so worker tool relays remain authorized;
+  request-scoped `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
 - Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
 - Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
 - Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
@@ -1045,6 +1099,10 @@ Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agen
 `inspect_agent_artifacts`, and `update_agent_artifact_lifecycle`) are cross-surface capabilities for desktop chat
 and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
 until realtime has an equally explicit creation UX, control envelope, and correlation policy.
+
+For PTT/realtime, `AgentControlService` resolves an opaque `agentRef` to only the canonical `runId` required by
+strict run-scoped tools. A completed `get_agent_run` result supplies its bounded final output as untrusted data for
+the coordinator to summarize; raw canonical identifiers remain hidden from user-facing speech.
 
 ### 16.3 Delegation semantics
 
