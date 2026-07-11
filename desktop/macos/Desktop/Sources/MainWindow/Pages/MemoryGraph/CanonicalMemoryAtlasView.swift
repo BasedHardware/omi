@@ -1008,9 +1008,10 @@ private struct CanonicalMemoryAtlasSurface: View {
             .scaledFont(size: 12)
           Text(atlasLevelLabel)
             .scaledFont(size: 11, weight: .semibold)
+            .lineLimit(1)
         }
         .foregroundColor(OmiColors.textSecondary)
-        .frame(width: 92, alignment: .leading)
+        .frame(width: 110, alignment: .leading)
       }
 
       HStack(spacing: 8) {
