@@ -129,10 +129,10 @@ The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.p
 # 1. Google only (default — no config needed)
 # TRANSLATION_SERVICE_MODELS is unset
 
-# 2. NLLB primary with Google fallback (recommended)
+# 2. NLLB primary with Google fallback
 TRANSLATION_SERVICE_MODELS=nllb,google
 
-# 3. NLLB only (no fallback)
+# 3. NLLB primary (Google fallback still fires on NLLB errors)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 

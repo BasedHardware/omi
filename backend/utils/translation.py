@@ -882,9 +882,7 @@ class TranslationService:
                 chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    batch_results = self._translate_batch(
-                        chunk, dest_language, "translate_text_by_sentence", source_language=source_language
-                    )
+                    batch_results = self._translate_batch(chunk, dest_language, source_language=source_language)
 
                     for j, (trans_text, det_lang) in enumerate(batch_results):
                         idx = chunk_indices[j]
@@ -1026,9 +1024,7 @@ class TranslationService:
                 chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    batch_results = self._translate_batch(
-                        chunk, dest_language, "translate_units_batch", source_language=source_language
-                    )
+                    batch_results = self._translate_batch(chunk, dest_language, source_language=source_language)
 
                     for j, (trans_text, det_lang) in enumerate(batch_results):
                         sent_hash = chunk_hashes[j]
@@ -1147,9 +1143,7 @@ class TranslationService:
             return result
 
         try:
-            batch_results = self._translate_batch(
-                [text], dest_language, "translate_text", source_language=source_language
-            )
+            batch_results = self._translate_batch([text], dest_language, source_language=source_language)
             translated_text, detected_lang = batch_results[0]
 
             self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
