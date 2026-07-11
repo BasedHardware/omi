@@ -49,15 +49,18 @@ export function releasePttMic(): void {
 export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<PttCapture> {
   const captureId = `ptt-${Date.now()}-${nextId++}`
   let latestBins: number[] = []
+  let latestOrbLevel = 0
 
   // A live AnalyserNode's getByteFrequencyData, reimplemented off the latest
-  // streamed frame; zeros until the first frame arrives.
+  // streamed frame; zeros until the first frame arrives. getOrbLevel exposes the
+  // fast orb loudness the capture window ships alongside the bar bins.
   const analyser: WaveformSource = {
     getByteFrequencyData: (dest: Uint8Array): void => {
       const n = Math.min(dest.length, latestBins.length)
       for (let i = 0; i < n; i++) dest[i] = latestBins[i]
       for (let i = n; i < dest.length; i++) dest[i] = 0
-    }
+    },
+    getOrbLevel: (): number => latestOrbLevel
   }
 
   return await new Promise<PttCapture>((resolve, reject) => {
@@ -77,6 +80,7 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
           if (ev.captureId !== captureId) return
           markStarted()
           latestBins = ev.bins
+          if (ev.orbLevel !== undefined) latestOrbLevel = ev.orbLevel
           break
         case 'ptt-capped':
           if (ev.captureId !== captureId) return

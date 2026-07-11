@@ -86,6 +86,19 @@ describe('startPttCapture (IPC client)', () => {
     expect(Array.from(dest)).toEqual([10, 20, 30, 0]) // last frame, zero-padded
   })
 
+  it('getOrbLevel tracks the latest ptt-levels orbLevel (fast orb lane)', async () => {
+    const p = startPttCapture({})
+    const id = lastStartId()
+    emit({ type: 'ptt-chunk', captureId: id, pcm: i16buf([0]) })
+    const capture = await p
+    expect(capture.analyser.getOrbLevel?.()).toBe(0) // zero before any frame
+    emit({ type: 'ptt-levels', captureId: id, bins: [1, 2, 3], orbLevel: 0.42 })
+    expect(capture.analyser.getOrbLevel?.()).toBeCloseTo(0.42, 9)
+    // A frame without orbLevel keeps the previous value (optional field).
+    emit({ type: 'ptt-levels', captureId: id, bins: [4, 5, 6] })
+    expect(capture.analyser.getOrbLevel?.()).toBeCloseTo(0.42, 9)
+  })
+
   it('forwards ptt-capped to onCapped', async () => {
     const onCapped = vi.fn()
     const p = startPttCapture({ onCapped })

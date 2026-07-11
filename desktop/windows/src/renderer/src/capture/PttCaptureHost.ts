@@ -43,12 +43,27 @@ function stopLevels(job: PttJob): void {
   }
 }
 
+/** Fast-response loudness 0..1: RMS of the (low-smoothing) orb analyser's bins,
+ *  lifted the same ×2.2 the orb applied to the bar bins so downstream shaping is
+ *  unchanged — only fresher. */
+function orbLevelFrom(bins: Uint8Array): number {
+  let sum = 0
+  for (let i = 0; i < bins.length; i++) sum += bins[i] * bins[i]
+  return (Math.sqrt(sum / bins.length) / 255) * 2.2
+}
+
 function startLevels(captureId: string, job: PttJob): void {
   const analyser = job.capture!.analyser
+  const orbAnalyser = job.capture!.orbAnalyser
   const bins = new Uint8Array(analyser.frequencyBinCount) // 32 bins (fftSize 64)
+  const orbBins = new Uint8Array(orbAnalyser.frequencyBinCount)
   job.levelsTimer = setInterval(() => {
     analyser.getByteFrequencyData(bins)
-    emit({ type: 'ptt-levels', captureId, bins: Array.from(bins) }, job.ownerId)
+    orbAnalyser.getByteFrequencyData(orbBins)
+    emit(
+      { type: 'ptt-levels', captureId, bins: Array.from(bins), orbLevel: orbLevelFrom(orbBins) },
+      job.ownerId
+    )
   }, LEVELS_INTERVAL_MS)
 }
 
