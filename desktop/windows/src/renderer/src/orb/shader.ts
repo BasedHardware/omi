@@ -19,6 +19,7 @@ precision highp float;
 
 uniform vec2 u_resolution;   // canvas pixels
 uniform vec4 u_dots[8];      // x, y, radius, capsule half-length (disc units)
+uniform float u_dotMerge[8]; // per-dot merge 0..1 (drives that dot's smin k)
 uniform float u_disc;        // disc radius (fraction of half-extent)
 uniform float u_merge;       // 0 separate dots .. 1 blob
 uniform float u_morph;       // 0 disc .. 1 rounded rect
@@ -83,18 +84,32 @@ void main() {
   // Surface: disc ↔ rounded rect, one continuous SDF.
   float dSurf = mix(sdCircle(q, u_disc), sdRoundBox(q, u_rectHalf, u_rectCorner), u_morph);
 
-  // Dots/pills merged with smin. k grows with merge so pooling looks liquid.
-  float k = mix(0.045, u_sminK, u_merge) * u_disc;
+  // Dots/pills merged with smin. The blend distance is PER DOT: a dot that
+  // hasn't converged yet (u_dotMerge≈0) unions near-hard, so it stays a crisp
+  // separate dot with no smin haze reaching toward its neighbours; a converged
+  // dot (u_dotMerge≈1) blends with the full liquid distance. Deriving k from a
+  // single global u_merge instead applied the pooling blend to EVERY pair even
+  // when only some dots had arrived — the faint interior webbing/mist.
   float dDots = 1e5;
   for (int i = 0; i < 8; i++) {
     vec4 d = u_dots[i];
     float di = sdCapsule(q, d.xy * u_disc, d.w * u_disc, d.z * u_disc);
-    dDots = smin(dDots, di, k);
+    float ki = mix(0.02, u_sminK, u_dotMerge[i]) * u_disc;
+    dDots = smin(dDots, di, ki);
   }
   // Center pool blob: fills the middle of the converging ring (no punched
-  // hole mid-merge) and carries the held blob's slow breathing.
+  // hole mid-merge) and GLUES the dots into one body. Its blend distance is
+  // generous once the blob is forming — larger than the dot↔dot k — so no
+  // interior field dip / hole survives between the pool and the ring; dots stay
+  // hard to EACH OTHER (no webbing), the pool does the liquid gluing. The bridge
+  // strength RAMPS with merge (smoothstep): near-zero while the dots are still a
+  // ring, full by the time the blob is holding. A constant-large bridge snapped
+  // the pool onto the dots the instant it became visible — the blob's rendered
+  // area jumped in one frame as a dissolve swept merge past that point (C6). The
+  // ramp lets the pool glue in gradually to match its smooth radius growth.
   if (u_centerR > 0.0) {
-    dDots = smin(dDots, sdCircle(q, u_centerR * u_disc), k);
+    float kPool = u_sminK * 1.7 * smoothstep(0.12, 0.36, u_merge) * u_disc;
+    dDots = smin(dDots, sdCircle(q, u_centerR * u_disc), kPool);
   }
 
   // Low-frequency wobble on the blob contour, scaled by merge so the resting

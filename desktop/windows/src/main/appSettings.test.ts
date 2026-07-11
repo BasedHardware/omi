@@ -57,7 +57,8 @@ describe('appSettings', () => {
       closeToTrayNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
       hudContentProtection: true,
-      meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false }
+      meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
+      lastShownChangelogVersion: null
     })
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
     expect(sanitizeAppSettings({ recordHotkey: 42 } as never).recordHotkey).toBe('Ctrl+Space')

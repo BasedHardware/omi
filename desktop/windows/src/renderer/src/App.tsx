@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
 import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
+import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
@@ -23,9 +24,10 @@ import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
-import { runAnimBench } from './lib/animBench'
+import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
+import { ChatBridgeHost } from './components/chat/ChatBridgeHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
@@ -63,9 +65,9 @@ function AppShellInner(): React.JSX.Element {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.omi?.perfMark('renderer:app-ready'))
     })
-    // Start the animation-jank probe (no-op unless OMI_ANIM_BENCH). Runs as the
-    // entrance animations (sidebar slide, content fade) play.
-    runAnimBench()
+    // Start the animation-jank probe (dev-only; no-op unless OMI_ANIM_BENCH).
+    // Runs as the entrance animations (sidebar slide, content fade) play.
+    if (import.meta.env.DEV) runAnimBench()
   }, [])
 
   // The overlay is a separate window with its own conversations cache, so when it
@@ -74,11 +76,15 @@ function AppShellInner(): React.JSX.Element {
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
 
   return (
-    <div className="app-canvas flex h-full min-h-0">
-      {!hideSidebar && <Sidebar />}
-      <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
-        <MainViews />
-      </main>
+    <div className="app-canvas flex h-full min-h-0 flex-col">
+      {/* Native-caption drag strip (Window Controls Overlay). */}
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        {!hideSidebar && <Sidebar />}
+        <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
+          <MainViews />
+        </main>
+      </div>
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -91,8 +97,27 @@ function AppShellInner(): React.JSX.Element {
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
+      {/* Bridges the bar's chat viewport to this window's single chat engine
+          (INV-CHAT-1): drives chat.send on bar:sendChat, broadcasts projected
+          state back to the bar. Main window only (this shell never mounts in the
+          bar/capture windows). */}
+      <ChatBridgeHost />
     </div>
   )
+}
+
+// Marks the root when the window was created with the Win11 Mica material so
+// the canvas goes translucent. Main window only — the bar/toast/capture windows
+// own their own transparent backgrounds (they never get data-mica). The tint
+// itself lives entirely in CSS: globals.css `html[data-mica='true']` paints
+// body/#root with `rgba(15,15,15,0.82) !important`, which outranks the inline
+// `style="background: transparent"` that index.html (shared by every window)
+// hardcodes. So this effect only has to flip the attribute.
+function useMicaChrome(): void {
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    if (window.omi?.micaEnabled) document.documentElement.dataset.mica = 'true'
+  }, [])
 }
 
 function AppShell(): React.JSX.Element {
@@ -112,11 +137,21 @@ function AppShell(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   const { user, loading } = useAuth()
-  // Under the perf bench, treat the user as already onboarded so the authed
+  useMicaChrome()
+  // Under the dev perf bench, treat the user as already onboarded so the authed
   // shell mounts (a returning user always is). The onboarding flag lives in
   // origin-scoped localStorage, which the file:// bench profile can't inherit
   // from the dev session, so without this the bench would stall on the wizard.
-  const onboarded = useOnboardingComplete() || !!window.omi?.isBench
+  // DEV-gated so the bypass tree-shakes out of packaged renderer builds. The
+  // OMI_E2E_FAKE_AUTH shell E2E does the same on a fresh throwaway profile, but
+  // must survive the production build (it runs the real out/ bundle). Forcing
+  // onboarded here — rather than seeding the onboardingCompletedAt pref — also
+  // keeps the background-consent interstitial closed (it gates on that pref),
+  // so the sidebar under test is never obstructed.
+  const onboarded =
+    useOnboardingComplete() ||
+    (import.meta.env.DEV && !!window.omi?.isBench) ||
+    !!window.omi?.e2eFakeAuth
 
   // Tell main whether the summon shortcut may open the overlay. Enabled once
   // onboarding is complete; during onboarding the shortcut-setup step enables it
@@ -162,6 +197,7 @@ function App(): React.JSX.Element {
   if (loading) {
     return (
       <div className="app-canvas flex h-full items-center justify-center">
+        {!IS_SECONDARY_WINDOW && <TitleBar variant="overlay" />}
         <SandboxBadge />
         <Spinner label="Loading Omi…" />
       </div>
@@ -182,7 +218,19 @@ function App(): React.JSX.Element {
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />
-        <Route path="/login" element={user ? <Navigate to="/home" replace /> : <Login />} />
+        <Route
+          path="/login"
+          element={
+            user ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <>
+                <TitleBar variant="overlay" />
+                <Login />
+              </>
+            )
+          }
+        />
         <Route
           path="/onboarding"
           element={
@@ -196,7 +244,10 @@ function App(): React.JSX.Element {
               // capture during onboarding is owned by the always-alive capture
               // window now (it seeds the hot currentScreen cache), so no capture
               // host is mounted here.
-              <Onboarding />
+              <>
+                <TitleBar variant="overlay" />
+                <Onboarding />
+              </>
             )
           }
         />

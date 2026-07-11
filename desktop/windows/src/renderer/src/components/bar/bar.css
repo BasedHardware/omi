@@ -36,19 +36,26 @@ body.bar-body {
 .bar-surface {
   position: relative;
   overflow: hidden;
-  background: rgba(12, 12, 12, 0.96);
+  background: rgba(15, 15, 15, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-top: none;
   border-radius: 0 0 18px 18px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* Collapse (this is the destination-state rule when leaving expanded) is
+     quicker than expand — the macOS notch asymmetry (0.16s/0.10s), scaled up
+     for the bar's larger surface. */
   transition:
-    width 260ms cubic-bezier(0.3, 0.8, 0.3, 1),
-    height 260ms cubic-bezier(0.3, 0.8, 0.3, 1),
-    border-radius 260ms cubic-bezier(0.3, 0.8, 0.3, 1);
+    width 170ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    height 170ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    border-radius 170ms cubic-bezier(0.3, 0.8, 0.3, 1);
   will-change: width, height;
 }
 .bar-surface.bar-surface-expanded {
-  border-radius: 0 0 22px 22px;
+  border-radius: 0 0 24px 24px;
+  transition:
+    width 240ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    height 240ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    border-radius 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
 }
 
 /* Content layers cross-dissolve INSIDE the single morphing surface. */
@@ -82,10 +89,6 @@ body.bar-body {
   font-weight: 500;
   letter-spacing: 0.02em;
   color: rgb(212 212 212);
-}
-.bar-pill-state {
-  font-size: 10.5px;
-  color: rgb(115 115 115);
 }
 
 /* The expanded ask panel lays out at the overlay's original 480px and paints

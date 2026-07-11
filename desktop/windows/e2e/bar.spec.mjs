@@ -60,6 +60,25 @@ async function barShow(app, mode) {
   throw new Error(`bar never became visible in mode ${mode}`)
 }
 
+/** The bar renderer's window is the one whose URL hash is #/bar. */
+async function findBarPage(app) {
+  for (let i = 0; i < 100; i++) {
+    const page = (await app.windows()).find((w) => w.url().includes('#/bar')) ?? null
+    if (page) return page
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error('bar page (#/bar) not found')
+}
+
+/** Pull translateY (px) out of a computed `transform` matrix string. */
+function translateYpx(transform) {
+  if (!transform || transform === 'none') return 0
+  const m = transform.match(/matrix(3d)?\(([^)]+)\)/)
+  if (!m) return 0
+  const parts = m[2].split(',').map((v) => parseFloat(v.trim()))
+  return m[1] ? parts[13] : parts[5] // matrix3d ty@13, matrix ty@5
+}
+
 test('bar focus contract: peek/ptt never take or steal focus; expanded does', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
@@ -82,7 +101,7 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   })
 
   // (a) PEEK: revealed inactive, unfocusable, and the previously-focused
-  // window keeps focus — a hover reveal must never interrupt typing.
+  // window keeps focus — a summoned pill must never interrupt typing.
   const peek = await barShow(app, 'peek')
   assert.equal(peek.visible, true, 'peek should reveal the bar')
   assert.equal(peek.focusable, false, 'peek bar must be unfocusable')
@@ -98,7 +117,7 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   // the user's own focus changes are environment noise, and getFocusedWindow
   // only reports this app's windows anyway.)
   assert.notEqual(afterPeek.focusedNow, afterPeek.barId, 'peek must not move focus to the bar')
-  assert.equal(afterPeek.barFocusEvents, 0, 'bar fired a focus event on a hover reveal')
+  assert.equal(afterPeek.barFocusEvents, 0, 'bar fired a focus event on a summon reveal')
 
   // (b) PTT mode: same contract — expanded listening WITHOUT focus.
   await app.evaluate(() => globalThis.__omiE2E.barHide())
@@ -122,16 +141,14 @@ test('bar focus contract: peek/ptt never take or steal focus; expanded does', as
   )
 })
 
-test('bar hide returns cleanly and can re-reveal; strips exist per display', async (t) => {
+test('bar hide returns cleanly and can re-reveal', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
   await app.firstWindow()
 
   await barShow(app, 'peek')
   // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback
-  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility —
-  // on a live desktop the user's cursor can cross the top edge and legitimately
-  // re-reveal the bar via a trigger strip right after the hide.
+  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility.
   const didHide = await app.evaluate(({ BrowserWindow }) => {
     return new Promise((resolve) => {
       const win = BrowserWindow.fromId(globalThis.__omiE2E.barState().id)
@@ -143,33 +160,105 @@ test('bar hide returns cleanly and can re-reveal; strips exist per display', asy
   assert.equal(didHide, true, 'bar should hide after the slide-out (event observed)')
   const again = await barShow(app, 'expanded')
   assert.equal(again.visible, true, 'bar should re-reveal after a hide')
+})
 
-  // Trigger strips: one thin window per display (they exist even while the
-  // bar is hidden — that IS the zero-poll reveal path), CENTERED over the
-  // bar's footprint and far from the screen corners (merge-blocker
-  // regression: a full-width strip hijacked ✕/minimize/tab-close targets).
-  const diag = await app.evaluate(() => globalThis.__omiE2E.barStrips())
-  assert.equal(diag.strips.length, diag.displays.length, 'one trigger strip per display')
-  for (const s of diag.strips) {
-    assert.ok(s.bounds.height <= 2, `strip ${s.id} is ${s.bounds.height}px tall (want 1px)`)
-    // Find the display this strip belongs to (same y origin, x within bounds).
-    const d = diag.displays.find(
-      (dd) => s.bounds.x >= dd.bounds.x && s.bounds.x < dd.bounds.x + dd.bounds.width
-    )
-    assert.ok(d, `strip ${s.id} not on any display`)
-    assert.ok(
-      s.bounds.width < d.bounds.width / 2,
-      `strip ${s.id} spans ${s.bounds.width}px of a ${d.bounds.width}px display — too wide`
-    )
-    assert.ok(
-      s.bounds.x > d.bounds.x + d.bounds.width * 0.25,
-      `strip ${s.id} reaches the top-left corner region`
-    )
-    assert.ok(
-      s.bounds.x + s.bounds.width < d.bounds.x + d.bounds.width * 0.75,
-      `strip ${s.id} reaches the top-right corner region`
-    )
+// C5 regression: pressing the summon hotkey must reveal the minimal PILL, NOT
+// the expanded chat panel (Chris: "hotkey tap → pill; click the pill to expand").
+// Top-edge hover reveal was removed entirely, so the summon gesture is the only
+// reveal path. A pill is unfocusable (peek); the expanded chat is the one
+// focusable mode — asserting !focusable proves the hotkey did NOT open the chat.
+test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  await findBarPage(app) // ensure the bar renderer has mounted (bar:ready)
+  await app.evaluate(() => globalThis.__omiE2E.barSummonFire())
+
+  let s = null
+  for (let i = 0; i < 100; i++) {
+    s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (s.visible) break
+    await new Promise((r) => setTimeout(r, 50))
   }
+  assert.ok(s && s.visible, 'summon hotkey should reveal the bar')
+  assert.equal(s.focusable, false, 'summon reveals the unfocusable PILL, not the focusable chat')
+  assert.equal(s.focused, false, 'the summoned pill must not steal focus')
+})
+
+// Regression for the blank-bar paint race (C11): main used to showInactive()
+// the HWND BEFORE the renderer had painted the slide-in frame, so the compositor
+// flashed the previous off-screen translateY(-110%) frame — a blank window on
+// first hover. The fix holds the HWND hidden until the renderer acks (double-rAF)
+// it painted the revealed frame. This test proves (a) the structural invariant:
+// the show is DEFERRED after arming, not synchronous; and (b) the observable
+// outcome: the first frame the window shows is the descended slide-in frame, not
+// the off-screen blank one.
+test('paint-ack: reveal defers the HWND show until the renderer paints slide-in', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  // Create the bar window (hidden) and locate its renderer page.
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  const barPage = await findBarPage(app)
+
+  // Settle bar:ready so the MEASURED reveal below goes through the present path
+  // (not the first-show pendingShow defer) — otherwise the structural assertion
+  // is meaningless. A quick reveal+hide does this; the window is re-hidden, so
+  // the next reveal still repaints slide-in from an off-screen start.
+  await barShow(app, 'peek')
+  await app.evaluate(
+    () =>
+      new Promise((resolve) => {
+        globalThis.__omiE2E.barHide()
+        setTimeout(resolve, 700) // > slide-out (200) + hide fallback (450)
+      })
+  )
+
+  // (a) Structural invariant (the fix, proven deterministically): arming a
+  // reveal must NOT show the HWND synchronously — it is deferred until the paint
+  // ack. Immediately after the barShow call resolves, the bar is still hidden
+  // (the ack needs a double-rAF + IPC round-trip, tens of ms away). Pre-fix,
+  // showInactive() ran synchronously inside showBar, so the bar was already
+  // visible here — THIS is the assertion that fails on the pre-fix code.
+  await app.evaluate(() => globalThis.__omiE2E.barShow('peek'))
+  const rightAfterArm = await app.evaluate(() => globalThis.__omiE2E.barState())
+  assert.equal(
+    rightAfterArm.visible,
+    false,
+    'reveal must defer the HWND show until the paint ack (pre-fix showed synchronously)'
+  )
+
+  // (b) Observable outcome: read .bar-slide the instant the window becomes
+  // visible. Because the show was gated on the paint ack, the slide-in
+  // transition is already underway, so the surface is descended into view —
+  // never the off-screen translateY(-110%) blank the pre-fix code flashed.
+  // (translateY is -110% of the ~36px pill ≈ -40px, ratio -1.1; revealed sits
+  // well above.)
+  let first = null
+  for (let i = 0; i < 100 && !first; i++) {
+    const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (s.visible) {
+      first = await barPage.evaluate(() => {
+        const el = document.querySelector('.bar-slide')
+        return el
+          ? { transform: getComputedStyle(el).transform, height: el.offsetHeight }
+          : { transform: 'no-element', height: 0 }
+      })
+      break
+    }
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  assert.ok(first, 'bar never became visible after the paint ack')
+  assert.notEqual(first.transform, 'no-element', '.bar-slide missing at reveal')
+  const ratio = translateYpx(first.transform) / (first.height || 36)
+  assert.ok(
+    ratio > -1.0,
+    `visible frame was the off-screen blank (translateY ratio ${ratio.toFixed(2)}, ` +
+      `transform "${first.transform}", height ${first.height})`
+  )
 })
 
 test('bar screenshots (collapsed / expanded) for the skeptical review', async (t) => {

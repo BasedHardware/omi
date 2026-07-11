@@ -5,53 +5,45 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Background ramp — ported from macOS OmiColors (neutral hues).
         bg: {
-          primary: 'transparent',
-          secondary: 'transparent',
-          tertiary: 'transparent',
-          quaternary: 'transparent',
-          color: 'transparent'
+          primary: '#0f0f0f',
+          secondary: '#1a1a1a',
+          tertiary: '#252525',
+          quaternary: '#343438',
+          raised: '#1f1f22'
         },
+        // 4-tier text hierarchy (macOS values).
         text: {
-          primary: 'rgba(255, 255, 255, 0.95)',
-          secondary: 'rgba(255, 255, 255, 0.72)',
-          tertiary: 'rgba(255, 255, 255, 0.48)',
-          quaternary: 'rgba(255, 255, 255, 0.32)'
+          primary: '#ffffff',
+          secondary: '#e5e5e5',
+          tertiary: '#b0b0b0',
+          quaternary: '#888888'
         },
-        purple: {
-          primary: 'rgba(255, 255, 255, 0.9)',
-          secondary: 'rgba(255, 255, 255, 0.75)',
-          accent: 'rgba(255, 255, 255, 0.6)',
-          light: 'rgba(255, 255, 255, 0.95)'
+        // Hairlines.
+        line: {
+          DEFAULT: 'rgba(255, 255, 255, 0.09)',
+          strong: 'rgba(255, 255, 255, 0.16)'
         },
-        signal: {
-          record: 'rgba(255, 255, 255, 0.9)',
-          recordDim: 'rgba(255, 255, 255, 0.2)'
-        },
-        success: 'rgba(255, 255, 255, 0.85)',
-        warning: 'rgba(255, 255, 255, 0.65)',
-        error: 'rgba(255, 255, 255, 0.75)',
-        info: 'rgba(255, 255, 255, 0.72)'
+        // Status (macOS values).
+        success: '#10b981',
+        warning: '#f59e0b',
+        error: '#ef4444',
+        info: '#3b82f6'
+      },
+      // Radius scale — macOS OmiChrome (window/card/section/control/chip).
+      borderRadius: {
+        window: '26px',
+        card: '24px',
+        section: '20px',
+        control: '16px',
+        chip: '14px'
       },
       fontFamily: {
-        display: [
-          '"SF Pro Display"',
-          '"SF Pro Text"',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI Variable"',
-          'system-ui',
-          'sans-serif'
-        ],
-        body: [
-          '"SF Pro Display"',
-          '"SF Pro Text"',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI Variable"',
-          'system-ui',
-          'sans-serif'
-        ]
+        // Both roles resolve through --font-app (Inter Variable, with the
+        // Segoe fallback stack) so the A/B hook + any future retheme is one var.
+        display: ['var(--font-app)', 'sans-serif'],
+        body: ['var(--font-app)', 'sans-serif']
       },
       backdropBlur: {
         glass: '24px',

@@ -12,12 +12,19 @@
 // doesn't have that constraint, so the tween was deliberately NOT ported —
 // expanded content sizes itself in CSS and scrolls internally.
 //
+// The bar is summoned by the hotkey ONLY (top-edge hover reveal was removed —
+// Chris disliked it). A hotkey TAP reveals the collapsed pill; clicking the pill
+// expands it to the chat surface; a hotkey HOLD is push-to-talk (auto-reveals
+// the pill). The peek retract watchdog stays as the pill's dismissal mechanism
+// (cursor leaves its footprint → grace → hide), suspended while voice/chat
+// activity is in flight (bar:keepAlive) so a spoken exchange isn't cut short.
+//
 // Focus rules (the bar must never steal keystrokes):
-//   peek (edge-hover reveal)  → focusable:false, showInactive, click-through
+//   peek (hotkey tap / PTT)   → focusable:false, showInactive, click-through
 //                               with interactive islands
-//   ptt (hotkey held)         → same as peek, expanded listening UI
-//   expanded (hotkey tap /    → focusable:true + focused — the ONLY mode that
-//             click on pill)    takes focus, because the user asked to type
+//   ptt (dead — E2E only)     → same as peek
+//   expanded (click on pill)  → focusable:true + focused — the ONLY mode that
+//                               takes focus, because the user asked to type
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -26,18 +33,16 @@ import { rendererBaseUrl } from '../rendererServer'
 import { isQuitting } from '../lifecycle'
 import {
   computeBarBounds,
-  computeStripBounds,
   isCursorInPeekFootprint,
-  shouldSuppressStrips,
+  isCursorOverPill,
   type DisplayLike
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
 import { makeKeySampler } from './keyState'
-import { getForegroundWindowRect, subscribeForegroundChange } from '../usage/nativeForeground'
 import { getAppSettings, setAppSettings } from '../appSettings'
 
 export type BarMode = 'peek' | 'expanded' | 'ptt'
-export type BarReveal = 'strip' | 'summon' | 'ptt'
+export type BarReveal = 'summon' | 'ptt'
 
 let barWindow: BrowserWindow | null = null
 let barReady = false
@@ -50,6 +55,17 @@ let activeDisplayId: number | null = null
 let pendingShow: { mode: BarMode; reveal: BarReveal } | null = null
 let pendingPttDown = false
 let hideFallback: ReturnType<typeof setTimeout> | null = null
+// Per-reveal paint-ack handshake (see presentBar/commitReveal): the bar window
+// is ARMED (renderer told to reveal) but stays hidden until the renderer acks
+// it painted the revealed frame, so we never flash the previous off-screen
+// frame (blank-bar paint race). The token rejects stale acks from a reveal that
+// was cancelled or superseded before it painted.
+let revealToken = 0
+let pendingReveal: { token: number; mode: BarMode; reveal: BarReveal } | null = null
+let revealFallback: ReturnType<typeof setTimeout> | null = null
+// If the renderer is wedged/slow and never acks, show anyway after this — the
+// bar must never become unsummonable.
+const REVEAL_ACK_FALLBACK_MS = 150
 
 export function getBarWindow(): BrowserWindow | null {
   return barWindow
@@ -132,6 +148,7 @@ export function createBarWindow(): BrowserWindow {
     barWindow = null
     barReady = false
     currentMode = null
+    cancelPendingReveal()
   })
   win.webContents.on('did-fail-load', (_e, code, desc, url) =>
     console.error('[bar] did-fail-load', code, desc, url)
@@ -215,24 +232,58 @@ function applyClickThrough(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
 }
 
+/** Invalidate an armed-but-not-yet-shown reveal (its token + fallback timer). */
+function cancelPendingReveal(): void {
+  pendingReveal = null
+  if (revealFallback) {
+    clearTimeout(revealFallback)
+    revealFallback = null
+  }
+}
+
+/**
+ * ARM phase: prepare window state and tell the renderer to reveal, but do NOT
+ * show the HWND yet. The window is shown in commitReveal, once the renderer
+ * acks (bar:showAck) that it painted the revealed frame — otherwise the
+ * compositor shows the previous off-screen frame first (the blank-bar race).
+ */
 function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void {
+  // A pending hide-fallback must not fire mid-reveal.
   if (hideFallback) {
     clearTimeout(hideFallback)
     hideFallback = null
   }
   currentMode = mode
   applyClickThrough(win)
-  if (mode === 'expanded') {
-    win.setFocusable(true)
-    win.showInactive()
-    win.focus()
-  } else {
-    win.setFocusable(false)
-    win.showInactive()
+  win.setFocusable(mode === 'expanded')
+  const token = ++revealToken
+  pendingReveal = { token, mode, reveal }
+  if (revealFallback) clearTimeout(revealFallback)
+  revealFallback = setTimeout(() => {
+    // No paint ack arrived — present anyway so a wedged/slow renderer can never
+    // make the bar unsummonable. Not silent: this is the fail-open path.
+    console.warn('[bar] reveal paint-ack timed out; presenting via fallback')
+    commitReveal(token)
+  }, REVEAL_ACK_FALLBACK_MS)
+  send('bar:show', { mode, reveal, token })
+}
+
+/** COMMIT phase: the renderer painted the revealed frame (or the fallback
+ *  fired) — show the HWND now. Rejects a stale ack whose reveal was cancelled
+ *  or superseded. */
+function commitReveal(token: number): void {
+  const pending = pendingReveal
+  if (!pending || pending.token !== token) return
+  const win = barWindow
+  if (!win || win.isDestroyed()) {
+    cancelPendingReveal()
+    return
   }
-  if (mode === 'peek') startPeekWatch()
+  cancelPendingReveal()
+  win.showInactive()
+  if (pending.mode === 'expanded') win.focus()
+  if (pending.mode === 'peek') startPeekWatch()
   else stopPeekWatch()
-  send('bar:show', { mode, reveal })
   send('overlay:shown')
   broadcastVisibility()
 }
@@ -253,6 +304,13 @@ let peekOutsideSince: number | null = null
  *  captured — on a live desktop the cursor is legitimately outside the
  *  footprint, so the watchdog would retract mid-capture. Never set in prod. */
 let peekWatchSuspended = false
+/** Renderer-driven hold: while true, the summoned pill must NOT auto-retract
+ *  even though the cursor is away from its footprint — a PTT hold / streaming
+ *  reply / spoken answer is in flight (the user is talking or listening, not
+ *  hovering). The bar renderer sets this via bar:keepAlive and drops it (after a
+ *  short grace) when the exchange ends, letting the normal cursor watchdog
+ *  reclaim the pill. */
+let barActivityHold = false
 
 export function setPeekWatchSuspended(suspended: boolean): void {
   peekWatchSuspended = suspended
@@ -269,9 +327,18 @@ function startPeekWatch(): void {
     }
     const display =
       screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
-    const inside =
-      peekWatchSuspended ||
-      isCursorInPeekFootprint(screen.getCursorScreenPoint(), displayLike(display))
+    const dl = displayLike(display)
+    const cursor = screen.getCursorScreenPoint()
+    // Click-through safety net: the bar window is intentionally oversized (560×…
+    // for the morph), but only the 148×36 pill should ever capture a click. If
+    // the interactive flag stuck on after the cursor left the pill (DOM
+    // mouseleave never fires once the cursor exits a forwarded-events window),
+    // force the whole window back to click-through so a control under the
+    // top-center dead space stays clickable. (Not while the E2E holds peek open.)
+    if (!peekWatchSuspended && barInteractive && !isCursorOverPill(cursor, dl)) {
+      applyClickThrough(win)
+    }
+    const inside = peekWatchSuspended || barActivityHold || isCursorInPeekFootprint(cursor, dl)
     if (inside) {
       peekOutsideSince = null
     } else if (peekOutsideSince === null) {
@@ -313,7 +380,17 @@ export function setBarMode(mode: BarMode): void {
  *  if the renderer is wedged. */
 export function hideBar(): void {
   const win = barWindow
-  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!win || win.isDestroyed()) return
+  // An armed-but-unshown reveal is cancelled outright — there is nothing to
+  // slide out, and a late ack/fallback must not resurrect it.
+  if (pendingReveal) {
+    cancelPendingReveal()
+    if (!win.isVisible()) {
+      currentMode = null
+      return
+    }
+  }
+  if (!win.isVisible()) return
   send('overlay:willHide')
   send('bar:willHide')
   if (hideFallback) clearTimeout(hideFallback)
@@ -325,6 +402,8 @@ function hideBarNow(): void {
     clearTimeout(hideFallback)
     hideFallback = null
   }
+  // Kill any armed reveal so a late ack/fallback can't re-show after a hide.
+  cancelPendingReveal()
   stopPeekWatch()
   const win = barWindow
   if (!win || win.isDestroyed()) return
@@ -355,14 +434,17 @@ function onGestureStart(): void {
   broadcast('overlay:summoned')
   gestureStartedVisible = isBarVisible()
   if (samplerAvailable) {
-    // Tap-vs-hold resolves at release; open now (stable — never flaps), and
-    // arm the PTT path (the renderer's own hold threshold decides recording).
-    if (!gestureStartedVisible) showBar('expanded', 'summon')
+    // Tap-vs-hold resolves at release; reveal the PILL now (a tap peeks, never
+    // auto-opens the chat — Chris's rule), and arm the PTT path (the renderer's
+    // own hold threshold decides recording; a hold keeps the pill up + drives
+    // the orb). Click the pill to expand into the chat surface.
+    if (!gestureStartedVisible) showBar('peek', 'summon')
     sendPtt('down')
   } else {
-    // No key-state sampling (koffi unavailable): classic debounced toggle.
+    // No key-state sampling (koffi unavailable): classic debounced toggle — tap
+    // reveals the pill, tap again hides it.
     if (gestureStartedVisible) hideBar()
-    else showBar('expanded', 'summon')
+    else showBar('peek', 'summon')
   }
 }
 
@@ -392,116 +474,6 @@ export function setSummonGestureAccelerator(accelerator: string): void {
   )
 }
 
-// --- Trigger strips (1px, top edge of every display; zero polling) -----------
-
-const strips = new Map<number, BrowserWindow>()
-let stripsStarted = false
-let unsubForeground: (() => void) | null = null
-
-// A fully-transparent window is click-through on Windows (layered hit-testing
-// skips alpha-0 pixels), so the strip paints an imperceptible 1/255-alpha wash
-// to stay hit-testable. mousemove over the 1px line is the reveal trigger.
-const STRIP_HTML =
-  'data:text/html;charset=utf-8,' +
-  encodeURIComponent(
-    `<!doctype html><html><body style="margin:0;background:rgba(0,0,0,0.004)"></body>` +
-      `<script>addEventListener('mousemove',()=>{window.omiBar&&window.omiBar.stripEnter()},{passive:true})</script></html>`
-  )
-
-function createStrip(display: Electron.Display): BrowserWindow {
-  const bounds = computeStripBounds(displayLike(display))
-  const win = new BrowserWindow({
-    ...bounds,
-    show: false,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    skipTaskbar: true,
-    focusable: false,
-    hasShadow: false,
-    // No WS_THICKFRAME: a sizing frame imposes an OS minimum window size that
-    // would silently inflate the 1px strip.
-    thickFrame: false,
-    minHeight: 0,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
-  })
-  win.setAlwaysOnTop(true, 'screen-saver')
-  try {
-    win.setContentProtection(true) // invisible helper — never in captures
-  } catch {
-    /* unsupported */
-  }
-  win.loadURL(STRIP_HTML)
-  win.setBounds(bounds) // re-assert after load (some drivers nudge 1px windows)
-  win.showInactive()
-  return win
-}
-
-function rebuildStrips(): void {
-  for (const [, w] of strips) {
-    if (!w.isDestroyed()) w.destroy()
-  }
-  strips.clear()
-  if (!stripsStarted) return
-  for (const d of screen.getAllDisplays()) {
-    strips.set(d.id, createStrip(d))
-  }
-  evaluateStripSuppression()
-}
-
-/** Hide strips on displays whose foreground window is fullscreen (never pop
- *  the bar over games/videos). Event-driven off the foreground hook. */
-function evaluateStripSuppression(): void {
-  const fg = getForegroundWindowRect()
-  for (const d of screen.getAllDisplays()) {
-    const strip = strips.get(d.id)
-    if (!strip || strip.isDestroyed()) continue
-    const suppress = shouldSuppressStrips(fg, displayLike(d), process.execPath)
-    if (suppress && strip.isVisible()) strip.hide()
-    else if (!suppress && !strip.isVisible()) strip.showInactive()
-  }
-}
-
-/** Start the edge-reveal machinery (strips + display tracking + fullscreen
- *  suppression). Call once after app ready (deferred with the other services). */
-export function startBarStrips(): void {
-  if (stripsStarted) return
-  stripsStarted = true
-  rebuildStrips()
-  screen.on('display-added', rebuildStrips)
-  screen.on('display-removed', rebuildStrips)
-  screen.on('display-metrics-changed', rebuildStrips)
-  unsubForeground = subscribeForegroundChange(() => {
-    // The WinEvent hook calls back on our thread mid-dispatch — defer the
-    // window show/hide work out of the native callback, and never throw back
-    // into the dispatcher.
-    setImmediate(() => {
-      try {
-        evaluateStripSuppression()
-      } catch {
-        /* guarded */
-      }
-    })
-  })
-}
-
-/** Diagnostics for the E2E harness: strips vs displays, with real bounds. */
-export function getStripDiagnostics(): {
-  displays: { id: number; bounds: Electron.Rectangle }[]
-  strips: { id: number; bounds: Electron.Rectangle; visible: boolean }[]
-} {
-  return {
-    displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds })),
-    strips: [...strips.values()]
-      .filter((w) => !w.isDestroyed())
-      .map((w) => ({ id: w.id, bounds: w.getBounds(), visible: w.isVisible() }))
-  }
-}
-
 /** E2E diagnostic: is real hit-testing currently enabled? Must be FALSE right
  *  after any present (even expanded) — the window starts click-through and
  *  only the cursor entering the visible surface enables interaction. */
@@ -511,7 +483,12 @@ export function isBarInteractive(): boolean {
 
 // --- IPC ----------------------------------------------------------------------
 
-export function registerBarIpc(): void {
+/**
+ * @param sendToMain forwards a channel to the MAIN app window (the bar chat is a
+ *   viewport over the main window's single chat engine — INV-CHAT-1). Injected
+ *   because window.ts has no reference to the main window (it lives in index.ts).
+ */
+export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[]) => void): void {
   ipcMain.on('bar:ready', (e) => {
     if (!barWindow || e.sender.id !== barWindow.webContents.id) return
     barReady = true
@@ -524,6 +501,11 @@ export function registerBarIpc(): void {
       pendingPttDown = false
       send('bar:ptt', 'down')
     }
+  })
+  // Paint ack for a per-reveal token — show the HWND now (see commitReveal).
+  ipcMain.on('bar:showAck', (e, token: number) => {
+    if (!barWindow || e.sender.id !== barWindow.webContents.id) return
+    commitReveal(token)
   })
   ipcMain.on('bar:requestHide', () => hideBarNow())
   ipcMain.on('bar:expand', () => setBarMode('expanded'))
@@ -539,10 +521,28 @@ export function registerBarIpc(): void {
     if (interactive) win.setIgnoreMouseEvents(false)
     else win.setIgnoreMouseEvents(true, { forward: true })
   })
-  // Edge reveal from a trigger strip: peek on the display under the cursor.
-  ipcMain.on('bar:stripEnter', () => {
-    if (!barEnabled || isBarVisible()) return
-    showBar('peek', 'strip')
+  // Renderer-driven retract hold: keep a summoned pill open while a PTT hold /
+  // streaming reply / spoken answer is in flight (the cursor is legitimately
+  // away from the footprint the whole time). The renderer drops it after a short
+  // grace once the exchange ends, and the normal cursor watchdog reclaims the pill.
+  ipcMain.on('bar:keepAlive', (_e, active: boolean) => {
+    barActivityHold = !!active
+  })
+  // Bar chat is a VIEWPORT over the main window's single chat engine (kills the
+  // duplicate-useChat continuity bug, C3): the bar sends here, main forwards to
+  // the main window, whose ChatBridgeHost drives the ONE chat.send(); the main
+  // window broadcasts projected state back via chat:publishState → chat:state.
+  ipcMain.on('bar:sendChat', (_e, payload: { text: string; fromVoice: boolean }) => {
+    sendToMain('chat:barSend', payload)
+  })
+  // The bar (re)requests the current chat state — e.g. on first mount / each
+  // reveal — so it renders the ongoing thread even if it missed prior broadcasts.
+  ipcMain.on('bar:requestChatState', () => {
+    sendToMain('chat:barRequestState')
+  })
+  // Main window → bar: projected chat state (history + streaming + status).
+  ipcMain.on('chat:publishState', (_e, state: unknown) => {
+    send('chat:state', state)
   })
   // Screen-share privacy toggle (persisted; applied live).
   ipcMain.handle('bar:getContentProtection', () => getAppSettings().hudContentProtection)
@@ -559,18 +559,9 @@ export function destroyBar(): void {
   gesture?.dispose()
   gesture = null
   stopPeekWatch()
+  cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)
   hideFallback = null
-  unsubForeground?.()
-  unsubForeground = null
-  screen.removeListener('display-added', rebuildStrips)
-  screen.removeListener('display-removed', rebuildStrips)
-  screen.removeListener('display-metrics-changed', rebuildStrips)
-  stripsStarted = false
-  for (const [, w] of strips) {
-    if (!w.isDestroyed()) w.destroy()
-  }
-  strips.clear()
   if (barWindow && !barWindow.isDestroyed()) barWindow.destroy()
   barWindow = null
 }

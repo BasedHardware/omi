@@ -115,6 +115,57 @@ test('single instance, tray, close-hides-to-tray, and app:quit really quits', as
   assert.equal(result, 'closed', 'app:quit should terminate the app')
 })
 
+test('hidden title bar: overlay chrome + maximize/restore keeps sane bounds', async (t) => {
+  // Regression guard for the known Electron path where titleBarStyle:'hidden'
+  // + backgroundMaterial breaks maximize/restore geometry. Runs on the real
+  // built app, so it exercises whatever material gating createWindow chose
+  // for this machine.
+  const dir = tempUserDataDir()
+  const app = await launch(dir)
+  t.after(async () => {
+    try {
+      await app.close()
+    } catch {
+      /* already closed */
+    }
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* best-effort */
+    }
+  })
+
+  await app.firstWindow()
+  const result = await app.evaluate(async ({ BrowserWindow }) => {
+    const hook = globalThis.__omiE2E
+    const win = BrowserWindow.fromId(hook.mainWindowId)
+    const before = win.getBounds()
+    const minSize = win.getMinimumSize()
+    win.maximize()
+    await new Promise((r) => setTimeout(r, 400))
+    const maximized = win.isMaximized()
+    const maxBounds = win.getBounds()
+    win.unmaximize()
+    await new Promise((r) => setTimeout(r, 400))
+    const after = win.getBounds()
+    return { before, minSize, maximized, maxBounds, after, restored: !win.isMaximized() }
+  })
+
+  assert.equal(result.maximized, true, 'window should maximize')
+  assert.ok(
+    result.maxBounds.width > result.before.width,
+    'maximized bounds should grow beyond the default window'
+  )
+  assert.equal(result.restored, true, 'window should restore from maximized')
+  assert.ok(
+    Math.abs(result.after.width - result.before.width) <= 2 &&
+      Math.abs(result.after.height - result.before.height) <= 2,
+    `restore should return to the original size (was ${JSON.stringify(result.before)}, got ${JSON.stringify(result.after)})`
+  )
+  // Windows-11 polish contract: the narrow-snap floor.
+  assert.equal(result.minSize[0], 500, 'min width should be 500 (narrow snap support)')
+})
+
 test('--hidden start creates the window but does not show it', async (t) => {
   const dir = tempUserDataDir()
   const app = await launch(dir, ['--hidden'])

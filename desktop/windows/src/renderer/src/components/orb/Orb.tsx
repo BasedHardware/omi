@@ -27,14 +27,17 @@ export type OrbProps = {
   className?: string
 }
 
-/** RMS of a WaveformSource's byte-frequency snapshot, normalized to ~0..1. */
+/** Raw voice level for the orb, ~0..1+. Prefers the source's fast `getOrbLevel`
+ *  (a low-smoothing tap that tracks syllables; the bar bins are too smoothed to
+ *  wave the blob); falls back to RMS of the frequency bins for a plain analyser.
+ *  Either way the choreography envelope + soft-knee bound it downstream. */
 function sampleAmplitude(source: WaveformSource, scratch: Uint8Array): number {
+  const fast = source.getOrbLevel?.()
+  if (fast !== undefined) return fast
   source.getByteFrequencyData(scratch)
   let sum = 0
   for (let i = 0; i < scratch.length; i++) sum += scratch[i] * scratch[i]
   const rms = Math.sqrt(sum / scratch.length) / 255
-  // Frequency-bin RMS of speech tends to sit low; lift into a usable range
-  // (the choreography soft-knee bounds it regardless).
   return rms * 2.2
 }
 

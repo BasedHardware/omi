@@ -14,7 +14,7 @@ export function SearchResultsFilmstrip({
         <button
           key={g.id}
           onClick={() => onJump(g.representative.ts)}
-          className="rounded bg-white/5 p-3 text-left hover:bg-white/10"
+          className="rounded-control border border-line bg-white/[0.04] p-3 text-left transition-colors hover:border-line-strong hover:bg-white/[0.08]"
         >
           <div className="text-xs text-white/50">
             {new Date(g.startTs).toLocaleString()} · {g.app}

@@ -6,6 +6,7 @@ import type {
   OmiBarApi,
   BarMode,
   BarShowPayload,
+  BarChatState,
   LocalConversation,
   ConversationSyncPatch,
   CaptureChoice,
@@ -22,6 +23,7 @@ import type {
   RewindSettings,
   InsightPayload,
   MeetingToastPayload,
+  WhatsNewPayload,
   AutomationPlan,
   StepResult
 } from '../shared/types'
@@ -75,6 +77,11 @@ const omi: OmiBridgeApi = {
   },
   allowVirtualMic: process.env.OMI_ALLOW_VIRTUAL_MIC === '1',
   e2e: process.env.OMI_E2E === '1',
+  // Offline fake-auth for the shell E2E (survives production builds). Gated on a
+  // dedicated flag the app never sets itself, so it can never activate in normal
+  // use — and separate from OMI_E2E so the bar/meeting/lifecycle specs (which set
+  // only OMI_E2E) still boot to the signed-out screen. See lib/dev/e2eAuth.
+  e2eFakeAuth: process.env.OMI_E2E_FAKE_AUTH === '1',
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
@@ -162,8 +169,19 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('meeting:toast', listener)
     return () => ipcRenderer.removeListener('meeting:toast', listener)
   },
+  onWhatsNewToast: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: WhatsNewPayload): void => cb(p)
+    ipcRenderer.on('whatsnew:toast', listener)
+    return () => ipcRenderer.removeListener('whatsnew:toast', listener)
+  },
+  whatsNewGetPending: () => ipcRenderer.invoke('whatsnew:getPending'),
+  whatsNewOpenNotes: () => ipcRenderer.send('whatsnew:openNotes'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
+  // Main-window chrome: whether the window was created with a Windows 11 Mica
+  // background material (renderer goes translucent so the material shows).
+  // Passed via additionalArguments at window construction.
+  micaEnabled: process.argv.includes('--omi-mica=1'),
   perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),
   isAnimBench: process.env.OMI_ANIM_BENCH === '1',
   benchEcho: (x: number) => ipcRenderer.invoke('bench:echo', x),
@@ -194,6 +212,21 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
   },
+  // --- Bar chat bridge (main-window side) ---
+  onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { text: string; fromVoice: boolean }
+    ): void => cb(payload)
+    ipcRenderer.on('chat:barSend', listener)
+    return () => ipcRenderer.removeListener('chat:barSend', listener)
+  },
+  onBarRequestChatState: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barRequestState', listener)
+    return () => ipcRenderer.removeListener('chat:barRequestState', listener)
+  },
+  publishChatState: (state: BarChatState) => ipcRenderer.send('chat:publishState', state),
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {
@@ -273,11 +306,20 @@ const omiOverlay: OmiOverlayApi = {
 
 const omiBar: OmiBarApi = {
   ready: () => ipcRenderer.send('bar:ready'),
+  showAck: (token: number) => ipcRenderer.send('bar:showAck', token),
   requestHide: () => ipcRenderer.send('bar:requestHide'),
   expand: () => ipcRenderer.send('bar:expand'),
   collapse: () => ipcRenderer.send('bar:collapse'),
   setInteractive: (interactive: boolean) => ipcRenderer.send('bar:setInteractive', interactive),
-  stripEnter: () => ipcRenderer.send('bar:stripEnter'),
+  keepAlive: (active: boolean) => ipcRenderer.send('bar:keepAlive', active),
+  sendChat: (text: string, fromVoice: boolean) =>
+    ipcRenderer.send('bar:sendChat', { text, fromVoice }),
+  requestChatState: () => ipcRenderer.send('bar:requestChatState'),
+  onChatState: (cb: (state: BarChatState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: BarChatState): void => cb(state)
+    ipcRenderer.on('chat:state', listener)
+    return () => ipcRenderer.removeListener('chat:state', listener)
+  },
   onShow: (cb: (p: BarShowPayload) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, p: BarShowPayload): void => cb(p)
     ipcRenderer.on('bar:show', listener)

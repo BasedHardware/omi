@@ -16,6 +16,7 @@ export class OrbRenderer {
   private vao: WebGLVertexArrayObject
   private u: Record<string, WebGLUniformLocation | null> = {}
   private dotData = new Float32Array(DOT_COUNT * 4)
+  private dotMergeData = new Float32Array(DOT_COUNT)
   private disposed = false
 
   constructor(
@@ -69,6 +70,7 @@ export class OrbRenderer {
     for (const name of [
       'u_resolution',
       'u_dots',
+      'u_dotMerge',
       'u_disc',
       'u_merge',
       'u_morph',
@@ -104,9 +106,11 @@ export class OrbRenderer {
       this.dotData[i * 4 + 1] = d.y
       this.dotData[i * 4 + 2] = d.r
       this.dotData[i * 4 + 3] = d.halfLen
+      this.dotMergeData[i] = d.merge
     }
     gl.uniform2f(this.u.u_resolution, w, h)
     gl.uniform4fv(this.u.u_dots, this.dotData)
+    gl.uniform1fv(this.u.u_dotMerge, this.dotMergeData)
     gl.uniform1f(this.u.u_disc, frame.params.discRadius)
     gl.uniform1f(this.u.u_merge, frame.merge)
     gl.uniform1f(this.u.u_morph, frame.morph)

@@ -35,23 +35,83 @@
 
 @layer base {
   :root {
+    /* ── Design tokens (ported from the macOS app's OmiColors/OmiChrome
+       structure — same ramp, neutral hues, NO purple family). ─────────── */
+
+    /* Background ramp (macOS: #0F0F0F → #252525). */
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #252525;
+    --bg-quaternary: #343438;
+    --bg-raised: #1f1f22;
+
+    /* Hairlines. macOS draws #3A3940 at ~0.28 over dark panels; over this
+       ramp the equivalent finished strokes are: */
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+
+    /* Text hierarchy (4 tiers, macOS values). */
+    --text-primary: #ffffff;
+    --text-secondary: #e5e5e5;
+    --text-tertiary: #b0b0b0;
+    --text-quaternary: #888888;
+
+    /* Accent: white/neutral system (INV-UI-1 — never purple). Filled accent
+       surfaces (toggles-on, send button, lit keycaps) pair the white fill
+       with --accent-contrast content. */
+    --accent: #ffffff;
+    --accent-contrast: #0f0f0f;
+
+    /* Status (macOS values — hue-true, used sparingly). */
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --info: #3b82f6;
+
+    /* Radius scale (macOS OmiChrome: window/card/section/control/chip). */
+    --radius-window: 26px;
+    --radius-card: 24px;
+    --radius-section: 20px;
+    --radius-control: 16px;
+    --radius-chip: 14px;
+
+    /* Motion (ported feel: fast, well-damped; window-morphs ease-out). */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-morph: cubic-bezier(0.3, 0.8, 0.3, 1);
+    --dur-fast: 120ms;
+    --dur-med: 180ms;
+    --dur-slow: 320ms;
+
+    /* Glass — reserved for floating surfaces (bar, toasts); content panels
+       are solid. */
     --glass-bg: rgba(0, 0, 0, 0.42);
-    --glass-bg-subtle: rgba(0, 0, 0, 0.30);
+    --glass-bg-subtle: rgba(0, 0, 0, 0.3);
     --glass-bg-strong: rgba(0, 0, 0, 0.52);
-    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-border: rgba(255, 255, 255, 0.1);
     --glass-border-strong: rgba(255, 255, 255, 0.18);
     --glass-highlight: rgba(255, 255, 255, 0.07);
     --glass-blur: 24px;
     --glass-blur-strong: 36px;
-    /* Accent color for the active nav item's icon. Change this one value to
-       re-theme the sidebar highlight. */
-    --accent: #5b02e0;
-    /* Neutral grey used for the selected/hovered sidebar row + the tab
-       background gradient's top-left corner (no accent tint). */
-    --nav-sel: #141414;
-    /* Surface tone for content panels (chat box, widgets) — darker than the
-       nav grey but not pure black. */
-    --surface: #0c0c0c;
+
+    /* Selected/hovered nav row fill (kept as a named token for the sidebar
+       and settings rail). */
+    --nav-sel: rgba(255, 255, 255, 0.07);
+    /* Surface tone for content panels (chat composer, widgets). */
+    --surface: var(--bg-secondary);
+
+    /* App typeface. Inter Variable (bundled via @fontsource, opsz axis) is
+       the SF Pro analog — deterministic rendering on every machine, closest
+       to the Mac app's feel. Segoe UI Variable stays as the fallback stack. */
+    --font-app:
+      'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui,
+      sans-serif;
+  }
+
+  /* A/B hook used by the Phase 8 typography comparison harness (and an easy
+     escape hatch): data-font="segoe" renders the whole app in Segoe UI
+     Variable instead of Inter. */
+  html[data-font='segoe'] {
+    --font-app: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   }
 
   html,
@@ -59,19 +119,28 @@
   #root {
     height: 100%;
     margin: 0;
-    background: #000000;
+    background: var(--bg-primary);
     background-attachment: fixed;
     color: rgba(255, 255, 255, 0.92);
-    font-family:
-      'SF Pro Display',
-      'SF Pro Text',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI Variable',
-      system-ui,
-      sans-serif;
+    font-family: var(--font-app);
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Mica (Win11 22H2+): main sets data-mica on the root (App.useMicaChrome, main
+     window only) when the window has a system background material; the canvas
+     goes translucent so the desktop tint reads through — subtly. Base tone is
+     --bg-primary #0f0f0f at 82% (mirrors shared/chrome APP_BG_HEX, the WCO
+     caption color). `!important` is load-bearing: index.html hardcodes inline
+     `style="background: transparent"` on <body>/<#root> (that page is shared by
+     every window; the bar/toast/capture surfaces need it transparent), and only
+     `!important` outranks a non-important inline style. Secondary windows never
+     get data-mica, so they keep their transparent page. */
+  html[data-mica='true'],
+  html[data-mica='true'] body,
+  html[data-mica='true'] #root {
+    background: rgba(15, 15, 15, 0.82) !important;
   }
 
   ::selection {
@@ -92,22 +161,42 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    /* Full-screen gradient (same as the tabs) so there's no black gap behind the
-       sidebar while it slides in. */
-    background: linear-gradient(135deg, var(--nav-sel) 0%, #000000 70%);
+    /* Flat canvas (macOS backgroundPrimary) so there's no gap behind the
+       sidebar while it slides in. Under mica this stays transparent so the
+       material shows through. */
+    background: var(--bg-primary);
+  }
+
+  html[data-mica='true'] .app-canvas::before {
+    background: transparent;
   }
 
   @keyframes auraDrift {
-    0% { opacity: 0.6; transform: translate(0, 0) scale(1); }
-    50% { opacity: 1; transform: translate(10px, -10px) scale(1.05); }
-    100% { opacity: 0.6; transform: translate(-10px, 10px) scale(1); }
+    0% {
+      opacity: 0.6;
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: translate(10px, -10px) scale(1.05);
+    }
+    100% {
+      opacity: 0.6;
+      transform: translate(-10px, 10px) scale(1);
+    }
   }
 
+  /* Page header panel (shared by every page via PageHeader). Previously a
+     white-4% tint sitting only a hair above the #0f0f0f canvas — LOWER than the
+     lifted utility rows beneath it, so the hierarchy read inverted. Raise it onto
+     the same elevated-panel family as .surface-panel / .widget-card so the header
+     reads as the top of the page. Opaque fill, so the old backdrop blur (dead
+     under an opaque background) is dropped. */
   .panel-header {
-    @apply rounded-2xl border border-white/10 px-7 py-5;
-    background: rgba(255, 255, 255, 0.04);
-    -webkit-backdrop-filter: blur(12px) saturate(1.2);
-    backdrop-filter: blur(12px) saturate(1.2);
+    @apply rounded-2xl border px-7 py-5;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
   .page-outlet {
@@ -173,6 +262,15 @@
 
   .section-label {
     @apply text-xs font-medium tracking-wide text-white/50;
+  }
+
+  /* Tabular lining numerals for timers, counters, and timestamps so digits
+     don't jitter as values tick. */
+  .tnum {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings:
+      'tnum' 1,
+      'lnum' 1;
   }
 
   .btn-primary {
@@ -245,17 +343,44 @@
     color: #fff !important;
   }
 
-  /* Dashboard widget surface (Home): black, slightly transparent so the tab
-     gradient shows through. Fixed height so cards never grow with their content
-     — sized to fit the header + 2 preview rows + a "+N more" line; shorter
-     content just leaves empty space at the bottom. */
+  /* Dashboard widget surface (Home): solid raised panel on the flat canvas.
+     Fixed height so cards never grow with their content — sized to fit the
+     header + 2 preview rows + a "+N more" line; shorter content just leaves
+     empty space at the bottom.
+
+     Elevation: --surface (#1a1a1a) sits only ~11 levels above the --bg-primary
+     (#0f0f0f) canvas, so with a 9%-white hairline and no shadow the card frame
+     nearly vanished into the dark ("sucked into the black"). Raise it to
+     --bg-tertiary (#252525, a real elevation step), strengthen the border, and
+     add a soft drop shadow so the panel reads as a distinct raised surface. */
   .widget-card {
-    @apply flex h-40 flex-col rounded-2xl border border-white/10 p-4 transition-colors duration-200;
-    background: var(--surface);
+    @apply flex h-40 flex-col rounded-section border p-4 transition-colors duration-200;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
+  /* Hover lifts one step LIGHTER (--bg-quaternary #343438) — the old value
+     (--bg-raised #1f1f22) was darker than the new resting tone and read as a
+     dip, not a lift. */
   .widget-card:hover {
-    background: var(--nav-sel);
+    background: var(--bg-quaternary);
+    border-color: var(--border-strong);
+  }
+
+  /* Elevated page surface (Conversations/Tasks search bars, filter/select
+     controls, info + error banners). These previously used .glass-subtle
+     (black 30% + a 6%-white hairline), which on the flat #0f0f0f canvas sat
+     DARKER than the page and read as murky — the top-right surfaces looked
+     "sucked into the black". Lift them onto the same raised-panel family as
+     .widget-card (--bg-tertiary + --border-strong + a soft shadow) so they
+     read as distinct raised surfaces. Deliberately kept OFF the shared glass-*
+     tokens (owned by the bar) — this is a page-level surface. */
+  .surface-panel {
+    @apply rounded-2xl border;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
   /* Sidebar entrance — slides in from the left. This is the first thing to
@@ -311,20 +436,58 @@
     }
   }
 
-  /* Chat bubble entrance — a gentle, slow rise + fade for a smooth feel. */
+  /* Chat message entrance — quick, well-damped rise + fade (macOS content
+     springs land in 220–350ms with minimal overshoot). */
   .bubble-in {
-    animation: bubbleIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: bubbleIn 0.38s var(--ease-out) both;
     will-change: transform, opacity;
   }
 
   @keyframes bubbleIn {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(8px) scale(0.985);
     }
     to {
       opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Assistant "thinking" indicator — three quiet dots, staggered. */
+  .typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 1em;
+  }
+
+  .typing-dots > span {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--text-tertiary);
+    animation: typingDot 1.2s ease-in-out infinite;
+  }
+
+  .typing-dots > span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  .typing-dots > span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  @keyframes typingDot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
       transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-2px);
     }
   }
 

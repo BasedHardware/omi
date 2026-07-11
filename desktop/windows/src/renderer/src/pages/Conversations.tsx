@@ -351,7 +351,7 @@ export function Conversations(): React.JSX.Element {
 
       {/* Search + filter bar */}
       <div className="flex items-center gap-2 px-6 pb-3 lg:px-10">
-        <div className="glass-subtle flex flex-1 items-center gap-2 px-4 py-2.5">
+        <div className="surface-panel flex flex-1 items-center gap-2 px-4 py-2.5">
           <Search className="h-4 w-4 text-white/45" />
           <input
             value={query}
@@ -366,7 +366,7 @@ export function Conversations(): React.JSX.Element {
           )}
         </div>
 
-        <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
+        <div className="surface-panel flex items-center gap-1 p-1">
           <button
             onClick={() => setFilter('all')}
             className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
@@ -406,7 +406,7 @@ export function Conversations(): React.JSX.Element {
             setSelectMode((o) => !o)
             if (selectMode) setSelected(new Set())
           }}
-          className={`glass-subtle flex items-center gap-2 px-4 py-2.5 text-sm transition-colors duration-200 ${
+          className={`surface-panel flex items-center gap-2 px-4 py-2.5 text-sm transition-colors duration-200 ${
             selectMode ? 'text-white' : 'text-white/55 hover:text-white/80'
           }`}
           title="Select conversations"
@@ -451,12 +451,12 @@ export function Conversations(): React.JSX.Element {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {error && (
-          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">
+          <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">
             Cloud conversations: {error}
           </div>
         )}
         {(unsyncedPast > 0 || backfillRunning) && (
-          <div className="glass-subtle mx-auto mb-5 flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+          <div className="surface-panel mx-auto mb-5 flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
             <span className="text-sm text-white/60">
               {backfillRunning && backfill
                 ? `Syncing past recordings… ${backfill.synced + backfill.failed}/${backfill.total}`

@@ -58,6 +58,12 @@ export type OrbParams = {
   /** Genesis spring: damping ratio and natural frequency (rad/s). */
   springZeta: number
   springOmega: number
+  /** Orbit speed multiplier at the busiest state (thinking). Idle is always 1×;
+   *  busy states target a fraction of the way to this, and the animator eases
+   *  the live multiplier toward the target so the ring visibly spins up while
+   *  Omi is working and slows as it settles. Kept lower on compact mounts so a
+   *  22–26px orb never reads as frantic. */
+  spinBusyMult: number
 }
 
 export const DEFAULT_ORB_PARAMS: OrbParams = {
@@ -73,7 +79,8 @@ export const DEFAULT_ORB_PARAMS: OrbParams = {
   pillHalfLen: 0.22,
   pillRowPitch: 0.3,
   springZeta: 0.68,
-  springOmega: 14
+  springOmega: 14,
+  spinBusyMult: 2.0
 }
 
 /** Named parameter variants kept for review/flipping in the harness. The
@@ -86,16 +93,20 @@ export const ORB_PRESETS: Record<string, OrbParams> = {
     orbitPeriod: 4.8,
     restFraction: 0.42,
     noiseAmp: 0.06,
-    sminK: 0.28
+    sminK: 0.28,
+    spinBusyMult: 1.7
   },
-  // Livelier: quicker steps, bigger wave.
+  // Livelier: quicker steps and spin. Wave amplitude stays in line with the
+  // others — its own 0.11 combined with the wider wave-gain span tore the
+  // merged silhouette into sharp inward notches (skeptical-review finding).
   lively: {
     ...DEFAULT_ORB_PARAMS,
     orbitPeriod: 2.8,
     restFraction: 0.26,
     stepDegrees: 60,
-    noiseAmp: 0.11,
-    sminK: 0.4
+    noiseAmp: 0.092,
+    sminK: 0.4,
+    spinBusyMult: 2.3
   },
   // Tighter ring, smaller dots — closer to the Mac notch mark's proportions.
   notch: {
@@ -112,13 +123,20 @@ export const ORB_PRESETS: Record<string, OrbParams> = {
     ...DEFAULT_ORB_PARAMS,
     orbitRadius: 0.54,
     dotRadius: 0.15,
-    sminK: 0.3
+    sminK: 0.3,
+    // Restrained spin-up: at 22–26px a big multiplier reads as frantic.
+    spinBusyMult: 1.55
   }
 }
 
 /** One dot/pill primitive handed to the shader: center (normalized, disc
- *  units), radius, and capsule half-length (0 = circle). */
-export type OrbDot = { x: number; y: number; r: number; halfLen: number }
+ *  units), radius, capsule half-length (0 = circle), and this dot's own merge
+ *  progress 0..1. The shader derives its smin blend distance PER DOT from
+ *  `merge` so a dot that hasn't converged yet unions near-hard (no haze/webbing
+ *  bridging it to still-separate neighbours); only converged dots blend into the
+ *  liquid pool. A single global k applied to every pair is what produced the
+ *  faint mist between mid-merge dots. */
+export type OrbDot = { x: number; y: number; r: number; halfLen: number; merge: number }
 
 /** Everything the shader needs for one frame. */
 export type OrbFrame = {
@@ -191,9 +209,12 @@ export function orbitVelocity(t: number, p: OrbParams): number {
 /** The shaped amplitude never leaves [AMP_FLOOR, 1]: dead silence mid-speech
  *  keeps a visible minimum wobble, clipping input compresses to 1. */
 export const AMP_FLOOR = 0.15
-/** Wave gain (multiplier on params.noiseAmp) at shaped amplitude 0 and 1. */
-export const WAVE_GAIN_MIN = 0.45
-export const WAVE_GAIN_MAX = 1.6
+/** Wave gain (multiplier on params.noiseAmp) at shaped amplitude 0 and 1. The
+ *  min is low and the max high on purpose: a wide span is what makes a loud
+ *  syllable read as a visibly bigger edge wave than a quiet one (C8b). Bounded —
+ *  the orb:check 'wavy' invariant caps the loud end. */
+export const WAVE_GAIN_MIN = 0.35
+export const WAVE_GAIN_MAX = 1.85
 /** Idle-blob (thinking) wave gain — fixed, no audio coupling. */
 export const THINK_WAVE_GAIN = 0.5
 
@@ -205,7 +226,11 @@ export const THINK_WAVE_GAIN = 0.5
  */
 export function shapeAmplitude(raw: number): number {
   const x = Math.max(0, raw)
-  const DRIVE = 1.8
+  // Softer knee (was 1.8): less compression through the normal speaking range,
+  // so quiet vs loud syllables land at distinct wave depths instead of both
+  // saturating high — the orb visibly tracks the voice. Clipping still saturates
+  // at 1 (bounded) and silence still rests at AMP_FLOOR (never a hard circle).
+  const DRIVE = 1.35
   const knee = Math.tanh(x * DRIVE) / Math.tanh(DRIVE)
   return AMP_FLOOR + (1 - AMP_FLOOR) * Math.min(1, knee)
 }
@@ -232,17 +257,69 @@ export function stepMergeEnvelope(current: number, target: 0 | 1, dt: number): n
   return target > current ? Math.min(target, next) : Math.max(target, next)
 }
 
+/** Seconds to cross-fade the merge from the value shown at a state change to
+ *  the new state's own merge — short enough to feel immediate, long enough that
+ *  a branch switch never snaps the blob apart and reforms it. */
+export const MERGE_XFADE = 0.4
+/** Thinking gathers into its blob over this long (its autonomous ramp). */
+const THINK_GATHER = 0.8
+
 /**
  * How merged the dots are (0 = ring, 1 = blob).
- * thinking: autonomous ramp to 1 over ~0.8s of state time, held.
- * speaking/listening/idle: driven entirely by the caller's speechMerge
- * envelope (speech signals). agents: 0.
+ *
+ * Each state has a steady merge target — thinking: 1 (autonomous), agents: 0,
+ * speaking/listening/idle: the caller's speechMerge envelope. When `enterMerge`
+ * is supplied (the merge shown at the instant this state was entered), the
+ * result CROSS-FADES from it to the target over the state's ramp, so a state
+ * change can never discontinuously snap the merge. Without `enterMerge` the
+ * exact original per-state formulas are returned (deterministic harness/tests).
+ *
+ * This is the C6 fix: previously `mergeAmount` branch-switched formulas on a
+ * state change, so e.g. speaking→thinking snapped merge 1→0 in one frame (the
+ * blob exploded to dots) before thinking's own ramp reformed it.
  */
-export function mergeAmount(state: OrbState, stateTime: number, speechMerge: number): number {
-  if (state === 'thinking') return easeInOut(stateTime / 0.8)
-  if (state === 'agents') return 0
-  return easeInOut(Math.min(1, Math.max(0, speechMerge)))
+export function mergeAmount(
+  state: OrbState,
+  stateTime: number,
+  speechMerge: number,
+  enterMerge?: number
+): number {
+  if (enterMerge === undefined) {
+    if (state === 'thinking') return easeInOut(Math.min(1, stateTime / THINK_GATHER))
+    if (state === 'agents') return 0
+    return easeInOut(Math.min(1, Math.max(0, speechMerge)))
+  }
+  const steady =
+    state === 'thinking'
+      ? 1
+      : state === 'agents'
+        ? 0
+        : easeInOut(Math.min(1, Math.max(0, speechMerge)))
+  // Thinking eases in over its designed gather time; every other transition
+  // uses the short cross-fade. (Entering thinking from the ring — enterMerge 0
+  // — reduces exactly to the original easeInOut(stateTime/0.8) ramp.)
+  const ramp = state === 'thinking' ? THINK_GATHER : MERGE_XFADE
+  const w = easeInOut(Math.min(1, stateTime / ramp))
+  return enterMerge * (1 - w) + steady * w
 }
+
+/**
+ * Target orbit-speed multiplier for a state (1 = calm idle cadence). Busy
+ * states spin the ring faster; the animator eases the LIVE multiplier toward
+ * this so the change is never a jump (C9). Thinking is the busiest; speaking
+ * and listening get progressively smaller bumps; idle and agents rest at 1×.
+ */
+export function spinTargetFor(state: OrbState, params: OrbParams = DEFAULT_ORB_PARAMS): number {
+  const busy = params.spinBusyMult
+  if (state === 'thinking') return busy
+  if (state === 'speaking') return 1 + (busy - 1) * 0.45
+  if (state === 'listening') return 1 + (busy - 1) * 0.15
+  return 1 // idle, agents
+}
+
+/** Exponential time-constant (s) for easing the live spin multiplier toward its
+ *  state target — a soft spin-up and a gentle decel into the settled state. */
+export const SPIN_EASE_TAU = 0.18
 
 // --- Genesis spring ----------------------------------------------------------
 
@@ -283,6 +360,15 @@ export type OrbInputs = {
   /** Speech-merge envelope 0..1 (stepMergeEnvelope output). Drives the blob
    *  for speaking/listening; ignored by thinking (autonomous) and agents. */
   speechMerge?: number
+  /** Merge value shown at the instant the current `state` was entered. When
+   *  present, `mergeAmount` cross-fades from it so a state change never snaps
+   *  the blob (C6). The app's OrbAnimator captures it on setState; deterministic
+   *  renders omit it for the exact original per-state ramps. */
+  enterMerge?: number
+  /** Warped orbit clock (seconds). The app advances this by dt × the live spin
+   *  multiplier so busy states rotate faster without an angle jump (C9); the
+   *  noise/pulse still use the real `t`. Falls back to `t` when omitted. */
+  orbitTime?: number
   /** Seconds since summon, or Infinity when long-since materialized. */
   genesisTime?: number
   /** Disc → rounded-rect morph 0..1 (expanded surface drives this). */
@@ -296,17 +382,22 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   const { t, state, stateTime } = input
   const shaped = shapeAmplitude(input.amplitude ?? 0)
   const genesisTime = input.genesisTime ?? Infinity
-  const merge = mergeAmount(state, stateTime, input.speechMerge ?? 0)
+  const merge = mergeAmount(state, stateTime, input.speechMerge ?? 0, input.enterMerge)
   const thinking = state === 'thinking'
 
-  const angle = orbitAngle(t, p)
+  // Orbit runs on the (optionally speed-warped) orbit clock; everything else
+  // (noise, pulse, agents timing) stays on real time.
+  const orbitT = input.orbitTime ?? t
+  const angle = orbitAngle(orbitT, p)
 
   // Merge travel is STAGGERED per dot (a rotational sweep: dots pool into the
   // puddle one after another and split back out the same way). A simultaneous
   // ring collapse left a punched hole at the center mid-merge (the smin union
   // of a ring is an annulus — skeptical-review Critical); staggering means
   // mass accumulates from the first arrivals, so the blob is solid throughout.
-  const STAGGER = 0.5
+  // A WIDE stagger also spreads the gather/dissolve over a broad merge range so
+  // the blob forms and breaks up dot-by-dot — never a one-frame ring↔blob cut.
+  const STAGGER = 0.9
   const dotMerge = (i: number): number =>
     Math.min(1, Math.max(0, merge * (1 + STAGGER) - STAGGER * (i / DOT_COUNT)))
 
@@ -335,7 +426,7 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // bridging pills mid-glide (review round 2).
   let rowOf: number[] | null = null
   if (ap > 0) {
-    const a0 = orbitAngle(t - stateTime, p)
+    const a0 = orbitAngle(orbitT - stateTime, p)
     const order = Array.from({ length: DOT_COUNT }, (_, i) => i).sort(
       (A, B) =>
         Math.sin(a0 + (A * 2 * Math.PI) / DOT_COUNT) - Math.sin(a0 + (B * 2 * Math.PI) / DOT_COUNT)
@@ -367,22 +458,25 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
       r = r * (1 - agents) + p.dotRadius * 0.72 * agents
       halfLen = p.pillHalfLen * stretch
     }
-    dots.push({ x, y, r, halfLen })
+    dots.push({ x, y, r, halfLen, merge: mi })
   }
 
   // Center pool: grows as the first dots arrive and breathes so the held blob
-  // feels liquid. Gated below merge≈0.1 — a sub-pixel pool at the very start
-  // of a merge reads as a stray white speck at the ring's center. The speech
-  // pool swells slightly with the (bounded) voice; the thinking pool is
-  // tighter with a quicker breath.
-  const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.15) / 0.3)))
+  // feels liquid. It comes up EARLY in the merge (so it is already present and —
+  // via the pool smin — bridged to the converging dots before they cluster; a
+  // late pool left a standalone center blob = a phantom 9th dot, and left the
+  // ring's interior unfilled = a punched hole). Its size is a SMOOTH, monotonic
+  // function of merge (eased gate, no hard visibility floor, no mid-merge bump):
+  // a floor or a hump made the rendered blob area jump in one frame as merge
+  // swept past it during a dissolve (thinking→idle explode/reform — C6). The
+  // shader ramps the pool's SMIN BRIDGE strength with merge to match, so the
+  // pool grows and glues in gradually instead of snapping onto the dots. The
+  // speech pool swells slightly with the (bounded) voice; thinking breathes
+  // quicker.
+  const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.3) / 0.42)))
   const poolBase = thinking ? 0.34 : 0.42 * (0.92 + 0.14 * shaped)
   const poolPulse = thinking ? 0.13 * Math.sin(t * 4.6) : (0.07 + 0.05 * shaped) * Math.sin(t * 1.7)
-  // Hard-zero below a visibility floor: smin INFLATES even a sub-pixel pool
-  // into a faint center speck (review round 2), so the pool only exists once
-  // it is genuinely visible; the smin blend masks the small pop.
-  const rawPool = poolGate * p.orbitRadius * poolBase * (1 + poolPulse)
-  const centerR = merge > 0 && rawPool > 0.02 ? rawPool : 0
+  const centerR = poolGate * p.orbitRadius * poolBase * (1 + poolPulse)
 
   // The wave: bounded by construction. Speech maps the shaped amplitude into
   // [WAVE_GAIN_MIN, WAVE_GAIN_MAX]×noiseAmp; thinking uses a fixed lower gain.

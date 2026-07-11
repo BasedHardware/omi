@@ -67,7 +67,7 @@ function speakerColor(label: string): string {
   const palette = [
     'border-emerald-400/30 bg-emerald-400/8 text-emerald-200',
     'border-sky-400/30 bg-sky-400/8 text-sky-200',
-    'border-violet-400/30 bg-violet-400/8 text-violet-200',
+    'border-teal-400/30 bg-teal-400/8 text-teal-200',
     'border-amber-400/30 bg-amber-400/8 text-amber-200',
     'border-rose-400/30 bg-rose-400/8 text-rose-200',
     'border-white/15 bg-white/5 text-white/75'

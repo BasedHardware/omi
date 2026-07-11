@@ -352,21 +352,65 @@ async function playTtsBlob(blob: Blob): Promise<void> {
 /** System-voice fallback (Web Speech API → SAPI). Always plays on the system
  *  DEFAULT output (speechSynthesis has no sink routing) — fine for a fallback;
  *  the echo gate still engages around it. */
-async function playSystemVoice(text: string): Promise<void> {
+// Exported for unit-testing the hang watchdog; not part of the public surface.
+export async function playSystemVoice(text: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const u = new SpeechSynthesisUtterance(text)
-    u.onend = () => resolve()
+    let settled = false
+    let resumePump: ReturnType<typeof setInterval> | null = null
+    let watchdog: ReturnType<typeof setTimeout> | null = null
+    const cleanup = (): void => {
+      if (resumePump !== null) {
+        clearInterval(resumePump)
+        resumePump = null
+      }
+      if (watchdog !== null) {
+        clearTimeout(watchdog)
+        watchdog = null
+      }
+    }
+    // Settle exactly once, tearing down the pump + watchdog first.
+    const done = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn()
+    }
+    // Chromium silently stalls SpeechSynthesis on long utterances (~15s) and
+    // then never fires `onend` unless `resume()` is pumped — which would hang
+    // this promise, wedge the echo gate, and (via useChat.speaking) freeze the
+    // bar orb + keepAlive until an app restart. Pump resume() to prevent the
+    // stall…
+    resumePump = setInterval(() => {
+      try {
+        window.speechSynthesis.resume()
+      } catch {
+        /* ignore */
+      }
+    }, 10000)
+    // …and a generous max-duration backstop so even if it still never ends, the
+    // caller's gate/speaking state can't wedge (~10 chars/s, floor 8s, cap 120s).
+    const maxMs = Math.min(120000, Math.max(8000, text.length * 100))
+    watchdog = setTimeout(() => {
+      try {
+        window.speechSynthesis.cancel()
+      } catch {
+        /* ignore */
+      }
+      done(resolve)
+    }, maxMs)
+    u.onend = () => done(resolve)
     u.onerror = (e) =>
       e.error === 'interrupted' || e.error === 'canceled'
-        ? resolve()
-        : reject(new Error(`system voice failed: ${e.error}`))
+        ? done(resolve)
+        : done(() => reject(new Error(`system voice failed: ${e.error}`)))
     stopCurrentTts = () => {
       try {
         window.speechSynthesis.cancel()
       } catch {
         /* ignore */
       }
-      resolve()
+      done(resolve)
     }
     window.speechSynthesis.speak(u)
   }).finally(() => {

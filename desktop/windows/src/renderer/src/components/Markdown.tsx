@@ -17,7 +17,7 @@ function renderInline(text: string): React.ReactNode[] {
       return <strong key={i}>{part.slice(2, -2)}</strong>
     if (part.startsWith('`') && part.endsWith('`'))
       return (
-        <code key={i} className="rounded bg-white/10 px-1 py-0.5 text-[0.85em]">
+        <code key={i} className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em]">
           {part.slice(1, -1)}
         </code>
       )
@@ -67,7 +67,10 @@ export function Markdown({ text }: { text: string }): React.JSX.Element {
       while (i < lines.length && !FENCE.test(lines[i].trim())) buf.push(lines[i++])
       i++ // consume closing fence
       blocks.push(
-        <pre key={key++} className="my-2 overflow-x-auto rounded bg-white/10 p-3 text-[0.85em]">
+        <pre
+          key={key++}
+          className="my-2 overflow-x-auto rounded-[10px] border border-line bg-white/[0.06] p-3 font-mono text-[0.85em]"
+        >
           <code>{buf.join('\n')}</code>
         </pre>
       )

@@ -8,6 +8,7 @@ import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { speakText } from '../lib/voice/voiceController'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
 
@@ -16,17 +17,22 @@ const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 export type UseChat = {
   history: ChatMsg[]
   sending: boolean
+  /** True while a spoken (TTS) reply for a `fromVoice` message is playing —
+   *  distinct from `sending` (which is the streaming phase). The bar orb uses it
+   *  to show the "speaking" state after a voice exchange. */
+  speaking: boolean
   // `send` takes the message text. The draft input is intentionally NOT stored
   // here: this hook lives in the app-wide AppStateProvider, so keeping the
   // per-keystroke input in it would re-render the entire app shell (and every
   // mounted page) on every character. The draft is local component state in the
   // chat bar; only the persisted history/sending live here.
-  // `send` is the single consent entry point for BOTH typed chat and any future
-  // voice transcript. When it classifies a message as an action and builds a valid
+  // `send` is the single consent entry point for BOTH typed chat and voice
+  // transcripts. When it classifies a message as an action and builds a valid
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
-  // so it works identically from the main window and the floating overlay.
-  send: (text: string) => Promise<void>
-  /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
+  // so it works identically from the main window and the bar. `fromVoice`
+  // requests that the assistant's reply be spoken (TTS) once it's assembled.
+  send: (text: string, opts?: { fromVoice?: boolean }) => Promise<void>
+  /** Clear the thread to a fresh conversation. */
   reset: () => void
 }
 
@@ -37,12 +43,32 @@ export type UseChat = {
  * Conversations list immediately. One conversation per hook lifetime (i.e. per
  * Home mount / app launch).
  */
-export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
-  const surface = opts?.surface ?? 'main'
+export function useChat(): UseChat {
   const mode = getPreferences().chatHistoryMode
 
   const [history, setHistory] = useState<ChatMsg[]>([])
   const [sending, setSending] = useState(false)
+  // Spoken-reply (TTS) playback state. A ref counter keeps `speaking` correct if
+  // a later reply's TTS starts before an earlier one drains.
+  const [speaking, setSpeaking] = useState(false)
+  const ttsActiveRef = useRef(0)
+  // Speak an assembled reply through the gated voice path — fire-and-forget so
+  // the send promise resolves as soon as the text is rendered (audio plays on
+  // its own). Only for voice-originated turns; falls back to the system voice
+  // internally if backend TTS is unavailable.
+  const maybeSpeak = (text: string, fromVoice: boolean): void => {
+    if (!fromVoice || !text.trim()) return
+    ttsActiveRef.current++
+    setSpeaking(true)
+    void speakText(text)
+      .catch(() => {
+        /* fully handled inside speakText (system-voice fallback); never throws */
+      })
+      .finally(() => {
+        ttsActiveRef.current = Math.max(0, ttsActiveRef.current - 1)
+        if (ttsActiveRef.current === 0) setSpeaking(false)
+      })
+  }
 
   // Resolve the conversation id once for this hook's lifetime, based on the mode.
   // 'infinite' shares one stable id across launches AND across the main/overlay
@@ -71,11 +97,12 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // the new send; the ref is always current.
   const sendingRef = useRef(false)
 
-  // In infinite mode the MAIN window shows the ongoing thread, so load it once on
-  // mount (and backfill ids on any legacy id-less messages so the merge can match
-  // them). The overlay never loads — it opens fresh and only appends.
+  // In infinite mode the ongoing thread is loaded once on mount (and legacy
+  // id-less messages get backfilled ids so the merge can match them). This hook
+  // is the app's single chat engine now (the bar is a viewport over it via the
+  // main-process bridge — INV-CHAT-1), so there is one loader/writer.
   useEffect(() => {
-    if (mode !== 'infinite' || surface !== 'main' || !chatIdRef.current) return
+    if (mode !== 'infinite' || !chatIdRef.current) return
     let cancelled = false
     void window.omi
       .getLocalConversation(chatIdRef.current)
@@ -108,15 +135,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
     if (!startedAtRef.current) startedAtRef.current = Date.now()
 
-    // In infinite mode the main window and overlay both write this id, so read the
-    // current stored thread and MERGE by message id instead of overwriting — that
-    // preserves the other window's messages and updates (not duplicates) a streamed
-    // assistant message. Per-launch keeps the simple single-writer replace path.
-    // NOTE: this read-modify-write isn't atomic, so two windows streaming at the
-    // EXACT same instant can have one cycle's write land second and drop the other's
-    // in-flight content. It self-heals on the next persist, and each send's final
-    // persist (in `finally`) reconciles — acceptable given simultaneous cross-window
-    // streaming is a niche case (accepted in the design spec).
+    // In infinite mode, read the current stored thread and MERGE by message id
+    // instead of overwriting — this updates (not duplicates) a streamed assistant
+    // message and preserves anything already persisted for the shared id across
+    // launches. Per-launch keeps the simple single-writer replace path.
     let toStore = thread
     if (mode === 'infinite') {
       try {
@@ -184,9 +206,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  const send = async (text: string): Promise<void> => {
+  const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     if (!text.trim() || sendingRef.current) return
+    const fromVoice = !!opts?.fromVoice
     sendingRef.current = true
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
     const baseHistory = history
@@ -212,6 +235,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       }
       setHistory((h) => [...h, outMsg])
       void persistChat([...baseHistory, userMsg, outMsg])
+      maybeSpeak(outMsg.content, fromVoice)
       sendingRef.current = false
       return
     }
@@ -224,6 +248,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       }
       setHistory((h) => [...h, errMsg])
       void persistChat([...baseHistory, userMsg, errMsg])
+      maybeSpeak(errMsg.content, fromVoice)
       sendingRef.current = false
       return
     }
@@ -323,13 +348,16 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
           return next
         })
       }
+      // Voice turn: speak the assembled reply (only on the success path — an
+      // error/partial is handled below and never spoken).
+      maybeSpeak(assistantText, fromVoice)
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
       setHistory((h) => {
@@ -361,5 +389,5 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  return { history, sending, send, reset }
+  return { history, sending, speaking, send, reset }
 }

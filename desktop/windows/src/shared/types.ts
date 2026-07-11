@@ -259,7 +259,11 @@ export type CaptureEvent =
   | { type: 'ptt-capped'; captureId: string }
   | { type: 'ptt-error'; captureId: string; message: string }
   // ~30fps 32-bin waveform snapshots for the PTT visualizer (routed to the owner).
-  | { type: 'ptt-levels'; captureId: string; bins: number[] }
+  // `orbLevel` (0..1) is a SEPARATE fast-response loudness for the orb: the bars'
+  // `bins` come from a heavily smoothed analyser (springy bars), which lags too
+  // much to wave the orb per syllable, so the capture window taps a second
+  // low-smoothing analyser just for the orb lane.
+  | { type: 'ptt-levels'; captureId: string; bins: number[]; orbLevel?: number }
   // The capture window was recreated/reloaded — UI windows re-issue their
   // standing commands (live-view, screen-view, an active PTT is abandoned).
   | { type: 'capture-window-restarted' }
@@ -279,6 +283,10 @@ export type CaptureEvent =
  *  in the capture window. */
 export type WaveformSource = {
   getByteFrequencyData: (dest: Uint8Array) => void
+  /** Fast-response loudness 0..1 for the orb, when the source provides one (the
+   *  IPC PTT adapter fills it from `ptt-levels.orbLevel`). Absent on a plain
+   *  `AnalyserNode`; the orb then falls back to RMS of the frequency bins. */
+  getOrbLevel?: () => number
 }
 
 export type OmiOverlayApi = {
@@ -334,15 +342,38 @@ export type OverlayVisibility = { open: boolean; active: boolean }
  *  interactive islands), expanded (chat, the only focused mode), ptt (expanded
  *  listening for a hotkey hold, unfocused). */
 export type BarMode = 'peek' | 'expanded' | 'ptt'
-/** What triggered a reveal — drives the renderer's entrance motion (strip =
- *  slide-in; summon/ptt = orb genesis). */
-export type BarReveal = 'strip' | 'summon' | 'ptt'
-export type BarShowPayload = { mode: BarMode; reveal: BarReveal }
+/** What triggered a reveal (hotkey tap/hold — top-edge hover reveal was
+ *  removed). Both drive the same entrance motion (slide-in + orb genesis). */
+export type BarReveal = 'summon' | 'ptt'
+
+/** A single chat message projected across the bar↔main bridge. Structurally the
+ *  renderer's `ChatMsg` (hooks/useChat) — kept here so the shared preload types
+ *  don't import renderer code. */
+export type BarChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+/** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
+ *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
+export type BarChatStatus = 'idle' | 'sending' | 'speaking'
+/** Projected chat state the main window broadcasts to the bar (viewport over the
+ *  ONE chat engine — INV-CHAT-1). The bar renders this; it never owns a thread. */
+export type BarChatState = {
+  messages: BarChatMessage[]
+  sending: boolean
+  status: BarChatStatus
+}
+/** `token` is a per-reveal monotonic id: the renderer echoes it back via
+ *  `showAck` once it has painted the revealed frame, so main can reject a stale
+ *  ack from a reveal that was cancelled/superseded (see the paint-ack handshake
+ *  in main/bar/window.ts). */
+export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
 
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
   ready: () => void
+  /** Per-reveal paint acknowledgement: the renderer has committed a frame with
+   *  the revealed state (double-rAF), so main may now show the HWND without
+   *  flashing the previous off-screen frame. Echoes the reveal `token`. */
+  showAck: (token: number) => void
   /** Slide-out finished; main may hide the window now. */
   requestHide: () => void
   /** Ask main to switch modes (focusability + hit-testing follow). */
@@ -350,8 +381,19 @@ export type OmiBarApi = {
   collapse: () => void
   /** Interactive-island hit-testing toggle (peek/ptt modes). */
   setInteractive: (interactive: boolean) => void
-  /** Fired by the 1px trigger-strip pages on mousemove (edge reveal). */
-  stripEnter: () => void
+  /** Keep the summoned pill open (suppress the cursor retract watchdog) while a
+   *  PTT hold / streaming reply / spoken answer is in flight; dropped after a
+   *  short grace so the pill retracts once the exchange ends. */
+  keepAlive: (active: boolean) => void
+  /** Send a chat message through the bar→main bridge (the main window's single
+   *  chat engine owns the thread). `fromVoice` requests a spoken reply. */
+  sendChat: (text: string, fromVoice: boolean) => void
+  /** Ask the main window to (re)broadcast the current chat state — called on
+   *  mount / each reveal so the bar shows the ongoing thread. */
+  requestChatState: () => void
+  /** Projected chat state pushed from the main window (history + streaming +
+   *  status). Returns an unsubscribe fn. */
+  onChatState: (cb: (state: BarChatState) => void) => () => void
   onShow: (cb: (p: BarShowPayload) => void) => () => void
   onMode: (cb: (mode: BarMode) => void) => () => void
   onWillHide: (cb: () => void) => () => void
@@ -423,6 +465,10 @@ export type OmiBridgeApi = {
   /** True when OMI_E2E=1 — renderer-side test hooks (e.g. window.__omiVoice)
    *  attach only in harness runs, never in production. */
   e2e: boolean
+  /** True when OMI_E2E_FAKE_AUTH=1 — the shell E2E injects an offline fake user
+   *  so the authed `/*` shell mounts on the real production build. A dedicated
+   *  flag (never set by the app), so it can never activate in normal use. */
+  e2eFakeAuth: boolean
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */
@@ -534,8 +580,19 @@ export type OmiBridgeApi = {
   meetingAction: (meetingId: string, action: MeetingToastAction) => void
   /** Toast renderer subscribes to meeting toast payloads. */
   onMeetingToast: (cb: (p: MeetingToastPayload) => void) => () => void
+  // --- What's new (Phase 8) ---
+  /** Toast renderer subscribes to post-update what's-new payloads. */
+  onWhatsNewToast: (cb: (p: WhatsNewPayload) => void) => () => void
+  /** Toast renderer → main: fetch the pending what's-new payload on mount. */
+  whatsNewGetPending: () => Promise<WhatsNewPayload | null>
+  /** Toast renderer → main: open the GitHub release notes in the browser. */
+  whatsNewOpenNotes: () => void
   perfFirstPaint: () => void
   perfMark: (name: string) => void
+  /** True when the main window was created with the Win11 Mica background
+   *  material (22H2+). The renderer sets data-mica on the root so the canvas
+   *  goes translucent; flat solid fallback everywhere else. */
+  micaEnabled: boolean
   // Animation bench (OMI_ANIM_BENCH): the renderer probe reports a jank summary
   // for the startup entrance animations back to main.
   perfAnimResult: (stats: Record<string, number>) => void
@@ -568,6 +625,14 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
+  /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
+   *  chat.send() (with fromVoice). Main-window renderer only. */
+  onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => () => void
+  /** The bar (re)requested current chat state — ChatBridgeHost publishes now. */
+  onBarRequestChatState: (cb: () => void) => () => void
+  /** Broadcast the projected chat state to the bar (history + streaming + status). */
+  publishChatState: (state: BarChatState) => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void
@@ -979,6 +1044,13 @@ export type MeetingToastPayload = {
 }
 
 export type MeetingToastAction = 'start' | 'stop' | 'dismiss'
+
+// Post-update "what's new" toast (Phase 8). Shown once after the app updates to a
+// version we have changelog notes for; rendered in the shared acrylic toast window.
+export type WhatsNewPayload = {
+  version: string
+  changes: string[]
+}
 
 export type InsightSettings = {
   enabled: boolean // default ON

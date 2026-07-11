@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
-  computeStripBounds,
   computeBarBounds,
   displayForPoint,
   isCursorInPeekFootprint,
-  shouldSuppressStrips,
+  isCursorOverPill,
   BAR_WINDOW_WIDTH,
-  STRIP_WIDTH,
+  PILL_HIT_WIDTH,
   type DisplayLike
 } from './placement'
 
@@ -22,36 +21,6 @@ const secondary: DisplayLike = {
   workArea: { x: 2560, y: -200, width: 1920, height: 1032 },
   scaleFactor: 1.5
 }
-
-describe('computeStripBounds', () => {
-  it('is a 1px-tall CENTERED footprint — never the display width (merge-blocker regression)', () => {
-    // Full-width strips hijacked the top edge: aiming at a maximized window's
-    // ✕/minimize or browser tab-close buttons summoned the bar.
-    const s = computeStripBounds(primary)
-    expect(s.height).toBe(1)
-    expect(s.width).toBe(STRIP_WIDTH)
-    expect(s.x).toBe(Math.round((2560 - STRIP_WIDTH) / 2))
-    // Corners are far outside the strip on every representative display.
-    for (const d of [
-      primary,
-      secondary,
-      { ...primary, bounds: { x: 0, y: 0, width: 1366, height: 768 } },
-      { ...primary, bounds: { x: 0, y: 0, width: 3440, height: 1440 } }
-    ]) {
-      const strip = computeStripBounds(d)
-      const b = d.bounds
-      expect(strip.x).toBeGreaterThan(b.x + b.width * 0.25) // top-left corner excluded
-      expect(strip.x + strip.width).toBeLessThan(b.x + b.width * 0.75) // top-right excluded
-      expect(strip.y).toBe(b.y)
-    }
-  })
-
-  it('keeps its own origin on a negative-origin secondary display', () => {
-    const s = computeStripBounds(secondary)
-    expect(s.y).toBe(-200)
-    expect(s.x).toBe(Math.round(2560 + (1920 - STRIP_WIDTH) / 2))
-  })
-})
 
 describe('isCursorInPeekFootprint (retract watchdog — merge-blocker regression)', () => {
   it('screen corners with the bar open must NOT count as hovering (retract fires)', () => {
@@ -72,6 +41,32 @@ describe('isCursorInPeekFootprint (retract watchdog — merge-blocker regression
     expect(isCursorInPeekFootprint({ x: 1280 - 300, y: 0 }, primary)).toBe(false)
     // Centered footprint on the negative-origin secondary display.
     expect(isCursorInPeekFootprint({ x: 2560 + 960, y: -190 }, secondary)).toBe(true)
+  })
+})
+
+describe('isCursorOverPill (click-through safety net — BUG 4 regression)', () => {
+  it('only the 160×44 top-center pill rect captures clicks — dead space is click-through', () => {
+    // Dead-center over the pill: interactive (the pill is clickable to expand).
+    expect(isCursorOverPill({ x: 1280, y: 0 }, primary)).toBe(true)
+    expect(isCursorOverPill({ x: 1280, y: 40 }, primary)).toBe(true)
+    // Just below the pill (a control at ~y=60 under the top-center band, e.g. a
+    // browser new-tab "+"): NOT over the pill → window stays click-through.
+    expect(isCursorOverPill({ x: 1280, y: 60 }, primary)).toBe(false)
+    // Off to the side but still inside the (larger) keep-open footprint: the bar
+    // stays revealed, yet this dead space must pass clicks through.
+    expect(isCursorInPeekFootprint({ x: 1280 + 120, y: 10 }, primary)).toBe(true)
+    expect(isCursorOverPill({ x: 1280 + 120, y: 10 }, primary)).toBe(false)
+  })
+
+  it('is narrower than the keep-open footprint (clicks pass around the pill)', () => {
+    expect(PILL_HIT_WIDTH).toBeLessThan(320) // < PEEK_FOOTPRINT_WIDTH
+    const edge = 1280 + PILL_HIT_WIDTH / 2 + 1 // just outside the pill hit-rect
+    expect(isCursorOverPill({ x: edge, y: 0 }, primary)).toBe(false)
+  })
+
+  it('centers on a negative-origin secondary display', () => {
+    expect(isCursorOverPill({ x: 2560 + 960, y: -200 }, secondary)).toBe(true)
+    expect(isCursorOverPill({ x: 2560 + 960, y: -140 }, secondary)).toBe(false) // below pill
   })
 })
 
@@ -109,65 +104,5 @@ describe('displayForPoint', () => {
     expect(displayForPoint([primary, secondary], { x: 3000, y: 10 }).id).toBe(2)
     // Point outside every display → nearest center.
     expect(displayForPoint([primary, secondary], { x: 9000, y: 0 }).id).toBe(2)
-  })
-})
-
-describe('shouldSuppressStrips', () => {
-  const self = 'C:\\apps\\omi\\omi.exe'
-
-  it('suppresses when the foreground rect covers the display (physical px)', () => {
-    expect(
-      shouldSuppressStrips(
-        {
-          rect: { x: 0, y: 0, width: 2560, height: 1440 },
-          className: 'UnityWndClass',
-          exePath: 'C:\\g\\game.exe'
-        },
-        primary,
-        self
-      )
-    ).toBe(true)
-  })
-
-  it('accounts for scaleFactor on high-DPI displays', () => {
-    // 1.5x display: 1920x1080 DIP = 2880x1620 physical.
-    const rect = { x: 2560 * 1.5, y: -200 * 1.5, width: 2880, height: 1620 }
-    expect(
-      shouldSuppressStrips({ rect, className: 'X', exePath: 'C:\\g\\game.exe' }, secondary, self)
-    ).toBe(true)
-    // A merely maximized window (short of the taskbar) does not suppress.
-    const maxed = { ...rect, height: 1550 }
-    expect(
-      shouldSuppressStrips(
-        { rect: maxed, className: 'X', exePath: 'C:\\g\\game.exe' },
-        secondary,
-        self
-      )
-    ).toBe(false)
-  })
-
-  it('never suppresses for shell surfaces, our own exe, or no rect', () => {
-    const full = { x: 0, y: 0, width: 2560, height: 1440 }
-    expect(
-      shouldSuppressStrips(
-        { rect: full, className: 'WorkerW', exePath: 'C:\\Windows\\explorer.exe' },
-        primary,
-        self
-      )
-    ).toBe(false)
-    expect(
-      shouldSuppressStrips(
-        { rect: full, className: 'Chrome_WidgetWin_1', exePath: self },
-        primary,
-        self
-      )
-    ).toBe(false)
-    expect(
-      shouldSuppressStrips(
-        { rect: null, className: 'X', exePath: 'C:\\g\\game.exe' },
-        primary,
-        self
-      )
-    ).toBe(false)
   })
 })
