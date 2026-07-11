@@ -113,6 +113,7 @@ actor TaskChatMessageStorage {
     static let shared = TaskChatMessageStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -123,7 +124,7 @@ actor TaskChatMessageStorage {
     }
 
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -134,11 +135,13 @@ actor TaskChatMessageStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw TaskChatMessageStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }

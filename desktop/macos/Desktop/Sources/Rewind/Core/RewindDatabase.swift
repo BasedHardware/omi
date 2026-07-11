@@ -51,6 +51,20 @@ actor RewindDatabase {
         return dbQueue
     }
 
+    /// Monotonic epoch of the current `dbQueue`. Bumped on every close and every
+    /// pool (re)open, so a storage actor that cached a pool can detect a swap
+    /// (corruption/maintenance recovery replaces the pool) and drop its stale
+    /// reference instead of reading/writing a closed or unlinked file.
+    func poolGeneration() -> Int {
+        return initGeneration
+    }
+
+    /// Atomically read the current pool and its epoch together, so a caching
+    /// storage actor stores a consistent (pool, generation) pair.
+    func getDatabaseQueueWithGeneration() -> (pool: DatabasePool?, generation: Int) {
+        return (dbQueue, initGeneration)
+    }
+
     /// Report a query error from a storage actor or subsystem.
     /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
     /// closes the database so the next initialize() call triggers recovery.
@@ -471,6 +485,10 @@ actor RewindDatabase {
         }
 
         dbQueue = activeQueue
+        // Bump the epoch on every pool (re)open so storage actors that cached the
+        // previous pool revalidate and drop it — recovery may have replaced the
+        // underlying omi.db file, leaving the old pool pointing at a stale inode.
+        initGeneration += 1
         openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
         consecutiveQueryIOErrors = 0
 
