@@ -8,6 +8,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
   - desktop/macos/Desktop/Sources/MemoryExportService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
 preconditions:
   - automation_bridge_ready
 
