@@ -40,6 +40,6 @@
   "unused_field": 6,
   "unused_import": 40,
   "unused_local_variable": 12,
-  "use_build_context_synchronously": 105,
+  "use_build_context_synchronously": 90,
   "use_super_parameters": 6
 }
