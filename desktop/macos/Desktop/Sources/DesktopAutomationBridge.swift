@@ -3147,6 +3147,11 @@ final class DesktopAutomationBridge {
   private var bindAttempts = 0
   private let maxBindAttempts = 3
 
+  /// Upper bound on a request body's declared Content-Length. Requests over this
+  /// are rejected before the body is sliced (see parseRequest); the automation
+  /// bridge only ever receives small JSON action payloads.
+  static let maxRequestBodyBytes = 8 * 1024 * 1024
+
   private init() {}
 
   func startIfNeeded() {
@@ -3281,7 +3286,15 @@ final class DesktopAutomationBridge {
       let value = pieces[1].trimmingCharacters(in: .whitespaces)
       headers[key] = value
       if key == "content-length" {
-        contentLength = Int(value) ?? 0
+        // Reject negative/absurd lengths before the body-slice range and the
+        // `distance + contentLength` addition below (which would trap/overflow).
+        // Reachable pre-auth from any local process, so fail closed.
+        guard
+          let parsed = LoopbackHTTPParsing.parseContentLength(value, maxBytes: Self.maxRequestBodyBytes)
+        else {
+          return nil
+        }
+        contentLength = parsed
       }
     }
 

