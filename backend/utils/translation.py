@@ -758,10 +758,24 @@ class TranslationService:
             )
         return self._nllb_client
 
+    def _detect_source_language(self, contents: List[str]) -> str:
+        combined = " ".join(contents)
+        if len(combined) < 20:
+            return ""
+        try:
+            detected = langdetect_detect(combined)
+            if detected and detected in LANGDETECT_RELIABLE_LANGUAGES:
+                return detected
+        except LangDetectException:
+            pass
+        return ""
+
     def _translate_nllb_batch(
         self, contents: List[str], dest_language: str, source_language: str = ""
     ) -> List[Tuple[str, str]]:
         TRANSLATION_BATCH_SIZE.labels(provider="nllb").observe(len(contents))
+        if not source_language:
+            source_language = self._detect_source_language(contents)
         t0 = time.monotonic()
         try:
             client = self._get_nllb_client()

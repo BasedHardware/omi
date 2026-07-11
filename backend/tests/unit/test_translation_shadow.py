@@ -707,6 +707,30 @@ class TestNllbPrimaryMode(unittest.TestCase):
             payload = call_args[1]["json"]
             self.assertNotIn("source_language_code", payload)
 
+    def test_nllb_batch_auto_detects_source_language(self):
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "translations": [
+                {"translated_text": "Hello everyone, welcome to today's meeting", "detected_language_code": "es"}
+            ],
+            "latency_ms": 10,
+        }
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            with patch.object(self.service, '_detect_source_language', return_value="es"):
+                self.service._nllb_client = None
+                self.service._translate_nllb_batch(["Hola a todos, bienvenidos a la reunión de hoy"], "en")
+                call_args = mock_client.post.call_args
+                payload = call_args[1]["json"]
+                self.assertEqual(payload["source_language_code"], "es")
+
     def test_translate_batch_uses_nllb_when_mode_nllb(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
