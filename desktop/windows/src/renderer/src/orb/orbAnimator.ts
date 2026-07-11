@@ -16,8 +16,11 @@ import {
   computeOrbFrame,
   easeInOut,
   genesisSettled,
+  mergeAmount,
+  spinTargetFor,
   stepMergeEnvelope,
   stepAmplitudeEnvelope,
+  SPIN_EASE_TAU,
   DEFAULT_ORB_PARAMS,
   type OrbParams,
   type OrbState
@@ -37,6 +40,13 @@ export class OrbAnimator {
   private params: OrbParams
   private state: OrbState = 'idle'
   private stateChangedAt = 0
+  /** Effective merge captured at the last state change — the new state's ramp
+   *  cross-fades from it so the blob never snaps (C6). */
+  private enterMerge = 0
+  /** Live orbit-speed multiplier, eased toward the current state's target, and
+   *  the warped orbit clock it integrates (C9 — faster spin while busy). */
+  private spinMult = 1
+  private orbitTime = 0
   private summonedAt: number | null = null
   private morphTarget = 0
   private morph = 0
@@ -97,6 +107,15 @@ export class OrbAnimator {
 
   setState(state: OrbState): void {
     if (state === this.state) return
+    // Capture the merge currently on screen (computed from the OUTGOING state,
+    // carrying any in-progress cross-fade) so the new state's ramp starts from
+    // it — the blob morphs continuously across the switch instead of snapping.
+    this.enterMerge = mergeAmount(
+      this.state,
+      this.now() - this.stateChangedAt,
+      this.speechMerge,
+      this.enterMerge
+    )
     this.state = state
     this.stateChangedAt = this.now()
     // 'speaking' as a STATE opens the speech gate; any other state closes it
@@ -183,6 +202,11 @@ export class OrbAnimator {
     // Deterministic envelope steps (same functions the harness scrubs with).
     this.speechMerge = stepMergeEnvelope(this.speechMerge, this.speechActive ? 1 : 0, dt)
     this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, this.rawAmplitude, dt)
+    // Ease the orbit-speed multiplier toward the state's target and integrate
+    // the warped orbit clock (incremental → no angle jump when speed changes).
+    const spinTarget = spinTargetFor(this.state, this.params)
+    this.spinMult += (spinTarget - this.spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
+    this.orbitTime += dt * this.spinMult
     // Ease the morph toward its target at a fixed rate (deterministic per dt).
     const step = dt / MORPH_SECONDS
     if (this.morph < this.morphTarget) this.morph = Math.min(this.morphTarget, this.morph + step)
@@ -195,6 +219,8 @@ export class OrbAnimator {
       stateTime: t - this.stateChangedAt,
       amplitude: this.ampEnvelope,
       speechMerge: this.speechMerge,
+      enterMerge: this.enterMerge,
+      orbitTime: this.orbitTime,
       genesisTime: this.summonedAt === null ? Infinity : t - this.summonedAt,
       // Linear progress internally; eased at the point of use so the shape
       // change reads as one smooth motion in both directions.
