@@ -5,7 +5,7 @@ import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/appState'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
-import { Markdown } from '../components/Markdown'
+import { RevealMarkdown } from '../components/chat/RevealMarkdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
 import omiMark from '../assets/omi-logo.png'
@@ -92,6 +92,7 @@ export function Home(): React.JSX.Element {
   const { chat } = useAppState()
   const [user, setUser] = useState<User | null>(auth.currentUser)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const chatContentRef = useRef<HTMLDivElement>(null)
   const widgetsGridRef = useRef<HTMLDivElement>(null)
   const lastLenRef = useRef(0)
   const [scrollMode, setScrollModeState] = useState<ChatScrollMode>('followingBottom')
@@ -292,6 +293,23 @@ export function Home(): React.JSX.Element {
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
   }, [chat.history, chat.sending, showThread, scrollToLatest, widgetsReady, widgetsH])
 
+  // RevealMarkdown grows the streaming reply's text every 16ms WITHOUT a
+  // chat.history change, so the effect above (keyed on history) can't follow it.
+  // Mirror BarChatSurface: observe the thread content and re-pin the live edge on
+  // every size change while following, so the bottom tracks the char-by-char
+  // reveal smoothly instead of jumping once per SSE chunk.
+  useEffect(() => {
+    const content = chatContentRef.current
+    if (!content) return
+    const ro = new ResizeObserver(() => {
+      const el = chatScrollRef.current
+      if (el) setOverflowing(el.scrollHeight > el.clientHeight + 4)
+      if (scrollModeRef.current === 'followingBottom') scrollToLatest()
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [scrollToLatest])
+
   // Reveal an older page when the user scrolls near the top, capturing the
   // current distance-from-bottom so the view can be pinned in place afterward.
   const onThreadScroll = (): void => {
@@ -377,7 +395,7 @@ export function Home(): React.JSX.Element {
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-            <div className="mt-auto space-y-5 pb-2">
+            <div ref={chatContentRef} className="mt-auto space-y-5 pb-2">
               {started && showThread ? (
                 windowed.map((m, i) => {
                   const isUser = m.role === 'user'
@@ -405,7 +423,10 @@ export function Home(): React.JSX.Element {
                       </div>
                       <div className="min-w-0 max-w-[85%] pt-0.5 text-[15px] leading-[1.65] text-white/90">
                         {m.content ? (
-                          <Markdown text={m.content} />
+                          <RevealMarkdown
+                            text={m.content}
+                            startRevealed={!(isLast && chat.sending)}
+                          />
                         ) : chat.sending && isLast ? (
                           <span className="typing-dots" aria-label="Omi is replying">
                             <span />
