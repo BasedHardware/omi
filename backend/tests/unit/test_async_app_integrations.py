@@ -176,9 +176,9 @@ if _utils_pkg is None:
 _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
 
 for name in _utils_stubs:
-    module = sys.modules.get(name)
-    if module is None:
-        module = types.ModuleType(name)
+    # Always install a fresh module instead of mutating an already-imported
+    # production module and leaking mocked executor attributes to later tests.
+    module = types.ModuleType(name)
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
@@ -252,6 +252,7 @@ from concurrent.futures import ThreadPoolExecutor as _TPE
 _executors_mod = sys.modules["utils.executors"]
 _executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
 _executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+_executors_mod.postprocess_executor = _TPE(max_workers=2, thread_name_prefix="test-postprocess")
 _executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
 
 

@@ -13,8 +13,10 @@ test_async_app_integrations.py so the heavy router-tier imports resolve without
 real Firestore / Redis / langchain / httpx packages.
 """
 
+import contextvars
 import os
 import sys
+import threading
 import types
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -181,9 +183,9 @@ if _utils_pkg is None:
 _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
 
 for name in _utils_stubs:
-    module = sys.modules.get(name)
-    if module is None:
-        module = types.ModuleType(name)
+    # Always install a fresh module instead of mutating an already-imported
+    # production module and leaking mocked executor attributes to later tests.
+    module = types.ModuleType(name)
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
@@ -197,6 +199,7 @@ sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
+sys.modules["utils.llm.clients"].get_llm = MagicMock()
 sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
@@ -252,6 +255,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 _executors_mod = sys.modules["utils.executors"]
 _executors_mod.db_executor = MagicMock(name="db_executor")
 _executors_mod.critical_executor = MagicMock(name="critical_executor")
+_executors_mod.postprocess_executor = MagicMock(name="postprocess_executor")
 _executors_mod.storage_executor = MagicMock(name="storage_executor")
 
 
@@ -265,6 +269,8 @@ import importlib
 
 app_integrations = importlib.import_module("utils.app_integrations")
 _restore_stub_modules()
+
+from utils.executors import run_blocking as _production_run_blocking
 
 
 def _make_app(app_id: str, webhook_url: str, triggers_realtime=True, uid=None):
@@ -288,6 +294,16 @@ def _make_tracking_run_blocking():
 
     async def _tracking(executor, fn, *args, **kwargs):
         calls.append((fn, args, kwargs))
+        return fn(*args, **kwargs)
+
+    return _tracking, calls
+
+
+def _make_executor_tracking_run_blocking():
+    calls = []
+
+    async def _tracking(executor, fn, *args, **kwargs):
+        calls.append((executor, fn, args, kwargs))
         return fn(*args, **kwargs)
 
     return _tracking, calls
@@ -343,3 +359,121 @@ class TestRealtimeIntegrationsOffload:
 
         offloaded_fns = [fn for (fn, _a, _kw) in calls]
         assert record_usage in offloaded_fns, "record_app_usage was not offloaded via run_blocking"
+
+    @pytest.mark.asyncio
+    async def test_mentor_pipeline_uses_postprocess_executor(self):
+        tracking, calls = _make_executor_tracking_run_blocking()
+        mentor_processor = MagicMock(return_value=None)
+
+        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
+            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
+        ), patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
+            app_integrations, "_process_mentor_proactive_notification", mentor_processor
+        ):
+            await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
+
+        call = next(call for call in calls if call[1] is mentor_processor)
+        assert call[0] is app_integrations.postprocess_executor
+        assert call[2] == ("uid-1", [{"text": "hi"}])
+
+    @pytest.mark.asyncio
+    async def test_third_party_pipeline_uses_postprocess_executor(self):
+        app = _make_app("a1", "https://app1.test/hook")
+        app.has_capability.return_value = True
+        response = MagicMock(status_code=200, text="")
+        response.json.return_value = {"notification": {"prompt": "Help"}}
+        client = AsyncMock()
+        client.post.return_value = response
+        tracking, calls = _make_executor_tracking_run_blocking()
+        proactive_processor = MagicMock(return_value=None)
+
+        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
+        ), patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+            app_integrations, "get_webhook_client", return_value=client
+        ), patch.object(
+            app_integrations, "_process_proactive_notification", proactive_processor
+        ):
+            await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
+
+        call = next(call for call in calls if call[1] is proactive_processor)
+        assert call[0] is app_integrations.postprocess_executor
+        assert call[2] == ("uid-1", app, {"prompt": "Help"})
+
+    @pytest.mark.asyncio
+    async def test_mentor_pipeline_preserves_usage_context_without_blocking_loop(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        usage_context = contextvars.ContextVar("proactive_usage_context", default=None)
+        started = threading.Event()
+        release = threading.Event()
+        loop_progressed = threading.Event()
+        observations = {}
+        worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-postprocess")
+
+        @_cm
+        def tracked_usage(_uid, _feature):
+            token = usage_context.set("realtime-integrations")
+            try:
+                yield
+            finally:
+                usage_context.reset(token)
+
+        def blocking_mentor_processor(_uid, _messages):
+            observations["context"] = usage_context.get()
+            started.set()
+            assert release.wait(timeout=2)
+            observations["loop_progressed_before_release"] = loop_progressed.is_set()
+
+        async def routing_run_blocking(executor, fn, *args, **kwargs):
+            if executor is worker:
+                return await _production_run_blocking(executor, fn, *args, **kwargs)
+            return fn(*args, **kwargs)
+
+        safety_release = threading.Timer(1, release.set)
+        safety_release.start()
+        try:
+            with patch.object(app_integrations, "run_blocking", routing_run_blocking), patch.object(
+                app_integrations, "postprocess_executor", worker
+            ), patch.object(app_integrations, "track_usage", tracked_usage), patch.object(
+                app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
+            ), patch.object(
+                app_integrations, "get_available_apps", return_value=[]
+            ), patch.object(
+                app_integrations,
+                "_process_mentor_proactive_notification",
+                blocking_mentor_processor,
+            ):
+                task = _asyncio.create_task(
+                    app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
+                )
+                deadline = _asyncio.get_running_loop().time() + 0.75
+                while not started.is_set() and _asyncio.get_running_loop().time() < deadline:
+                    await _asyncio.sleep(0.005)
+                assert started.is_set()
+                loop_progressed.set()
+                release.set()
+                await task
+        finally:
+            release.set()
+            safety_release.cancel()
+            worker.shutdown(wait=True)
+
+        assert observations == {
+            "context": "realtime-integrations",
+            "loop_progressed_before_release": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_mentor_pipeline_preserves_failure_semantics(self):
+        tracking, _calls = _make_executor_tracking_run_blocking()
+
+        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
+            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
+        ), patch.object(
+            app_integrations,
+            "_process_mentor_proactive_notification",
+            side_effect=RuntimeError("mentor failed"),
+        ):
+            with pytest.raises(RuntimeError, match="mentor failed"):
+                await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")

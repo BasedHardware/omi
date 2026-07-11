@@ -13,7 +13,7 @@ from utils.http_client import (
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
@@ -49,7 +49,7 @@ from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
@@ -590,8 +590,6 @@ def _process_proactive_notification(uid: str, app: App, data):
     if 'user_chat' in filter_scopes:
         chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    from utils.llm.clients import get_llm
-
     # Build prompt with substitutions
     for param in filter_scopes:
         if param == "user_name":
@@ -700,7 +698,12 @@ async def _async_trigger_realtime_integrations(
     conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
+            mentor_message = await run_blocking(
+                postprocess_executor,
+                _process_mentor_proactive_notification,
+                uid,
+                conversation_messages,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
@@ -780,7 +783,13 @@ async def _async_trigger_realtime_integrations(
                 noti = response_data.get('notification', None)
                 if app.has_capability("proactive_notification"):
                     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                        message = _process_proactive_notification(uid, app, noti)
+                        message = await run_blocking(
+                            postprocess_executor,
+                            _process_proactive_notification,
+                            uid,
+                            app,
+                            noti,
+                        )
                     if message:
                         results[app.id] = message
             except Exception:
