@@ -1,5 +1,6 @@
-import SwiftUI
+import OmiSupport
 import OmiTheme
+import SwiftUI
 
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
@@ -484,7 +485,7 @@ struct ConversationDetailView: View {
     private func copyTranscript() {
         guard canCopyTranscript else { return }
 
-        let peopleDict = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let peopleDict = Dictionary(lastWriteWins: people.map { ($0.id, $0) })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
             let speakerName: String
             if segment.isUser {
@@ -716,7 +717,7 @@ struct ConversationDetailView: View {
     /// Do NOT wrap this in another LazyVStack or VStack — it emits ForEach items directly.
     @ViewBuilder
     private var transcriptBubblesContent: some View {
-        let peopleDict = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let peopleDict = Dictionary(lastWriteWins: people.map { ($0.id, $0) })
         ForEach(displayConversation.transcriptSegments) { segment in
             SpeakerBubbleView(
                 segment: segment,

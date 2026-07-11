@@ -1,9 +1,10 @@
 import AppKit
 import Combine
 import MarkdownUI
+import OmiSupport
+import OmiTheme
 import SwiftUI
 import UniformTypeIdentifiers
-import OmiTheme
 
 enum ShortcutHintLayout {
     static func visibleTokens(for keys: [String]) -> [String] {
@@ -2272,7 +2273,9 @@ private enum NotchAgentStackMetrics {
     static let logoRingRadiusRatio: CGFloat = 0.33
 
     static func sortedPills(_ pills: [AgentPill]) -> [AgentPill] {
-        let newestIndex = Dictionary(uniqueKeysWithValues: pills.reversed().enumerated().map { ($0.element.id, $0.offset) })
+        let newestIndex = Dictionary(lastWriteWins: pills.enumerated().map {
+            ($0.element.id, pills.count - 1 - $0.offset)
+        })
         return pills.sorted { lhs, rhs in
             let lhsGroup = NotchAgentStatusGroup(status: lhs.status)
             let rhsGroup = NotchAgentStatusGroup(status: rhs.status)

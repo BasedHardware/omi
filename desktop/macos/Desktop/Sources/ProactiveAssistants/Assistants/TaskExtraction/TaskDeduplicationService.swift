@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Service that periodically scans staged tasks and uses Gemini AI to detect
 /// and remove semantic duplicates BEFORE they are promoted to action items.
@@ -215,7 +216,7 @@ actor TaskDeduplicationService {
 
         // Validate and delete
         let validTaskIDs = Set(tasks.map { $0.id })
-        let taskLookup = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let taskLookup = Dictionary(lastWriteWins: tasks.map { ($0.id, $0) })
         var deletedCount = 0
 
         for group in result.duplicateGroups {

@@ -1,4 +1,5 @@
 import Combine
+import OmiSupport
 import SwiftUI
 
 /// Projects a selected task into its durable workstream conversation. The task
@@ -583,7 +584,7 @@ final class TaskChatCoordinator: ObservableObject {
     }
 
     var backendHeads = Dictionary(
-      uniqueKeysWithValues: TaskThreadProjection(
+      lastWriteWins: TaskThreadProjection(
         detail: detail,
         activeTaskID: detail.tasks.first?.id ?? ""
       ).artifactHeads.map { ($0.logicalKey, $0) }

@@ -1,3 +1,4 @@
+import OmiSupport
 import SwiftUI
 
 /// State management for apps/plugins functionality
@@ -198,9 +199,8 @@ class AppProvider: ObservableObject {
                 do {
                     let ratedApps = try await self.apiClient.getAppsWithRatings()
                     // Build a map of id → full app (for ratings AND enabled state).
-                    // The API can return duplicate app ids; use last-write-wins instead of
-                    // Dictionary(uniqueKeysWithValues:), which traps on a duplicate key.
-                    let v1Map = Dictionary(ratedApps.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+                    // The API can return duplicate app ids; use last-write-wins.
+                    let v1Map = Dictionary(lastWriteWins: ratedApps.map { ($0.id, $0) })
                     func enrich(_ list: inout [OmiApp]) {
                         for index in list.indices {
                             guard let v1App = v1Map[list[index].id] else { continue }

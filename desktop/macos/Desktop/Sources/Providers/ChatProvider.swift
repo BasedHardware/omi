@@ -1,7 +1,8 @@
-import SwiftUI
 import Combine
 import CoreGraphics
 import GRDB
+import OmiSupport
+import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - UserDefaults Extension for KVO
@@ -5189,10 +5190,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for runId in runIds {
             guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
             else { continue }
-            // Guard against duplicate artifact ids (last-write-wins); Dictionary(uniqueKeysWithValues:)
-            // traps on a duplicate key and would crash the chat view.
-            artifactsByRunId[runId] = Dictionary(
-                artifacts.map { ($0.artifactId, $0) }, uniquingKeysWith: { _, latest in latest })
+            // Guard against duplicate artifact ids from the runtime (last-write-wins).
+            artifactsByRunId[runId] = Dictionary(lastWriteWins: artifacts.map { ($0.artifactId, $0) })
         }
         guard !artifactsByRunId.isEmpty else { return }
 

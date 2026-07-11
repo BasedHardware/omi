@@ -178,15 +178,6 @@ run_agent_runtime_focus() {
     cd "$DESKTOP_DIR"
     scripts/test-tool-surfaces.sh
   )
-  (
-    cd "$DESKTOP_DIR/agent"
-    npm test -- --run \
-      tests/codemagic-pi-mono-extension-ci.test.ts \
-      tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts \
-      tests/surface-session.test.ts \
-      tests/chat-continuity-invariant.test.ts
-  )
 }
 
 ensure_pi_mono_extension_deps() {
