@@ -311,7 +311,12 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                 pos += 1
                 let (chunkLength, chunkPos) = decodeVarint(flashPageData, pos)
                 pos = chunkPos
-                let chunkEnd = pos + chunkLength
+                // Clamp every embedded length to the buffer end. A reassembled
+                // flash page can arrive truncated (a stale/lost BLE fragment, or an
+                // outer field already clamped upstream) while its inner length
+                // fields still over-claim, which would drive `pos` to `count` and
+                // trap on the subscripts below. Mirrors extractOpusFramesFromFlashPage.
+                let chunkEnd = min(pos + chunkLength, flashPageData.count)
 
                 while pos < chunkEnd - 1 {
                     let marker = flashPageData[pos]
@@ -321,7 +326,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                         pos += 1
                         let (statusLength, statusPos) = decodeVarint(flashPageData, pos)
                         pos = statusPos
-                        let statusEnd = pos + statusLength
+                        let statusEnd = min(pos + statusLength, flashPageData.count)
 
                         while pos < statusEnd {
                             let statusMarker = flashPageData[pos]
@@ -343,7 +348,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                         pos += 1
                         let (audioLength, audioPos) = decodeVarint(flashPageData, pos)
                         pos = audioPos
-                        let audioEnd = pos + audioLength
+                        let audioEnd = min(pos + audioLength, flashPageData.count)
 
                         while pos < audioEnd - 1 {
                             let audioMarker = flashPageData[pos]
