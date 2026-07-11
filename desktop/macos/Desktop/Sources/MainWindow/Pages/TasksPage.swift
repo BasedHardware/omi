@@ -3620,7 +3620,7 @@ struct TasksPage: View {
         .padding(.top, 8)
     }
 
-    private func errorView(_ error: String) -> some View {
+    private func errorView(_: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: 48)
@@ -3630,7 +3630,7 @@ struct TasksPage: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(error)
+            Text("Check your connection and try again.")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
