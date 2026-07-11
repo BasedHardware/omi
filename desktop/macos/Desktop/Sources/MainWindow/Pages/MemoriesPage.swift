@@ -2106,7 +2106,19 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-        MemoryGraphInlineCard(viewModel: graphViewModel)
+        switch MemoryGraphPresentationMode.resolve(
+          canonicalLifecycleExposed: viewModel.canonicalLifecycleExposed
+        ) {
+        case .canonicalAtlas:
+          CanonicalMemoryAtlasInlineCard(
+            viewModel: graphViewModel,
+            onViewEvidence: { memoryIds in
+              viewModel.selectedMemory = viewModel.memories.first { memoryIds.contains($0.id) }
+            }
+          )
+        case .legacyBrainMap:
+          MemoryGraphInlineCard(viewModel: graphViewModel)
+        }
 
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(viewModel.filteredMemories) { memory in
