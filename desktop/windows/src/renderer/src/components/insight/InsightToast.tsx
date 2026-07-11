@@ -33,7 +33,7 @@ function WhatsNewCard({ p }: { p: WhatsNewPayload }): React.JSX.Element {
           <li key={i}>{c}</li>
         ))}
       </ul>
-      <div className="meeting-actions">
+      <div className="whatsnew-actions">
         <button
           className="meeting-btn meeting-btn-primary"
           onClick={() => window.omi.whatsNewOpenNotes()}

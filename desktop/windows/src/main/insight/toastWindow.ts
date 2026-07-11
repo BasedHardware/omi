@@ -19,6 +19,11 @@ import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
+// The what's-new card carries more copy (a 3-item changelog + a button) than an
+// insight/meeting toast, so it gets a taller window sized to its content — three
+// changes each wrapping to two lines, the headline, and the release-notes button
+// all fit without clipping. Insight/meeting toasts reset the window to HEIGHT.
+const WHATS_NEW_HEIGHT = 244
 const MARGIN = 16
 const AUTO_DISMISS_MS = 8000
 // The ask-toast is a decision prompt — give it longer before it slips away.
@@ -118,13 +123,13 @@ function ensureWindow(): BrowserWindow {
   return win
 }
 
-function position(win: BrowserWindow): void {
+function position(win: BrowserWindow, height: number = HEIGHT): void {
   const wa = screen.getPrimaryDisplay().workArea
   win.setBounds({
     x: wa.x + wa.width - WIDTH - MARGIN,
-    y: wa.y + wa.height - HEIGHT - MARGIN,
+    y: wa.y + wa.height - height - MARGIN,
     width: WIDTH,
-    height: HEIGHT
+    height
   })
 }
 
@@ -167,7 +172,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
  *  Informational, so it uses a longer dismiss and never steals focus. */
 export function showWhatsNewToast(payload: WhatsNewPayload): void {
   const win = ensureWindow()
-  position(win)
+  position(win, WHATS_NEW_HEIGHT)
   win.showInactive()
   currentMeetingToast = null
   currentWhatsNew = payload
