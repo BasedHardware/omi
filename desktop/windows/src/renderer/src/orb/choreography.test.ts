@@ -15,6 +15,7 @@ import {
   stepAmplitudeEnvelope,
   stepMergeEnvelope,
   mergeAmount,
+  spinTargetFor,
   genesisScale,
   genesisSettled,
   computeOrbFrame
@@ -180,6 +181,77 @@ describe('mergeAmount', () => {
     expect(mergeAmount('thinking', 0, 1)).toBe(0)
     expect(mergeAmount('thinking', 2, 0)).toBe(1)
     expect(mergeAmount('agents', 5, 1)).toBe(0)
+  })
+
+  // C6: with enterMerge supplied, a state change cross-fades from the value on
+  // screen instead of snapping (blob explode-and-reform).
+  describe('cross-fade on state change (enterMerge)', () => {
+    it('is exactly continuous with the value shown at the switch instant', () => {
+      // At stateTime 0 the new state must return precisely enterMerge.
+      for (const state of ['idle', 'listening', 'speaking', 'thinking', 'agents'] as const) {
+        for (const em of [0, 0.3, 1]) {
+          expect(mergeAmount(state, 0, 0, em)).toBeCloseTo(em, 9)
+        }
+      }
+    })
+
+    it('speaking→thinking never snaps: entering thinking merged stays merged', () => {
+      // enterMerge≈1 (a held speech blob) → thinking holds ~1 the whole ramp,
+      // never dips toward 0 the way the branch-switch bug did.
+      for (let s = 0; s <= 0.8; s += 0.05) {
+        expect(mergeAmount('thinking', s, 0, 1)).toBeGreaterThan(0.98)
+      }
+    })
+
+    it('thinking→idle dissolves smoothly from 1 down to 0', () => {
+      const start = mergeAmount('idle', 0, 0, 1)
+      const end = mergeAmount('idle', 0.6, 0, 1)
+      expect(start).toBeCloseTo(1, 9)
+      expect(end).toBeLessThan(0.02)
+      // Monotone, no reversal, bounded per-step (no snap) at 60fps.
+      let prev = start
+      for (let s = 1 / 60; s <= 0.6; s += 1 / 60) {
+        const m = mergeAmount('idle', s, 0, 1)
+        expect(m).toBeLessThanOrEqual(prev + 1e-9)
+        expect(prev - m).toBeLessThan(0.12)
+        prev = m
+      }
+    })
+
+    it('thinking from the ring (enterMerge 0) reduces exactly to the original ramp', () => {
+      // thinking's steady target is 1, so cross-fading 0→1 over its 0.8s gather
+      // IS the original easeInOut(stateTime/0.8).
+      for (let s = 0; s <= 1; s += 0.1) {
+        expect(mergeAmount('thinking', s, 0, 0)).toBeCloseTo(mergeAmount('thinking', s, 0), 9)
+      }
+    })
+
+    it('envelope-driven states converge to the original once the cross-fade completes', () => {
+      // Entering idle with enterMerge 0 briefly ramps 0→envelope, then matches
+      // the plain envelope value after MERGE_XFADE (0.4s).
+      for (let s = 0.4; s <= 1; s += 0.1) {
+        expect(mergeAmount('idle', s, 0.5, 0)).toBeCloseTo(mergeAmount('idle', s, 0.5), 9)
+      }
+    })
+  })
+})
+
+describe('spinTargetFor (state-speed choreography)', () => {
+  it('idle and agents rest at 1×; busy states spin faster, thinking the most', () => {
+    const busy = DEFAULT_ORB_PARAMS.spinBusyMult
+    expect(spinTargetFor('idle', P)).toBe(1)
+    expect(spinTargetFor('agents', P)).toBe(1)
+    expect(spinTargetFor('thinking', P)).toBe(busy)
+    // speaking > listening > idle, all below thinking.
+    expect(spinTargetFor('speaking', P)).toBeGreaterThan(spinTargetFor('listening', P))
+    expect(spinTargetFor('listening', P)).toBeGreaterThan(1)
+    expect(spinTargetFor('speaking', P)).toBeLessThan(spinTargetFor('thinking', P))
+  })
+
+  it('compact mounts spin up more gently than the default', () => {
+    expect(spinTargetFor('thinking', ORB_PRESETS.compact)).toBeLessThan(
+      spinTargetFor('thinking', P)
+    )
   })
 })
 
