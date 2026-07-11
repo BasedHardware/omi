@@ -97,6 +97,12 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
                                     'name': 'DEEPGRAM_API_KEY',
                                     'valueFrom': {'secretKeyRef': {'name': 'DEEPGRAM_API_KEY', 'key': '7'}},
                                 },
+                                {
+                                    'name': 'GOOGLE_APPLICATION_CREDENTIALS',
+                                    'valueFrom': {
+                                        'secretKeyRef': {'name': 'GOOGLE_APPLICATION_CREDENTIALS', 'key': 'latest'}
+                                    },
+                                },
                             ]
                         }
                     ]
@@ -109,12 +115,15 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
         service,
         'REDIS_DB_HOST=10.0.0.2\nSYNC_TASKS_QUEUE=sync-backfill',
         'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest',
+        drop_names='GOOGLE_APPLICATION_CREDENTIALS',
     )
 
     assert 'REDIS_DB_HOST=10.0.0.2' in env_vars
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in env_vars
     assert 'DEEPGRAM_API_KEY=DEEPGRAM_API_KEY:7' in secrets
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in env_vars
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in secrets
 
 
 def test_deploy_contract_routes_both_backfill_budget_alerts():
@@ -136,6 +145,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
 
     for workflow in (manual, auto_dev):
         assert 'uses: ./.github/actions/sync-backfill-lifecycle' in workflow
+        assert 'concurrency:' in workflow
+        assert 'cancel-in-progress: false' in workflow
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
         assert 'mode: platform' in workflow
@@ -152,9 +163,12 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert "provision_budget_alerts: 'false'" in auto_dev
     assert 'id: backfill-service' in action
     assert 'id: backfill-runtime' in action
+    assert 'DROP_NAMES: GOOGLE_APPLICATION_CREDENTIALS' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'id: backfill-service-exists' in action
     assert "no_traffic: ${{ steps.backfill-service-exists.outputs.exists }}" in action
+    assert 'REVISION="${{ inputs.service }}-sync-backfill-${{ inputs.revision_suffix }}"' in action
+    assert "--format='value(status.latestCreatedRevisionName)'" in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
     assert '--min-instances=0' in action

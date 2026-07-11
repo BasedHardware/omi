@@ -90,6 +90,7 @@ runs:
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
+        DROP_NAMES: GOOGLE_APPLICATION_CREDENTIALS
       run: |
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
@@ -140,7 +141,17 @@ runs:
       id: capture-backend-sync-backfill-revision
       shell: bash
       run: |
-        echo "revision=backend-sync-backfill-${{ inputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+        REVISION="${{ inputs.service }}-sync-backfill-${{ inputs.revision_suffix }}"
+        LATEST_CREATED="$(gcloud run services describe "${{ inputs.service }}-sync-backfill" \
+          --region="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --format='value(status.latestCreatedRevisionName)')"
+        test "$LATEST_CREATED" = "$REVISION"
+        gcloud run revisions describe "$REVISION" \
+          --region="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --format='value(metadata.name)' | grep -Fx "$REVISION"
+        echo "revision=$REVISION" >> "$GITHUB_OUTPUT"
 
     - name: Configure bounded sync backfill queue
       if: ${{ inputs.mode == 'platform' }}

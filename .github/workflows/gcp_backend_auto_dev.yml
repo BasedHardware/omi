@@ -10,6 +10,10 @@ env:
   SERVICE: backend
   REGION: us-central1
 
+concurrency:
+  group: backend-deploy-development
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: development

@@ -625,7 +625,6 @@ environments:
               version: latest
         backend-sync-backfill:
           <<: *prod_backend_sync
-          provisional: true
         backend-integration:
           env:
             OMI_ENV_STAGE:

@@ -40,6 +40,10 @@ env:
   SERVICE: backend
   REGION: us-central1
 
+concurrency:
+  group: backend-deploy-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
 jobs:
   repair-traffic:
     if: ${{ github.event.inputs.mode == 'repair-traffic-only' }}

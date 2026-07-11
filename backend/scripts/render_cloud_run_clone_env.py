@@ -23,7 +23,17 @@ def _pairs(value: str) -> dict[str, str]:
     return result
 
 
-def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay: str) -> tuple[str, str]:
+def _names(value: str) -> set[str]:
+    return {name.strip() for name in value.replace(',', '\n').splitlines() if name.strip()}
+
+
+def clone_environment(
+    service: dict[str, Any],
+    env_overlay: str,
+    secret_overlay: str,
+    *,
+    drop_names: str = '',
+) -> tuple[str, str]:
     literals: dict[str, str] = {}
     secrets: dict[str, str] = {}
     containers = service.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
@@ -47,6 +57,9 @@ def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay:
     for name, value in _pairs(secret_overlay).items():
         secrets[name] = value
         literals.pop(name, None)
+    for name in _names(drop_names):
+        literals.pop(name, None)
+        secrets.pop(name, None)
 
     return (
         '\n'.join(f'{name}={value}' for name, value in sorted(literals.items())),
@@ -70,6 +83,7 @@ def main() -> int:
         service,
         os.getenv('ENV_OVERLAY', ''),
         os.getenv('SECRET_OVERLAY', ''),
+        drop_names=os.getenv('DROP_NAMES', ''),
     )
     _emit('env_vars', env_vars)
     _emit('secrets', secrets)
