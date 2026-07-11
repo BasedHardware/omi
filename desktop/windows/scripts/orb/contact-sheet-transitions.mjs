@@ -9,7 +9,7 @@
 import { PNG } from 'pngjs'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { openHarness, renderPixels, outDir } from './lib/harness.mjs'
+import { openHarness, outDir } from './lib/harness.mjs'
 
 const TILE = 200 // px (100 CSS × dpr 2)
 const COLS = 16
