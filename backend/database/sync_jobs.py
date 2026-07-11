@@ -46,7 +46,17 @@ PROCESSED_SEGMENTS_KEY_PREFIX = 'sync_job_segments:'
 ONCE_KEY_PREFIX = 'sync_job_once:'
 
 
-def create_sync_job(uid: str, total_files: int, total_segments: int, job_id: Optional[str] = None) -> Dict[str, Any]:
+def create_sync_job(
+    uid: str,
+    total_files: int,
+    total_segments: int,
+    job_id: Optional[str] = None,
+    *,
+    lane: str = 'fresh',
+    capture_time_trust: str = 'legacy',
+    recording_age_seconds: Optional[int] = None,
+    content_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
     if job_id is None:
         job_id = str(uuid.uuid4())
@@ -66,10 +76,20 @@ def create_sync_job(uid: str, total_files: int, total_segments: int, job_id: Opt
         'failed_segments': 0,
         'result': None,
         'error': None,
+        'reason_code': None,
+        'retry_after': None,
+        'lane': lane,
+        'capture_time_trust': capture_time_trust,
+        'recording_age_seconds': recording_age_seconds,
+        'content_id': content_id,
     }
     key = f'{JOB_KEY_PREFIX}{job_id}'
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
     return job
+
+
+def delete_sync_job(job_id: str) -> None:
+    r.delete(f'{JOB_KEY_PREFIX}{job_id}')
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
@@ -165,7 +185,13 @@ def mark_job_completed(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str
     )
 
 
-def mark_job_failed(job_id: str, error: str) -> Optional[Dict[str, Any]]:
+def mark_job_failed(
+    job_id: str,
+    error: str,
+    *,
+    reason_code: Optional[str] = None,
+    retry_after: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     """Mark job as failed with error message."""
     return update_sync_job(
         job_id,
@@ -173,6 +199,8 @@ def mark_job_failed(job_id: str, error: str) -> Optional[Dict[str, Any]]:
             'status': 'failed',
             'completed_at': time.time(),
             'error': error,
+            'reason_code': reason_code,
+            'retry_after': retry_after,
         },
     )
 

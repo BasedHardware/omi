@@ -20,10 +20,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatStateUsesKernelSurfaceRef() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(
-      source.contains("AgentSurfaceReference.taskChat(taskId: taskId)")
-        || source.contains("projection.surface == .taskChat(taskId: taskId)")
-    )
+    XCTAssertTrue(source.contains("AgentSurfaceReference.workstream(workstreamId: workstreamId)"))
+    XCTAssertFalse(source.contains("AgentSurfaceReference.taskChat(taskId:"))
     XCTAssertFalse(source.contains("legacyAcpSessionId"))
     XCTAssertFalse(source.contains("currentOmiSessionId"))
     XCTAssertFalse(source.contains("getACPSessionId"))
@@ -220,12 +218,51 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)"))
   }
 
-  func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {
+  func testCoordinatorStopsWritingLegacyTaskSessionIdentity() throws {
     let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
 
-    XCTAssertTrue(coordinator.contains("updateChatSessionId(taskId: task.id, sessionId: task.id)"))
+    XCTAssertFalse(coordinator.contains("updateChatSessionId"))
+    XCTAssertFalse(coordinator.contains("TaskAgentStatusRegistry"))
+    XCTAssertFalse(coordinator.contains("TaskAgentManager"))
     XCTAssertFalse(coordinator.contains("chatSessionId = state.currentOmiSessionId"))
     XCTAssertFalse(coordinator.contains("chatSessionId = state.legacyAcpSessionId"))
+  }
+
+  func testCoordinatorUsesTicketSixContinuityAndKernelStatusProjection() throws {
+    let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.prepare("))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.persist("))
+    XCTAssertTrue(coordinator.contains("deliverContinuity(receipt.deliveries"))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.resolveDelivery("))
+    XCTAssertTrue(coordinator.contains("AgentRuntimeStatusStore.shared.$projectionsBySurface"))
+    XCTAssertTrue(coordinator.contains("func ingestTaskMappings(_ tasks: [TaskActionItem])"))
+    XCTAssertFalse(coordinator.contains("state.$isSending"))
+    XCTAssertFalse(coordinator.contains("deriveStreamingStatus"))
+  }
+
+  func testScenarioAutomationUsesRunningAppKernelInsteadOfFrozenArtifacts() throws {
+    let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+    let projection = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift")
+    XCTAssertTrue(coordinator.contains("buildScenario13RuntimeProjection("))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.project("))
+    XCTAssertTrue(coordinator.contains("TaskChatRuntime.debugAutomationControlTool"))
+    XCTAssertTrue(coordinator.contains("\"runtime_bridge\": \"live_app_kernel\""))
+    XCTAssertFalse(projection.contains("\"artifact_id\": \"artifact-email-v1\""))
+  }
+
+  func testCanonicalTasksPageCannotLaunchLegacyTmuxAgent() throws {
+    let tasksPage = try sourceFile("MainWindow/Pages/TasksPage.swift")
+    XCTAssertFalse(tasksPage.contains("AgentStatusIndicator(task: task)"))
+    XCTAssertFalse(tasksPage.contains("TaskAgentManager.shared.startAgent"))
+    XCTAssertFalse(tasksPage.contains("AgentPillsManager.shared.spawn(query: task.description"))
+    XCTAssertTrue(tasksPage.contains("_ = await chatCoordinator.openExistingThread(for: task)"))
+    XCTAssertTrue(tasksPage.contains("Task { await coordinator.openChat(for: task) }"))
+  }
+
+  func testAppStartupDoesNotSilentlyLaunchLegacyRecurringTaskAgents() throws {
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertFalse(app.contains("RecurringTaskScheduler.shared.start()"))
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {

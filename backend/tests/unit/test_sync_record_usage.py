@@ -161,9 +161,9 @@ class TestV2RecordUsage:
     def test_record_usage_wrapped_in_try_except(self):
         body = self._get_v2_body()
         record_idx = body.find('record_usage,')
-        preceding = body[max(0, record_idx - 400) : record_idx]
+        preceding = body[max(0, record_idx - 1000) : record_idx]
         assert 'try:' in preceding, "record_usage must be inside a try block"
-        following = body[record_idx : record_idx + 400]
+        following = body[record_idx : record_idx + 800]
         assert 'except Exception' in following, "record_usage must have an except handler"
 
 

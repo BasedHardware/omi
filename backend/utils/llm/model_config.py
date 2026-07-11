@@ -86,6 +86,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4-mini', 'openai'),
         'notifications': ('gpt-5.4-mini', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gemini-2.5-flash-lite', 'gemini'),
         'smart_glasses': ('gpt-4.1-nano', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -138,6 +139,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -189,6 +191,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -257,6 +260,7 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'conv_app_select',
     'external_structure',
     'trends',
+    'what_matters_now',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 

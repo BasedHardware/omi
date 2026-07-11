@@ -1,5 +1,223 @@
 import Foundation
 
+enum TaskIntelligenceConfidenceBand: String {
+    case low
+    case medium
+    case high
+    case explicit
+
+    static func forCapture(confidence: Double, explicit: Bool) -> Self {
+        if explicit { return .explicit }
+        if confidence >= 0.85 { return .high }
+        if confidence >= 0.65 { return .medium }
+        return .low
+    }
+}
+
+enum TaskIntelligenceResolutionCode: String {
+    case accepted
+    case rejected
+    case expired
+}
+
+struct TaskIntelligenceAttributionEvent {
+    enum EventType: String {
+        case candidateCaptured = "candidate_captured"
+        case candidateResolved = "candidate_resolved"
+        case interventionPresented = "intervention_presented"
+        case feedbackRecorded = "feedback_recorded"
+        case outcomeRecorded = "outcome_recorded"
+    }
+
+    enum Surface: String {
+        case suggested
+        case whatMattersNow = "what_matters_now"
+    }
+
+    let eventID: String
+    let eventType: EventType
+    let confidenceBand: TaskIntelligenceConfidenceBand?
+    let candidateID: String?
+    let taskID: String?
+    let resolutionCode: TaskIntelligenceResolutionCode?
+    let interventionID: String?
+    let surface: Surface?
+    let subjectKind: String?
+    let subjectID: String?
+    let feedbackAction: String?
+    let feedbackReason: String?
+    let outcomeCode: String?
+    let attributionChainID: String?
+    let occurredAt: Date
+
+    static func candidateCaptured(
+        candidateID: String,
+        confidenceBand: TaskIntelligenceConfidenceBand,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .candidateCaptured,
+            confidenceBand: confidenceBand,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: nil,
+            surface: nil,
+            subjectKind: nil,
+            subjectID: nil,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: nil,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func candidateResolved(
+        candidateID: String,
+        taskID: String?,
+        resolutionCode: TaskIntelligenceResolutionCode,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self? {
+        guard resolutionCode != .accepted || taskID != nil else { return nil }
+        return Self(
+            eventID: eventID,
+            eventType: .candidateResolved,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: taskID,
+            resolutionCode: resolutionCode,
+            interventionID: nil,
+            surface: nil,
+            subjectKind: nil,
+            subjectID: nil,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: nil,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func interventionPresented(
+        interventionID: String,
+        surface: Surface,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String? = nil,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .interventionPresented,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: nil,
+            attributionChainID: attributionChainID,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func feedbackRecorded(
+        interventionID: String?,
+        surface: Surface,
+        action: String,
+        reason: String? = nil,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String? = nil,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .feedbackRecorded,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: action,
+            feedbackReason: reason,
+            outcomeCode: nil,
+            attributionChainID: attributionChainID,
+            occurredAt: occurredAt
+        )
+    }
+
+    static func outcomeRecorded(
+        interventionID: String?,
+        surface: Surface,
+        outcomeCode: String,
+        subjectKind: String,
+        subjectID: String,
+        candidateID: String? = nil,
+        attributionChainID: String,
+        eventID: String = "attr-\(UUID().uuidString.lowercased())",
+        occurredAt: Date = Date()
+    ) -> Self {
+        Self(
+            eventID: eventID,
+            eventType: .outcomeRecorded,
+            confidenceBand: nil,
+            candidateID: candidateID,
+            taskID: nil,
+            resolutionCode: nil,
+            interventionID: interventionID,
+            surface: surface,
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            feedbackAction: nil,
+            feedbackReason: nil,
+            outcomeCode: outcomeCode,
+            attributionChainID: attributionChainID,
+            occurredAt: occurredAt
+        )
+    }
+
+    var analyticsProperties: [String: Any] {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var properties: [String: Any] = [
+            "schema_version": 1,
+            "event_id": eventID,
+            "event_type": eventType.rawValue,
+            "source_class": "screen",
+            "occurred_at": formatter.string(from: occurredAt),
+        ]
+        if let confidenceBand { properties["confidence_band"] = confidenceBand.rawValue }
+        if let candidateID { properties["candidate_id"] = candidateID }
+        if let taskID { properties["task_id"] = taskID }
+        if let resolutionCode { properties["resolution_code"] = resolutionCode.rawValue }
+        if let interventionID { properties["intervention_id"] = interventionID }
+        if let surface { properties["surface"] = surface.rawValue }
+        if let subjectKind { properties["subject_kind"] = subjectKind }
+        if let subjectID { properties["subject_id"] = subjectID }
+        if let feedbackAction { properties["feedback_action"] = feedbackAction }
+        if let feedbackReason { properties["feedback_reason"] = feedbackReason }
+        if let outcomeCode { properties["outcome_code"] = outcomeCode }
+        if let attributionChainID { properties["attribution_chain_id"] = attributionChainID }
+        return properties
+    }
+}
+
 // MARK: - Task Source Classification
 
 /// High-level category for where a task originated
@@ -196,7 +414,18 @@ struct ExtractedTask: Codable {
     let tags: [String]
     let sourceCategory: String
     let sourceSubcategory: String
-    let relevanceScore: Int?
+    let captureKind: String?
+    let owner: String?
+    let concreteDeliverable: Bool?
+    let publicBroadcast: Bool?
+    let directMention: Bool?
+    let alreadyDone: Bool?
+    let duplicateOf: String?
+    let refinesTask: String?
+    let ownershipConfidence: Double?
+
+    /// Compatibility-only. Screen extraction no longer assigns global ordering.
+    var relevanceScore: Int? { nil }
 
     enum CodingKeys: String, CodingKey {
         case title
@@ -208,7 +437,15 @@ struct ExtractedTask: Codable {
         case tags
         case sourceCategory = "source_category"
         case sourceSubcategory = "source_subcategory"
-        case relevanceScore = "relevance_score"
+        case captureKind = "capture_kind"
+        case owner
+        case concreteDeliverable = "concrete_deliverable"
+        case publicBroadcast = "public_broadcast"
+        case directMention = "direct_mention"
+        case alreadyDone = "already_done"
+        case duplicateOf = "duplicate_of"
+        case refinesTask = "refines_task"
+        case ownershipConfidence = "ownership_confidence"
     }
 
     /// Primary tag (first tag) for backward compatibility
@@ -236,7 +473,9 @@ struct ExtractedTask: Codable {
             "tags": tags.map { $0 },
             "category": primaryTag ?? "other",
             "sourceCategory": sourceCategory,
-            "sourceSubcategory": sourceSubcategory
+            "sourceSubcategory": sourceSubcategory,
+            "captureKind": captureKind ?? "direct_request",
+            "owner": owner ?? "unknown"
         ]
         if let description = description {
             dict["description"] = description

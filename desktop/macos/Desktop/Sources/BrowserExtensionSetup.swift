@@ -653,7 +653,7 @@ struct BrowserExtensionSetup: View {
                     if msg.contains("timeout") || msg.contains("Extension connection timeout") {
                         verifyError = "Connection timed out. Make sure \(selectedTarget.name) is running and the extension is installed, then try again."
                     } else {
-                        verifyError = msg
+                        verifyError = UserFacingErrorPresentation.message(for: error, while: .browserExtension)
                     }
                     log("BrowserExtensionSetup: Connection test error: \(error)")
                 }
