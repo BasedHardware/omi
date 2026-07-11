@@ -31,6 +31,11 @@ class UpdateAdviceRequest(BaseModel):
     is_dismissed: bool | None = None
 
 
+class AdviceCountResponse(BaseModel):
+    total: int = Field(description="Non-dismissed advice count (matches the default list)")
+    unread: int = Field(description="Non-dismissed, unread advice count (badge value)")
+
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -62,6 +67,12 @@ def get_advice(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return advice_db.get_advice(uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed)
+
+
+@router.get('/v1/advice/count', tags=['advice'], response_model=AdviceCountResponse)
+def get_advice_count(uid: str = Depends(auth.get_current_user_uid)):
+    """Total and unread advice counts for a badge, matching the default list visibility."""
+    return advice_db.get_advice_counts(uid)
 
 
 @router.patch('/v1/advice/{advice_id}', tags=['advice'], response_model=Advice)

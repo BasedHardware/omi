@@ -45,6 +45,24 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
     return doc
 
 
+def get_advice_counts(uid: str) -> Dict[str, int]:
+    """Return total and unread advice counts for a badge/summary.
+
+    Matches the default list visibility (get_advice hides is_dismissed): ``total`` counts
+    non-dismissed advice, ``unread`` counts non-dismissed advice with is_read False. Unread
+    items are typically few, so they are streamed and filtered rather than requiring a
+    (is_read, is_dismissed) composite index.
+    """
+    col = _user_col(uid, 'advice')
+    total = int(col.where(filter=FieldFilter('is_dismissed', '==', False)).count().get()[0][0].value)
+    unread = 0
+    for doc in col.where(filter=FieldFilter('is_read', '==', False)).stream():
+        data = doc.to_dict() or {}
+        if not data.get('is_dismissed'):
+            unread += 1
+    return {'total': total, 'unread': unread}
+
+
 def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
 ) -> List[Dict[str, Any]]:
