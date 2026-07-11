@@ -20,7 +20,6 @@ const OUT_DIR = fileURLToPath(new URL('../test/fixtures/audio/', import.meta.url
 const FORCE = process.argv.includes('--force')
 
 const SAMPLE_RATE = 16000
-const BYTES_PER_SAMPLE = 2
 // Mirror the app's gate constants (src/renderer/src/lib/ptt/constants.ts). Kept as
 // literals here so the generator is dependency-free; the manifest self-check below
 // would catch drift loudly if the gate rule ever changes.

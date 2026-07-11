@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// backfill → conversationSync → apiClient → firebase evaluates `getAuth()` at import,
+// which throws `auth/invalid-api-key` when VITE_FIREBASE_* is unset (CI has no .env).
+// These are pure-data tests that never touch auth, so stub the module — same pattern as
+// omiListenClient.test.ts / ptt/transport.test.ts.
+vi.mock('../firebase', () => ({ auth: { currentUser: null } }))
+
 import { BACKFILL_HOURLY_CAP, backfillCandidates, planBackfill, transcriptToSegments } from './backfill'
 import type { LocalConversation } from '../../../../shared/types'
 

@@ -55,5 +55,21 @@ export default defineConfig(
       '@typescript-eslint/explicit-function-return-type': 'off'
     }
   },
+  {
+    // Honor the `_`-prefix convention for intentionally-unused bindings
+    // (discarded destructures, placeholder mock/callback params) so the linter
+    // stays green without scattered one-off disables.
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_'
+        }
+      ]
+    }
+  },
   eslintConfigPrettier
 )
