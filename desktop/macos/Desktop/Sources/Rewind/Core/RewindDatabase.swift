@@ -3072,9 +3072,15 @@ actor RewindDatabase {
 
         do {
             let deleteResult = try await dbQueue.write { db -> DeleteResult in
+                // Exclude empty imagePaths: video-based screenshots store "" (the
+                // NOT NULL coalescing in insertScreenshot), and an empty path
+                // resolves to the Screenshots root, which the storage layer would
+                // otherwise recursively delete. RewindStorage guards this too, but
+                // never hand the empty path downstream in the first place.
                 let imagePaths = try String.fetchAll(
                     db,
-                    sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
+                    sql:
+                        "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL AND imagePath != ''",
                     arguments: [date]
                 )
 

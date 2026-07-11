@@ -512,13 +512,35 @@ actor RewindStorage {
 
     // MARK: - Delete Screenshot
 
+    /// Resolve the on-disk file to delete for a stored screenshot relative path,
+    /// or `nil` when the path is unsafe to delete.
+    ///
+    /// Video-based screenshots persist `imagePath` as "" (see
+    /// `RewindDatabase.insertScreenshot`), and retention cleanup can hand those
+    /// empty strings back. `root.appendingPathComponent("")` resolves to the
+    /// Screenshots directory itself, so a naive `removeItem` would recursively
+    /// wipe the entire screenshot store. Refuse empty/whitespace paths and any
+    /// path that normalizes back to (or above) the storage root.
+    static func screenshotDeletionURL(relativePath: String, in root: URL) -> URL? {
+        let trimmed = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = root.appendingPathComponent(relativePath)
+        guard candidate.standardizedFileURL != root.standardizedFileURL else { return nil }
+        return candidate
+    }
+
     /// Delete a screenshot file
     func deleteScreenshot(relativePath: String) async throws {
         guard let screenshotsDirectory = screenshotsDirectory else {
             throw RewindError.storageError("Storage not initialized")
         }
 
-        let fullPath = screenshotsDirectory.appendingPathComponent(relativePath)
+        guard
+            let fullPath = Self.screenshotDeletionURL(
+                relativePath: relativePath, in: screenshotsDirectory)
+        else {
+            return
+        }
 
         if fileManager.fileExists(atPath: fullPath.path) {
             try fileManager.removeItem(at: fullPath)
