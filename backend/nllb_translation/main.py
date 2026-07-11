@@ -23,6 +23,8 @@ CT2_INTER_THREADS = int(os.environ.get("CT2_INTER_THREADS", "1"))
 CT2_INTRA_THREADS = int(os.environ.get("CT2_INTRA_THREADS", "4"))
 MAX_INPUT_LENGTH = int(os.environ.get("NLLB_MAX_INPUT_LENGTH", "512"))
 MAX_BATCH_SIZE = int(os.environ.get("NLLB_MAX_BATCH_SIZE", "64"))
+BEAM_SIZE = int(os.environ.get("NLLB_BEAM_SIZE", "4"))
+INFERENCE_WORKERS = int(os.environ.get("NLLB_INFERENCE_WORKERS", "2"))
 PORT = int(os.environ.get("PORT", "8080"))
 
 BCP47_TO_NLLB: Dict[str, str] = {
@@ -153,7 +155,7 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
     return None
 
 
-_inference_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nllb-infer")
+_inference_pool = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="nllb-infer")
 
 
 def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> List[TranslationResult]:
@@ -176,7 +178,7 @@ def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> Li
         tokenized,
         target_prefix=target_prefix,
         max_input_length=MAX_INPUT_LENGTH,
-        beam_size=4,
+        beam_size=BEAM_SIZE,
     )
     target_bcp47 = NLLB_TO_BCP47.get(target_nllb, target_nllb.split("_")[0])
     INFERENCE_LATENCY.labels(target_lang=target_bcp47).observe(time.monotonic() - t_inf)
@@ -244,7 +246,17 @@ async def translate(req: TranslateRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": _translator is not None, "model_dir": MODEL_DIR}
+    return {
+        "status": "ok",
+        "model_loaded": _translator is not None,
+        "model_dir": MODEL_DIR,
+        "beam_size": BEAM_SIZE,
+        "compute_type": CT2_COMPUTE_TYPE,
+        "inter_threads": CT2_INTER_THREADS,
+        "intra_threads": CT2_INTRA_THREADS,
+        "max_batch_size": MAX_BATCH_SIZE,
+        "inference_workers": INFERENCE_WORKERS,
+    }
 
 
 @app.get("/ready")
