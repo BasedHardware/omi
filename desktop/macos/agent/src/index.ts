@@ -1370,9 +1370,72 @@ async function main(): Promise<void> {
           break;
         }
 
+        let directControlRunCorrelation: { requestId?: string; clientId?: string } = {};
+        let directControlRunOwnerKey: string | undefined;
+        let preserveDirectControlRunOwner = false;
+        let directControlRunOwnerInserted = false;
+        try {
+          // A direct Swift spawn does not have a model-owned query context to
+          // inherit. Mint and retain a run-scoped context so the leaf worker's
+          // Swift-backed tools can relay through the shared daemon.
+          const directRunClientId =
+            typeof controlInput.clientId === "string" && controlInput.clientId.trim()
+              ? controlInput.clientId.trim()
+              : control.clientId;
+          const correlated = withControlRunCorrelation(control.name, controlInput, directRunClientId);
+          controlInput = correlated.input;
+          directControlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
+          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
+          if (adapterId && correlated.requestId && correlated.clientId) {
+            directControlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
+            if (directControlRunOwnerKey) {
+              directControlRunOwnerInserted = registerActiveControlOwner(
+                directControlRunOwnerKey,
+                controlContext.activeOwnerId,
+              );
+            }
+            transport.registerExternalRequestContext({
+              requestId: correlated.requestId,
+              clientId: correlated.clientId,
+              ownerId: controlContext.activeOwnerId,
+              adapterId,
+            });
+          }
+        } catch (error) {
+          if (directControlRunOwnerKey && directControlRunOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
+          }
+          if (
+            directControlRunCorrelation.requestId &&
+            directControlRunCorrelation.clientId &&
+            directControlRunOwnerInserted
+          ) {
+            transport.releaseExternalRequestContext(
+              directControlRunCorrelation.requestId,
+              directControlRunCorrelation.clientId,
+            );
+          }
+          releaseDirectControlOwner();
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "control_context_conflict",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+
         const result = await (async () => {
           try {
-            return agentControlToolContext
+            const toolResult = agentControlToolContext
               ? await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
@@ -1386,7 +1449,24 @@ async function main(): Promise<void> {
                   ok: false,
                   error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
                 });
+            preserveDirectControlRunOwner =
+              isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
+            return toolResult;
           } finally {
+            if (directControlRunOwnerKey && !preserveDirectControlRunOwner && directControlRunOwnerInserted) {
+              activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
+            }
+            if (
+              !preserveDirectControlRunOwner &&
+              directControlRunCorrelation.requestId &&
+              directControlRunCorrelation.clientId &&
+              directControlRunOwnerInserted
+            ) {
+              transport.releaseExternalRequestContext(
+                directControlRunCorrelation.requestId,
+                directControlRunCorrelation.clientId,
+              );
+            }
             releaseDirectControlOwner();
           }
         })();
