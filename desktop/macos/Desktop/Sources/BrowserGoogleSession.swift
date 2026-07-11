@@ -5,6 +5,7 @@ import Security
 struct BrowserGoogleSession: Equatable {
   let browserName: String
   let keychainService: String
+  let keychainAccount: String
   let cookiePath: String
 
   static let chromiumCookiePythonSupport = """
@@ -124,7 +125,7 @@ struct BrowserGoogleSession: Equatable {
   static func all() -> [BrowserGoogleSession] {
     let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
     return BrowserAutomationTargetResolver.knownTargets.flatMap { target in
-      guard let keychainService = keychainService(for: target) else {
+      guard let keychainIdentity = keychainIdentity(for: target) else {
         return [BrowserGoogleSession]()
       }
       let userDataPath = target.profileRoot(homeDirectory: homeDirectory).path
@@ -138,7 +139,8 @@ struct BrowserGoogleSession: Equatable {
         let browserName = profileName == "Default" ? target.name : "\(target.name) (\(profileName))"
         return BrowserGoogleSession(
           browserName: browserName,
-          keychainService: keychainService,
+          keychainService: keychainIdentity.service,
+          keychainAccount: keychainIdentity.account,
           cookiePath: cookiePath
         )
       }
@@ -148,7 +150,12 @@ struct BrowserGoogleSession: Equatable {
   static func configsForPython(logPrefix: String) -> [[String: String]] {
     all().compactMap { session in
       guard FileManager.default.fileExists(atPath: session.cookiePath) else { return nil }
-      guard let password = BrowserKeychainCache.shared.password(for: session.keychainService) else {
+      guard
+        let password = BrowserKeychainCache.shared.password(
+          for: session.keychainService,
+          account: session.keychainAccount
+        )
+      else {
         log("\(logPrefix): No keychain password for \(session.browserName)")
         return nil
       }
@@ -169,7 +176,8 @@ struct BrowserGoogleSession: Equatable {
       .compactMap { entry -> (name: String, path: String)? in
         var isDirectory: ObjCBool = false
         let profilePath = "\(userDataPath)/\(entry)"
-        guard fm.fileExists(atPath: profilePath, isDirectory: &isDirectory), isDirectory.boolValue else {
+        guard fm.fileExists(atPath: profilePath, isDirectory: &isDirectory), isDirectory.boolValue
+        else {
           return nil
         }
         let networkCookies = "\(profilePath)/Network/Cookies"
@@ -194,24 +202,26 @@ struct BrowserGoogleSession: Equatable {
       .filter { fm.fileExists(atPath: $0) }
   }
 
-  private static func keychainService(for target: BrowserAutomationTarget) -> String? {
+  static func keychainIdentity(for target: BrowserAutomationTarget) -> (
+    service: String, account: String
+  )? {
     switch target.bundleIdentifier {
     case "company.thebrowser.Browser":
-      return "Arc Safe Storage"
+      return ("Arc Safe Storage", "Arc")
     case "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary",
       "com.openai.atlas":
-      return "Chrome Safe Storage"
+      return ("Chrome Safe Storage", "Chrome")
     case "com.brave.Browser", "com.brave.Browser.beta", "com.brave.Browser.nightly":
-      return "Brave Safe Storage"
+      return ("Brave Safe Storage", "Brave")
     case "com.microsoft.edgemac", "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev",
       "com.microsoft.edgemac.Canary":
-      return "Microsoft Edge Safe Storage"
+      return ("Microsoft Edge Safe Storage", "Microsoft Edge")
     case "com.operasoftware.Opera", "com.operasoftware.OperaGX":
-      return "Opera Safe Storage"
+      return ("Opera Safe Storage", "Opera")
     case "org.chromium.Chromium":
-      return "Chromium Safe Storage"
+      return ("Chromium Safe Storage", "Chromium")
     case "com.vivaldi.Vivaldi":
-      return "Vivaldi Safe Storage"
+      return ("Vivaldi Safe Storage", "Vivaldi")
     default:
       return nil
     }
@@ -226,19 +236,14 @@ struct BrowserGoogleSession: Equatable {
 /// identity the user must recognize before granting — instead of "security wants to
 /// access …" (which is what shelling out to `/usr/bin/security` produced).
 ///
-/// Fallback path: the legacy `/usr/bin/security find-generic-password -w` CLI, kept
-/// for environments where the in-process read cannot complete for an environmental
-/// reason (e.g. no interaction allowed on a background thread). We never fall back
-/// after the user actively denies the in-process prompt, so there is no double-prompt.
+/// A first cross-app read requires user approval. For a stably signed app, choosing
+/// "Always Allow" lets macOS add this app's code-signing identity and partition ID to
+/// the item's ACL, so later reads can proceed without another prompt. We intentionally
+/// do not retry through `/usr/bin/security`: that would attribute any second prompt to
+/// the CLI and persist access for the wrong requester.
 ///
-/// NOTE: neither path makes "Always Allow" durably persist. The Safe Storage item is
-/// owned by the browser and its ACL partition list is pinned to the browser's Team ID,
-/// so macOS may re-prompt a third-party reader on each launch regardless of the API
-/// used — this is a browser/OS ACL limitation, not a bug here (see
-/// mostlikelee.com "Scripting the macOS Keychain – Partition IDs"). The durable fix is
-/// OAuth-backed providers. The in-memory cache below only coalesces concurrent reads
-/// within a single app run; we do not duplicate browser Safe Storage secrets into app
-/// preferences.
+/// The in-memory cache below coalesces concurrent reads within a single app run; we do
+/// not duplicate browser Safe Storage secrets into app preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
 
@@ -255,89 +260,45 @@ final class BrowserKeychainCache: @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: "cachedBrowserKeychainPasswords")
   }
 
-  func password(for service: String) -> String? {
-    password(for: service) {
-      // Primary: in-process read so the OS attributes the prompt to this signed app.
-      let (nativePassword, status) = Self.nativeSafeStoragePassword(for: service)
-      if let nativePassword { return nativePassword }
-
-      // Only fall back to the legacy `/usr/bin/security` CLI when the in-process read
-      // could not complete for an environmental reason (see shouldFallBackToLegacyCLI).
-      guard Self.shouldFallBackToLegacyCLI(afterNativeReadStatus: status) else { return nil }
-      return Self.securityCLIPassword(for: service)
+  func password(for service: String, account: String) -> String? {
+    password(for: "\(service)\u{0}\(account)") {
+      Self.nativeSafeStoragePassword(for: service, account: account)
     }
   }
 
-  /// Whether a nil in-process read should retry through the legacy `/usr/bin/security`
-  /// CLI. We fall back ONLY for environmental failures (e.g. `errSecInteractionNotAllowed`
-  /// on a background thread, `errSecNotAvailable`). We do NOT fall back when:
-  ///   - the read already succeeded (`errSecSuccess`, e.g. empty/undecodable data),
-  ///   - the user actively denied the prompt (`errSecUserCanceled`, `errSecAuthFailed`) —
-  ///     retrying would surface a second, worse-looking "security wants to access" dialog,
-  ///   - the item is absent (`errSecItemNotFound`) — there is no browser session to read.
-  ///
-  /// Pure and version-agnostic (a switch over `OSStatus`), so the behavior is identical on
-  /// every supported macOS version and is unit-testable without touching the real Keychain.
-  static func shouldFallBackToLegacyCLI(afterNativeReadStatus status: OSStatus) -> Bool {
-    switch status {
-    case errSecSuccess, errSecUserCanceled, errSecAuthFailed, errSecItemNotFound:
-      return false
-    default:
-      return true
-    }
-  }
-
-  /// Reads the browser Safe Storage key in-process via the Security framework.
-  /// The keychain prompt is attributed to this app bundle, not `/usr/bin/security`.
-  /// Returns the decoded password (if any) and the raw `OSStatus` so the caller can
-  /// decide whether an environmental failure warrants the legacy CLI fallback.
-  private static func nativeSafeStoragePassword(for service: String) -> (password: String?, status: OSStatus) {
-    let query: [String: Any] = [
+  static func safeStorageQuery(service: String, account: String) -> [String: Any] {
+    [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
+  }
+
+  /// Reads the browser Safe Storage key in-process so the prompt and any durable
+  /// "Always Allow" grant belong to this app rather than `/usr/bin/security`.
+  private static func nativeSafeStoragePassword(for service: String, account: String) -> String? {
     var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    let status = SecItemCopyMatching(
+      safeStorageQuery(service: service, account: account) as CFDictionary,
+      &item
+    )
     guard status == errSecSuccess,
       let data = item as? Data,
       let password = String(data: data, encoding: .utf8),
       !password.isEmpty
     else {
-      return (nil, status)
-    }
-    return (password, status)
-  }
-
-  /// Legacy fallback: shells out to `/usr/bin/security`. Retained for resilience when
-  /// the in-process read cannot complete. Note the OS attributes this prompt to
-  /// "security", not this app — this is the fallback, not the primary path.
-  private static func securityCLIPassword(for service: String) -> String? {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-    process.arguments = ["find-generic-password", "-s", service, "-w"]
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
-    do {
-      try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0 else { return nil }
-      let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      return output?.isEmpty == false ? output : nil
-    } catch {
       return nil
     }
+    return password
   }
 
-  func password(for service: String, loader: () -> String?) -> String? {
+  func password(for cacheKey: String, loader: () -> String?) -> String? {
     loop: while true {
       lock.lock()
 
-      if let cached = cache[service] {
+      if let cached = cache[cacheKey] {
         lock.unlock()
         switch cached {
         case .found(let password): return password
@@ -345,7 +306,7 @@ final class BrowserKeychainCache: @unchecked Sendable {
         }
       }
 
-      if let group = inFlight[service] {
+      if let group = inFlight[cacheKey] {
         lock.unlock()
         group.wait()
         continue loop
@@ -353,18 +314,18 @@ final class BrowserKeychainCache: @unchecked Sendable {
 
       let group = DispatchGroup()
       group.enter()
-      inFlight[service] = group
+      inFlight[cacheKey] = group
       lock.unlock()
 
       let password = loader()
 
       lock.lock()
       if let password {
-        cache[service] = .found(password)
+        cache[cacheKey] = .found(password)
       } else {
-        cache[service] = .missing
+        cache[cacheKey] = .missing
       }
-      let completedGroup = inFlight.removeValue(forKey: service)
+      let completedGroup = inFlight.removeValue(forKey: cacheKey)
       lock.unlock()
 
       completedGroup?.leave()
@@ -372,9 +333,9 @@ final class BrowserKeychainCache: @unchecked Sendable {
     }
   }
 
-  func invalidate(service: String) {
+  func invalidate(cacheKey: String) {
     lock.lock()
-    cache.removeValue(forKey: service)
+    cache.removeValue(forKey: cacheKey)
     lock.unlock()
   }
 }
