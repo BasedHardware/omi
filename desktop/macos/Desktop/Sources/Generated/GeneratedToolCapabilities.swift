@@ -452,9 +452,11 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .onboarding]),
       summary: "Open or guide the user through granting a required macOS permission.",
       bullets: [
-      "Use when a tool reports permission_required or the user asks Omi to grant/check a permission.",
-      "Use strict permission types only.",
-      "For screen-related requests, if Screen Recording is missing, tell the user Omi cannot see the current screen yet and call request_permission with type=screen_recording.",
+      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
+      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."
     ]
