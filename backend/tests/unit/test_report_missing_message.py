@@ -6,9 +6,10 @@ exist. The report handlers used to unpack it unconditionally
 missing id instead of the intended 404 (the following `if message is None` guard was
 unreachable). They now check the result before unpacking.
 
-routers.chat has a heavy import graph (typesense/pinecone/langchain/etc.), so it is
+routers.chat has a heavy import graph (typesense/pinecone/langchain/etc.). It is
 imported under a stub finder that auto-mocks those namespaces (fastapi/pydantic stay
-real). Doing it at module scope keeps the cost out of the test's call phase.
+real). The stubbing lives inside a module-scoped fixture (not at module scope) so it
+does not pollute global import state, and its cost stays out of the test call phase.
 """
 
 import importlib.abc
@@ -19,6 +20,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -72,29 +74,35 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
-_f = _Finder()
-_saved = {n: m for n, m in sys.modules.items() if _is_stubbed(n)}
-for n in list(sys.modules):
-    if _is_stubbed(n):
-        sys.modules.pop(n, None)
-sys.meta_path.insert(0, _f)
-try:
-    from routers import chat as mod
-finally:
-    sys.meta_path.remove(_f)
+@pytest.fixture(scope="module")
+def chat_router():
+    """Import routers.chat under a stub finder, restoring sys.modules afterwards.
+
+    Kept inside a fixture (function scope, not module scope) so it never leaves global
+    import state mutated for other test files.
+    """
+    finder = _Finder()
+    saved = {n: m for n, m in sys.modules.items() if _is_stubbed(n)}
     for n in list(sys.modules):
-        if _is_stubbed(n) and n not in _saved:
+        if _is_stubbed(n):
             sys.modules.pop(n, None)
-    sys.modules.update(_saved)
+    sys.meta_path.insert(0, finder)
+    try:
+        from routers import chat as mod
+    finally:
+        sys.meta_path.remove(finder)
+        for n in list(sys.modules):
+            if _is_stubbed(n) and n not in saved:
+                sys.modules.pop(n, None)
+        sys.modules.update(saved)
+    return mod
 
-from fastapi import HTTPException  # noqa: E402
 
-
-def test_report_missing_message_returns_404_not_500():
+def test_report_missing_message_returns_404_not_500(chat_router):
     # get_message returns None for an unknown id; the handler must translate that into a
     # 404, not crash trying to unpack None into (message, doc_id).
-    with patch.object(mod.chat_db, "get_message", return_value=None):
+    with patch.object(chat_router.chat_db, "get_message", return_value=None):
         with pytest.raises(HTTPException) as exc:
-            mod.report_message(message_id="does-not-exist", uid="u1")
+            chat_router.report_message(message_id="does-not-exist", uid="u1")
 
     assert exc.value.status_code == 404
