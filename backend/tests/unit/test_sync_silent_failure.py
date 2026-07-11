@@ -1162,6 +1162,9 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
 
         # STT stubs
+        sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(
+            'PrerecordedSTTConfigurationError', (RuntimeError,), {}
+        )
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
