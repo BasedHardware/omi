@@ -3,10 +3,19 @@
 // OrbAnimator (self-throttled rAF: 30fps idle / 60fps active / 0fps hidden)
 // and wires REAL app signals: state, speech activity (PTT capturing / VAD
 // gate), and a live amplitude source sampled while speech is active.
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { OrbAnimator } from '../../orb/orbAnimator'
 import { ORB_PRESETS, DEFAULT_ORB_PARAMS, type OrbState } from '../../orb/choreography'
 import type { WaveformSource } from '../../../../shared/types'
+import omiLogo from '../../assets/omi-logo.png'
+
+// WebGL/SwiftShader can be transiently unavailable while the GPU process spins up
+// at boot (or across a renderer reload). Retry construction this many times, at
+// this interval, before settling on the static-mark fallback — long enough to
+// outlast a startup GPU handshake, and self-healing (the canvas stays mounted so
+// the orb reveals the moment WebGL becomes ready).
+const MAX_ORB_ATTEMPTS = 60
+const ORB_RETRY_MS = 700
 
 export type OrbProps = {
   /** CSS size in px (the canvas backing store is size × devicePixelRatio). */
@@ -53,6 +62,13 @@ export function Orb({
 }: OrbProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animatorRef = useRef<OrbAnimator | null>(null)
+  // The orb reveals only once its WebGL animator is built; until then the static
+  // omi mark shows under a hidden canvas. Bumping retryNonce re-runs the build
+  // effect, so the orb self-heals the instant WebGL becomes ready — no broken
+  // canvas, and no permanent fallback for a mere startup race.
+  const [ready, setReady] = useState(false)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const attemptsRef = useRef(0)
   const sourceRef = useRef(amplitudeSource)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the sampling interval
   sourceRef.current = amplitudeSource
@@ -66,10 +82,26 @@ export function Orb({
     let animator: OrbAnimator | null = null
     try {
       animator = new OrbAnimator(canvas, ORB_PRESETS[preset] ?? DEFAULT_ORB_PARAMS)
+      attemptsRef.current = 0
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot fallback→orb swap reflecting the result of building the external WebGL renderer, not derived state
+      setReady(true)
     } catch (e) {
-      // WebGL2 unavailable (ancient GPU/driver): leave the canvas empty rather
-      // than crash the window — the orb is brand motion, not functionality.
-      console.warn('[orb] renderer unavailable:', e)
+      // Drop back to the fallback while we retry — if a prior build had succeeded
+      // (props changed → rebuild → the disposed context can't be reused on the
+      // same element), leaving `ready` true would show a hidden canvas over a dead
+      // context with the static mark suppressed.
+      setReady(false)
+      // WebGL2 not ready (GPU/SwiftShader still coming up, or a renderer reload).
+      // The canvas stays mounted-but-hidden and we keep retrying, so the orb
+      // reveals itself the instant WebGL works rather than latching a broken
+      // frame. Only settle on the static mark after a generous window.
+      attemptsRef.current += 1
+      if (attemptsRef.current === 1) console.warn('[orb] WebGL not ready, retrying…', e)
+      if (attemptsRef.current < MAX_ORB_ATTEMPTS) {
+        const retry = setTimeout(() => setRetryNonce((n) => n + 1), ORB_RETRY_MS)
+        return () => clearTimeout(retry)
+      }
+      console.warn('[orb] WebGL unavailable after retries — showing static mark')
       return
     }
     animatorRef.current = animator
@@ -77,24 +109,28 @@ export function Orb({
       animatorRef.current = null
       animator?.dispose()
     }
-  }, [size, preset])
+  }, [size, preset, retryNonce])
 
+  // `ready` is in each dep list so that when a RETRY finally builds a fresh
+  // animator (ready flips false→true), the app's current state / visibility /
+  // pending genesis are re-applied to it — otherwise the rebuilt animator would
+  // keep its constructor defaults (idle, visible, already looping) forever.
   useEffect(() => {
     animatorRef.current?.setState(state)
     // setState resets the speech gate; re-assert the live signal after.
     if (state === 'listening') animatorRef.current?.setSpeechActive(speechActive)
-  }, [state, speechActive])
+  }, [state, speechActive, ready])
 
   useEffect(() => {
     animatorRef.current?.setVisible(visible && !document.hidden)
     const onVis = (): void => animatorRef.current?.setVisible(visible && !document.hidden)
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
-  }, [visible])
+  }, [visible, ready])
 
   useEffect(() => {
     if (genesisNonce > 0) animatorRef.current?.summon()
-  }, [genesisNonce])
+  }, [genesisNonce, ready])
 
   // Live amplitude: sample the source ~30Hz while speech is active.
   const speechLive = speechActive || state === 'speaking'
@@ -112,12 +148,47 @@ export function Orb({
     return () => clearInterval(timer)
   }, [speechLive])
 
+  // The canvas is always mounted (so retries can reach it) but hidden until the
+  // orb is ready; the static mark shows underneath meanwhile. No broken-canvas
+  // glyph is ever visible, and the orb fades in the moment WebGL comes up.
   return (
-    <canvas
-      ref={canvasRef}
+    <div
       className={className}
-      style={{ width: size, height: size, display: 'block' }}
+      style={{ position: 'relative', width: size, height: size }}
       aria-hidden
-    />
+    >
+      <canvas
+        // Fresh canvas per retry. getContext('webgl2') is idempotent per element:
+        // once this canvas hands back a context that later becomes lost (the boot
+        // GPU handshake, or a GPU-process reset), every subsequent getContext on
+        // the SAME element returns that same dead context, so retrying in place
+        // can never recover. Keying on retryNonce remounts a brand-new canvas, so
+        // each retry gets a genuinely fresh context off the (now-ready) GPU.
+        key={retryNonce}
+        ref={canvasRef}
+        style={{
+          width: size,
+          height: size,
+          display: 'block',
+          opacity: ready ? 1 : 0,
+          transition: 'opacity 200ms ease'
+        }}
+        aria-hidden
+      />
+      {!ready && (
+        <img
+          src={omiLogo}
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: size,
+            height: size,
+            objectFit: 'contain'
+          }}
+        />
+      )}
+    </div>
   )
 }
