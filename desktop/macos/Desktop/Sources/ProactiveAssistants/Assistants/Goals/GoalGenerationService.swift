@@ -37,13 +37,13 @@ class GoalGenerationService {
     // MARK: - Stale Goal Removal
 
     /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
-    /// Only applies to goals with source == "ai". User-created goals (source == "user" or no source) are never auto-removed.
+    /// User-created goals are never auto-removed.
     private func removeStaleGoals() async {
         do {
             let goals = try await APIClient.shared.getGoals()
             let now = Date()
 
-            for goal in goals where goal.isActive && goal.source == "ai" {
+            for goal in goals where goal.isActive && Self.isAIGeneratedSource(goal.source) {
                 let daysSinceUpdate = now.timeIntervalSince(goal.updatedAt)
                 if daysSinceUpdate >= staleGoalDays {
                     log("GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
@@ -55,6 +55,11 @@ class GoalGenerationService {
         } catch {
             log("GoalGenerationService: Failed to check/complete stale goals: \(error.localizedDescription)")
         }
+    }
+
+    /// Match the canonical source while retaining compatibility with goals returned by older servers.
+    static func isAIGeneratedSource(_ source: String?) -> Bool {
+        source == "ai_suggested" || source == "ai"
     }
 
     // MARK: - Daily Generation Check

@@ -516,23 +516,48 @@ final class AgentPillsManager: ObservableObject {
         if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
             return nil
         }
-        let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
-        let existingAgentFollowUpPattern = #"\b(?:ask|tell)\s+(?:this|that|the)\s+"# + Self.agentNounPattern + #"\b"#
-        if lower.range(of: existingAgentFollowUpPattern, options: .regularExpression) != nil {
-            return nil
-        }
-        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run|ask|tell|have)\b"#
-        guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
-        guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
+        guard Self.isStrictFloatingAgentCreationRequest(trimmedLower) else { return nil }
+        // A visible sibling must have a concrete objective. "Start an agent" is
+        // not enough to hand a child a useful task, and questions about an
+        // existing agent must remain in that agent's conversation.
+        guard let agentTask = extractFloatingAgentTask(from: original) else { return nil }
 
         return FloatingAgentHandoff(
             originalRequest: original,
-            agentTask: extractFloatingAgentTask(from: original) ?? original
+            agentTask: agentTask
         )
     }
 
     nonisolated static func explicitlyRequestsFloatingAgent(_ text: String) -> Bool {
         floatingAgentHandoff(for: text) != nil
+    }
+
+    /// High-confidence creation syntax for a *new sibling* background agent.
+    ///
+    /// This intentionally excludes conversational verbs such as "ask", "tell",
+    /// and "have". Those can refer to the current/main agent or one it already
+    /// manages, so routing them through an automatic spawn would turn a question
+    /// into a side effect. Ambiguous requests reach the normal chat/router path.
+    nonisolated static func isStrictFloatingAgentCreationRequest(_ text: String) -> Bool {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !lower.isEmpty else { return false }
+
+        // Permit polite modal requests in either natural order: "please could
+        // you …" and "could you please …". Both remain explicit creation
+        // requests only when the rest of the strict grammar matches.
+        let optionalPoliteness = #"(?:(?:please\s+)?(?:(?:can|could|would)\s+you\s+(?:please\s+)?)?)"#
+        let creationVerb = #"(?:spawn|start|launch|kick\s+off|create|make|run)"#
+        let optionalCount = #"(?:(?:\d+|one|two|three|four|five|six|seven|eight)\s+)?"#
+        // A bare "agent" is too ambiguous: "run agent tests" and
+        // "create agent tooling" are developer commands, not requests for a
+        // sibling. Require an unmistakable creation marker for that generic
+        // noun, while retaining the unambiguous compound nouns (subagent,
+        // background agent, floating agent) and pill target.
+        let explicitTarget = #"(?:(?:(?:a|an|new|background|floating)\s+)*(?:sub\s*agents?|pills?)|(?:(?:a|an|new|background|floating)\s+)+agents?)"#
+        let pattern = #"^"# + optionalPoliteness + creationVerb + #"\s+"#
+            + optionalCount + explicitTarget + #"\b"#
+
+        return lower.range(of: pattern, options: .regularExpression) != nil
     }
 
     private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {
@@ -547,17 +572,23 @@ final class AgentPillsManager: ObservableObject {
             return nil
         }
 
-        var task = String(text[matchRange.upperBound...])
+        let taskSuffix = String(text[matchRange.upperBound...])
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let connectorPattern = #"^(?:to|for|that\s+can|that\s+will|which\s+can|which\s+will|and)\s+"#
-        if let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) {
-            task = connectorRegex.stringByReplacingMatches(
-                in: task,
-                range: NSRange(task.startIndex..., in: task),
-                withTemplate: ""
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The objective must be explicitly introduced. Without this, source
+        // phrases such as "run subagent tests locally" look like a sibling
+        // request after the noun matcher. Requiring a natural task connector
+        // makes the deterministic handoff conservative by construction.
+        let connectorPattern = #"^(?:to|for|that|which)\s+"#
+        guard let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) else {
+            return nil
         }
+        let suffixRange = NSRange(taskSuffix.startIndex..., in: taskSuffix)
+        guard let connectorMatch = connectorRegex.firstMatch(in: taskSuffix, range: suffixRange),
+              let taskStart = Range(connectorMatch.range, in: taskSuffix)?.upperBound
+        else {
+            return nil
+        }
+        let task = String(taskSuffix[taskStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard task.split(whereSeparator: \.isWhitespace).count >= 2 else { return nil }
         return task
     }

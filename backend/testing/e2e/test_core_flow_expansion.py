@@ -1,10 +1,12 @@
 """Core hermetic E2E coverage for high-churn backend flows."""
 
+from testing.e2e.sync_helpers import patch_fresh_sync_lane
 import asyncio
 import json
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fakes.firestore import read_conversation, seed_conversation
 from fakes.stt import fake_suggested_transcript_event
@@ -122,9 +124,9 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
 
 def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):
     """The v2 sync API should create, run, and expose a completed job against hermetic fakes."""
+    patch_fresh_sync_lane(monkeypatch)
     scheduled = []
     sync_conversation_id = "sync-core-flow-conversation"
-    segment_path = "syncing/123/e2e-job/1760000000.wav"
 
     def capture_background_task(coro, *, name):
         scheduled.append((name, coro))
@@ -132,10 +134,18 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
 
     def fake_decode_files_to_wav(raw_paths):
         assert raw_paths
-        return [segment_path]
+        wav_paths = []
+        for raw_path in raw_paths:
+            wav_path = str(Path(raw_path).with_suffix(".wav"))
+            Path(wav_path).write_bytes(b"fake wav bytes")
+            wav_paths.append(wav_path)
+        return wav_paths
 
     def fake_retrieve_vad_segments(path, segmented_paths, errors=None):
-        assert path == segment_path
+        from utils.sync.files import get_timestamp_from_path
+
+        segment_path = f"{Path(path).parent}/{int(get_timestamp_from_path(path))}.wav"
+        Path(segment_path).write_bytes(b"fake wav bytes")
         segmented_paths.add(segment_path)
 
     def fake_process_segment(

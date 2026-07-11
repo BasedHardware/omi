@@ -865,6 +865,8 @@ class TestVoiceMessageTranscribeEndpoint:
             data = resp.json()
             assert data['transcript'] == 'Hello world'
             assert data['language'] == 'en'
+            assert data['stt_provider'] == 'deepgram'
+            assert data['stt_model'] == 'nova-3'
             assert mock_transcribe.call_args.kwargs['keywords'] == ['Aarav', 'Ansh']
         finally:
             _cleanup_chat_client(saved)
@@ -968,6 +970,28 @@ class TestVoiceMessageTranscribeEndpoint:
             )
             assert resp.status_code == 500
             assert 'Transcription failed' in resp.json()['detail']
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_missing_parakeet_configuration_returns_controlled_503(self, mock_transcribe):
+        """A selected provider missing runtime config must not escape as a generic 500."""
+        from utils.stt.pre_recorded import PrerecordedSTTConfigurationError
+
+        mock_transcribe.side_effect = PrerecordedSTTConfigurationError('parakeet', 'HOSTED_PARAKEET_API_URL')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe?language=en',
+                content=b'\x00' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 503
+            assert resp.json()['detail'] == {
+                'error': 'stt_provider_configuration_error',
+                'provider': 'parakeet',
+                'missing': 'HOSTED_PARAKEET_API_URL',
+            }
         finally:
             _cleanup_chat_client(saved)
 

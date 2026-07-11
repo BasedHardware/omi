@@ -49,6 +49,56 @@
   },
   "workflows": [
     {
+      "id": "task_candidate_resolution",
+      "risk": "high",
+      "sources": [
+        "backend/database/candidates.py",
+        "backend/utils/task_intelligence/candidate_service.py",
+        "backend/utils/task_intelligence/staged_migration.py",
+        "backend/routers/candidates.py"
+      ],
+      "tests": [
+        "tests/unit/test_candidate_lifecycle.py",
+        "tests/unit/test_staged_candidate_migration.py",
+        "tests/unit/test_candidates_router.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "candidate retries and concurrent acceptance create exactly one canonical task",
+        "account generation mismatches fail closed without product mutation",
+        "legacy terminal rows cannot reappear as pending candidates",
+        "accepted-task integration dispatch is durably outboxed, leased once, and retryable after failure"
+      ]
+    },
+    {
+      "id": "goal_workstream_lifecycle",
+      "risk": "high",
+      "sources": [
+        "backend/database/goals.py",
+        "backend/database/workstreams.py",
+        "backend/database/action_items.py",
+        "backend/database/candidates.py",
+        "backend/routers/goals.py",
+        "backend/routers/workstreams.py",
+        "backend/models/goal.py",
+        "backend/models/workstream.py"
+      ],
+      "tests": [
+        "tests/unit/test_workstream_core.py",
+        "tests/unit/test_workstream_router_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "goal creation never implicitly changes another goal and focus overflow requires an explicit replacement",
+        "workstream Candidate and explicit-intent retries create exactly one workstream and anchor linkage",
+        "journal sequences and artifact versions are append-only and idempotent",
+        "goal lifecycle disposition never cascade-deletes tasks, workstreams, artifacts, or evidence",
+        "canonical writes are account-generation fenced and disabled in off or shadow mode",
+        "task goal and workstream relationships are validated in the same transaction as task mutation",
+        "task-goal migration receipts resume per-item outcomes and return stable reports"
+      ]
+    },
+    {
       "id": "desktop_update_channel_promotion",
       "risk": "high",
       "sources": [

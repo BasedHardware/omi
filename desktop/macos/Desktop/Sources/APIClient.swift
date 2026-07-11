@@ -290,9 +290,18 @@ actor APIClient {
   /// Firebase session (e.g. background polling that should not sign the user out).
   struct RequestAuthPolicy: Sendable {
     var signOutOn401: Bool
+    var recordsAuthRetryTelemetry: Bool = true
+    /// When true, a post-refresh HTTP 401 is returned to the caller instead of
+    /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
+    var returnsPersistent401Response: Bool = false
 
     static let `default` = RequestAuthPolicy(signOutOn401: true)
     static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
+    static let providerCredentialBoundary = RequestAuthPolicy(
+      signOutOn401: false,
+      recordsAuthRetryTelemetry: false,
+      returnsPersistent401Response: true
+    )
   }
 
   private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
@@ -352,7 +361,10 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      if !retriedAuth {
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (data, httpResponse)
+      }
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       }
       guard let retryRequest = try await authorizedRetryRequest(
@@ -360,7 +372,9 @@ actor APIClient {
         retriedAuth: retriedAuth,
         signOutOn401: authPolicy.signOutOn401
       ) else {
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
         throw APIError.unauthorized
       }
       do {
@@ -371,13 +385,17 @@ actor APIClient {
         )
         let (_, retryResponse) = result
         let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
         return result
       } catch {
         if case APIError.unauthorized = error {
           throw error
         }
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
         throw error
       }
     }
@@ -1093,7 +1111,7 @@ struct Structured: Codable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
-      OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
+      OmiAPI.ActionItem(candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed, completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -1163,12 +1181,19 @@ struct ActionItem: Codable, Identifiable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let wire = OmiAPI.ActionItem(
+      candidateAction: nil,
+      captureConfidence: nil,
+      captureKind: nil,
+      captureOwner: nil,
       completed: completed,
       completedAt: nil,
+      concreteDeliverable: nil,
       conversationId: nil,
       createdAt: nil,
       description_: description,
       dueAt: nil,
+      ownershipConfidence: nil,
+      targetTaskId: nil,
       updatedAt: nil
     )
     try wire.encode(to: encoder)
@@ -2566,52 +2591,21 @@ extension APIClient {
     priority: String? = nil,
     metadata: [String: Any]? = nil,
     goalId: String? = nil,
+    clearGoalId: Bool = false,
+    workstreamId: String? = nil,
+    clearWorkstreamId: Bool = false,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    supersededBy: String? = nil,
+    source: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
-    recurrenceRule: String? = nil
+    recurrenceRule: String? = nil,
+    recurrenceParentId: String? = nil
   ) async throws -> TaskActionItem {
-    struct UpdateRequest: Encodable {
-      let completed: Bool?
-      let description: String?
-      let dueAt: String?
-      let includeDueAt: Bool
-      let clearDueAt: Bool
-      let priority: String?
-      let metadata: String?
-      let goalId: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-
-      enum CodingKeys: String, CodingKey {
-        case completed, description, priority, metadata
-        case dueAt = "due_at"
-        case clearDueAt = "clear_due_at"
-        case goalId = "goal_id"
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-      }
-
-      func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(completed, forKey: .completed)
-        try container.encodeIfPresent(description, forKey: .description)
-        if includeDueAt {
-          if let dueAt {
-            try container.encode(dueAt, forKey: .dueAt)
-          } else {
-            try container.encodeNil(forKey: .dueAt)
-          }
-        }
-        if clearDueAt {
-          try container.encode(true, forKey: .clearDueAt)
-        }
-        try container.encodeIfPresent(priority, forKey: .priority)
-        try container.encodeIfPresent(metadata, forKey: .metadata)
-        try container.encodeIfPresent(goalId, forKey: .goalId)
-        try container.encodeIfPresent(relevanceScore, forKey: .relevanceScore)
-        try container.encodeIfPresent(recurrenceRule, forKey: .recurrenceRule)
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2624,17 +2618,29 @@ extension APIClient {
       }
     }
 
-    let request = UpdateRequest(
-      completed: completed,
-      description: description,
-      dueAt: dueAt.map { formatter.string(from: $0) },
-      includeDueAt: clearDueAt || dueAt != nil,
-      clearDueAt: clearDueAt,
-      priority: priority,
+    let wire = OmiAPI.ActionItemUpdateRequest(
+      clearDueAt: taskPatchField(clearDueAt ? true : nil),
+      completed: taskPatchField(completed),
+      description_: taskPatchField(description),
+      dueAt: taskPatchField(dueAt.map { formatter.string(from: $0) }),
+      dueConfidence: taskPatchField(dueConfidence),
+      goalId: clearGoalId ? .null : taskPatchField(goalId),
+      indentLevel: taskPatchField(indentLevel),
+      owner: taskPatchField(owner.flatMap(OmiAPI.TaskOwner.init(rawValue:))),
+      priority: taskPatchField(priority.flatMap(OmiAPI.TaskPriority.init(rawValue:))),
+      provenance: taskPatchField(provenance),
+      recurrenceParentId: taskPatchField(recurrenceParentId),
+      recurrenceRule: taskPatchField(recurrenceRule),
+      sortOrder: taskPatchField(sortOrder),
+      source: taskPatchField(source),
+      status: taskPatchField(status.flatMap(OmiAPI.TaskStatus.init(rawValue:))),
+      supersededBy: taskPatchField(supersededBy),
+      workstreamId: clearWorkstreamId ? .null : taskPatchField(workstreamId)
+    )
+    let request = try taskMutationBody(
+      wire,
       metadata: metadataString,
-      goalId: goalId,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule
+      relevanceScore: relevanceScore
     )
 
     return try await patch("v1/action-items/\(id)", body: request)
@@ -2655,29 +2661,16 @@ extension APIClient {
     metadata: [String: Any]? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil
+    recurrenceParentId: String? = nil,
+    goalId: String? = nil,
+    workstreamId: String? = nil,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil
   ) async throws -> TaskActionItem {
-    struct CreateRequest: Encodable {
-      let description: String
-      let dueAt: String?
-      let source: String?
-      let priority: String?
-      let category: String?
-      let metadata: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-      let recurrenceParentId: String?
-
-      enum CodingKeys: String, CodingKey {
-        case description
-        case dueAt = "due_at"
-        case source, priority, category, metadata
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-        case recurrenceParentId = "recurrence_parent_id"
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2690,19 +2683,59 @@ extension APIClient {
       }
     }
 
-    let request = CreateRequest(
-      description: description,
+    let wire = OmiAPI.ActionItemCreateRequest(
+      appleReminderId: nil,
+      completed: nil,
+      conversationId: nil,
+      description_: description,
       dueAt: dueAt.map { formatter.string(from: $0) },
+      dueConfidence: dueConfidence,
+      exportDate: nil,
+      exportPlatform: nil,
+      exported: nil,
+      goalId: goalId,
+      indentLevel: indentLevel,
+      isLocked: nil,
+      owner: owner.flatMap(OmiAPI.TaskOwner.init(rawValue:)),
+      priority: priority.flatMap(OmiAPI.TaskPriority.init(rawValue:)),
+      provenance: provenance,
+      recurrenceParentId: recurrenceParentId,
+      recurrenceRule: recurrenceRule,
+      sortOrder: sortOrder,
       source: source,
-      priority: priority,
+      status: status.flatMap(OmiAPI.TaskStatus.init(rawValue:)),
+      workstreamId: workstreamId
+    )
+    let request = try taskMutationBody(
+      wire,
       category: category,
       metadata: metadataString,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule,
-      recurrenceParentId: recurrenceParentId
+      relevanceScore: relevanceScore
     )
 
     return try await post("v1/action-items", body: request)
+  }
+
+  private func taskMutationBody<Wire: Encodable>(
+    _ wire: Wire,
+    category: String? = nil,
+    metadata: String? = nil,
+    relevanceScore: Int? = nil
+  ) throws -> OmiAnyCodable {
+    let data = try JSONEncoder().encode(wire)
+    guard var body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw APIError.invalidResponse
+    }
+    // Released desktop clients still send these compatibility-only fields.
+    // Canonical fields remain owned by the generated OpenAPI request DTO.
+    if let category { body["category"] = category }
+    if let metadata { body["metadata"] = metadata }
+    if let relevanceScore { body["relevance_score"] = relevanceScore }
+    return OmiAnyCodable(body)
+  }
+
+  private func taskPatchField<Value: Codable>(_ value: Value?) -> OmiAPI.OmiPatchField<Value> {
+    value.map(OmiAPI.OmiPatchField.value) ?? .omitted
   }
 
   /// Batch update relevance scores for multiple action items
@@ -2757,6 +2790,352 @@ extension APIClient {
     return try await post("v1/action-items/share", body: ShareRequest(taskIds: taskIds))
   }
 
+}
+
+// MARK: - Canonical Candidates API
+
+extension APIClient {
+  func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
+    try await get("v1/candidates/control")
+  }
+
+  func createCanonicalCandidate(
+    _ candidate: OmiAPI.CandidateCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates",
+      method: "POST",
+      body: candidate,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func acceptCanonicalCandidate(
+    candidateID: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates/\(candidateID)/accept",
+      method: "POST",
+      body: Optional<String>.none,
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func getCanonicalCandidate(candidateID: String) async throws -> OmiAPI.CandidateRecord {
+    try await get("v1/candidates/\(candidateID)")
+  }
+
+  private func taskIntelligenceMutation<Response: Decodable, Body: Encodable>(
+    endpoint: String,
+    method: String,
+    body: Body?,
+    idempotencyKey: String?,
+    accountGeneration: Int?
+  ) async throws -> Response {
+    guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    request.allHTTPHeaderFields = try await buildHeaders()
+    if let accountGeneration {
+      request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    }
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
+    if let body { request.httpBody = try JSONEncoder().encode(body) }
+    return try await performRequest(request)
+  }
+}
+
+// MARK: - Suggested task review and feedback
+
+extension APIClient {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
+    let encodedStatus = status.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? status
+    let response: OmiAPI.CandidateListResponse = try await get(
+      "v1/candidates?status=\(encodedStatus)&limit=\(limit)&offset=0")
+    return response.candidates
+  }
+
+  func rejectCanonicalCandidate(
+    candidateID: String,
+    reason: String?,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates/\(candidateID)/reject",
+      method: "POST",
+      body: OmiAPI.CandidateResolutionRequest(reason: reason),
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func registerTaskIntervention(
+    _ request: OmiAPI.InterventionCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.InterventionRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/interventions",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func recordTaskFeedback(
+    _ request: OmiAPI.FeedbackCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.FeedbackRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/feedback",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/outcomes",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func updateSuggestedTaskDescription(id: String, description: String) async throws {
+    _ = try await updateActionItem(id: id, description: description)
+  }
+}
+
+// MARK: - What Matters Now and canonical Goals
+
+extension APIClient {
+  func getWhatMattersNow(deviceID: String? = nil) async throws -> OmiAPI.WhatMattersNowProjection {
+    var endpoint = "v1/what-matters-now"
+    if let deviceID {
+      let encodedDeviceID = deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID
+      endpoint += "?device_id=\(encodedDeviceID)"
+    }
+    return try await get(endpoint)
+  }
+
+  func replaceTaskContextSnapshot(
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.SnapshotReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/context-snapshot",
+      method: "PUT",
+      body: snapshot,
+      idempotencyKey: snapshot.snapshotId,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func evaluateWhatMattersNow(
+    _ request: OmiAPI.EvaluationRequest
+  ) async throws -> OmiAPI.WhatMattersNowProjection {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/what-matters-now/evaluate",
+      method: "POST",
+      body: request,
+      idempotencyKey: nil,
+      accountGeneration: nil
+    )
+  }
+
+  func getCanonicalGoals(includeEnded: Bool = true) async throws -> [OmiAPI.GoalResponse] {
+    try await get("v1/goals/all?include_ended=\(includeEnded ? "true" : "false")")
+  }
+
+  func getCanonicalGoalDetail(goalID: String) async throws -> OmiAPI.GoalDetailProjection {
+    try await get("v1/goals/\(goalID)/detail")
+  }
+
+  func createCanonicalGoal(
+    title: String,
+    desiredOutcome: String,
+    whyItMatters: String?,
+    successCriteria: [String],
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let title: String
+      let desired_outcome: String
+      let why_it_matters: String?
+      let success_criteria: [String]
+      let status: String
+      let source: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/canonical",
+      method: "POST",
+      body: Request(
+        title: title,
+        desired_outcome: desiredOutcome,
+        why_it_matters: whyItMatters,
+        success_criteria: successCriteria,
+        status: "background",
+        source: "user"
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func focusCanonicalGoal(
+    goalID: String,
+    replacementGoalID: String?,
+    focusRank: Int?,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let replacement_goal_id: String?
+      let focus_rank: Int?
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "POST",
+      body: Request(replacement_goal_id: replacementGoalID, focus_rank: focusRank),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func unfocusCanonicalGoal(
+    goalID: String,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "DELETE",
+      body: Optional<String>.none,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func transitionCanonicalGoal(
+    goalID: String,
+    status: OmiAPI.GoalStatus,
+    relationshipDisposition: String = "retain",
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let status: OmiAPI.GoalStatus
+      let relationship_disposition: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/lifecycle",
+      method: "POST",
+      body: Request(status: status, relationship_disposition: relationshipDisposition),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+}
+
+// MARK: - Workstream-backed task threads
+
+extension APIClient {
+  func resolveTaskWorkIntent(
+    taskId: String,
+    title: String?,
+    objective: String?,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.WorkIntentReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/work-intents",
+      method: "POST",
+      body: OmiAPI.TaskOriginWorkIntent(
+        objective: objective,
+        origin: "task",
+        taskId: taskId,
+        title: title
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func resolveGoalWorkIntent(
+    goalId: String,
+    title: String,
+    objective: String,
+    anchorTaskDescription: String,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.WorkIntentReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/work-intents",
+      method: "POST",
+      body: OmiAPI.GoalOriginWorkIntent(
+        anchorTaskDescription: anchorTaskDescription,
+        goalId: goalId,
+        objective: objective,
+        origin: "goal",
+        title: title
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func getWorkstreamDetail(workstreamId: String) async throws -> OmiAPI.WorkstreamDetailProjection {
+    try await get("v1/workstreams/\(workstreamId)")
+  }
+
+  func createWorkstreamArtifact(
+    workstreamId: String,
+    artifact: OmiAPI.ArtifactDescriptorCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.ArtifactDescriptor {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/workstreams/\(workstreamId)/artifacts",
+      method: "POST",
+      body: artifact,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func upsertWorkstreamCheckpoint(
+    workstreamId: String,
+    runtimeId: String,
+    checkpoint: OmiAPI.ContinuationCheckpointUpsert,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.ContinuationCheckpoint {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/workstreams/\(workstreamId)/checkpoints/\(runtimeId)",
+      method: "PUT",
+      body: checkpoint,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
 }
 
 /// Response types for task sharing
@@ -3046,445 +3425,6 @@ extension APIClient {
       endpoint += "?date=\(formatter.string(from: date))"
     }
     return try await get(endpoint)
-  }
-}
-
-// MARK: - Action Item Model (Standalone)
-
-/// Standalone action item stored in Firestore subcollection
-/// Different from ActionItem which is embedded in conversation structured data
-struct TaskActionItem: Codable, Identifiable, Equatable {
-  let id: String
-  let description: String
-  let completed: Bool
-  let createdAt: Date
-  let updatedAt: Date?
-  let dueAt: Date?
-  let completedAt: Date?
-  let conversationId: String?
-  /// Source of the task: "screenshot", "transcription:omi", "transcription:desktop", "manual"
-  let source: String?
-  /// Priority: "high", "medium", "low"
-  let priority: String?
-  /// JSON metadata string containing extra info like source_app, confidence
-  let metadata: String?
-  /// Classification category: personal, work, feature, bug, code, research, communication, finance, health, other
-  let category: String?
-  /// Soft-delete: true if this task has been deleted by AI dedup
-  let deleted: Bool?
-  /// Who deleted: "user", "ai_dedup"
-  let deletedBy: String?
-  /// When the task was soft-deleted
-  let deletedAt: Date?
-  /// AI reason for deletion (dedup explanation)
-  let deletedReason: String?
-  /// ID of the task that was kept instead of this one
-  let keptTaskId: String?
-  /// ID of the goal this task is linked to
-  let goalId: String?
-  /// Whether this task was promoted from staged_tasks
-  let fromStaged: Bool?
-  /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
-  let recurrenceRule: String?
-  /// ID of original parent task in recurrence chain
-  let recurrenceParentId: String?
-
-  // Ordering (synced to backend)
-  var sortOrder: Int?  // Sort position within category
-  var indentLevel: Int?  // 0-3 indent depth
-
-  // Prioritization (stored locally, not synced to backend)
-  var relevanceScore: Int?  // 0-100 relevance score from TaskPrioritizationService
-
-  // Desktop extraction context (stored locally, not synced to backend)
-  var contextSummary: String?  // Summary of screen context at extraction time
-  var currentActivity: String?  // What user was doing when task was detected
-  var agentEditedFiles: [String]?  // Files the agent previously edited
-
-  // Agent execution tracking (stored locally, not synced to backend)
-  var agentStatus: String?  // nil, "pending", "processing", "completed", "failed"
-  var agentPrompt: String?  // The prompt sent to Claude
-  var agentPlan: String?  // Claude's response/plan
-  var agentSessionId: String?  // tmux session name for the Claude session
-  var agentStartedAt: Date?  // When agent was launched
-  var agentCompletedAt: Date?  // When agent finished
-
-  // Chat session for task-scoped AI chat (stored locally, not synced to backend)
-  var chatSessionId: String?
-
-  /// Whether this task has an active recurrence rule
-  var isRecurring: Bool {
-    guard let rule = recurrenceRule, !rule.isEmpty else { return false }
-    return true
-  }
-
-  /// Custom Equatable: compares only display-relevant fields.
-  /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
-  /// `updatedAt` (set to Date() when nil on sync), and fields lost through SQLite.
-  static func == (lhs: TaskActionItem, rhs: TaskActionItem) -> Bool {
-    lhs.id == rhs.id && lhs.description == rhs.description && lhs.completed == rhs.completed
-      && lhs.createdAt == rhs.createdAt && lhs.dueAt == rhs.dueAt && lhs.source == rhs.source
-      && lhs.priority == rhs.priority && lhs.category == rhs.category && lhs.deleted == rhs.deleted
-      && lhs.deletedBy == rhs.deletedBy && lhs.goalId == rhs.goalId
-      && lhs.recurrenceRule == rhs.recurrenceRule
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case id, description, completed, source, priority, metadata, category, deleted
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-    case dueAt = "due_at"
-    case completedAt = "completed_at"
-    case conversationId = "conversation_id"
-    case deletedBy = "deleted_by"
-    case deletedAt = "deleted_at"
-    case deletedReason = "deleted_reason"
-    case keptTaskId = "kept_task_id"
-    case goalId = "goal_id"
-    case fromStaged = "from_staged"
-    case recurrenceRule = "recurrence_rule"
-    case recurrenceParentId = "recurrence_parent_id"
-    case sortOrder = "sort_order"
-    case indentLevel = "indent_level"
-    case relevanceScore = "relevance_score"
-  }
-
-  /// Memberwise initializer for creating instances programmatically
-  init(
-    id: String,
-    description: String,
-    completed: Bool,
-    createdAt: Date,
-    updatedAt: Date? = nil,
-    dueAt: Date? = nil,
-    completedAt: Date? = nil,
-    conversationId: String? = nil,
-    source: String? = nil,
-    priority: String? = nil,
-    metadata: String? = nil,
-    category: String? = nil,
-    deleted: Bool? = nil,
-    deletedBy: String? = nil,
-    deletedAt: Date? = nil,
-    deletedReason: String? = nil,
-    keptTaskId: String? = nil,
-    goalId: String? = nil,
-    fromStaged: Bool? = nil,
-    recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil,
-    sortOrder: Int? = nil,
-    indentLevel: Int? = nil,
-    relevanceScore: Int? = nil,
-    contextSummary: String? = nil,
-    currentActivity: String? = nil,
-    agentEditedFiles: [String]? = nil,
-    agentStatus: String? = nil,
-    agentPrompt: String? = nil,
-    agentPlan: String? = nil,
-    agentSessionId: String? = nil,
-    agentStartedAt: Date? = nil,
-    agentCompletedAt: Date? = nil,
-    chatSessionId: String? = nil
-  ) {
-    self.id = id
-    self.description = description
-    self.completed = completed
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-    self.dueAt = dueAt
-    self.completedAt = completedAt
-    self.conversationId = conversationId
-    self.source = source
-    self.priority = priority
-    self.metadata = metadata
-    self.category = category
-    self.deleted = deleted
-    self.deletedBy = deletedBy
-    self.deletedAt = deletedAt
-    self.deletedReason = deletedReason
-    self.keptTaskId = keptTaskId
-    self.goalId = goalId
-    self.fromStaged = fromStaged
-    self.recurrenceRule = recurrenceRule
-    self.recurrenceParentId = recurrenceParentId
-    self.sortOrder = sortOrder
-    self.indentLevel = indentLevel
-    self.relevanceScore = relevanceScore
-    self.contextSummary = contextSummary
-    self.currentActivity = currentActivity
-    self.agentEditedFiles = agentEditedFiles
-    self.agentStatus = agentStatus
-    self.agentPrompt = agentPrompt
-    self.agentPlan = agentPlan
-    self.agentSessionId = agentSessionId
-    self.agentStartedAt = agentStartedAt
-    self.agentCompletedAt = agentCompletedAt
-    self.chatSessionId = chatSessionId
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
-    completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
-    conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
-    source = try container.decodeIfPresent(String.self, forKey: .source)
-    priority = try container.decodeIfPresent(String.self, forKey: .priority)
-    metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
-    category = try container.decodeIfPresent(String.self, forKey: .category)
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted)
-    deletedBy = try container.decodeIfPresent(String.self, forKey: .deletedBy)
-    deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
-    deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
-    keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
-    goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
-    fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
-    recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule)
-    recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
-    sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
-    indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
-    relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
-
-    // Local-only fields, not decoded from API
-    contextSummary = nil
-    currentActivity = nil
-    agentEditedFiles = nil
-    agentStatus = nil
-    agentPrompt = nil
-    agentPlan = nil
-    agentSessionId = nil
-    agentStartedAt = nil
-    agentCompletedAt = nil
-  }
-
-  /// Categories that trigger Claude agent execution
-  static let agentCategories: Set<String> = ["feature", "bug", "code"]
-
-  /// Get tags array from metadata or fall back to single category
-  var tags: [String] {
-    // First try to get tags from metadata JSON
-    if let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let metaTags = json["tags"] as? [String], !metaTags.isEmpty
-    {
-      return metaTags
-    }
-    // Fall back to single category for backward compat
-    if let category = category {
-      return [category]
-    }
-    return []
-  }
-
-  /// Check if this task should trigger an agent (any task can trigger)
-  var shouldTriggerAgent: Bool {
-    return true
-  }
-
-  /// Parsed source classification from metadata
-  var sourceClassification: TaskSourceClassification? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let cat = json["source_category"] as? String,
-      let sub = json["source_subcategory"] as? String
-    else { return nil }
-    return TaskSourceClassification.from(category: cat, subcategory: sub)
-  }
-
-  /// Parse metadata JSON to extract source app name
-  var sourceApp: String? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["source_app"] as? String
-  }
-
-  /// Parse metadata JSON to extract window title
-  var windowTitle: String? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["window_title"] as? String
-  }
-
-  /// Parse metadata JSON to extract confidence score
-  var confidence: Double? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["confidence"] as? Double
-  }
-
-  /// Parse full metadata JSON dictionary
-  var parsedMetadata: [String: Any]? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json
-  }
-
-  /// Whether this task has detail metadata worth showing (beyond tags/category already visible as badges)
-  var hasDetailMetadata: Bool {
-    guard let json = parsedMetadata else { return false }
-    let displayedKeys: Set<String> = ["tags", "category", "source_category", "source_subcategory"]
-    return json.keys.contains(where: { !displayedKeys.contains($0) })
-  }
-
-  /// Display-friendly source label
-  var sourceLabel: String {
-    guard let source = source else { return "Task" }
-    switch source {
-    case "screenshot": return "Screen"
-    case "transcription:omi": return "omi"
-    case "transcription:desktop": return "Desktop"
-    case "transcription:phone": return "Phone"
-    case "manual": return "Manual"
-    default: return "Task"
-    }
-  }
-
-  /// Display label: app name for screenshot tasks, generic label otherwise
-  var sourceAppLabel: String {
-    if source == "screenshot", let app = sourceApp {
-      return app
-    }
-    return sourceLabel
-  }
-
-  /// System icon name for source
-  var sourceIcon: String {
-    guard let source = source else { return "list.bullet" }
-    switch source {
-    case "screenshot": return "camera.fill"
-    case "transcription:omi": return "waveform"
-    case "transcription:desktop": return "desktopcomputer"
-    case "transcription:phone": return "iphone"
-    case "manual": return "square.and.pencil"
-    default: return "list.bullet"
-    }
-  }
-
-  /// Display-friendly category label
-  var categoryLabel: String {
-    guard let category = category else { return "" }
-    return category.capitalized
-  }
-
-  /// System icon name for category
-  var categoryIcon: String {
-    guard let category = category else { return "folder.fill" }
-    switch category {
-    case "feature": return "sparkles"
-    case "bug": return "ladybug.fill"
-    case "code": return "chevron.left.forwardslash.chevron.right"
-    case "work": return "briefcase.fill"
-    case "personal": return "person.fill"
-    case "research": return "magnifyingglass"
-    case "communication": return "bubble.left.fill"
-    case "finance": return "dollarsign.circle.fill"
-    case "health": return "heart.fill"
-    default: return "folder.fill"
-    }
-  }
-
-  /// Color for category badge
-  var categoryColor: String {
-    guard let category = category else { return "gray" }
-    switch category {
-    case "feature": return "purple"
-    case "bug": return "red"
-    case "code": return "blue"
-    case "work": return "orange"
-    case "personal": return "green"
-    case "research": return "cyan"
-    case "communication": return "indigo"
-    case "finance": return "yellow"
-    case "health": return "pink"
-    default: return "gray"
-    }
-  }
-
-  /// All meaningful task data formatted for chat context.
-  /// Add new fields here when they're added to the struct so chat always gets everything.
-  var chatContext: String {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
-
-    var lines: [String] = []
-
-    // Core
-    lines.append("Task: \(description)")
-    if let category = category { lines.append("Category: \(category)") }
-    if !tags.isEmpty { lines.append("Tags: \(tags.joined(separator: ", "))") }
-    if let priority = priority { lines.append("Priority: \(priority)") }
-    lines.append("Status: \(completed ? "completed" : "active")")
-    lines.append("Created: \(formatter.string(from: createdAt))")
-    if let dueAt = dueAt { lines.append("Due: \(formatter.string(from: dueAt))") }
-    if let completedAt = completedAt {
-      lines.append("Completed: \(formatter.string(from: completedAt))")
-    }
-
-    // Source & origin
-    if let source = source { lines.append("Source: \(sourceLabel) (\(source))") }
-    if let app = sourceApp { lines.append("Source app: \(app)") }
-    if let title = windowTitle { lines.append("Window title: \(title)") }
-    if let conf = confidence {
-      lines.append("Extraction confidence: \(String(format: "%.0f%%", conf * 100))")
-    }
-
-    // Screen context at extraction time
-    if let ctx = contextSummary, !ctx.isEmpty { lines.append("Context when detected: \(ctx)") }
-    if let act = currentActivity, !act.isEmpty { lines.append("User activity: \(act)") }
-
-    // Relationships
-    if let convId = conversationId { lines.append("Conversation ID: \(convId)") }
-    if let goalId = goalId { lines.append("Linked goal: \(goalId)") }
-
-    // Agent work
-    if let status = agentStatus { lines.append("Agent status: \(status)") }
-    if let prompt = agentPrompt, !prompt.isEmpty {
-      lines.append("Agent prompt: \(String(prompt.prefix(1000)))")
-    }
-    if let plan = agentPlan, !plan.isEmpty {
-      lines.append("Agent plan:\n\(String(plan.prefix(2000)))")
-    }
-    if let files = agentEditedFiles, !files.isEmpty {
-      lines.append("Files edited by agent: \(files.joined(separator: ", "))")
-    }
-
-    // Raw metadata (catches anything not explicitly listed above)
-    if let meta = parsedMetadata {
-      let coveredKeys: Set<String> = [
-        "tags", "source_app", "window_title", "confidence",
-        "source_category", "source_subcategory",
-      ]
-      let extra = meta.filter { !coveredKeys.contains($0.key) }
-      if !extra.isEmpty {
-        let pairs = extra.map { "\($0.key): \($0.value)" }.sorted()
-        lines.append("Additional metadata: \(pairs.joined(separator: ", "))")
-      }
-    }
-
-    return lines.joined(separator: "\n")
   }
 }
 
@@ -4331,7 +4271,9 @@ extension APIClient {
       }
     }
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
-    return try await patch("v1/users/transcription-preferences", body: body)
+    struct StatusResponse: Decodable { let status: String }
+    let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
+    return try await getTranscriptionPreferences()
   }
 
   /// Fetches user language preference
@@ -6208,34 +6150,45 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders()
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
+    // This desktop-backend route can surface upstream OpenAI/BYOK credential
+    // failures as HTTP 401. Refresh the Firebase header once in case it is stale,
+    // but never let a voice-only provider failure invalidate the Omi session.
+    // Only remap to providerAuth when the body is OpenAI-shaped — a bare/Firebase
+    // 401 after refresh is a real login failure and must require re-auth.
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: .providerCredentialBoundary
+    )
 
     if httpResponse.statusCode == 401 {
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: false,
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: mode,
+          message: mode == .byok
+            ? "Your OpenAI key was rejected. Update it in Settings."
+            : "OpenAI authentication failed. Voice responses are using fallback."
+        )
+      }
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
         signOutOn401: true
-      ) else {
-        throw APIError.unauthorized
-      }
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
-      }
-      guard retryHttpResponse.statusCode != 401 else {
-        await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
-        throw APIError.unauthorized
-      }
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
-      }
-      return retryData
+      )
+      throw APIError.unauthorized
     }
 
+    if httpResponse.statusCode == 429 {
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        throw CredentialHealthError.providerQuota(
+          provider: .openai,
+          message: "OpenAI voice quota was exceeded. Voice responses are using fallback."
+        )
+      }
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
     }

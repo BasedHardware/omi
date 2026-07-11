@@ -134,6 +134,7 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { StaleAdapterBindingError } from "./kernel-types.js";
+import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
 import type { BuiltDesktopContextPacket } from "./desktop-context-packet.js";
 
@@ -151,6 +152,7 @@ export class KernelCore {
   protected readonly registry: AdapterRegistry;
   protected readonly runtimeNodeId: string;
   protected readonly artifactStorage?: OmiArtifactStorage;
+  protected readonly recoverRunInput?: AgentRuntimeKernelOptions["recoverRunInput"];
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
@@ -162,6 +164,7 @@ export class KernelCore {
     this.registry = options.registry;
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
+    this.recoverRunInput = options.recoverRunInput;
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -172,6 +175,11 @@ export class KernelCore {
   protected createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
     return this.withTransaction(() => {
       const session = this.resolveSession(input);
+      resolveAdapterWithinBoundary({
+        providerBoundary: session.providerBoundary,
+        defaultAdapterId: session.defaultAdapterId,
+        requestedAdapterId: input.adapterId ?? session.defaultAdapterId,
+      });
       const run = this.store.insertRun({
         sessionId: session.sessionId,
         parentRunId: input.parentRunId ?? null,
@@ -204,6 +212,16 @@ export class KernelCore {
   ): Promise<KernelRunResult> {
 
     const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    if (!input.recoverAfterError) {
+      const recovery = this.recoverRunInput?.(adapterId);
+      if (recovery) {
+        input = {
+          ...input,
+          maxAttempts: input.maxAttempts ?? recovery.maxAttempts,
+          recoverAfterError: recovery.recoverAfterError,
+        };
+      }
+    }
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;
@@ -334,6 +352,7 @@ export class KernelCore {
           sessionId: accepted.session.sessionId,
           conversationId,
           surfaceRef,
+          executionRole: accepted.session.executionRole,
           userText: input.prompt,
           attachmentMetadataJson: input.attachmentMetadataJson,
           surfaceContextJson: input.surfaceContextJson,
@@ -712,6 +731,13 @@ export class KernelCore {
   }
 
   protected resolveSession(input: KernelSessionResolutionInput): AgentSession {
+    // An explicit canonical session is authoritative even when the caller also
+    // supplies a new surface reference. This is how one long-running thread can
+    // move between task scopes without silently forking its runtime identity.
+    if (input.sessionId) {
+      const existing = this.findExistingSession(input);
+      if (existing) return existing;
+    }
     if (input.surfaceKind && input.externalRefKind && input.externalRefId) {
       const resolved = resolveSurfaceSession(
         this.store,
@@ -723,11 +749,25 @@ export class KernelCore {
             externalRefId: input.externalRefId,
           },
           defaultAdapterId: input.defaultAdapterId,
+          executionRole: input.executionRole,
+          providerBoundary: input.providerBoundary,
           title: input.title ?? null,
         },
         () => Date.now(),
       );
-      return this.readSession(resolved.agentSessionId);
+      const session = this.readSession(resolved.agentSessionId);
+      const hasCreationEvent = this.store.getOptionalRow(
+        "SELECT event_id FROM events WHERE session_id = ? AND type = 'session.created' LIMIT 1",
+        [session.sessionId],
+      );
+      if (!hasCreationEvent) {
+        this.appendEvent({
+          sessionId: session.sessionId,
+          type: "session.created",
+          payload: { sessionId: session.sessionId, ownerId: session.ownerId, surfaceKind: session.surfaceKind },
+        });
+      }
+      return session;
     }
     const existing = this.findExistingSession(input);
     if (existing) return existing;
@@ -738,6 +778,9 @@ export class KernelCore {
       externalRefId: input.externalRefId ?? null,
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
+      executionRole: input.executionRole ?? "coordinator",
+      providerBoundary:
+        input.providerBoundary ?? providerBoundaryForAdapter(input.defaultAdapterId ?? "acp"),
     });
     this.appendEvent({
       sessionId: session.sessionId,
@@ -929,6 +972,11 @@ export class KernelCore {
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
         mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
+        metadata: {
+          ...(input.input.metadata ?? {}),
+          executionRole: input.session.executionRole,
+          providerBoundary: input.session.providerBoundary,
+        },
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -981,7 +1029,11 @@ export class KernelCore {
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
       mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-      metadata: input.input.metadata,
+      metadata: {
+        ...(input.input.metadata ?? {}),
+        executionRole: input.session.executionRole,
+        providerBoundary: input.session.providerBoundary,
+      },
     });
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(
