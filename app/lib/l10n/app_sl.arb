@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
     "appDisabledOn": "Onemogočeno {date}.",
     "appDisabledLastError": "Zadnja napaka: {error}.",
-    "prerecordedTranscript": "Vnaprej posneto"
+    "prerecordedTranscript": "Vnaprej posneto",
+    "pendantRecordingSyncBlocked": "Pendant še vedno snema, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte."
 }

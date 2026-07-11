@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
     "appDisabledOn": "Адключана {date}.",
     "appDisabledLastError": "Апошняя памылка: {error}.",
-    "prerecordedTranscript": "Папярэдне запісанае"
+    "prerecordedTranscript": "Папярэдне запісанае",
+    "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў."
 }

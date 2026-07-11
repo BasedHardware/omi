@@ -3209,5 +3209,6 @@
     "appReEnableFailedBody": "Diese App konnte nicht reaktiviert werden. Bitte versuche es erneut.",
     "appDisabledOn": "Deaktiviert am {date}.",
     "appDisabledLastError": "Letzter Fehler: {error}.",
-    "prerecordedTranscript": "Voraufgezeichnet"
+    "prerecordedTranscript": "Voraufgezeichnet",
+    "pendantRecordingSyncBlocked": "Dein Pendant nimmt noch auf, daher kann das gespeicherte Audio nicht übertragen werden. Drücke die Taste am Pendant, um die Aufnahme zu stoppen, und synchronisiere dann erneut."
 }

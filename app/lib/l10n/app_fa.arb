@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "این برنامه دوباره فعال نشد. لطفاً دوباره تلاش کنید.",
     "appDisabledOn": "در {date} غیرفعال شد.",
     "appDisabledLastError": "آخرین خطا: {error}",
-    "prerecordedTranscript": "از پیش ضبط‌شده"
+    "prerecordedTranscript": "از پیش ضبط‌شده",
+    "pendantRecordingSyncBlocked": "Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید."
 }

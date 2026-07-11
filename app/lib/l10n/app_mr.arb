@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "हे अ‍ॅप पुन्हा सक्षम करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
     "appDisabledOn": "{date} रोजी अक्षम केले.",
     "appDisabledLastError": "शेवटची त्रुटी: {error}",
-    "prerecordedTranscript": "पूर्व-रेकॉर्डेड"
+    "prerecordedTranscript": "पूर्व-रेकॉर्डेड",
+    "pendantRecordingSyncBlocked": "Pendant अजूनही रेकॉर्ड करत आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा."
 }

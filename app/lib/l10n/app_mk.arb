@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
     "appDisabledOn": "Оневозможена на {date}.",
     "appDisabledLastError": "Последна грешка: {error}.",
-    "prerecordedTranscript": "Претходно снимено"
+    "prerecordedTranscript": "Претходно снимено",
+    "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно."
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -30,6 +31,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   bool _isSyncing = false;
   bool _cancelRequested = false;
 
+  FlashSyncStallReason _lastStallReason = FlashSyncStallReason.none;
+
+  @override
+  FlashSyncStallReason get lastStallReason => _lastStallReason;
+
   @override
   bool get isSyncing => _isSyncing;
 
@@ -46,6 +52,23 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   void cancelSync() {
     Logger.debug("FlashPageSync: Cancel requested");
     _cancelRequested = true;
+  }
+
+  /// Classifies a drain stall. [statusAfterStall] is the device status read
+  /// after the stall fired; [endPageAtEnumeration] is the newest flash page
+  /// the device reported when the pass was enumerated. If the device minted
+  /// pages beyond that while serving none to the drain, it is recording — the
+  /// protocol cannot drain flash during an open recording session.
+  @visibleForTesting
+  static FlashSyncStallReason classifyStall({
+    required int endPageAtEnumeration,
+    required Map<String, int>? statusAfterStall,
+  }) {
+    final newestAfter = statusAfterStall?['newest_flash_page'];
+    if (newestAfter != null && newestAfter > endPageAtEnumeration) {
+      return FlashSyncStallReason.recordingSuspected;
+    }
+    return FlashSyncStallReason.unknown;
   }
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
@@ -185,6 +208,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
+    _lastStallReason = FlashSyncStallReason.none;
 
     int? globalStartPage;
     int globalEndPage = 0;
@@ -258,6 +282,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
+    _lastStallReason = FlashSyncStallReason.none;
     final matches = _wals.where((w) => w == wal).toList();
     if (matches.isEmpty) return null;
     final walToSync = matches.first;
@@ -552,9 +577,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         }
       }
 
-      await limitlessConnection.enableRealTimeMode();
-
       final bool reachedEnd = lastProcessedIndex != null && lastProcessedIndex >= endPage;
+
+      // On a stall, classify it while still in batch mode (device-status
+      // requests are answered in any mode — the RX handler parses them on
+      // every notification). The pendant has no mode that serves flash pages
+      // while a recording session is being written, so a newest-page pointer
+      // that advanced past the enumerated end while the drain starved means
+      // the pendant is actively recording.
+      if (!reachedEnd && !_cancelRequested) {
+        final statusAfterStall = await _getStorageStatus(deviceId);
+        _lastStallReason = classifyStall(endPageAtEnumeration: endPage, statusAfterStall: statusAfterStall);
+      }
+
+      await limitlessConnection.enableRealTimeMode();
       if (reachedEnd) {
         Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
         DebugLogManager.logEvent('flash_page_download_completed', {'filesSaved': filesSaved});
@@ -581,6 +617,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         'filesSaved': filesSaved,
         'lastProcessedIndex': lastProcessedIndex ?? 0,
         'endPage': endPage,
+        'stallReason': _lastStallReason.name,
       });
       return false; // Not fully drained — WAL stays 'miss' for the next sync
     } catch (e) {

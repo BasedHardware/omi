@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -9,6 +10,7 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/models/sync_state.dart';
@@ -543,6 +545,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _performSync(
       operation: () => _walService.getSyncs().syncAll(progress: this),
       context: 'sync all WALs',
+      checkFlashStall: true,
     );
   }
 
@@ -560,6 +563,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
+      checkFlashStall: wal.storage == WalStorage.flashPage,
     );
     // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
     // is scheduled (do not poke SyncReconciler here). Soft-retry failures wake
@@ -583,6 +587,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     required String context,
     Wal? failedWal,
     bool rethrowOnError = false,
+    bool checkFlashStall = false,
   }) async {
     try {
       _updateSyncState(_syncState.toSyncing());
@@ -618,6 +623,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           'updatedConversations': result.updatedConversationIds.length,
         });
         await _processConversationResults(result);
+      } else if (checkFlashStall &&
+          _walService.getSyncs().flashStallReason == FlashSyncStallReason.recordingSuspected) {
+        // The pendant drain starved while the device kept minting new flash
+        // pages: it is recording, and the protocol cannot serve stored pages
+        // during an open recording session. Without this branch the state
+        // falls through to `toCompleted` and the user is never told why
+        // nothing synced.
+        DebugLogManager.logWarning('SyncProvider: $context stalled — pendant appears to be recording');
+        _updateSyncState(_syncState.toError(message: _pendantRecordingMessage()));
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []));
@@ -673,6 +687,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   bool _hasConversationResults(SyncLocalFilesResponse result) {
     return result.newConversationIds.isNotEmpty || result.updatedConversationIds.isNotEmpty;
+  }
+
+  String _pendantRecordingMessage() {
+    // Providers have no BuildContext; use the global navigator's context for
+    // l10n (same pattern as ai_app_generator_provider) with an English
+    // fallback for headless/test runs where no widget tree exists.
+    final l10n = globalNavigatorKey.currentContext?.l10n;
+    return l10n?.pendantRecordingSyncBlocked ??
+        'Your Pendant is still recording, so its stored audio can\'t be transferred. '
+            'Press the Pendant\'s button to stop recording, then sync again.';
   }
 
   String _formatSyncError(dynamic error, Wal? wal) {

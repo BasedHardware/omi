@@ -3232,5 +3232,6 @@
     "appReEnableFailedBody": "Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.",
     "appDisabledOn": "Poistettu käytöstä {date}.",
     "appDisabledLastError": "Viimeisin virhe: {error}.",
-    "prerecordedTranscript": "Esitallenne"
+    "prerecordedTranscript": "Esitallenne",
+    "pendantRecordingSyncBlocked": "Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen."
 }

@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
     "appDisabledOn": "Na-disable noong {date}.",
     "appDisabledLastError": "Huling error: {error}.",
-    "prerecordedTranscript": "Paunang-rekord"
+    "prerecordedTranscript": "Paunang-rekord",
+    "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli."
 }

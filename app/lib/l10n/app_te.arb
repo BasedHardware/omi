@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.",
     "appDisabledOn": "{date} న నిలిపివేయబడింది.",
     "appDisabledLastError": "చివరి లోపం: {error}",
-    "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది"
+    "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది",
+    "pendantRecordingSyncBlocked": "Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి."
 }

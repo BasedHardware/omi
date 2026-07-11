@@ -3233,5 +3233,6 @@
     "appReEnableFailedBody": "No se pudo reactivar esta app. Inténtalo de nuevo.",
     "appDisabledOn": "Desactivada el {date}.",
     "appDisabledLastError": "Último error: {error}.",
-    "prerecordedTranscript": "Pregrabado"
+    "prerecordedTranscript": "Pregrabado",
+    "pendantRecordingSyncBlocked": "Tu Pendant sigue grabando, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar."
 }

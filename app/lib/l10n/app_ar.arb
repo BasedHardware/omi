@@ -3208,5 +3208,6 @@
     "appReEnableFailedBody": "تعذّرت إعادة تفعيل هذا التطبيق. يُرجى المحاولة مرة أخرى.",
     "appDisabledOn": "تم التعطيل في {date}.",
     "appDisabledLastError": "آخر خطأ: {error}",
-    "prerecordedTranscript": "مسجّل مسبقاً"
+    "prerecordedTranscript": "مسجّل مسبقاً",
+    "pendantRecordingSyncBlocked": "لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة."
 }

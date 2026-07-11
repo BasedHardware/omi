@@ -3250,5 +3250,6 @@
     "appReEnableFailedBody": "Denne app kunne ikke genaktiveres. Prøv igen.",
     "appDisabledOn": "Deaktiveret den {date}.",
     "appDisabledLastError": "Seneste fejl: {error}.",
-    "prerecordedTranscript": "Forudoptaget"
+    "prerecordedTranscript": "Forudoptaget",
+    "pendantRecordingSyncBlocked": "Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen."
 }

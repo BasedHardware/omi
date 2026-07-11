@@ -3237,5 +3237,6 @@
     "appReEnableFailedBody": "Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.",
     "appDisabledOn": "Vypnuté {date}.",
     "appDisabledLastError": "Posledná chyba: {error}.",
-    "prerecordedTranscript": "Prednahraté"
+    "prerecordedTranscript": "Prednahraté",
+    "pendantRecordingSyncBlocked": "Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova."
 }

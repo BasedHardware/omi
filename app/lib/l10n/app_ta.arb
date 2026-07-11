@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "appDisabledOn": "{date} அன்று முடக்கப்பட்டது.",
     "appDisabledLastError": "கடைசி பிழை: {error}",
-    "prerecordedTranscript": "முன் பதிவு"
+    "prerecordedTranscript": "முன் பதிவு",
+    "pendantRecordingSyncBlocked": "Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்."
 }

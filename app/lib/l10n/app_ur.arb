@@ -10798,5 +10798,6 @@
     "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
     "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
     "appDisabledLastError": "آخری خرابی: {error}",
-    "prerecordedTranscript": "پہلے سے ریکارڈ شدہ"
+    "prerecordedTranscript": "پہلے سے ریکارڈ شدہ",
+    "pendantRecordingSyncBlocked": "Pendant ابھی بھی ریکارڈ کر رہا ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔"
 }

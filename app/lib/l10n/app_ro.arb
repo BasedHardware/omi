@@ -3232,5 +3232,6 @@
     "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
     "appDisabledOn": "Dezactivată pe {date}.",
     "appDisabledLastError": "Ultima eroare: {error}.",
-    "prerecordedTranscript": "Preînregistrat"
+    "prerecordedTranscript": "Preînregistrat",
+    "pendantRecordingSyncBlocked": "Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou."
 }

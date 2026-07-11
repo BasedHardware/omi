@@ -3210,5 +3210,6 @@
     "appReEnableFailedBody": "Това приложение не можа да бъде активирано отново. Опитайте пак.",
     "appDisabledOn": "Деактивирано на {date}.",
     "appDisabledLastError": "Последна грешка: {error}.",
-    "prerecordedTranscript": "Предварително записано"
+    "prerecordedTranscript": "Предварително записано",
+    "pendantRecordingSyncBlocked": "Pendant все още записва, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и синхронизирайте отново."
 }

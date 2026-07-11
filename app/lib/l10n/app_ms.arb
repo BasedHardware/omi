@@ -3232,5 +3232,6 @@
     "appReEnableFailedBody": "Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.",
     "appDisabledOn": "Dilumpuhkan pada {date}.",
     "appDisabledLastError": "Ralat terakhir: {error}.",
-    "prerecordedTranscript": "Pra-rakam"
+    "prerecordedTranscript": "Pra-rakam",
+    "pendantRecordingSyncBlocked": "Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula."
 }
