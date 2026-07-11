@@ -48,7 +48,11 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
-import { createInsightToastWindow, showWhatsNewToast, getCurrentWhatsNew } from './insight/toastWindow'
+import {
+  createInsightToastWindow,
+  showWhatsNewToast,
+  getCurrentWhatsNew
+} from './insight/toastWindow'
 import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
 import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
@@ -457,8 +461,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
   )
-  ipcMain.handle('db:claimConversationForPosting', async (_e, id: string, resetAttempts?: boolean) =>
-    claimConversationForPosting(id, resetAttempts)
+  ipcMain.handle(
+    'db:claimConversationForPosting',
+    async (_e, id: string, resetAttempts?: boolean) =>
+      claimConversationForPosting(id, resetAttempts)
   )
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window

@@ -22,7 +22,12 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
 import { deriveOrbState, isBarBusy } from './barDisplay'
-import type { BarMode, BarShowPayload, BarChatState, WaveformSource } from '../../../../shared/types'
+import type {
+  BarMode,
+  BarShowPayload,
+  BarChatState,
+  WaveformSource
+} from '../../../../shared/types'
 import './bar.css'
 
 const PILL = { width: 148, height: 36 }

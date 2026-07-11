@@ -5,11 +5,13 @@ import { BarChatSurface, type BarChatSurfaceProps } from './BarChatSurface'
 import type { BarChatState } from '../../../../shared/types'
 
 // The conversation view pins the message list with a ResizeObserver (absent in jsdom).
+/* eslint-disable @typescript-eslint/no-empty-function -- no-op ResizeObserver stub */
 class ResizeObserverStub {
   observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
 }
+/* eslint-enable @typescript-eslint/no-empty-function */
 ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub
 
 // The message list is markdown-heavy and tested elsewhere; stub it so this test

@@ -25,7 +25,9 @@ describe('deriveOrbState', () => {
   })
 
   it('recording wins even while a reply is still speaking/streaming', () => {
-    expect(deriveOrbState({ ...base, recording: true, status: 'speaking' }).withAmplitude).toBe(true)
+    expect(deriveOrbState({ ...base, recording: true, status: 'speaking' }).withAmplitude).toBe(
+      true
+    )
     expect(deriveOrbState({ ...base, recording: true, status: 'sending' }).state).toBe('speaking')
   })
 
@@ -70,9 +72,9 @@ describe('omiChatListStatus', () => {
     expect(
       omiChatListStatus(chat({ messages: [{ role: 'assistant', content: 'Here is the answer' }] }))
     ).toBe('Here is the answer')
-    expect(
-      omiChatListStatus(chat({ messages: [{ role: 'user', content: 'what is next' }] }))
-    ).toBe('You: what is next')
+    expect(omiChatListStatus(chat({ messages: [{ role: 'user', content: 'what is next' }] }))).toBe(
+      'You: what is next'
+    )
   })
 
   it('collapses whitespace so a multi-line reply stays one line', () => {

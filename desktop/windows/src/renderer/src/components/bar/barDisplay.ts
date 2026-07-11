@@ -36,9 +36,7 @@ export function deriveOrbState(a: BarActivity): { state: OrbState; withAmplitude
 /** True while a summoned pill must NOT auto-retract — a PTT hold / streaming
  *  reply / spoken answer is in flight (the cursor is legitimately away). */
 export function isBarBusy(a: Pick<BarActivity, 'recording' | 'transcribing' | 'status'>): boolean {
-  return (
-    a.recording || a.transcribing || a.status === 'sending' || a.status === 'speaking'
-  )
+  return a.recording || a.transcribing || a.status === 'sending' || a.status === 'speaking'
 }
 
 /** One-line status for the list's "Omi Chat" row: what Omi is doing, a preview
