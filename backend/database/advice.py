@@ -89,7 +89,9 @@ def _update_advice_and_return(uid: str, advice_id: str, updates: dict) -> Option
     return result
 
 
-def update_advice(uid: str, advice_id: str, is_read: bool = None, is_dismissed: bool = None) -> Optional[dict]:
+def update_advice(
+    uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
+) -> Optional[dict]:
     updates = {'updated_at': datetime.now(timezone.utc)}
     if is_read is not None:
         updates['is_read'] = is_read
