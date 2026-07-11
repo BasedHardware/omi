@@ -55,7 +55,8 @@ extension SettingsContentView {
             }
 
             settingRow(
-              title: "Task Notifications", subtitle: "Show notification when a task is extracted",
+              title: "Task Notifications",
+              subtitle: "Allow interruptions when a task needs attention",
               settingId: "notifications.task"
             ) {
               Toggle("", isOn: $taskNotificationsEnabled)

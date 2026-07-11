@@ -80,6 +80,10 @@ actor TaskDeduplicationService {
     // MARK: - Deduplication Logic
 
     private func runDeduplication() async {
+        guard await TaskLegacyEffectGate.live.isAllowed(.destructiveDeduplication) else {
+            log("TaskDedup: Canonical or unresolved mode; destructive staged dedupe skipped")
+            return
+        }
         guard let client = getGeminiClient() else {
             log("TaskDedup: Skipping - Gemini client not initialized")
             return
@@ -251,7 +255,16 @@ actor TaskDeduplicationService {
 
                 // Hard-delete staged task from backend
                 do {
-                    try await APIClient.shared.deleteStagedTask(id: deleteId)
+                    let deleted: Bool = try await TaskLegacyEffectGate.live.perform(
+                        .destructiveDeduplication
+                    ) {
+                        try await APIClient.shared.deleteStagedTask(id: deleteId)
+                        return true
+                    } ?? false
+                    guard deleted else {
+                        log("TaskDedup: Mode changed; stopping before destructive write")
+                        return deletedCount
+                    }
                     deletedCount += 1
                     log("TaskDedup: Hard-deleted staged task '\(deletedTask?.description ?? deleteId)' (kept: '\(keptTask?.description ?? group.keepId)') - \(group.reason)")
                 } catch {

@@ -92,6 +92,56 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  struct DirectPermissionRedirect: Equatable {
+    let tool: HubTool
+    let type: String
+  }
+
+  /// A model should call the permission tools directly. This narrow fallback
+  /// prevents a malformed `spawn_agent` request from creating a child worker
+  /// for an immediate, app-local permission action.
+  static func directPermissionRedirect(forDelegationBrief brief: String) -> DirectPermissionRedirect? {
+    let normalized = brief.lowercased()
+    let words = Set(
+      normalized.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    )
+
+    let permissionTypes: [(String, [String])] = [
+      ("screen_recording", ["screen recording", "screen-recording"]),
+      ("microphone", ["microphone", "mic permission"]),
+      ("notifications", ["notification permission", "notifications permission"]),
+      ("accessibility", ["accessibility permission"]),
+      ("automation", ["automation permission"]),
+      ("full_disk_access", ["full disk access"]),
+    ]
+    guard let permissionType = permissionTypes.first(where: { _, phrases in
+      phrases.contains { normalized.contains($0) }
+    })?.0 else {
+      return nil
+    }
+
+    let targetsLocalApp = normalized.contains("omi")
+      || normalized.contains("this app")
+      || normalized.contains("this application")
+
+    // Both direct tools only operate on Omi. Do not answer a question about
+    // another app with this process's permission status.
+    guard targetsLocalApp else { return nil }
+
+    // Status requests report this process's state and never open System Settings.
+    let asksForStatus = ["check", "status", "granted"].contains { words.contains($0) }
+    if asksForStatus {
+      return .init(tool: .checkPermissionStatus, type: permissionType)
+    }
+
+    // Opening System Settings is a user-visible side effect. Require an
+    // imperative verb matched as a whole word, so "granted" is not "grant".
+    let asksToChangeAccess = ["request", "grant", "allow", "enable", "give"]
+      .contains { words.contains($0) }
+    guard asksToChangeAccess else { return nil }
+    return .init(tool: .requestPermission, type: permissionType)
+  }
+
   static func systemInstruction(
     aboutUser: String, topLevelConversationContext: String = "", userLanguages: [String] = []
   ) -> String {
@@ -141,6 +191,10 @@ enum RealtimeHubTools {
     multi-step "do X for me" work, use spawn_agent — it requests delegation through Omi's \
     resolver, which may start a background agent, continue an existing one, or ask the user \
     for missing details before any child agent sees the task.
+
+    Permissions are never background work. When the user asks to check or grant a macOS \
+    permission, or screen access is missing, call check_permission_status or request_permission \
+    yourself. NEVER use spawn_agent for a permission request.
 
     Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up first so the \
     user knows you're on it and that it won't be instant — then call the tool and speak the \
