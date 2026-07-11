@@ -750,11 +750,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func topCenteredOrigin(for size: NSSize, on screen: NSScreen, usesNotchIsland: Bool) -> NSPoint {
         let anchorFrame = usesNotchIsland ? screen.frame : screen.visibleFrame
-        let x = (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
-        let y = usesNotchIsland
-            ? anchorFrame.maxY - size.height
-            : anchorFrame.maxY - size.height - topInsetForPillFallback
-        return NSPoint(x: x, y: y)
+        var frame = FloatingControlBarGeometry.topCenteredFrame(size: size, anchorFrame: anchorFrame)
+        if !usesNotchIsland {
+            frame.origin.y -= topInsetForPillFallback
+        }
+        return frame.origin
     }
 
     private func growOutFromNotch(on targetScreen: NSScreen) {

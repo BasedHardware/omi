@@ -123,8 +123,18 @@ _non_lexical_utterances_pattern = re.compile(
     r'\b(' + '|'.join(re.escape(word) for word in _non_lexical_utterances) + r')\b', re.IGNORECASE
 )
 
-# Initialize the translation client globally
-_client = translate_v3.TranslationServiceClient()
+# Construct the cloud client only when translation is actually requested. Importing
+# the backend must remain safe in hermetic/local environments without Google ADC.
+_client: Optional[translate_v3.TranslationServiceClient] = None
+
+
+def _get_client() -> translate_v3.TranslationServiceClient:
+    global _client
+    if _client is None:
+        _client = translate_v3.TranslationServiceClient()
+    return _client
+
+
 _parent = f"projects/{PROJECT_ID}/locations/global"
 _mime_type = "text/plain"
 
@@ -618,7 +628,7 @@ class TranslationService:
                 chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
+                    response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                         contents=chunk,
                         parent=_parent,
                         mime_type=_mime_type,
@@ -760,7 +770,7 @@ class TranslationService:
                 chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
+                    response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                         contents=chunk,
                         parent=_parent,
                         mime_type=_mime_type,
@@ -881,7 +891,7 @@ class TranslationService:
             return result
 
         try:
-            response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
+            response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                 contents=[text],
                 parent=_parent,
                 mime_type=_mime_type,

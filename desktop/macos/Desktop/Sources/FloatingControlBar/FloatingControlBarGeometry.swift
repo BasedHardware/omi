@@ -28,6 +28,17 @@ enum FloatingControlBarGeometry {
         )
     }
 
+    /// Canonical top-center placement. Non-draggable notch surfaces must use
+    /// the display midpoint rather than an in-flight window frame: PTT, chat,
+    /// and the agent list can otherwise preserve a transient animation offset.
+    static func topCenteredFrame(size: NSSize, anchorFrame: NSRect) -> NSRect {
+        NSRect(
+            x: (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero),
+            y: anchorFrame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
     /// A notch island is tied to the display's camera housing, not to a prior
     /// transient panel frame. When its surface changes size, retain the display
     /// top edge and re-center it on the display so a stale panel offset cannot
