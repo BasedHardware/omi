@@ -201,16 +201,16 @@ For a bounded resume:
   digest. Do not rebuild, reapply GKE, or reprovision queues/TTL/IAM/alerts.
 - Require every candidate to be `Ready=True`, latest-created for its service,
   and still at zero percent. Until keyless IAM signing is implemented,
-  all four production candidates must retain the
-  `GOOGLE_APPLICATION_CREDENTIALS` secret binding: removing it makes compute ADC
-  unable to generate GCS signed URLs, causes authenticated `/v1/users/people`
-  requests to return 500, and prevents backfill segment processing. The backfill
-  clone helper drops inherited credentials before applying explicit manifest
-  overlays: prod deliberately restores this binding, while dev continues to omit
-  it. The clone renderer must emit an explicit removal flag when the overlay
-  omits a dropped secret, because the deploy action merges secrets by default.
-  Pin the environment-variable secret to a numeric enabled version rather than
-  `latest`, and test both sides of that ordering contract.
+  all four production candidates must bind numeric-versioned
+  `SERVICE_ACCOUNT_JSON` until keyless signing lands. Compute ADC alone cannot
+  generate GCS signed URLs, causing authenticated `/v1/users/people` requests to
+  return 500 and preventing backfill segment processing. Do not restore the
+  retired `GOOGLE_APPLICATION_CREDENTIALS` filename secret: it resolves to
+  `google-credentials.json`, which is absent from the b939 image and fails startup.
+  The clone renderer drops inherited names before overlays and must emit an
+  explicit removal flag when an overlay omits a dropped secret, because the
+  deploy action merges secrets by default. Test both sides of that ordering
+  contract.
 - Add temporary per-revision tags and require the exact tag/revision mapping to
   converge in both `spec.traffic` and `status.traffic`. Remove every attempted
   tag, including after an ambiguous command result, and poll until it is absent
@@ -336,7 +336,7 @@ incident:
   or keep the integration-smoke/post-cutover-rollback limitation explicit.
 - Replace private-key GCS URL signing with refreshed ADC plus IAM `signBlob`,
   grant the runtime service account the narrow self-signing permission, and only
-  then remove `GOOGLE_APPLICATION_CREDENTIALS`. Add an authenticated candidate
+  then remove `SERVICE_ACCOUNT_JSON`. Add an authenticated candidate
   smoke that exercises at least one real signed-URL response; health/OpenAPI
   checks did not catch the `.70` signing regression.
 - Generalize the resume lane's dependency ordering, smokes, and rollback to fresh

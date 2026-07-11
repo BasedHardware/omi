@@ -759,7 +759,7 @@ def test_repo_rendered_cloud_run_matches_manifest():
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
 
 
-def test_prod_cloud_run_retains_signing_credentials_until_keyless_signing_lands():
+def test_prod_cloud_run_replaces_legacy_filename_with_json_signing_credentials():
     validator = load_validator()
     workflow = validator._load_yaml(ROOT.parent / '.github/workflows/gcp_backend.yml')
 
@@ -769,8 +769,8 @@ def test_prod_cloud_run_retains_signing_credentials_until_keyless_signing_lands(
         manifest_path=ROOT / 'deploy/runtime_env.yaml',
     )
 
-    assert '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS' not in outputs['cloud_run_flags'].split()
-    expected_binding = 'GOOGLE_APPLICATION_CREDENTIALS=GOOGLE_APPLICATION_CREDENTIALS:1'
+    assert '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS' in outputs['cloud_run_flags'].split()
+    expected_binding = 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:1'
     for output_name in (
         'backend_secrets',
         'backend_sync_secrets',
@@ -778,6 +778,7 @@ def test_prod_cloud_run_retains_signing_credentials_until_keyless_signing_lands(
         'backend_integration_secrets',
     ):
         assert expected_binding in outputs[output_name].splitlines()
+        assert 'GOOGLE_APPLICATION_CREDENTIALS=' not in outputs[output_name]
     expected_project = 'GOOGLE_CLOUD_PROJECT=based-hardware'
     for output_name in (
         'backend_env_vars',
@@ -903,7 +904,9 @@ def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     prod_services = manifest['environments']['prod']['cloud_run']['services']
-    stale_secrets = {'SERVICE_ACCOUNT_JSON', 'POSTHOG_PROJECT_API_KEY'}
+    # SERVICE_ACCOUNT_JSON is temporarily required for GCS signed URLs until
+    # keyless IAM signBlob support replaces private-key signing.
+    stale_secrets = {'POSTHOG_PROJECT_API_KEY'}
 
     for service_name, service_config in prod_services.items():
         secret_names = set((service_config.get('secrets') or {}).keys())
