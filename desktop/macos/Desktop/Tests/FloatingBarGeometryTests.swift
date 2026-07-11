@@ -75,6 +75,21 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(collapsedFrame.midX - displayFrame.midX), 0.5)
     }
 
+    func testNotchIslandExpansionRecentersShiftedPanelOnDisplay() {
+        let shiftedFrame = NSRect(x: 606, y: 876, width: 268, height: 58)
+        let expandedFrame = FloatingControlBarGeometry.topAnchoredFrame(
+            currentFrame: shiftedFrame,
+            targetSize: NSSize(width: 430, height: 110),
+            screenFrame: visibleFrame,
+            pinsToScreenCenter: true
+        )
+
+        XCTAssertEqual(shiftedFrame.midX, 740)
+        XCTAssertEqual(expandedFrame.midX, visibleFrame.midX)
+        XCTAssertEqual(expandedFrame.maxY, visibleFrame.maxY)
+        XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
+    }
+
     func testPTTExpansionKeepsCompactPillCenter() {
         let compactFrame = FloatingControlBarGeometry.defaultPillFrame(
             size: compactSize,
