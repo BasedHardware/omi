@@ -1143,7 +1143,7 @@ struct OnboardingChatView: View {
         targetValue: config.targetValue,
         currentValue: 0,
         unit: config.unit,
-        source: "onboarding_\(source)"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)

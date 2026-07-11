@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import re
@@ -196,16 +197,70 @@ def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
     return result if isinstance(result, list) else []
 
 
+EXPECTATION_OPERATORS = {"min", "max", "exists"}
+
+
+def _decimal(value: typing.Any) -> Decimal | None:
+    """Coerce only assertion-operator operands; literal equality remains type-strict."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        parsed = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def expectation_mismatch(actual: typing.Any, expected: typing.Any) -> str | None:
+    if not isinstance(expected, dict):
+        return None if actual == expected else f"expected strict equality with {expected!r}, got {actual!r}"
+
+    # Dictionaries remain literal values when the actual value is also a dictionary.
+    # A dictionary against a scalar is an explicit operator expression, so reject
+    # misspellings and mixed operators instead of silently treating them as equality.
+    if isinstance(actual, dict):
+        return None if actual == expected else f"expected strict equality with {expected!r}, got {actual!r}"
+    if not expected:
+        return "numeric operator expression must not be empty"
+    unsupported = sorted(set(expected) - EXPECTATION_OPERATORS)
+    if unsupported:
+        return f"unsupported expectation operator(s): {', '.join(unsupported)}"
+
+    if "exists" in expected:
+        if len(expected) != 1:
+            return "exists cannot be combined with numeric expectation operators"
+        operand = expected["exists"]
+        if not isinstance(operand, bool):
+            return f"exists requires a boolean operand, got {operand!r}"
+        exists = actual is not None
+        return None if exists == operand else f"expected value existence to be {operand!r}, got {exists!r}"
+
+    actual_number = _decimal(actual)
+    if actual_number is None:
+        return f"numeric operator requires a finite numeric actual value, got {actual!r}"
+    for operator, operand in expected.items():
+        operand_number = _decimal(operand)
+        if operand_number is None:
+            return f"{operator} requires a finite numeric operand, got {operand!r}"
+        if operator == "min" and actual_number < operand_number:
+            return f"expected {actual!r} to be >= {operand!r}"
+        if operator == "max" and actual_number > operand_number:
+            return f"expected {actual!r} to be <= {operand!r}"
+    return None
+
+
 def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> bool:
-    return all(nested_get(data, key) == value for key, value in expectations.items())
+    return all(expectation_mismatch(nested_get(data, key), value) is None for key, value in expectations.items())
 
 
 def expectation_mismatches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> dict[str, typing.Any]:
-    return {
-        key: {"expected": value, "actual": nested_get(data, key)}
-        for key, value in expectations.items()
-        if nested_get(data, key) != value
-    }
+    mismatches = {}
+    for key, expected in expectations.items():
+        actual = nested_get(data, key)
+        reason = expectation_mismatch(actual, expected)
+        if reason is not None:
+            mismatches[key] = {"expected": expected, "actual": actual, "reason": reason}
+    return mismatches
 
 
 def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
@@ -437,7 +492,7 @@ def assert_state(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -
         return False, "state.expect requires a mapping"
     if expectation_matches({"state": state}, expectations):
         return True, None
-    return False, f"state assertions failed: {expectations}"
+    return False, f"state assertions failed: {expectation_mismatches({'state': state}, expectations)}"
 
 
 def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
@@ -466,7 +521,8 @@ def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -
         return False, "trace.expect requires a mapping"
     if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
         return True, None
-    return False, f"no trace matched: {expectations}"
+    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in traces]
+    return False, f"no trace matched: expectations={expectations}, mismatches={reasons}"
 
 
 def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
@@ -505,7 +561,8 @@ def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, re
         result["artifacts"]["traces"] = str(trace_path)
         if not waited_ok:
             result["ok"] = False
-            result["error"] = f"trace wait timed out after {timeout}s"
+            mismatches = [expectation_mismatches({"trace": trace}, wait_spec["trace"]) for trace in traces]
+            result["error"] = f"trace wait timed out after {timeout}s; mismatches={mismatches}"
     else:
         waited_ok, state = wait_for_state(ctx, wait_spec, timeout)
         state_path = ctx.steps_dir / f"{prefix}-state.json"
@@ -513,7 +570,8 @@ def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, re
         result["artifacts"]["state"] = str(state_path)
         if not waited_ok:
             result["ok"] = False
-            result["error"] = f"state wait timed out after {timeout}s"
+            mismatches = expectation_mismatches({"state": state}, wait_spec)
+            result["error"] = f"state wait timed out after {timeout}s; mismatches={mismatches}"
 
 
 def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -> dict[str, typing.Any]:

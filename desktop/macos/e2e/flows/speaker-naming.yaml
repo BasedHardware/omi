@@ -53,9 +53,10 @@ steps:
       name: open_latest_conversation
       params:
         showTranscript: "true"
-        settleMs: "500"
+        timeoutMs: "5000"
     expect:
       ok: true
+      result.detail.detail_open: "true"
 
   - id: S6
     name: Assign speaker name to second segment

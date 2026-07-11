@@ -20,8 +20,16 @@ enum ConnectorImportOperations {
     }
 
     @MainActor
-    static func importMemoryLog(text: String, source: OnboardingMemoryLogSource) async -> Outcome {
-        let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(text, source: source)
+    static func importMemoryLog(
+        text: String,
+        source: OnboardingMemoryLogSource,
+        extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog? = nil
+    ) async -> Outcome {
+        let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
+            text,
+            source: source,
+            extractedFixture: extractedFixture
+        )
         return memoryLogOutcome(result, source: source)
     }
 
