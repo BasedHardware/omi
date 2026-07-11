@@ -91,10 +91,18 @@ def check_desktop_codemagic_release() -> list[str]:
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")
+    candidate_gate_index = desktop_workflow_body.find("Verify automatic beta candidate")
+    qualification_index = desktop_workflow_body.find("Qualify and promote newest beta automatically")
     if smoke_index == -1:
         errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
     elif release_index == -1 or smoke_index > release_index:
         errors.append("desktop signed artifact smoke must run before Create GitHub release")
+    if candidate_gate_index == -1 or release_index == -1 or candidate_gate_index < release_index:
+        errors.append("desktop automatic beta candidate gate must run after GitHub candidate publication")
+    if qualification_index == -1 or candidate_gate_index == -1 or qualification_index < candidate_gate_index:
+        errors.append("desktop automatic beta qualification must run after the digest-bound candidate gate")
+    if "docker info" not in desktop_workflow_body:
+        errors.append("desktop automatic beta qualification must fail closed without a healthy Docker runtime")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
         errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
 
@@ -125,6 +133,11 @@ def check_desktop_codemagic_release() -> list[str]:
     for required_fragment in (
         "--result-json \"$BUILD_DIR/desktop-smoke-result.json\"",
         "build/desktop-smoke-result.json",
+        "check-desktop-auto-beta-candidate.py",
+        "--automatic",
+        "--signed-smoke-result",
+        "--candidate-gate-result",
+        "DESKTOP_AUTO_BETA_ENABLED",
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")

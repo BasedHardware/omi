@@ -55,6 +55,7 @@ model_config_features:
       - external_structure
       - proactive_notification
       - trends
+      - what_matters_now
     streaming:
       - chat_responses
       - chat_graph

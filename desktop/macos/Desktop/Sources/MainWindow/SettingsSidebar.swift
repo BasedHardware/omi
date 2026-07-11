@@ -114,8 +114,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
       settingId: "notifications.focus"),
     SettingsSearchItem(
-      name: "Task Notifications", subtitle: "Show notification when a task is extracted",
-      keywords: ["task", "action item", "notify task"], section: .notifications, icon: "bell",
+      name: "Task Notifications",
+      subtitle: "Allow interruptions when a task needs attention",
+      keywords: ["task", "action item", "notify task", "interruption", "proactive"],
+      section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
       name: "Insight Notifications", subtitle: "Show notification when an insight is generated",

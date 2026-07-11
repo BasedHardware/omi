@@ -23,6 +23,7 @@ from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
+    PrerecordedSTTConfigurationError,
     get_deepgram_model_for_language,
     postprocess_words,
     prerecorded,
@@ -139,6 +140,8 @@ def transcribe_voice_message_segment(
         else:
             words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
             detected_language = stt_language
+    except PrerecordedSTTConfigurationError:
+        raise
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return None, stt_language if not is_multi else 'en'
@@ -242,6 +245,8 @@ def process_voice_message_segment(
 
     try:
         words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    except PrerecordedSTTConfigurationError:
+        raise
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return []
@@ -311,6 +316,8 @@ async def process_voice_message_segment_stream(
 
     try:
         words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    except PrerecordedSTTConfigurationError:
+        raise
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return

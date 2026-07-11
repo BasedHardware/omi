@@ -96,7 +96,7 @@ struct GoalsHistoryPage: View {
             completedGoals = try await APIClient.shared.getCompletedGoals()
             isLoading = false
         } catch {
-            self.error = error.localizedDescription
+            self.error = UserFacingErrorPresentation.message(for: error, while: .goals)
             isLoading = false
         }
     }

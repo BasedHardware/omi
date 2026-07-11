@@ -32,6 +32,7 @@ from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_search_gateway import SearchMode
+from models.memory_recurrence import CanonicalRecurrenceSignal
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.clients import get_llm
@@ -61,6 +62,10 @@ def _empty_str_list() -> List[str]:
 
 
 def _empty_consolidation_decisions() -> List["ConsolidationAgentDecision"]:
+    return []
+
+
+def _empty_recurrence_signals() -> List[CanonicalRecurrenceSignal]:
     return []
 
 
@@ -352,6 +357,7 @@ class ConsolidationAgentDecision(BaseModel):
 
 class ConsolidationAgentBatch(BaseModel):
     decisions: List[ConsolidationAgentDecision] = Field(default_factory=_empty_consolidation_decisions)
+    recurrence_signals: List[CanonicalRecurrenceSignal] = Field(default_factory=_empty_recurrence_signals)
     reasoning: str = ""
 
 
@@ -377,6 +383,13 @@ Reference conflict-resolution patterns (adapt for batch reasoning):
 - Duplicate text: skip_duplicate on the newer id, survivor=existing.
 - Compatible preferences (tennis + basketball): keep_both or no decision.
 - Cross-source same fact: add_evidence or merge onto one survivor, corroboration_increment=true.
+- recurrence_signals are only for the same unresolved open loop appearing on at
+  least two distinct days. One-off mentions never qualify. Cite only canonical
+  memory_item/conversation EvidenceRefs; do not include raw source content.
+  EvidenceRefs MUST be oldest-first, retaining the original first-seen evidence
+  anchor when later batches add evidence or refine wording. signal_id identifies
+  this observation; workflow derives enduring loop identity from canonical time
+  and that first evidence anchor rather than trusting model-authored identity.
 
 Batch JSON:
 {context_json}
@@ -827,6 +840,7 @@ class ConsolidationReport:
     review_escalations: int = 0
     last_consolidation_run_at: Optional[datetime] = None
     watermark_blocked: bool = False
+    recurrence_signals: List[CanonicalRecurrenceSignal] = field(default_factory=_empty_recurrence_signals)
 
 
 def run_canonical_consolidation(
@@ -837,6 +851,7 @@ def run_canonical_consolidation(
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
     batch_threshold: Optional[int] = None,
+    recurrence_signal_sink: Optional[Callable[..., int]] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -879,6 +894,7 @@ def run_canonical_consolidation(
     last_agent_batch: Optional[ConsolidationAgentBatch] = None
     offset = 0
     batches_run = 0
+    recurrence_signals_by_id: Dict[str, CanonicalRecurrenceSignal] = {}
 
     while offset < len(pending) and batches_run < max_batches:
         pending_batch = pending[offset : offset + batch_cap]
@@ -893,6 +909,24 @@ def run_canonical_consolidation(
         if _agent_batch_blocks_watermark(agent_batch):
             watermark_blocked = True
             break
+
+        for signal in agent_batch.recurrence_signals:
+            recurrence_signals_by_id[signal.stable_loop_key] = signal
+        if recurrence_signal_sink is not None and agent_batch.recurrence_signals:
+            try:
+                recurrence_signal_sink(
+                    uid,
+                    agent_batch.recurrence_signals,
+                    firestore_client=client,
+                )
+            except Exception as exc:
+                watermark_blocked = True
+                logger.warning(
+                    'consolidation_recurrence_handoff_blocked uid=%s reason=%s',
+                    uid,
+                    type(exc).__name__,
+                )
+                break
 
         for decision in agent_batch.decisions:
             if decision.decision == "review" or decision.review_required:
@@ -946,6 +980,7 @@ def run_canonical_consolidation(
 
     report.batched_memory_ids = list(dict.fromkeys(batched_ids))
     report.watermark_blocked = watermark_blocked
+    report.recurrence_signals = list(recurrence_signals_by_id.values())
 
     # Skipped hallucinated refs still advance when no partial/parse failure: agent output was usable;
     # retrying the same batch would reproduce the same bad decision. parse_failed and partial apply block.
