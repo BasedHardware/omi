@@ -28,11 +28,12 @@ actor RewindStorage {
     }
 
     /// Reset storage state (called on user switch / sign-out)
-    func reset() {
+    func reset() async {
         screenshotsDirectory = nil
         videosDirectory = nil
         frameCache.removeAllObjects()
         corruptedChunks.removeAll()
+        await VideoChunkEncoder.shared.resetForUserSwitch()
         log("RewindStorage: Reset for user switch")
     }
 

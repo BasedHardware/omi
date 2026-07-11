@@ -100,11 +100,18 @@ actor VideoChunkEncoder {
 
     /// Initialize the encoder with the videos directory
     func initialize(videosDirectory: URL) async throws {
-        guard !isInitialized else { return }
+        if isInitialized {
+            guard self.videosDirectory != videosDirectory else { return }
+            await resetForUserSwitch()
+        }
 
         self.videosDirectory = videosDirectory
         isInitialized = true
         log("VideoChunkEncoder: Initialized at \(videosDirectory.path)")
+    }
+
+    func videosDirectoryForTesting() -> URL? {
+        videosDirectory
     }
 
     func hasFinalizedChunkForDedupe() -> Bool {
@@ -641,6 +648,13 @@ actor VideoChunkEncoder {
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
         writerNotReadyCount = 0
+    }
+
+    func resetForUserSwitch() async {
+        await cancel()
+        videosDirectory = nil
+        isInitialized = false
+        hasFinalizedAnyChunk = false
     }
 
     /// Emergency reset when encoding fails repeatedly or buffer overflows
