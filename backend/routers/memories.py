@@ -846,7 +846,11 @@ def review_memory(
 def edit_memory(
     memory_id: str,
     request: Optional[MemoryValueRequest] = Body(default=None),
-    value: Optional[str] = Query(default=None, description="Deprecated; send JSON body {'value': ...} instead"),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
@@ -883,7 +887,11 @@ def edit_memory(
 def update_memory_visibility(
     memory_id: str,
     request: Optional[MemoryValueRequest] = Body(default=None),
-    value: Optional[str] = Query(default=None, description="Deprecated; send JSON body {'value': ...} instead"),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),

@@ -291,12 +291,16 @@ actor APIClient {
   struct RequestAuthPolicy: Sendable {
     var signOutOn401: Bool
     var recordsAuthRetryTelemetry: Bool = true
+    /// When true, a post-refresh HTTP 401 is returned to the caller instead of
+    /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
+    var returnsPersistent401Response: Bool = false
 
     static let `default` = RequestAuthPolicy(signOutOn401: true)
     static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
     static let providerCredentialBoundary = RequestAuthPolicy(
       signOutOn401: false,
-      recordsAuthRetryTelemetry: false
+      recordsAuthRetryTelemetry: false,
+      returnsPersistent401Response: true
     )
   }
 
@@ -357,6 +361,9 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (data, httpResponse)
+      }
       if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       }
@@ -6146,22 +6153,30 @@ extension APIClient {
     // This desktop-backend route can surface upstream OpenAI/BYOK credential
     // failures as HTTP 401. Refresh the Firebase header once in case it is stale,
     // but never let a voice-only provider failure invalidate the Omi session.
-    let data: Data
-    let httpResponse: HTTPURLResponse
-    do {
-      (data, httpResponse) = try await performAuthenticatedData(
-        for: request,
-        authPolicy: .providerCredentialBoundary
+    // Only remap to providerAuth when the body is OpenAI-shaped — a bare/Firebase
+    // 401 after refresh is a real login failure and must require re-auth.
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: .providerCredentialBoundary
+    )
+
+    if httpResponse.statusCode == 401 {
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: mode,
+          message: mode == .byok
+            ? "Your OpenAI key was rejected. Update it in Settings."
+            : "OpenAI authentication failed. Voice responses are using fallback."
+        )
+      }
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: true
       )
-    } catch APIError.unauthorized {
-      let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
-      throw CredentialHealthError.providerAuth(
-        provider: .openai,
-        mode: mode,
-        message: mode == .byok
-          ? "Your OpenAI key was rejected. Update it in Settings."
-          : "OpenAI authentication failed. Voice responses are using fallback."
-      )
+      throw APIError.unauthorized
     }
 
     if httpResponse.statusCode == 429 {
