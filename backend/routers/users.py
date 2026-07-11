@@ -427,7 +427,18 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhook/{wtype}/health', tags=['v1'])
+class DevWebhookHealthResponse(BaseModel):
+    type: str
+    has_data: bool
+    failure_count: int = 0
+    last_success_at: Optional[int] = None
+    last_failure_at: Optional[int] = None
+    last_status: Optional[int] = None
+    last_error: Optional[str] = None
+    disabled: bool = False
+
+
+@router.get('/v1/users/developer/webhook/{wtype}/health', tags=['v1'], response_model=DevWebhookHealthResponse)
 def get_user_webhook_health_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     """Delivery health for a developer webhook: failure count, last success/failure timestamps
     (unix seconds), last HTTP status, last error, and whether it was auto-disabled after sustained

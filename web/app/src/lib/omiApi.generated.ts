@@ -1371,6 +1371,17 @@ export interface DevApiKeyCreated {
   scopes?: Array<string> | null;
 }
 
+export interface DevWebhookHealthResponse {
+  disabled?: boolean;
+  failure_count?: number;
+  has_data: boolean;
+  last_error?: string | null;
+  last_failure_at?: number | null;
+  last_status?: number | null;
+  last_success_at?: number | null;
+  type: string;
+}
+
 export interface DeveloperActionItem {
   completed: boolean;
   completed_at?: string | null;
@@ -3840,6 +3851,7 @@ export interface OmiApiSchemas {
   "DevApiKey": DevApiKey;
   "DevApiKeyCreate": DevApiKeyCreate;
   "DevApiKeyCreated": DevApiKeyCreated;
+  "DevWebhookHealthResponse": DevWebhookHealthResponse;
   "DeveloperActionItem": DeveloperActionItem;
   "DeveloperConversation": DeveloperConversation;
   "DeveloperConversationActionItem": DeveloperConversationActionItem;
@@ -7028,7 +7040,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get";
       responses: {
-        "200": unknown;
+        "200": DevWebhookHealthResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -13487,7 +13499,7 @@ export async function enable_user_webhook_endpoint_v1_users_developer_webhook__w
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get(path: { wtype: WebhookType }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get(path: { wtype: WebhookType }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DevWebhookHealthResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhook/${path.wtype}/health`;
   const _search = "";
