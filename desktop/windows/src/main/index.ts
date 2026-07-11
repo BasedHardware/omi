@@ -144,6 +144,16 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
 
+// Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
+// cannot register global shortcuts (push-to-talk / overlay summon) and the X11
+// active-window path is blind, so XWayland gives the fullest experience. Set
+// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
+// the PipeWire capturer so on-demand screen capture works through the portal.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer')
+}
+
 const icon = nativeImage.createFromPath(iconPath)
 import {
   remapConversationId,
