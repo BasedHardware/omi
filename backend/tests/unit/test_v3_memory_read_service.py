@@ -158,6 +158,24 @@ def test_projection_ready_page_passes_memorydb_compatible_body_and_adds_next_cur
     assert 'read_decision' not in body[0]
 
 
+def test_next_cursor_without_context_fails_closed():
+    result = plan_v3_memory_read(
+        _service_input(
+            cursor_context=None,
+            cursor_secret=None,
+            next_keyset=V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),
+        )
+    )
+
+    assert result.http_status == 400
+    assert result.read_plan == 'fail_closed'
+    assert result.read_decision == 'next_cursor_context_missing'
+    assert result.headers == {
+        'X-Omi-Memory-Read-Source': 'none',
+        'X-Omi-Memory-Read-Decision': 'next_cursor_context_missing',
+    }
+
+
 def test_cursor_validation_is_required_in_memory_mode_and_invalid_cursor_never_downgrades_to_offset_or_legacy():
     valid_cursor = create_v3_cursor(
         V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),

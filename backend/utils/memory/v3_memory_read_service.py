@@ -71,6 +71,14 @@ class V3MemoryReadServiceResult:
     stale_short_term_default_visible: bool = False
 
 
+class V3MemoryReadServiceError(Exception):
+    """A fail-closed read-planning step failure handled by the service boundary."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _projection_context(
     value: V3ProjectionReadinessContext | dict[str, Any] | None,
 ) -> V3ProjectionReadinessContext | None:
@@ -119,13 +127,11 @@ def _validate_memory_cursor_request(service_input: V3MemoryReadServiceInput) -> 
     return None
 
 
-def _add_next_cursor_headers(
-    headers: dict[str, str], service_input: V3MemoryReadServiceInput
-) -> dict[str, str] | V3MemoryReadServiceResult:
+def _add_next_cursor_headers(headers: dict[str, str], service_input: V3MemoryReadServiceInput) -> dict[str, str]:
     if service_input.next_keyset is None:
         return headers
     if service_input.cursor_context is None or service_input.cursor_secret is None:
-        return _fail_closed_cursor('next_cursor_context_missing')
+        raise V3MemoryReadServiceError('next_cursor_context_missing')
 
     cursor = create_v3_cursor(
         service_input.next_keyset,
@@ -213,16 +219,17 @@ def plan_v3_memory_read(service_input: V3MemoryReadServiceInput) -> V3MemoryRead
             legacy_fallback_allowed=decision.legacy_fallback_allowed,
         )
 
-    headers_or_failure = _add_next_cursor_headers(decision.headers, service_input)
-    if isinstance(headers_or_failure, V3MemoryReadServiceResult):
-        return headers_or_failure
+    try:
+        headers = _add_next_cursor_headers(decision.headers, service_input)
+    except V3MemoryReadServiceError as error:
+        return _fail_closed_cursor(error.reason)
 
     return V3MemoryReadServiceResult(
         http_status=decision.http_status,
         read_plan='memory_compatibility_projection',
         read_path=decision.read_path,
         read_decision=decision.reason,
-        headers=headers_or_failure,
+        headers=headers,
         body=service_input.page_body,
         legacy_fallback_allowed=decision.legacy_fallback_allowed,
     )

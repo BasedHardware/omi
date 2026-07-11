@@ -93,6 +93,9 @@ jobs:
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 
+      - name: Check typed error flow-control ratchet
+        run: python3 .github/scripts/check_isinstance_return_ratchet.py
+
       - name: Check brand UI purple ratchet (INV-UI-1)
         if: github.event_name == 'pull_request'
         run: |
