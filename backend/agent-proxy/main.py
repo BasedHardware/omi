@@ -14,8 +14,9 @@ import os
 import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 import firebase_admin
 import google.auth
@@ -29,11 +30,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import ArrayUnion
 from google.cloud.firestore_v1 import Query
-from utils.executors import critical_executor, db_executor, run_blocking, start_background_task
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    drain_background_tasks,
+    run_blocking,
+    start_background_task,
+)
 
 logger = logging.getLogger(__name__)
-
-app = FastAPI()
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
@@ -81,6 +86,20 @@ def _verify_id_token(token: str) -> Dict[str, Any]:
     """Verify one Firebase token after ensuring the provider app exists."""
     _ensure_firebase_initialized()
     return cast(Dict[str, Any], auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Fail startup closed on provider readiness and drain owned persistence on shutdown."""
+    await run_blocking(critical_executor, _ensure_firebase_initialized)
+    await run_blocking(db_executor, _get_firestore_db)
+    try:
+        yield
+    finally:
+        await drain_background_tasks(timeout=10.0)
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:

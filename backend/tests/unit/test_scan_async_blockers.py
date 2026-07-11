@@ -348,6 +348,71 @@ def test_prerecorded_stt_and_storage_helpers_are_safe_on_managed_executors(scann
     assert results["async_helpers_with_blocking"] == []
 
 
+def test_sync_app_and_subscription_imports_are_db_blockers_with_aliases(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.apps import get_available_apps as load_apps
+        from utils.subscription import is_trial_paywalled
+
+        async def realtime_coordinator(uid, source):
+            await checkpoint()
+            if is_trial_paywalled(uid, source):
+                return []
+            return load_apps(uid)
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert {call["call"] for call in finding["db_calls"]} == {"is_trial_paywalled", "load_apps"}
+
+
+def test_sync_notification_import_is_detected_through_local_helper(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.notifications import send_notification
+
+        def send_app_notification(uid, message):
+            send_notification(uid, "App says", message)
+
+        async def realtime_coordinator(uid):
+            await checkpoint()
+            send_app_notification(uid, "hello")
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    call = finding["network_io"][0]
+    assert call["call"] == "send_app_notification() -> send_notification() [sync notification]"
+    assert call["via"] == ["send_app_notification"]
+
+
+def test_app_boundaries_are_clean_on_owned_executor_and_async_notification_seam(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.apps import get_available_apps
+        from utils.subscription import is_trial_paywalled
+        from utils.notifications import send_notification_async
+
+        async def realtime_coordinator(uid, source):
+            if await run_blocking(db_executor, is_trial_paywalled, uid, source):
+                return []
+            apps = await run_blocking(db_executor, get_available_apps, uid)
+            await send_notification_async(uid, "App says", "hello")
+            return apps
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["mixed_await_sync_db"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
 def test_asyncio_to_thread_is_reported_as_unmanaged_offload(scanner, tmp_path):
     _source_path, results = _scan_source(
         scanner,
@@ -369,6 +434,57 @@ def test_asyncio_to_thread_is_reported_as_unmanaged_offload(scanner, tmp_path):
             "calls": [{"line": 5, "call": "asyncio.to_thread() [unmanaged executor]"}],
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("import_statement", "offload_call"),
+    [
+        ("import asyncio as aio", "aio.to_thread(blocking_call)"),
+        ("from asyncio import to_thread", "to_thread(blocking_call)"),
+        ("from asyncio import to_thread as offload", "offload(blocking_call)"),
+    ],
+)
+def test_asyncio_to_thread_import_aliases_are_reported_as_unmanaged_offloads(
+    scanner,
+    tmp_path,
+    import_statement,
+    offload_call,
+):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        f"""
+        {import_statement}
+
+        async def legacy_helper():
+            return await {offload_call}
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == [
+        {
+            "file": str(_source_path),
+            "line": 4,
+            "end_line": 5,
+            "function": "legacy_helper",
+            "calls": [{"line": 5, "call": "asyncio.to_thread() [unmanaged executor]"}],
+        }
+    ]
+
+
+def test_unrelated_to_thread_import_is_not_reported_as_an_asyncio_offload(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from workers import to_thread
+
+        async def helper():
+            return await to_thread(blocking_call)
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == []
 
 
 def test_explicit_python_file_path_is_scanned(scanner, tmp_path):

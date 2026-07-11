@@ -120,6 +120,76 @@ def test_firebase_token_verification_uses_lazy_app_boundary(agent_proxy, monkeyp
     verify_id_token.assert_called_once_with("token")
 
 
+@pytest.mark.asyncio
+async def test_lifespan_initializes_providers_on_owned_lanes_and_drains_background_tasks(agent_proxy, monkeypatch):
+    firebase_init = MagicMock()
+    firestore_db = object()
+    firestore_init = MagicMock(return_value=firestore_db)
+    events = []
+
+    async def tracking_run_blocking(executor, func, *args, **kwargs):
+        events.append(("run_blocking", executor, func))
+        return func(*args, **kwargs)
+
+    async def tracking_drain_background_tasks(*, timeout):
+        events.append(("drain_background_tasks", timeout))
+        return 0
+
+    monkeypatch.setattr(agent_proxy, "_ensure_firebase_initialized", firebase_init)
+    monkeypatch.setattr(agent_proxy, "_get_firestore_db", firestore_init)
+    monkeypatch.setattr(agent_proxy, "run_blocking", tracking_run_blocking)
+    monkeypatch.setattr(agent_proxy, "drain_background_tasks", tracking_drain_background_tasks)
+
+    async with agent_proxy.lifespan(agent_proxy.app):
+        assert events == [
+            ("run_blocking", agent_proxy.critical_executor, firebase_init),
+            ("run_blocking", agent_proxy.db_executor, firestore_init),
+        ]
+
+    assert events == [
+        ("run_blocking", agent_proxy.critical_executor, firebase_init),
+        ("run_blocking", agent_proxy.db_executor, firestore_init),
+        ("drain_background_tasks", 10.0),
+    ]
+    firebase_init.assert_called_once_with()
+    firestore_init.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failing_provider", ["firebase", "firestore"])
+async def test_lifespan_provider_failure_prevents_startup(agent_proxy, monkeypatch, failing_provider):
+    entered = False
+    drain_calls = []
+
+    def initialize_firebase():
+        if failing_provider == "firebase":
+            raise RuntimeError("firebase unavailable")
+
+    def initialize_firestore():
+        if failing_provider == "firestore":
+            raise RuntimeError("firestore unavailable")
+        return object()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def tracking_drain_background_tasks(*, timeout):
+        drain_calls.append(timeout)
+        return 0
+
+    monkeypatch.setattr(agent_proxy, "_ensure_firebase_initialized", initialize_firebase)
+    monkeypatch.setattr(agent_proxy, "_get_firestore_db", initialize_firestore)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "drain_background_tasks", tracking_drain_background_tasks)
+
+    with pytest.raises(RuntimeError, match=f"{failing_provider} unavailable"):
+        async with agent_proxy.lifespan(agent_proxy.app):
+            entered = True
+
+    assert entered is False
+    assert drain_calls == []
+
+
 def test_agent_proxy_image_packages_the_shared_executor_boundary():
     dockerfile = (AGENT_PROXY_DIR / "Dockerfile").read_text(encoding="utf-8")
 

@@ -6,6 +6,8 @@ on:
     paths:
       - 'backend/agent-proxy/**'
       - 'backend/charts/agent-proxy/**'
+      - 'backend/utils/__init__.py'
+      - 'backend/utils/executors.py'
 
 env:
   SERVICE: agent-proxy

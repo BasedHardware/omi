@@ -63,6 +63,19 @@ STORAGE_NETWORK_CALL_MARKERS = (
     "cleanup",
 )
 
+# Imported synchronous utility boundaries that hide blocking provider or
+# persistence work behind a business-level name. Keep this list exact and
+# import-aware: matching a same-named local helper would create false positives,
+# while omitting these imports lets async coordinators look clean even though the
+# imported implementation performs synchronous I/O.
+SYNC_DB_UTILITY_IMPORTS = {
+    "utils.apps": frozenset({"get_available_apps"}),
+    "utils.subscription": frozenset({"is_trial_paywalled"}),
+}
+SYNC_NETWORK_UTILITY_IMPORTS = {
+    "utils.notifications": frozenset({"send_notification"}),
+}
+
 
 def _node_lineno(node: ast.AST) -> int:
     """Best-effort line number for an arbitrary AST node."""
@@ -120,6 +133,47 @@ def get_prerecorded_stt_imports(source: str) -> Set[str]:
             if alias.name.startswith("prerecorded"):
                 names.add(alias.asname or alias.name)
     return names
+
+
+def get_asyncio_to_thread_imports(source: str) -> Tuple[Set[str], Set[str]]:
+    """Return bound names for ``asyncio`` modules and direct ``to_thread`` imports.
+
+    Matching the imported binding, rather than the source spelling alone,
+    closes alias bypasses without treating an unrelated same-named helper as an
+    unmanaged executor boundary.
+    """
+    module_names: Set[str] = set()
+    callable_names: Set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == 'asyncio':
+                    module_names.add(alias.asname or alias.name)
+        if isinstance(node, ast.ImportFrom) and node.module == 'asyncio':
+            for alias in node.names:
+                if alias.name == 'to_thread':
+                    callable_names.add(alias.asname or alias.name)
+    return module_names, callable_names
+
+
+def get_sync_utility_imports(source: str) -> Tuple[Set[str], Set[str]]:
+    """Return aliased synchronous utility imports grouped by blocking effect."""
+    db_names: Set[str] = set()
+    network_names: Set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        db_exports = SYNC_DB_UTILITY_IMPORTS.get(node.module, frozenset())
+        network_exports = SYNC_NETWORK_UTILITY_IMPORTS.get(node.module, frozenset())
+        for alias in node.names:
+            bound_name = alias.asname or alias.name
+            if alias.name in db_exports:
+                db_names.add(bound_name)
+            if alias.name in network_exports:
+                network_names.add(bound_name)
+    return db_names, network_names
 
 
 def _walk_body(node: FunctionNode) -> Iterator[ast.AST]:
@@ -185,19 +239,25 @@ def _collect_nested_func_lines(node: FunctionNode) -> Set[int]:
     return nested
 
 
-def _unmanaged_to_thread_calls(node: ast.AsyncFunctionDef) -> List[Dict[str, Any]]:
-    """Return bare asyncio.to_thread calls outside nested function scopes."""
+def _unmanaged_to_thread_calls(
+    node: ast.AsyncFunctionDef,
+    asyncio_module_names: Set[str],
+    asyncio_to_thread_names: Set[str],
+) -> List[Dict[str, Any]]:
+    """Return imported asyncio.to_thread calls outside nested function scopes."""
     nested = _collect_nested_func_lines(node)
     calls: List[Dict[str, Any]] = []
     for child in _walk_body(node):
         if not isinstance(child, ast.Call) or child.lineno in nested:
             continue
-        if (
+        is_module_call = (
             isinstance(child.func, ast.Attribute)
             and child.func.attr == 'to_thread'
             and isinstance(child.func.value, ast.Name)
-            and child.func.value.id == 'asyncio'
-        ):
+            and child.func.value.id in asyncio_module_names
+        )
+        is_direct_call = isinstance(child.func, ast.Name) and child.func.id in asyncio_to_thread_names
+        if is_module_call or is_direct_call:
             calls.append({"line": child.lineno, "call": "asyncio.to_thread() [unmanaged executor]"})
     return calls
 
@@ -208,6 +268,7 @@ def _scan_function_body(
     db_module_aliases: Set[str],
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
+    sync_network_names: Set[str],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
@@ -235,6 +296,8 @@ def _scan_function_body(
                     network_io.append({"line": line, "call": call_name})
             if child.func.id in prerecorded_stt_names:
                 network_io.append({"line": line, "call": f"{child.func.id}() [sync STT]"})
+            if child.func.id in sync_network_names:
+                network_io.append({"line": line, "call": f"{child.func.id}() [sync notification]"})
             if child.func.id == 'open':
                 file_io.append({"line": line, "call": "open()"})
         if isinstance(child.func, ast.Attribute):
@@ -297,6 +360,7 @@ def analyze_local_sync_helpers(
     db_module_aliases: Set[str],
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
+    sync_network_names: Set[str],
 ) -> LocalHelperEffects:
     """Compute the shortest blocking path reachable from each local sync helper.
 
@@ -316,6 +380,7 @@ def analyze_local_sync_helpers(
             db_module_aliases,
             storage_names,
             prerecorded_stt_names,
+            sync_network_names,
         )
         direct_by_field = {
             "db_calls": db_calls,
@@ -374,6 +439,7 @@ def scan_async_function(
     storage_names: Set[str],
     local_helper_effects: Optional[LocalHelperEffects] = None,
     prerecorded_stt_names: Optional[Set[str]] = None,
+    sync_network_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan direct and module-local transitive blocking calls on the event loop."""
     db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
@@ -382,6 +448,7 @@ def scan_async_function(
         db_module_aliases,
         storage_names,
         prerecorded_stt_names or set(),
+        sync_network_names or set(),
     )
     if local_helper_effects:
         propagated = _propagated_helper_calls(node, local_helper_effects)
@@ -440,12 +507,16 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         db_names, db_module_aliases = get_db_imports(source)
         storage_names = get_storage_imports(source)
         prerecorded_stt_names = get_prerecorded_stt_imports(source)
+        asyncio_module_names, asyncio_to_thread_names = get_asyncio_to_thread_imports(source)
+        utility_db_names, sync_network_names = get_sync_utility_imports(source)
+        db_names.update(utility_db_names)
         local_helper_effects = analyze_local_sync_helpers(
             tree,
             db_names,
             db_module_aliases,
             storage_names,
             prerecorded_stt_names,
+            sync_network_names,
         )
         module_level_nodes = set(tree.body)
         is_dependency_module = os.path.basename(fpath) == 'dependencies.py'
@@ -474,8 +545,9 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
                 storage_names,
                 local_helper_effects=local_helper_effects,
                 prerecorded_stt_names=prerecorded_stt_names,
+                sync_network_names=sync_network_names,
             )
-            unmanaged_offloads = _unmanaged_to_thread_calls(node)
+            unmanaged_offloads = _unmanaged_to_thread_calls(node, asyncio_module_names, asyncio_to_thread_names)
             endpoint_has_await = has_await(node)
             start_line, end_line = _line_span(node)
             blocking_call_lines = {

@@ -6,11 +6,14 @@ database/model stubs survive collection or leak into another test file.
 """
 
 import asyncio
+import functools
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, Iterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -37,6 +40,19 @@ def _auto_module(name: str, **attributes: Any) -> AutoMockModule:
     for key, value in attributes.items():
         setattr(module, key, value)
     return module
+
+
+def _realtime_app(app_id: str = 'app-1') -> MagicMock:
+    app = MagicMock()
+    app.id = app_id
+    app.name = 'Test App'
+    app.uid = 'owner-uid'
+    app.enabled = True
+    app.external_integration.webhook_url = 'https://app.test/hook'
+    app.triggers_realtime.return_value = True
+    app.triggers_realtime_audio_bytes.return_value = True
+    app.has_capability.return_value = False
+    return app
 
 
 class _BaseCallbackHandler:
@@ -90,6 +106,7 @@ def integration_harness() -> Iterator[SimpleNamespace]:
     process_mentor_notification = MagicMock(return_value=None)
     get_available_apps = MagicMock(return_value=[])
     add_app_message = MagicMock(return_value={'id': 'msg-1'})
+    send_notification_async = AsyncMock(return_value=None)
 
     async def run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -219,7 +236,11 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             serialize_datetimes=MagicMock(side_effect=lambda value: value),
         ),
         'utils.apps': _module('utils.apps', get_available_apps=get_available_apps),
-        'utils.notifications': _module('utils.notifications', send_notification=MagicMock()),
+        'utils.notifications': _module(
+            'utils.notifications',
+            send_notification=MagicMock(),
+            send_notification_async=send_notification_async,
+        ),
         'utils.llm.clients': _auto_module(
             'utils.llm.clients',
             generate_embedding=MagicMock(return_value=[0] * 3072),
@@ -258,6 +279,8 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             usage=usage_tracker,
             process_mentor_notification=process_mentor_notification,
             get_available_apps=get_available_apps,
+            add_app_message=add_app_message,
+            send_notification_async=send_notification_async,
         )
 
 
@@ -344,3 +367,117 @@ async def test_track_usage_context_entered_around_proactive_message(integration_
     enter_idx = call_log.index(marker)
     exit_idx = call_log.index(('exit', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS))
     assert enter_idx < process_idx < exit_idx
+
+
+@pytest.mark.asyncio
+async def test_audio_app_lookup_uses_db_executor_without_blocking_loop(integration_harness):
+    app = integration_harness.app
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+    worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix='test-app-lookup')
+
+    def blocking_get_apps(uid):
+        assert uid == 'user-audio'
+        started.set()
+        assert release.wait(timeout=2)
+        return []
+
+    async def routing_run_blocking(executor, func, *args, **kwargs):
+        calls.append((executor, func, args, kwargs))
+        if func is blocking_get_apps:
+            call = functools.partial(func, *args, **kwargs)
+            return await asyncio.get_running_loop().run_in_executor(worker, call)
+        return func(*args, **kwargs)
+
+    safety_release = threading.Timer(1, release.set)
+    safety_release.start()
+    try:
+        with patch.object(app, 'run_blocking', routing_run_blocking), patch.object(
+            app, 'get_available_apps', blocking_get_apps
+        ):
+            task = asyncio.create_task(app.trigger_realtime_audio_bytes('user-audio', 16_000, bytearray(b'audio')))
+            deadline = asyncio.get_running_loop().time() + 0.75
+            while not started.is_set() and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.005)
+            assert started.is_set()
+
+            loop_tick = asyncio.Event()
+            asyncio.get_running_loop().call_soon(loop_tick.set)
+            await asyncio.wait_for(loop_tick.wait(), timeout=1)
+            assert not task.done()
+
+            release.set()
+            assert await task == {}
+    finally:
+        release.set()
+        safety_release.cancel()
+        worker.shutdown(wait=True)
+
+    lookup_call = next(call for call in calls if call[1] is blocking_get_apps)
+    assert lookup_call[0] is app.db_executor
+    assert lookup_call[2] == ('user-audio',)
+
+
+@pytest.mark.asyncio
+async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integration_harness):
+    app = integration_harness.app
+    calls = []
+
+    def failing_paywall(uid, source):
+        assert (uid, source) == ('user-paywall', 'desktop')
+        raise RuntimeError('paywall store unavailable')
+
+    async def tracking_run_blocking(executor, func, *args, **kwargs):
+        calls.append((executor, func, args, kwargs))
+        return func(*args, **kwargs)
+
+    with patch.object(app, 'run_blocking', tracking_run_blocking), patch.object(
+        app, 'is_trial_paywalled', failing_paywall
+    ):
+        with pytest.raises(RuntimeError, match='paywall store unavailable'):
+            await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
+
+    assert calls == [(app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {})]
+
+
+@pytest.mark.asyncio
+async def test_realtime_message_uses_async_notification_boundary(integration_harness):
+    app = integration_harness.app
+    external_app = _realtime_app()
+    response = MagicMock(status_code=200, text='')
+    response.json.return_value = {'message': 'A useful notification'}
+    client = AsyncMock()
+    client.post.return_value = response
+    notifier = AsyncMock(return_value=None)
+
+    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
+        app, 'process_mentor_notification', return_value=None
+    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
+        app, 'send_app_notification_async', notifier
+    ):
+        result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
+
+    notifier.assert_awaited_once_with('user-message', 'Test App', 'app-1', 'A useful notification')
+    assert result == [{'id': 'msg-1'}]
+
+
+@pytest.mark.asyncio
+async def test_realtime_notification_failure_remains_fail_soft(integration_harness):
+    app = integration_harness.app
+    external_app = _realtime_app()
+    response = MagicMock(status_code=200, text='')
+    response.json.return_value = {'message': 'A useful notification'}
+    client = AsyncMock()
+    client.post.return_value = response
+    integration_harness.add_app_message.reset_mock()
+
+    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
+        app, 'process_mentor_notification', return_value=None
+    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
+        app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))
+    ):
+        result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
+
+    assert result == []
+    integration_harness.add_app_message.assert_not_called()

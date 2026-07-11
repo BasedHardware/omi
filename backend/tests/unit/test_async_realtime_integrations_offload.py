@@ -192,6 +192,7 @@ sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
+sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})

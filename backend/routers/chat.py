@@ -591,7 +591,7 @@ async def transcribe_voice_message(
     # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
     # Narrow to trial-only on purpose — full enforce_chat_quota here would
     # change mobile behavior for users past their existing 30/mo chat cap.
-    if is_trial_paywalled(uid, x_app_platform):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
         raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
 
     content_type = request.headers.get("content-type", "")
@@ -820,7 +820,7 @@ async def transcribe_voice_message_stream(
 
     # Paywalled desktop users — close before opening DG connection so we don't
     # bill Deepgram for a PTT stream that wouldn't be allowed to chat anyway.
-    if is_trial_paywalled(uid, x_app_platform):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
         await websocket.close(code=1008, reason='trial_expired')
         return
 
