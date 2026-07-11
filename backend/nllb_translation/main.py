@@ -52,7 +52,7 @@ CT2_INTER_THREADS = int(os.environ.get("CT2_INTER_THREADS", "1"))
 CT2_INTRA_THREADS = int(os.environ.get("CT2_INTRA_THREADS", "4"))
 MAX_INPUT_LENGTH = int(os.environ.get("NLLB_MAX_INPUT_LENGTH", "512"))
 MAX_BATCH_SIZE = int(os.environ.get("NLLB_MAX_BATCH_SIZE", "64"))
-BEAM_SIZE = int(os.environ.get("NLLB_BEAM_SIZE", "4"))
+BEAM_SIZE = int(os.environ.get("NLLB_BEAM_SIZE", "1"))
 INFERENCE_WORKERS = int(os.environ.get("NLLB_INFERENCE_WORKERS", "2"))
 PORT = int(os.environ.get("PORT", "8080"))
 

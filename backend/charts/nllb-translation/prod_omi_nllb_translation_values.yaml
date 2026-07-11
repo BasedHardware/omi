@@ -96,8 +96,8 @@ affinity: {}
 strategy:
   type: RollingUpdate
   rollingUpdate:
-    maxUnavailable: 1
-    maxSurge: 0
+    maxSurge: 1
+    maxUnavailable: 0
 
 initContainers:
   - name: model-downloader

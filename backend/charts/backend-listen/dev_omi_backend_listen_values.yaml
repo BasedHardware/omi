@@ -181,6 +181,8 @@ env:
     value: "http://diarizer.omiapi.com:80"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://dev-omi-nllb-translation:8080"
+  - name: TRANSLATION_SERVICE_MODELS
+    value: "shadow"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
