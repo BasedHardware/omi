@@ -516,23 +516,45 @@ final class AgentPillsManager: ObservableObject {
         if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
             return nil
         }
-        let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
-        let existingAgentFollowUpPattern = #"\b(?:ask|tell)\s+(?:this|that|the)\s+"# + Self.agentNounPattern + #"\b"#
-        if lower.range(of: existingAgentFollowUpPattern, options: .regularExpression) != nil {
-            return nil
-        }
-        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run|ask|tell|have)\b"#
-        guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
-        guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
+        guard Self.isStrictFloatingAgentCreationRequest(trimmedLower) else { return nil }
+        // A visible sibling must have a concrete objective. "Start an agent" is
+        // not enough to hand a child a useful task, and questions about an
+        // existing agent must remain in that agent's conversation.
+        guard let agentTask = extractFloatingAgentTask(from: original) else { return nil }
 
         return FloatingAgentHandoff(
             originalRequest: original,
-            agentTask: extractFloatingAgentTask(from: original) ?? original
+            agentTask: agentTask
         )
     }
 
     nonisolated static func explicitlyRequestsFloatingAgent(_ text: String) -> Bool {
         floatingAgentHandoff(for: text) != nil
+    }
+
+    /// High-confidence creation syntax for a *new sibling* background agent.
+    ///
+    /// This intentionally excludes conversational verbs such as "ask", "tell",
+    /// and "have". Those can refer to the current/main agent or one it already
+    /// manages, so routing them through an automatic spawn would turn a question
+    /// into a side effect. Ambiguous requests reach the normal chat/router path.
+    nonisolated static func isStrictFloatingAgentCreationRequest(_ text: String) -> Bool {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !lower.isEmpty else { return false }
+
+        let optionalPoliteness = #"(?:(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?)"#
+        let creationVerb = #"(?:spawn|start|launch|kick\s+off|create|make|run)"#
+        let optionalCount = #"(?:(?:\d+|one|two|three|four|five|six|seven|eight)\s+)?"#
+        // A bare "agent" is too ambiguous: "run agent tests" and
+        // "create agent tooling" are developer commands, not requests for a
+        // sibling. Require an unmistakable creation marker for that generic
+        // noun, while retaining the unambiguous compound nouns (subagent,
+        // background agent, floating agent) and pill target.
+        let explicitTarget = #"(?:(?:(?:a|an|new|background|floating)\s+)*(?:sub\s*agents?|pills?)|(?:(?:a|an|new|background|floating)\s+)+agents?)"#
+        let pattern = #"^"# + optionalPoliteness + creationVerb + #"\s+"#
+            + optionalCount + explicitTarget + #"\b"#
+
+        return lower.range(of: pattern, options: .regularExpression) != nil
     }
 
     private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {

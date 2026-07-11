@@ -162,6 +162,271 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(restoredOutput, "Done.")
   }
 
+  func testAgentLifecycleDisplayProjectionShowsOneTerminalCardAndKeepsCompletionResources() {
+    let pillID = UUID()
+    let spawn = ChatMessage(
+      id: "spawn-message",
+      text: "I started a background agent.",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Notes",
+          objective: "Research the release notes"
+        ),
+      ]
+    )
+    let artifact = ChatResource.localGeneratedFile(
+      id: "artifact-1",
+      title: "notes.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/notes.md"
+    )
+    let completion = ChatMessage(
+      id: "completion-message",
+      text: "[Background agent id=\(pillID.uuidString)] Done.",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Notes",
+          promptSnippet: "Research the release notes",
+          output: "Done.",
+          status: "completed"
+        ),
+      ],
+      resources: [artifact]
+    )
+
+    let canonical = [spawn, completion]
+    let projected = AgentLifecycleDisplayProjection.project(canonical)
+
+    // The canonical transcript retains separate lifecycle facts; only the
+    // display projection collapses the terminal completion into the spawn row.
+    XCTAssertEqual(canonical.count, 2)
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertEqual(projected[0].id, "spawn-message")
+    XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
+    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+      projected[0].contentBlocks.first
+    else {
+      return XCTFail("matched lifecycle must render its terminal completion in the spawn row")
+    }
+    XCTAssertEqual(renderedPill, pillID)
+    XCTAssertEqual(renderedRun, "run-1")
+    XCTAssertEqual(output, "Done.")
+  }
+
+  func testAgentLifecycleDisplayProjectionUsesRunBeforePillAndFallsBackForLegacyCompletion() {
+    let pillID = UUID()
+    let runBoundSpawn = ChatMessage(
+      id: "run-bound-spawn",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-run-bound",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "First Agent",
+          objective: "First objective"
+        ),
+      ]
+    )
+    let conflictingCompletion = ChatMessage(
+      id: "conflicting-completion",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-run-2",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-2",
+          title: "Second Agent",
+          promptSnippet: "Second objective",
+          output: "Done.",
+          status: "completed"
+        ),
+      ]
+    )
+    XCTAssertEqual(
+      AgentLifecycleDisplayProjection.project([runBoundSpawn, conflictingCompletion]).count,
+      2,
+      "a run-identified completion must not collapse onto a different run that shares a pill id"
+    )
+
+    let legacySpawn = ChatMessage(
+      id: "legacy-spawn",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "legacy-spawn-block",
+          pillId: pillID,
+          sessionId: "",
+          runId: "",
+          title: "Legacy Agent",
+          objective: "Legacy objective"
+        ),
+      ]
+    )
+    let legacyCompletion = ChatMessage(
+      id: "legacy-completion",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "legacy-completion-block",
+          pillId: pillID,
+          sessionId: nil,
+          runId: nil,
+          title: "Legacy Agent",
+          promptSnippet: "Legacy objective",
+          output: "Done.",
+          status: "completed"
+        ),
+      ]
+    )
+    XCTAssertEqual(
+      AgentLifecycleDisplayProjection.project([legacySpawn, legacyCompletion]).count,
+      1,
+      "legacy completion without a run id may fall back to the pill identity"
+    )
+  }
+
+  func testAgentLifecycleDisplayProjectionCoalescesDuplicateTerminalCompletions() {
+    let pillID = UUID()
+    let spawn = ChatMessage(
+      id: "spawn-message",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Agent",
+          objective: "Objective"
+        ),
+      ]
+    )
+    func completion(id: String, output: String, resourceID: String) -> ChatMessage {
+      ChatMessage(
+        id: id,
+        text: "",
+        sender: .ai,
+        contentBlocks: [
+          .agentCompletion(
+            id: "\(id)-block",
+            pillId: pillID,
+            sessionId: "session-1",
+            runId: "run-1",
+            title: "Agent",
+            promptSnippet: "Objective",
+            output: output,
+            status: "completed"
+          ),
+        ],
+        resources: [
+          .localGeneratedFile(
+            id: resourceID,
+            title: "\(resourceID).txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/\(resourceID).txt"
+          ),
+        ]
+      )
+    }
+
+    let projected = AgentLifecycleDisplayProjection.project([
+      spawn,
+      completion(id: "completion-1", output: "Initial result", resourceID: "artifact-1"),
+      completion(id: "completion-2", output: "Final result", resourceID: "artifact-2"),
+    ])
+
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertEqual(Set(projected[0].resources.map(\.id)), Set(["artifact-1", "artifact-2"]))
+    guard case .agentCompletion(_, _, _, _, _, _, let output, _) = projected[0].contentBlocks.first else {
+      return XCTFail("expected terminal agent card")
+    }
+    XCTAssertEqual(output, "Final result")
+  }
+
+  func testAgentLifecycleDisplayProjectionRemovesMatchedCardFromMixedCompletionMessage() {
+    let pillID = UUID()
+    let spawn = ChatMessage(
+      id: "spawn-message",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Agent",
+          objective: "Objective"
+        ),
+      ]
+    )
+    let artifact = ChatResource.localGeneratedFile(
+      id: "artifact-1",
+      title: "result.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/result.md"
+    )
+    let mixedCompletion = ChatMessage(
+      id: "mixed-completion-message",
+      text: "The surrounding response remains visible.",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Agent",
+          promptSnippet: "Objective",
+          output: "Done.",
+          status: "completed"
+        ),
+        .text(id: "surrounding-text", text: "The surrounding response remains visible."),
+      ],
+      resources: [artifact]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([spawn, mixedCompletion])
+
+    XCTAssertEqual(projected.count, 2, "the non-agent portion of a mixed completion stays visible")
+    XCTAssertEqual(
+      projected.flatMap(\.contentBlocks).filter { block in
+        if case .agentCompletion = block { return true }
+        return false
+      }.count,
+      1,
+      "the lifecycle must render exactly one terminal agent card"
+    )
+    XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
+    XCTAssertEqual(projected[1].resources.map(\.id), ["artifact-1"])
+    XCTAssertEqual(projected[1].contentBlocks.count, 1)
+    guard case .text(_, let text) = projected[1].contentBlocks[0] else {
+      return XCTFail("the mixed completion's ordinary content must remain")
+    }
+    XCTAssertEqual(text, "The surrounding response remains visible.")
+  }
+
   func testAgentIdentityBlocksSurviveSaveMessageMetadataRoundTrip() {
     let pillId = UUID()
     let spawn = ChatContentBlock.agentSpawn(

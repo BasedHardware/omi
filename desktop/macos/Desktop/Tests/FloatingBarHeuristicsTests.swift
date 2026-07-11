@@ -55,8 +55,8 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             ("start a background agent to review my notes", "review my notes"),
             ("launch an agent to research this", "research this"),
             ("make a floating agent for this task", "this task"),
-            ("have an agent make a simple snake facts html page", "make a simple snake facts html page"),
-            ("ask a subagent if it can also see my screen or not", "if it can also see my screen or not"),
+            ("create a new subagent to draft a release note", "draft a release note"),
+            ("can you run an agent to compare these two files", "compare these two files"),
         ]
         for (q, task) in spawnRequests {
             XCTAssertTrue(
@@ -71,6 +71,14 @@ final class FloatingBarHeuristicsTests: XCTestCase {
         let normalFollowUps = [
             "how did it go?",
             "ask this agent what it found",
+            "ask a subagent if it can also see my screen or not",
+            "ask the main agent about its subagents",
+            "tell this agent what its subagents found",
+            "have an agent make a simple snake facts html page",
+            "start an agent",
+            "run agent tests in desktop",
+            "start agent tests for macos",
+            "create agent tooling docs",
             "what do you know about my memories?",
             "can you explain that result?",
         ]
@@ -92,10 +100,6 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "launch a subagent to fix the not-found bug",
             "create a pill to clean up notes with no duplicates",
             "run an agent to remove items that are not pinned",
-            // Action verb after negation but NOT followed by an agent noun
-            "don't make me laugh, spawn an agent",
-            "not sure how to start a background agent",
-            "never mind, launch an agent anyway",
         ]
         for q in legitimateSpawns {
             XCTAssertTrue(

@@ -221,17 +221,13 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)"))
   }
 
-  func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
+  func testSubagentChatFollowUpAlwaysContinuesCurrentAgent() throws {
     let source = try floatingControlBarViewSource()
-    let agentPillSource = try agentPillSource()
 
-    XCTAssertTrue(source.contains("if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
-    XCTAssertTrue(source.contains("harnessOverride: pill.bridgeHarnessOverride"))
-    XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
-    XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
-    XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
-    XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
-    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
+    XCTAssertFalse(source.contains("AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
+    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertFalse(source.contains("onSpawnSibling"))
+    XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -552,7 +548,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("barWindow.closeAIConversation()"))
   }
 
-  func testSubagentSiblingSpawnUsesDelegationExecutor() throws {
+  func testTopLevelDelegationExecutorRemainsOutsideSubagentComposer() throws {
     let viewSource = try floatingControlBarViewSource()
     let executorURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -560,9 +556,8 @@ final class AgentPillLifecycleTests: XCTestCase {
       .appendingPathComponent("Sources/FloatingControlBar/AgentDelegationExecutor.swift")
     let executorSource = try String(contentsOf: executorURL, encoding: .utf8)
 
-    XCTAssertTrue(viewSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    XCTAssertTrue(viewSource.contains("harnessOverride: pill.bridgeHarnessOverride"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed)"))
+    XCTAssertFalse(viewSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
     XCTAssertTrue(executorSource.contains("harnessOverride ?? task.directedProvider?.harnessMode"))
   }
 
