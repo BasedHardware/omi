@@ -55,8 +55,8 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             ("start a background agent to review my notes", "review my notes"),
             ("launch an agent to research this", "research this"),
             ("make a floating agent for this task", "this task"),
-            ("have an agent make a simple snake facts html page", "make a simple snake facts html page"),
-            ("ask a subagent if it can also see my screen or not", "if it can also see my screen or not"),
+            ("create a new subagent to draft a release note", "draft a release note"),
+            ("can you run an agent to compare these two files", "compare these two files"),
         ]
         for (q, task) in spawnRequests {
             XCTAssertTrue(
@@ -71,6 +71,14 @@ final class FloatingBarHeuristicsTests: XCTestCase {
         let normalFollowUps = [
             "how did it go?",
             "ask this agent what it found",
+            "ask a subagent if it can also see my screen or not",
+            "ask the main agent about its subagents",
+            "tell this agent what its subagents found",
+            "have an agent make a simple snake facts html page",
+            "start an agent",
+            "run agent tests in desktop",
+            "start agent tests for macos",
+            "create agent tooling docs",
             "what do you know about my memories?",
             "can you explain that result?",
         ]
@@ -78,6 +86,49 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             XCTAssertFalse(
                 AgentPillsManager.explicitlyRequestsFloatingAgent(q),
                 "Expected normal follow-up, not floating-agent control command: \"\(q)\"")
+        }
+    }
+
+    func testFloatingAgentHandoffRequiresQualifiedTargetAndObjectiveConnector() {
+        // Exercise every supported creation verb and target form through the
+        // public handoff API. This protects the side-effect boundary rather
+        // than just the regex helper used to implement it.
+        let qualifiedRequests: [(String, String)] = [
+            ("spawn a subagent to compare two files", "compare two files"),
+            ("start a background agent for a release review", "a release review"),
+            ("launch a floating agent that reviews the notes", "reviews the notes"),
+            ("kick off a new agent which compares two files", "compares two files"),
+            ("create a pill to draft a release note", "draft a release note"),
+            ("make an agent to summarize this transcript", "summarize this transcript"),
+            ("run an agent to compare two files", "compare two files"),
+            ("please could you run an agent to compare two files", "compare two files"),
+            ("could you please run an agent to compare two files", "compare two files"),
+            ("spawn two background agents to compare two files", "compare two files"),
+        ]
+        for (request, expectedTask) in qualifiedRequests {
+            XCTAssertEqual(
+                AgentPillsManager.floatingAgentHandoff(for: request)?.agentTask,
+                expectedTask,
+                "Expected qualified creation request to hand off: \"\(request)\"")
+        }
+
+        // These are developer/product phrases that contain the action and
+        // agent vocabulary but no explicit task connector. They must not turn
+        // into background-agent side effects as the wording evolves.
+        let nonCreationCommands = [
+            "run agent tests in desktop",
+            "run subagent tests locally",
+            "run background agent tests locally",
+            "launch floating agent tooling locally",
+            "create a pill UI fixture",
+            "start an agent right now",
+            "spawn a subagent: compare two files",
+            "spawn a subagent and compare two files",
+        ]
+        for command in nonCreationCommands {
+            XCTAssertNil(
+                AgentPillsManager.floatingAgentHandoff(for: command),
+                "Expected inline handling, not a handoff, for: \"\(command)\"")
         }
     }
 
@@ -92,10 +143,6 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "launch a subagent to fix the not-found bug",
             "create a pill to clean up notes with no duplicates",
             "run an agent to remove items that are not pinned",
-            // Action verb after negation but NOT followed by an agent noun
-            "don't make me laugh, spawn an agent",
-            "not sure how to start a background agent",
-            "never mind, launch an agent anyway",
         ]
         for q in legitimateSpawns {
             XCTAssertTrue(
