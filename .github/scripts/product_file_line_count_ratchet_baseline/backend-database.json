@@ -1,7 +1,9 @@
 {
   "files": {
-    "backend/database/users.py": 1943
+    "backend/database/users.py": 1952
   },
-  "raise_justifications": {},
+  "raise_justifications": {
+    "backend/database/users.py": "The people-count read is a small aggregate over the same users/{uid}/people collection the other people helpers own, so it stays with them rather than starting a parallel module."
+  },
   "threshold": 1500
 }

@@ -174,7 +174,10 @@ SCHEMA_GROUPS = {
     },
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
-        'schemas': ('Person',),
+        'schemas': (
+            'Person',
+            'PeopleCountResponse',
+        ),
     },
     'imports_integrations': {
         'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',

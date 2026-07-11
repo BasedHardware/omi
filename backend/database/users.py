@@ -728,6 +728,15 @@ def get_people(uid: str):
     return result
 
 
+def get_people_count(uid: str) -> int:
+    """Return how many people (contacts) the user has via a Firestore count() aggregation.
+
+    Lets a client show a count without streaming and building every person record
+    (which resolves signed speech-sample URLs on the list path)."""
+    people_ref = db.collection('users').document(uid).collection('people')
+    return int(people_ref.count().get()[0][0].value)
+
+
 def get_person_by_name(uid: str, name: str):
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)

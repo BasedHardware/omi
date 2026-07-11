@@ -608,6 +608,19 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     return result
 
 
+class PeopleCountResponse(BaseModel):
+    count: int
+
+
+@router.get('/v1/users/people/count', tags=['v1'], response_model=PeopleCountResponse)
+def count_people(uid: str = Depends(auth.get_current_user_uid)):
+    """Return how many people (contacts) the user has.
+
+    Declared before /v1/users/people/{person_id} so the static path is not captured as a
+    person id."""
+    return {'count': get_people_count(uid)}
+
+
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
 def get_single_person(
     person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)

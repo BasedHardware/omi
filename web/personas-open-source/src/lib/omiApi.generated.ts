@@ -2483,6 +2483,10 @@ export interface PendingSyncResponse {
   synced_items: Array<ActionItemResponse>;
 }
 
+export interface PeopleCountResponse {
+  count: number;
+}
+
 export interface Person {
   created_at?: string | null;
   id: string;
@@ -4031,6 +4035,7 @@ export interface OmiApiSchemas {
   "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
+  "PeopleCountResponse": PeopleCountResponse;
   "Person": Person;
   "PhoneCallQuota": PhoneCallQuota;
   "PhoneMutationResponse": PhoneMutationResponse;
@@ -7360,6 +7365,16 @@ export interface OmiApiPaths {
       operationId: "get_or_create_person_v1_users_people_post";
       responses: {
         "200": Person;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/count": {
+    get: {
+      operationId: "count_people_v1_users_people_count_get";
+      responses: {
+        "200": PeopleCountResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14178,6 +14193,25 @@ export async function get_or_create_person_v1_users_people_post(header: { author
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function count_people_v1_users_people_count_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PeopleCountResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/people/count`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_single_person_v1_users_people__person_id__get(path: { person_id: string }, query: { include_speech_samples?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Person> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/people/${path.person_id}`;
@@ -15539,4 +15573,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.

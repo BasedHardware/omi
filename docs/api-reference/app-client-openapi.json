@@ -15109,6 +15109,19 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PeopleCountResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "PeopleCountResponse",
+        "type": "object"
+      },
       "Person": {
         "properties": {
           "created_at": {
@@ -49387,6 +49400,84 @@
           }
         ],
         "summary": "Get Or Create Person",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/people/count": {
+      "get": {
+        "description": "Return how many people (contacts) the user has.\n\nDeclared before /v1/users/people/{person_id} so the static path is not captured as a\nperson id.",
+        "operationId": "count_people_v1_users_people_count_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Count People",
         "tags": [
           "v1"
         ]
