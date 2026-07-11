@@ -72,6 +72,15 @@ def main() -> int:
         for result in results:
             print(repair_cloud_run_traffic._format_result(result))
             if result.action == 'failed':
+                if _traffic_failure_is_allowed(
+                    env=args.env,
+                    manifest_path=args.manifest,
+                    project=args.project,
+                    region=args.region,
+                    service=result.service,
+                ):
+                    print(f'{result.service}: provisional service is absent; first deployment will create it')
+                    continue
                 exit_code = 1
 
     if args.wait_revision_ready:
@@ -92,6 +101,63 @@ def main() -> int:
                 exit_code = 1
 
     return exit_code
+
+
+def _traffic_failure_is_allowed(
+    *,
+    env: str,
+    manifest_path: Path,
+    project: str,
+    region: str,
+    service: str,
+) -> bool:
+    manifest = render_backend_runtime_env._load_yaml(manifest_path)  # pyright: ignore[reportPrivateUsage]
+    environments = (
+        render_backend_runtime_env._as_config_dict(manifest['environments'])  # pyright: ignore[reportPrivateUsage]
+        or {}
+    )
+    env_config = (
+        render_backend_runtime_env._as_config_dict(environments[env]) or {}  # pyright: ignore[reportPrivateUsage]
+    )
+    cloud_run = (
+        render_backend_runtime_env._as_config_dict(env_config['cloud_run']) or {}  # pyright: ignore[reportPrivateUsage]
+    )
+    service_configs = (
+        render_backend_runtime_env._as_config_dict(cloud_run.get('services'))  # pyright: ignore[reportPrivateUsage]
+        or {}
+    )
+    service_config = (
+        render_backend_runtime_env._as_config_dict(service_configs.get(service))  # pyright: ignore[reportPrivateUsage]
+        or {}
+    )
+    if service_config.get('provisional') is not True:
+        return False
+    return not _cloud_run_service_exists(project=project, region=region, service=service)
+
+
+def _cloud_run_service_exists(*, project: str, region: str, service: str) -> bool:
+    command = [
+        'gcloud',
+        'run',
+        'services',
+        'describe',
+        service,
+        f'--project={project}',
+        f'--region={region}',
+        '--format=value(metadata.name)',
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    error = f'{result.stdout}\n{result.stderr}'.lower()
+    if 'cannot find service' in error or 'not found' in error:
+        return False
+    raise subprocess.CalledProcessError(
+        result.returncode,
+        command,
+        output=result.stdout,
+        stderr=result.stderr,
+    )
 
 
 def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> list[SecretBinding]:

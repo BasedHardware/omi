@@ -47,6 +47,26 @@ def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.Mo
     assert missing == []
 
 
+def test_missing_provisional_service_is_allowed_before_first_deploy(monkeypatch: pytest.MonkeyPatch) -> None:
+    preflight = load_preflight()
+    monkeypatch.setattr(preflight, '_cloud_run_service_exists', lambda **kwargs: False)
+
+    assert preflight._traffic_failure_is_allowed(
+        env='prod',
+        manifest_path=BACKEND_ROOT / 'deploy/runtime_env.yaml',
+        project='based-hardware',
+        region='us-central1',
+        service='backend-sync-backfill',
+    )
+    assert not preflight._traffic_failure_is_allowed(
+        env='prod',
+        manifest_path=BACKEND_ROOT / 'deploy/runtime_env.yaml',
+        project='based-hardware',
+        region='us-central1',
+        service='backend',
+    )
+
+
 def test_parse_revision_targets_rejects_blank_values() -> None:
     preflight = load_preflight()
 
