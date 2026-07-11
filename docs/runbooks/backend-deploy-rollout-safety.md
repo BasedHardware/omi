@@ -343,5 +343,11 @@ incident:
   deploys; add verified Helm rollback rather than relying on rollout timeout alone.
 - Add one verifier for the sync queues, IAM bindings, Firestore TTL, log metrics,
   alert policies, and notification channels.
+- Retry bounded Firestore `ABORTED`/409 transaction-contention failures at the
+  `/v3/memories/batch` ownership boundary, with jitter and an idempotency guard;
+  add a concurrency regression test and a denominator-based route error alert.
+  During the `.70` soak one request returned 503 for cross-transaction contention
+  while the adjacent requests succeeded, so deploy health alone cannot close this
+  failure class.
 - Gate anomalous reconnect/request amplification independently from raw HPA
   demand so a correctness loop cannot consume the whole capacity envelope.
