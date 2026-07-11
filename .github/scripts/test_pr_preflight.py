@@ -75,7 +75,14 @@ class SelectionTests(unittest.TestCase):
         names = {check.name for check in select_checks(["docs/doc/developer/Contribution.mdx"])}
         self.assertEqual(
             names,
-            {"diff-hygiene", "architecture-guardrails", "product-invariants", "desktop-changelog-data"},
+            {
+                "check-manifest-contract",
+                "diff-hygiene",
+                "architecture-guardrails",
+                "product-invariants",
+                "desktop-changelog-data",
+                "deferred-work-markers",
+            },
         )
 
     def test_9402_equivalent_fixture_fails_missing_invariants_and_flow_coverage(self) -> None:

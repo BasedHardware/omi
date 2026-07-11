@@ -27,9 +27,6 @@ jobs:
       has_format: ${{ steps.changes.outputs.has_format }}
       has_python: ${{ steps.changes.outputs.has_python }}
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
-      has_desktop_async_after_ratchet: ${{ steps.changes.outputs.has_desktop_async_after_ratchet }}
-      has_desktop_auth_session_ratchet: ${{ steps.changes.outputs.has_desktop_auth_session_ratchet }}
-      has_desktop_defaults_ratchet: ${{ steps.changes.outputs.has_desktop_defaults_ratchet }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,25 +52,6 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
-      - name: Check merge conflict markers
-        if: github.event_name != 'pull_request'
-        run: |
-          failed=0
-          while IFS= read -r file; do
-            if [ -f "$file" ] && grep -I -nE '^(<<<<<<<|>>>>>>>)' "$file"; then
-              failed=1
-            fi
-          done < /tmp/changed-files.txt
-
-          if [ "$failed" -eq 1 ]; then
-            echo "FAIL: unresolved merge conflict markers found in changed files"
-            exit 1
-          fi
-
-      - name: Architecture guardrail warnings
-        if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
-
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 
@@ -90,19 +68,12 @@ jobs:
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
 
+      - name: Run deterministic check manifest on main pushes
+        if: github.event_name != 'pull_request'
+        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}"
+
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
-
-      - name: Check brand UI purple ratchet (INV-UI-1)
-        if: github.event_name == 'pull_request'
-        run: |
-          python3 .github/scripts/check_brand_ui.py \
-            --changed-files /tmp/changed-files.txt \
-            --base "${{ needs.changes.outputs.diff_base }}"
-
-      - name: Check desktop changelog data
-        if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/desktop-changelog.py validate
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
@@ -121,22 +92,6 @@ jobs:
 
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
-
-      - name: Summarize deferred-work markers
-        continue-on-error: true
-        run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check desktop UserDefaults key ratchet
-        if: needs.changes.outputs.has_desktop_defaults_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
-
-      - name: Check desktop asyncAfter ratchet
-        if: needs.changes.outputs.has_desktop_async_after_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-async-after-ratchet.py
-
-      - name: Check desktop auth session ratchet (INV-AUTH-1)
-        if: needs.changes.outputs.has_desktop_auth_session_ratchet == 'true'
-        run: python3 .github/scripts/check_desktop_auth_session.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
