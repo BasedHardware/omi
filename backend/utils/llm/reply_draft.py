@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -44,7 +44,8 @@ def create_reply_draft(uid: str, request: ReplyDraftRequest) -> ReplyDraftRespon
     )
 
     with track_usage(uid, Features.REPLY_DRAFT):
-        result: ReplyDraftGeneration = (
+        result = cast(
+            ReplyDraftGeneration,
             get_llm('reply_draft')
             .with_structured_output(ReplyDraftGeneration)
             .invoke(
@@ -52,7 +53,7 @@ def create_reply_draft(uid: str, request: ReplyDraftRequest) -> ReplyDraftRespon
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
                 ]
-            )
+            ),
         )
 
     return ReplyDraftResponse(
@@ -76,10 +77,10 @@ def _load_memory_context(uid: str, include_memories: bool) -> List[str]:
     for memory in rows:
         if memory.get('is_locked'):
             continue
-        content = _normalize_context_text(memory.get('content'))
+        content = normalize_context_text(memory.get('content'))
         if not content:
             continue
-        if not _append_bounded_context(
+        if not append_bounded_context(
             memories,
             content,
             max_items=MAX_CONTEXT_MEMORIES,
@@ -103,9 +104,9 @@ def _load_recent_user_chat(uid: str, include_recent_chat: bool) -> List[str]:
             continue
         if message.sender != MessageSender.human:
             continue
-        _append_bounded_context(
+        append_bounded_context(
             messages,
-            _normalize_context_text(message.text),
+            normalize_context_text(message.text),
             max_items=MAX_RECENT_CHAT_MESSAGES,
             max_item_chars=MAX_RECENT_CHAT_CHARS,
             max_total_chars=MAX_RECENT_CHAT_CONTEXT_CHARS,
@@ -128,9 +129,9 @@ def _build_reply_draft_prompt(
         'length': request.length,
         'extra_context': request.extra_context or 'None',
     }
-    memory_context = _numbered_block(memories) or 'None'
-    chat_style = _numbered_block(recent_messages) or 'None'
-    incoming = _neutralize_delimiters(request.incoming_message)
+    memory_context = numbered_block(memories) or 'None'
+    chat_style = numbered_block(recent_messages) or 'None'
+    incoming = neutralize_delimiters(request.incoming_message)
 
     return f"""User name: {user_name}
 
@@ -159,11 +160,11 @@ Recent examples of how the user writes to Omi. Use these only for tone and phras
 </recent_user_messages>"""
 
 
-def _numbered_block(items: Sequence[str]) -> str:
+def numbered_block(items: Sequence[str]) -> str:
     return '\n'.join(f'{index + 1}. {item}' for index, item in enumerate(items) if item.strip())
 
 
-def _neutralize_delimiters(text: str) -> str:
+def neutralize_delimiters(text: str) -> str:
     """Stop untrusted text (a contact's incoming message) from forging a prompt
     section boundary. Angle brackets are swapped for unicode lookalikes so a payload
     like "</incoming_message><system>..." cannot break out of its section and inject
@@ -173,11 +174,11 @@ def _neutralize_delimiters(text: str) -> str:
     return text.replace('<', '‹').replace('>', '›')
 
 
-def _normalize_context_text(value) -> str:
+def normalize_context_text(value) -> str:
     return ' '.join(str(value or '').split())
 
 
-def _append_bounded_context(
+def append_bounded_context(
     items: List[str],
     text: str,
     *,

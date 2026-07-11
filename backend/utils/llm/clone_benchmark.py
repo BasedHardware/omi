@@ -10,7 +10,7 @@ letting go.
 
 import logging
 from statistics import mean
-from typing import List
+from typing import List, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -23,7 +23,7 @@ from models.clone import (
 )
 from utils.llm.clients import get_llm
 from utils.llm.on_behalf import draft_on_behalf_reply
-from utils.llm.reply_draft import _neutralize_delimiters
+from utils.llm.reply_draft import neutralize_delimiters
 from utils.llm.usage_tracker import Features, track_usage
 
 logger = logging.getLogger(__name__)
@@ -83,16 +83,17 @@ def benchmark_clone(uid: str, request: CloneBenchmarkRequest) -> CloneBenchmarkR
 def _judge_match(incoming: str, actual: str, generated: str) -> CloneMatchJudgment:
     # Neutralize delimiters so text in any of the three fields can't inject
     # instructions that skew the match score.
-    incoming = _neutralize_delimiters(incoming)
-    actual = _neutralize_delimiters(actual)
-    generated = _neutralize_delimiters(generated)
+    incoming = neutralize_delimiters(incoming)
+    actual = neutralize_delimiters(actual)
+    generated = neutralize_delimiters(generated)
     prompt = (
         f"Incoming message:\n{incoming}\n\n" f"User's ACTUAL reply:\n{actual}\n\n" f"Clone's DRAFT reply:\n{generated}"
     )
-    return (
+    return cast(
+        CloneMatchJudgment,
         get_llm('reply_draft')
         .with_structured_output(CloneMatchJudgment)
-        .invoke([SystemMessage(content=JUDGE_SYSTEM_PROMPT), HumanMessage(content=prompt)])
+        .invoke([SystemMessage(content=JUDGE_SYSTEM_PROMPT), HumanMessage(content=prompt)]),
     )
 
 

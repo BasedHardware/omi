@@ -10,7 +10,7 @@ This extends the review-first reply-draft primitive (utils/llm/reply_draft.py)
 with contact-thread context, an optional persona voice, and a send decision.
 """
 
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -24,6 +24,7 @@ from models.clone import (
     CloneGeneration,
     CloneReplyRequest,
     CloneReplyResponse,
+    CloneSendAction,
     CloneThreadMessage,
 )
 from utils.clone_policy import (
@@ -38,10 +39,10 @@ from utils.llm.reply_draft import (
     MAX_MEMORY_CHARS,
     MAX_MEMORY_CONTEXT_CHARS,
     MAX_RECENT_CHAT_CHARS,
-    _append_bounded_context,
-    _neutralize_delimiters,
-    _numbered_block,
-    _normalize_context_text,
+    append_bounded_context,
+    neutralize_delimiters,
+    numbered_block,
+    normalize_context_text,
 )
 from utils.llm.usage_tracker import Features, track_usage
 from utils.users import get_user_display_name
@@ -85,10 +86,11 @@ def answer_personal_question(uid: str, request: CloneAskRequest) -> CloneAskResp
     user_name = get_user_display_name(uid, default='the user')
     prompt = _build_ask_prompt(user_name, request.question, memories, persona_prompt)
     with track_usage(uid, Features.REPLY_DRAFT):
-        generation: CloneAskGeneration = (
+        generation = cast(
+            CloneAskGeneration,
             get_llm('reply_draft')
             .with_structured_output(CloneAskGeneration)
-            .invoke([SystemMessage(content=ASK_SYSTEM_PROMPT), HumanMessage(content=prompt)])
+            .invoke([SystemMessage(content=ASK_SYSTEM_PROMPT), HumanMessage(content=prompt)]),
         )
     return CloneAskResponse(
         answer=generation.answer.strip(),
@@ -100,7 +102,7 @@ def answer_personal_question(uid: str, request: CloneAskRequest) -> CloneAskResp
 
 def _build_ask_prompt(user_name: str, question: str, memories: Sequence[str], persona_prompt: Optional[str]) -> str:
     persona_block = persona_prompt if persona_prompt else 'None provided.'
-    memory_context = _numbered_block(list(memories)) or 'None'
+    memory_context = numbered_block(list(memories)) or 'None'
     return f"""User: {user_name}
 
 The user's persona (how they sound):
@@ -115,7 +117,7 @@ Relevant things Omi knows about the user:
 
 Personal question to answer as the user:
 <question>
-{_neutralize_delimiters(question)}
+{neutralize_delimiters(question)}
 </question>"""
 
 
@@ -134,7 +136,8 @@ def draft_on_behalf_reply(uid: str, request: CloneReplyRequest) -> CloneReplyRes
     )
 
     with track_usage(uid, Features.REPLY_DRAFT):
-        generation: CloneGeneration = (
+        generation = cast(
+            CloneGeneration,
             get_llm('reply_draft')
             .with_structured_output(CloneGeneration)
             .invoke(
@@ -142,7 +145,7 @@ def draft_on_behalf_reply(uid: str, request: CloneReplyRequest) -> CloneReplyRes
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
                 ]
-            )
+            ),
         )
 
     draft = generation.draft.strip()
@@ -171,7 +174,7 @@ def draft_on_behalf_reply(uid: str, request: CloneReplyRequest) -> CloneReplyRes
         draft=draft,
         alternatives=alternatives,
         confidence=confidence,
-        action=decision.action,
+        action=cast(CloneSendAction, decision.action),
         action_reason=decision.reason,
         needs_review=not decision.will_send,
         safety_notes=safety_notes,
@@ -197,7 +200,7 @@ def _policy_from_request(request: CloneReplyRequest) -> SendPolicy:
 def _bounded_thread(thread: Sequence[CloneThreadMessage]) -> List[CloneThreadMessage]:
     trimmed: List[CloneThreadMessage] = []
     for message in list(thread)[-MAX_THREAD_MESSAGES:]:
-        text = _normalize_context_text(message.text)
+        text = normalize_context_text(message.text)
         if not text:
             continue
         if len(text) > MAX_RECENT_CHAT_CHARS:
@@ -223,7 +226,7 @@ def _load_relevant_memories(uid: str, query: str, include_memories: bool) -> Lis
     for index, memory in enumerate(rows):
         if memory.get('is_locked'):
             continue
-        content = _normalize_context_text(memory.get('content'))
+        content = normalize_context_text(memory.get('content'))
         if not content:
             continue
         relevance = len(query_tokens & _tokenize(content))
@@ -232,7 +235,7 @@ def _load_relevant_memories(uid: str, query: str, include_memories: bool) -> Lis
     scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
     memories: List[str] = []
     for _relevance, _recency, content in scored:
-        if not _append_bounded_context(
+        if not append_bounded_context(
             memories,
             content,
             max_items=MAX_CONTEXT_MEMORIES,
@@ -266,7 +269,7 @@ def _thread_block(thread: Sequence[CloneThreadMessage], user_name: str, contact_
     lines: List[str] = []
     for message in thread:
         speaker = user_name if message.sender == 'me' else contact_name
-        lines.append(f'{speaker}: {_neutralize_delimiters(message.text)}')
+        lines.append(f'{speaker}: {neutralize_delimiters(message.text)}')
     return '\n'.join(lines)
 
 
@@ -281,7 +284,7 @@ def _build_clone_prompt(
     persona_block = (
         persona_prompt if persona_prompt else 'None provided. Infer the user\'s voice from the memories and thread.'
     )
-    memory_context = _numbered_block(list(memories)) or 'None'
+    memory_context = numbered_block(list(memories)) or 'None'
     thread_context = _thread_block(thread, user_name=user_name, contact_name=contact_name)
 
     return f"""User name: {user_name}
@@ -308,5 +311,5 @@ Recent conversation with {contact_name} (oldest first):
 
 The new incoming message from {contact_name} to respond to:
 <incoming_message>
-{_neutralize_delimiters(request.incoming_message)}
+{neutralize_delimiters(request.incoming_message)}
 </incoming_message>"""
