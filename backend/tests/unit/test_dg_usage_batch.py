@@ -4,10 +4,65 @@ Verifies that record_dg_usage_ms is batched every 60s instead of per-chunk,
 reducing Redis ops from ~100/sec/session to ~0.03/sec/session.
 """
 
-import re
 import os
+import re
+from pathlib import Path
+from types import ModuleType
+from typing import Iterator
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _module(name: str, **attributes: object) -> ModuleType:
+    module = ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    return module
+
+
+class _SoftCapTrigger:
+    DAILY = 'daily'
+    THREE_DAY = 'three_day'
+    WEEKLY = 'weekly'
+
+
+@pytest.fixture
+def fair_use() -> Iterator[ModuleType]:
+    redis_client = MagicMock()
+
+    async def run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    stubs = {
+        'database.fair_use': AutoMockModule('database.fair_use'),
+        'database.users': AutoMockModule('database.users'),
+        'database.redis_db': _module('database.redis_db', r=redis_client),
+        'models.fair_use': _module('models.fair_use', SoftCapTrigger=_SoftCapTrigger),
+        'utils.subscription': _module(
+            'utils.subscription',
+            has_transcription_credits=MagicMock(return_value=True),
+            is_paid_plan=MagicMock(return_value=False),
+        ),
+        'utils.executors': _module(
+            'utils.executors',
+            db_executor=object(),
+            postprocess_executor=object(),
+            run_blocking=run_blocking,
+        ),
+        'utils.llm.fair_use_classifier': _module(
+            'utils.llm.fair_use_classifier',
+            classify_user_purpose=MagicMock(),
+        ),
+        'utils.notifications': _module('utils.notifications', send_notification=MagicMock()),
+    }
+
+    with stub_modules(stubs):
+        yield load_module_fresh('utils.fair_use', str(BACKEND_DIR / 'utils' / 'fair_use.py'))
 
 
 def _read_transcribe_source():
@@ -64,95 +119,53 @@ class TestDgUsageBatchingStructure:
 class TestDgUsageBatchingBehavior:
     """Test the record_dg_usage_ms function handles batched input correctly."""
 
-    def setup_method(self):
-        import sys
-        from types import ModuleType
-        from unittest.mock import MagicMock
-
-        for mod_name in [
-            'database._client',
-            'database.redis_db',
-            'database.fair_use',
-            'database.users',
-            'database.user_usage',
-            'database.conversations',
-            'firebase_admin',
-            'firebase_admin.auth',
-            'firebase_admin.messaging',
-        ]:
-            if mod_name not in sys.modules:
-                sys.modules[mod_name] = ModuleType(mod_name)
-
-        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
-        sys.modules['database._client'].db = MagicMock()
-        sys.modules['database.redis_db'].r = MagicMock()
-
-        os.environ.setdefault('FAIR_USE_ENABLED', 'true')
-        os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-key-that-is-long-enough-for-encryption-32ch')
-
-    def test_batched_60s_single_redis_write(self):
+    def test_batched_60s_single_redis_write(self, fair_use):
         """60s of accumulated chunks should produce a single Redis pipeline."""
-        from unittest.mock import MagicMock, patch
-
-        import utils.fair_use as fu
-
-        fu.redis_client = MagicMock()
         pipe = MagicMock()
-        fu.redis_client.pipeline.return_value = pipe
+        fair_use.redis_client.pipeline.return_value = pipe
 
-        with patch.object(fu, 'FAIR_USE_ENABLED', True), patch.object(fu, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000):
+        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
+            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        ):
             # Simulate 60s of audio: 50 chunks/sec × 60s × 20ms = 60000ms
             total_ms = 60000
-            fu.record_dg_usage_ms('user1', total_ms)
+            fair_use.record_dg_usage_ms('user1', total_ms)
 
         # Single pipeline call with single INCRBY
-        fu.redis_client.pipeline.assert_called_once()
+        fair_use.redis_client.pipeline.assert_called_once()
         pipe.incrby.assert_called_once()
         call_args = pipe.incrby.call_args
         assert total_ms in call_args[0] or total_ms in call_args[1].values()
 
-    def test_large_accumulation_no_overflow(self):
+    def test_large_accumulation_no_overflow(self, fair_use):
         """24h of continuous audio should not overflow Python int."""
-        from unittest.mock import MagicMock, patch
-
-        import utils.fair_use as fu
-
-        fu.redis_client = MagicMock()
         pipe = MagicMock()
-        fu.redis_client.pipeline.return_value = pipe
+        fair_use.redis_client.pipeline.return_value = pipe
 
-        with patch.object(fu, 'FAIR_USE_ENABLED', True), patch.object(fu, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000):
+        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
+            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        ):
             # 24h of audio = 86,400,000 ms — well within Python int range
             total_ms = 86_400_000
-            fu.record_dg_usage_ms('user1', total_ms)
+            fair_use.record_dg_usage_ms('user1', total_ms)
 
         pipe.incrby.assert_called_once()
 
-    def test_disabled_skips_redis(self):
+    def test_disabled_skips_redis(self, fair_use):
         """When FAIR_USE_ENABLED is False, no Redis calls."""
-        from unittest.mock import MagicMock, patch
+        with patch.object(fair_use, 'FAIR_USE_ENABLED', False):
+            fair_use.record_dg_usage_ms('user1', 60000)
 
-        import utils.fair_use as fu
+        fair_use.redis_client.pipeline.assert_not_called()
 
-        fu.redis_client = MagicMock()
-
-        with patch.object(fu, 'FAIR_USE_ENABLED', False):
-            fu.record_dg_usage_ms('user1', 60000)
-
-        fu.redis_client.pipeline.assert_not_called()
-
-    def test_zero_ms_skips_redis(self):
+    def test_zero_ms_skips_redis(self, fair_use):
         """Zero ms should not trigger Redis write."""
-        from unittest.mock import MagicMock, patch
+        with patch.object(fair_use, 'FAIR_USE_ENABLED', True), patch.object(
+            fair_use, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000
+        ):
+            fair_use.record_dg_usage_ms('user1', 0)
 
-        import utils.fair_use as fu
-
-        fu.redis_client = MagicMock()
-
-        with patch.object(fu, 'FAIR_USE_ENABLED', True), patch.object(fu, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000):
-            fu.record_dg_usage_ms('user1', 0)
-
-        fu.redis_client.pipeline.assert_not_called()
+        fair_use.redis_client.pipeline.assert_not_called()
 
 
 class TestRedisOpsReduction:

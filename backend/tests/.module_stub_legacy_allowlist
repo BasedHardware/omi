@@ -64,7 +64,6 @@ backend/tests/unit/test_memory_imports.py
 backend/tests/unit/test_new_usage_tracking_gaps.py
 backend/tests/unit/test_oauth_callback_uid_guard.py
 backend/tests/unit/test_omi_qos_tiers.py
-backend/tests/unit/test_realtime_integrations_usage_tracking.py
 backend/tests/unit/test_resample_pcm_divzero.py
 backend/tests/unit/test_speech_profile_wav_decode.py
 backend/tests/unit/test_sync_file_paths_filename_none.py

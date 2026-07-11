@@ -156,6 +156,18 @@ def test_no_preference_detect_language(chat, monkeypatch):
     assert language == "multi"
 
 
+def test_prepare_voice_message_url_signs_and_schedules_same_path(chat, monkeypatch):
+    signed_url = "https://signed.test/audio"
+    sign = MagicMock(return_value=signed_url)
+    schedule_cleanup = MagicMock()
+    monkeypatch.setattr(chat, "get_syncing_file_temporal_signed_url", sign)
+    monkeypatch.setattr(chat, "schedule_syncing_temporal_file_deletion", schedule_cleanup)
+
+    assert chat._prepare_voice_message_url("audio.wav") == signed_url
+    sign.assert_called_once_with("audio.wav")
+    schedule_cleanup.assert_called_once_with("audio.wav")
+
+
 @pytest.mark.asyncio
 async def test_stream_routes_storage_and_transcription_to_owned_executors(chat, monkeypatch):
     calls = []
