@@ -13,7 +13,7 @@ Result ids are namespaced (``memory:<id>`` / ``conversation:<id>``) so ``fetch``
 knows which store to read.
 """
 
-from typing import List, Optional
+from typing import List
 
 import database.conversations as conversations_db
 import database.memories as memories_db
@@ -96,7 +96,7 @@ def _memory_visible(mem: dict) -> bool:
 def _search_memories(uid: str, query: str, limit: int) -> List[dict]:
     fetch_limit = min(limit * 3, 60)
     matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
-    memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
+    memory_ids = [str(m.get("memory_id")) for m in matches if m.get("memory_id")]
     if not memory_ids:
         return []
     score_map = {m.get("memory_id"): m.get("score", 0) for m in matches if m.get("memory_id")}
@@ -106,7 +106,7 @@ def _search_memories(uid: str, query: str, limit: int) -> List[dict]:
         # Mirror search_memories: never surface rejected, locked, or superseded facts.
         if not _memory_visible(mem) or mem.get("is_locked", False):
             continue
-        mem_id = mem.get("id")
+        mem_id = str(mem.get("id") or "")
         content = mem.get("content", "") or ""
         results.append(
             {
@@ -186,7 +186,7 @@ def search(uid: str, query: str, limit=None) -> dict:
 
     Returns the ChatGPT connector shape: ``{"results": [{id, title, url, text}, ...]}``.
     """
-    if not isinstance(query, str) or not query.strip():
+    if not query.strip():
         raise InvalidRequest("query is required")
     query = query.strip()
     limit = _clamp_limit(limit)
@@ -200,7 +200,7 @@ def fetch(uid: str, item_id: str) -> dict:
 
     Returns the ChatGPT connector shape: ``{id, title, text, url, metadata}``.
     """
-    if not isinstance(item_id, str) or not item_id.strip():
+    if not item_id.strip():
         raise InvalidRequest("id is required")
     item_id = item_id.strip()
 
