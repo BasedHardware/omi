@@ -200,7 +200,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     do {
       mcpKey = try await MemoryExportService.shared.ensureMCPKey()
     } catch {
-      errorMessage = "Couldn't create an MCP key: \(error.localizedDescription)"
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
     }
   }
 
@@ -216,7 +216,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       mcpKey = key
       statusMessage = "New key created. Copy the prompt again when you're ready."
     } catch {
-      errorMessage = "Couldn't create a new connection key: \(error.localizedDescription)"
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
     }
   }
 
@@ -235,7 +235,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         localToken: localToken)
       statusMessage = result.summary
     } catch {
-      errorMessage = "Omi couldn't test the connection: \(error.localizedDescription)"
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
     }
   }
 
@@ -265,7 +265,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         "Prompt copied. Only share it with an agent you trust; it includes Omi access keys."
       return await MemoryExportService.shared.status(for: .agents)
     } catch {
-      errorMessage = "Couldn't create the prompt: \(error.localizedDescription)"
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
       return nil
     }
   }
@@ -297,7 +297,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         statusMessage = outcome.taskTitle
       }
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
     }
   }
 
@@ -353,7 +353,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
       return await MemoryExportService.shared.status(for: destination)
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryExport)
       return nil
     }
   }

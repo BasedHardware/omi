@@ -292,7 +292,10 @@ extension AppState {
         source: recordingConversationSource.rawValue,
         stage: "startup"
       )
-      showAlert(title: "Transcription Error", message: error.localizedDescription)
+      showAlert(
+        title: "Couldn't Start Transcription",
+        message: UserFacingErrorPresentation.message(for: error, while: .transcription)
+      )
     }
   }
 

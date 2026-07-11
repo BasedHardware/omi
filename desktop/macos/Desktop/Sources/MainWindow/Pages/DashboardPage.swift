@@ -1816,11 +1816,32 @@ struct DashboardPage: View {
     @ViewBuilder
     private var dashboardIntelligenceError: some View {
         if let error = intelligenceStore.error, !error.isEmpty {
-            Text(error)
-                .scaledFont(size: 10)
-                .foregroundColor(OmiColors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("dashboard-intelligence-error")
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.warning)
+                Text(error)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textSecondary)
+                Spacer(minLength: 8)
+                Button("Retry") {
+                    Task { await intelligenceStore.load() }
+                }
+                .buttonStyle(.plain)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(OmiColors.backgroundSecondary.opacity(0.88))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
+            )
+            .accessibilityIdentifier("dashboard-intelligence-error")
         }
     }
 

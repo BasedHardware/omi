@@ -1857,7 +1857,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         sessions = []
-        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load chats. Check your connection and try again."
+        sessionsLoadError = lastError.map {
+          UserFacingErrorPresentation.message(for: $0, while: .chatSessions)
+        } ?? "Couldn't load chats. Check your connection and try again."
     }
 
     /// Toggle the starred filter and reload sessions
@@ -2911,7 +2913,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         messages = []
         resetMessagesPagination()
-        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
+        sessionsLoadError = lastError.map {
+          UserFacingErrorPresentation.message(for: $0, while: .chatSessions)
+        } ?? "Couldn't load chats. Check your connection and try again."
         isLoading = false
     }
 

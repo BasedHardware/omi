@@ -686,7 +686,7 @@ class AuthService {
             log("OMI AUTH LOCAL: signed in via emulator REST as \(email) uid=\(tokens.localId) user=\(selectedUser)")
         } catch {
             logError("OMI AUTH LOCAL: sign-in failed for \(email)", error: error)
-            self.error = "Local Auth emulator sign-in failed for \(email): \(error.localizedDescription)"
+            self.error = UserFacingErrorPresentation.message(for: error, while: .signIn)
             AuthState.shared.transition(to: .recoveryRequired)
         }
     }
@@ -1352,7 +1352,7 @@ class AuthService {
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
-            self.error = error.localizedDescription
+            self.error = UserFacingErrorPresentation.message(for: error, while: .signIn)
             throw error
         }
     }
