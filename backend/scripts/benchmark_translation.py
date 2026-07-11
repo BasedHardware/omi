@@ -107,7 +107,11 @@ def load_wmt_data(target_lang: str, max_samples: int = 0) -> Optional[Tuple[List
     Returns (source_sentences, reference_sentences) or None if unavailable.
     No authentication required — sacrebleu downloads data on demand.
     """
-    import sacrebleu
+    try:
+        import sacrebleu
+    except ImportError:
+        logger.error("sacrebleu not installed: pip install sacrebleu")
+        return None
 
     if target_lang not in WMT_LANGPAIR_MAP:
         return None
