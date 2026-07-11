@@ -58,6 +58,10 @@ _parakeet_languages = {
 # ---------------------------------------------------------------------------
 
 
+class PrerecordedSTTConfigurationError(RuntimeError):
+    """Raised when the selected prerecorded STT provider lacks required runtime configuration."""
+
+
 class PrerecordedSTTProvider(ABC):
 
     @abstractmethod
@@ -755,7 +759,9 @@ def parakeet_prerecorded_from_bytes(
 
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
-        raise ValueError('HOSTED_PARAKEET_API_URL environment variable is not set')
+        raise PrerecordedSTTConfigurationError(
+            'HOSTED_PARAKEET_API_URL is required when prerecorded STT selects parakeet'
+        )
 
     try:
         if encoding:

@@ -116,6 +116,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
         errors.extend(
@@ -234,6 +235,47 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     if entry is None or 'value' not in entry:
         return None
     return str(entry['value'])
+
+
+def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require a Parakeet endpoint anywhere the prerecorded model can select Parakeet."""
+    errors: list[ValidationError] = []
+    surfaces: list[tuple[str, ConfigDict, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/gke/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                {},
+            )
+        )
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    for service, raw_service in (_as_config_dict(cloud_run.get('services')) or {}).items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/cloud_run/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                _as_config_dict(service_config.get('secrets')) or {},
+            )
+        )
+
+    for scope, env_map, secrets_map in surfaces:
+        if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
+            continue
+        endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
+        if not endpoint:
+            errors.append(
+                ValidationError(
+                    scope,
+                    'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+                )
+            )
+    return errors
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:

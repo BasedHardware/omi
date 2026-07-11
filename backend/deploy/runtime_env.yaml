@@ -20,6 +20,13 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          STT_PRERECORDED_MODEL:
+            secret:
+              name: dev-omi-backend-secrets
+              key: STT_PRERECORDED_MODEL
+          HOSTED_PARAKEET_API_URL:
+            value: http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080
+            category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
@@ -93,6 +100,9 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -160,6 +170,9 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
               version: latest
         backend-sync:
           env:
@@ -168,6 +181,9 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -235,6 +251,9 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
               version: latest
         backend-integration:
           env:
@@ -243,6 +262,9 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -310,6 +332,9 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
               version: latest
       jobs:
         notifications-job:
