@@ -2083,6 +2083,38 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    /// A floating panel can move between displays when macOS changes Spaces or
+    /// reassigns windows, without emitting a display-configuration change. Keep
+    /// the SwiftUI presentation flag and frame in lockstep with the panel's
+    /// actual screen so an idle bar cannot render as the legacy pill inside a
+    /// notch-sized window (which is visually hidden by the camera housing).
+    func windowDidChangeScreen(_ notification: Notification) {
+        guard !isUserDragging, let screen = screenForPlacement else { return }
+
+        let previousUsesNotchIsland = state.usesNotchIsland
+        updateNotchIslandState()
+
+        // An open chat owns its user-resizable response dimensions. Updating
+        // the render mode is sufficient here; rebuilding its frame from the
+        // compact-bar defaults would discard that size (and can double-count
+        // an active voice-response glow).
+        guard !state.showingAIConversation else { return }
+
+        let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
+        let requiresFrameRefresh = !Self.framesEquivalent(frame, targetFrame)
+        guard previousUsesNotchIsland != state.usesNotchIsland || requiresFrameRefresh else { return }
+
+        resizeToFrame(
+            targetFrame,
+            makeResizable: state.showingAIConversation && state.showingAIResponse,
+            animated: false
+        )
+        log(
+            "FloatingControlBarWindow: reconciled screen change to \(screen.localizedName) "
+                + "usesNotch=\(state.usesNotchIsland)"
+        )
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         // Only dismiss when the user physically clicks away.
         // Programmatic focus changes — e.g. the AI agent activating a browser
