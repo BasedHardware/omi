@@ -76,6 +76,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/paypal',
     '/v1/persons',
     '/v1/phone',
+    '/v1/reply-drafts',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',

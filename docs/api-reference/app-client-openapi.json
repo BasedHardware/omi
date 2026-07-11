@@ -15816,6 +15816,171 @@
         "title": "ReorderFoldersRequest",
         "type": "object"
       },
+      "ReplyDraftContextSummary": {
+        "properties": {
+          "memories_used": {
+            "title": "Memories Used",
+            "type": "integer"
+          },
+          "recent_chat_messages_used": {
+            "title": "Recent Chat Messages Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memories_used",
+          "recent_chat_messages_used"
+        ],
+        "title": "ReplyDraftContextSummary",
+        "type": "object"
+      },
+      "ReplyDraftRequest": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "extra_context": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Context"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "maxLength": 800,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "include_memories": {
+            "default": true,
+            "title": "Include Memories",
+            "type": "boolean"
+          },
+          "include_recent_chat": {
+            "default": true,
+            "title": "Include Recent Chat",
+            "type": "boolean"
+          },
+          "incoming_message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Incoming Message",
+            "type": "string"
+          },
+          "length": {
+            "default": "medium",
+            "enum": [
+              "short",
+              "medium",
+              "long"
+            ],
+            "title": "Length",
+            "type": "string"
+          },
+          "recipient_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Name"
+          },
+          "relationship": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relationship"
+          },
+          "tone": {
+            "default": "natural",
+            "enum": [
+              "natural",
+              "warm",
+              "brief",
+              "professional",
+              "playful"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incoming_message"
+        ],
+        "title": "ReplyDraftRequest",
+        "type": "object"
+      },
+      "ReplyDraftResponse": {
+        "properties": {
+          "alternatives": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "draft": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Draft",
+            "type": "string"
+          },
+          "needs_review": {
+            "default": true,
+            "title": "Needs Review",
+            "type": "boolean"
+          },
+          "safety_notes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Safety Notes",
+            "type": "array"
+          },
+          "used_context": {
+            "$ref": "#/components/schemas/ReplyDraftContextSummary"
+          }
+        },
+        "required": [
+          "draft",
+          "used_context"
+        ],
+        "title": "ReplyDraftResponse",
+        "type": "object"
+      },
       "ReplyToReviewRequest": {
         "properties": {
           "response": {
@@ -42262,6 +42427,93 @@
         "summary": "Twiml Voice Webhook",
         "tags": [
           "phone-calls"
+        ]
+      }
+    },
+    "/v1/reply-drafts": {
+      "post": {
+        "operationId": "draft_reply_v1_reply_drafts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplyDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Draft Reply",
+        "tags": [
+          "chat"
         ]
       }
     },

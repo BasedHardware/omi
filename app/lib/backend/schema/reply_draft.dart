@@ -1,3 +1,11 @@
+import 'package:omi/backend/schema/gen/reply_drafts_wire.g.dart' as wire;
+
+// Hand surface over the generated wire DTOs (reply_drafts_wire.g.dart). The wire
+// types own JSON decoding/encoding; these adapters keep the app-facing shape the
+// UI depends on (non-null alternatives/safety notes, draft validation, and request
+// trimming) while delegating parsing to the generated code, so this file stays
+// generated-backed against the app-client OpenAPI contract.
+
 class ReplyDraftRequest {
   final String incomingMessage;
   final String? recipientName;
@@ -48,12 +56,15 @@ class ReplyDraftContextSummary {
     required this.recentChatMessagesUsed,
   });
 
-  factory ReplyDraftContextSummary.fromJson(Map<String, dynamic> json) {
+  factory ReplyDraftContextSummary.fromGenerated(wire.GeneratedReplyDraftContextSummary g) {
     return ReplyDraftContextSummary(
-      memoriesUsed: json['memories_used'] ?? 0,
-      recentChatMessagesUsed: json['recent_chat_messages_used'] ?? 0,
+      memoriesUsed: g.memoriesUsed,
+      recentChatMessagesUsed: g.recentChatMessagesUsed,
     );
   }
+
+  factory ReplyDraftContextSummary.fromJson(Map<String, dynamic> json) =>
+      ReplyDraftContextSummary.fromGenerated(wire.GeneratedReplyDraftContextSummary.fromJson(json));
 }
 
 class ReplyDraftResponse {
@@ -71,20 +82,26 @@ class ReplyDraftResponse {
     required this.usedContext,
   });
 
+  factory ReplyDraftResponse.fromGenerated(wire.GeneratedReplyDraftResponse g) {
+    if (g.draft.trim().isEmpty) {
+      throw const FormatException('Reply draft response is missing a draft.');
+    }
+    return ReplyDraftResponse(
+      draft: g.draft.trim(),
+      alternatives: (g.alternatives ?? const <String>[]).map((item) => item.toString()).toList(),
+      needsReview: g.needsReview,
+      safetyNotes: (g.safetyNotes ?? const <String>[]).map((item) => item.toString()).toList(),
+      usedContext: ReplyDraftContextSummary.fromGenerated(g.usedContext),
+    );
+  }
+
   factory ReplyDraftResponse.fromJson(Map<String, dynamic> json) {
+    // Preserve the app-facing contract: a missing or blank draft is a hard error,
+    // validated before delegating the full parse to the generated wire decoder.
     final draft = json['draft'];
     if (draft is! String || draft.trim().isEmpty) {
       throw const FormatException('Reply draft response is missing a draft.');
     }
-
-    return ReplyDraftResponse(
-      draft: draft.trim(),
-      alternatives: ((json['alternatives'] ?? []) as List).map((item) => item.toString()).toList(),
-      needsReview: json['needs_review'] ?? true,
-      safetyNotes: ((json['safety_notes'] ?? []) as List).map((item) => item.toString()).toList(),
-      usedContext: ReplyDraftContextSummary.fromJson(
-        json['used_context'] ?? {},
-      ),
-    );
+    return ReplyDraftResponse.fromGenerated(wire.GeneratedReplyDraftResponse.fromJson(json));
   }
 }

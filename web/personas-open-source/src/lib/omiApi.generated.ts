@@ -2607,6 +2607,32 @@ export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
 
+export interface ReplyDraftContextSummary {
+  memories_used: number;
+  recent_chat_messages_used: number;
+}
+
+export interface ReplyDraftRequest {
+  channel?: string | null;
+  extra_context?: string | null;
+  goal?: string | null;
+  include_memories?: boolean;
+  include_recent_chat?: boolean;
+  incoming_message: string;
+  length?: "short" | "medium" | "long";
+  recipient_name?: string | null;
+  relationship?: string | null;
+  tone?: "natural" | "warm" | "brief" | "professional" | "playful";
+}
+
+export interface ReplyDraftResponse {
+  alternatives?: Array<string>;
+  draft: string;
+  needs_review?: boolean;
+  safety_notes?: Array<string>;
+  used_context: ReplyDraftContextSummary;
+}
+
 export interface ReplyToReviewRequest {
   response: string;
   reviewer_uid: string;
@@ -4011,6 +4037,9 @@ export interface OmiApiSchemas {
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
   "ReorderFoldersRequest": ReorderFoldersRequest;
+  "ReplyDraftContextSummary": ReplyDraftContextSummary;
+  "ReplyDraftRequest": ReplyDraftRequest;
+  "ReplyDraftResponse": ReplyDraftResponse;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
   "ReviewAppRequest": ReviewAppRequest;
@@ -6543,6 +6572,16 @@ export interface OmiApiPaths {
       responses: {
         "200": void;
         "401": void;
+      };
+    };
+  };
+  "/v1/reply-drafts": {
+    post: {
+      operationId: "draft_reply_v1_reply_drafts_post";
+      responses: {
+        "200": ReplyDraftResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -12552,6 +12591,27 @@ export async function twiml_voice_webhook_v1_phone_twiml_post(init?: OmiApiClien
   return;
 }
 
+export async function draft_reply_v1_reply_drafts_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ReplyDraftRequest, init?: OmiApiClientInit): Promise<ReplyDraftResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/reply-drafts`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_connect_account_endpoint_v1_stripe_connect_accounts_post(query: { country?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<StripeConnectAccountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/stripe/connect-accounts`;
@@ -15430,4 +15490,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 379 client methods generated.
+// Total: 380 client methods generated.
