@@ -254,7 +254,29 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
-    for service, raw_service in (_as_config_dict(cloud_run.get('services')) or {}).items():
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    required_cloud_run_scopes: set[str] = set()
+    if env == 'dev':
+        for service in ('backend', 'backend-sync', 'backend-integration'):
+            if service not in cloud_run_services:
+                continue
+            scope = f'{env}/cloud_run/{service}'
+            required_cloud_run_scopes.add(scope)
+            service_config = _as_config_dict(cloud_run_services.get(service)) or {}
+            env_map = _as_config_dict(service_config.get('env')) or {}
+            secrets_map = _as_config_dict(service_config.get('secrets')) or {}
+            if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
+                errors.append(ValidationError(scope, 'required Cloud Run service is missing STT_PRERECORDED_MODEL'))
+            endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
+            if not endpoint:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+                    )
+                )
+
+    for service, raw_service in cloud_run_services.items():
         service_config = _as_config_dict(raw_service) or {}
         surfaces.append(
             (
@@ -265,6 +287,8 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
+        if scope in required_cloud_run_scopes:
+            continue
         if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
             continue
         endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
