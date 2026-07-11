@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Security
 
 struct BrowserGoogleSession: Equatable {
   let browserName: String
@@ -208,13 +209,27 @@ struct BrowserGoogleSession: Equatable {
   }
 }
 
-/// Settled browser Safe Storage strategy for Chromium cookie scraping.
+/// Browser Safe Storage strategy for Chromium cookie scraping.
 ///
-/// We use `/usr/bin/security find-generic-password -w` instead of
-/// `SecItemCopyMatching` because the CLI path matches the browser-created
-/// generic-password item and lets macOS remember the user's "Always Allow"
-/// decision. The in-memory cache coalesces concurrent reads during this app run;
-/// we do not duplicate browser Safe Storage secrets into app preferences.
+/// Primary path: read the browser-created generic-password item in-process via
+/// `SecItemCopyMatching`. macOS attributes the keychain prompt to the *requesting
+/// process*, so the in-process read shows "<this app> wants to access …" — the app
+/// identity the user must recognize before granting — instead of "security wants to
+/// access …" (which is what shelling out to `/usr/bin/security` produced).
+///
+/// Fallback path: the legacy `/usr/bin/security find-generic-password -w` CLI, kept
+/// for environments where the in-process read cannot complete for an environmental
+/// reason (e.g. no interaction allowed on a background thread). We never fall back
+/// after the user actively denies the in-process prompt, so there is no double-prompt.
+///
+/// NOTE: neither path makes "Always Allow" durably persist. The Safe Storage item is
+/// owned by the browser and its ACL partition list is pinned to the browser's Team ID,
+/// so macOS may re-prompt a third-party reader on each launch regardless of the API
+/// used — this is a browser/OS ACL limitation, not a bug here (see
+/// mostlikelee.com "Scripting the macOS Keychain – Partition IDs"). The durable fix is
+/// OAuth-backed providers. The in-memory cache below only coalesces concurrent reads
+/// within a single app run; we do not duplicate browser Safe Storage secrets into app
+/// preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
 
@@ -233,23 +248,79 @@ final class BrowserKeychainCache: @unchecked Sendable {
 
   func password(for service: String) -> String? {
     password(for: service) {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-      process.arguments = ["find-generic-password", "-s", service, "-w"]
-      let pipe = Pipe()
-      let errPipe = Pipe()
-      process.standardOutput = pipe
-      process.standardError = errPipe
-      do {
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        return output?.isEmpty == false ? output : nil
-      } catch {
-        return nil
-      }
+      // Primary: in-process read so the OS attributes the prompt to this signed app.
+      let (nativePassword, status) = Self.nativeSafeStoragePassword(for: service)
+      if let nativePassword { return nativePassword }
+
+      // Only fall back to the legacy `/usr/bin/security` CLI when the in-process read
+      // could not complete for an environmental reason (see shouldFallBackToLegacyCLI).
+      guard Self.shouldFallBackToLegacyCLI(afterNativeReadStatus: status) else { return nil }
+      return Self.securityCLIPassword(for: service)
+    }
+  }
+
+  /// Whether a nil in-process read should retry through the legacy `/usr/bin/security`
+  /// CLI. We fall back ONLY for environmental failures (e.g. `errSecInteractionNotAllowed`
+  /// on a background thread, `errSecNotAvailable`). We do NOT fall back when:
+  ///   - the read already succeeded (`errSecSuccess`, e.g. empty/undecodable data),
+  ///   - the user actively denied the prompt (`errSecUserCanceled`, `errSecAuthFailed`) —
+  ///     retrying would surface a second, worse-looking "security wants to access" dialog,
+  ///   - the item is absent (`errSecItemNotFound`) — there is no browser session to read.
+  ///
+  /// Pure and version-agnostic (a switch over `OSStatus`), so the behavior is identical on
+  /// every supported macOS version and is unit-testable without touching the real Keychain.
+  static func shouldFallBackToLegacyCLI(afterNativeReadStatus status: OSStatus) -> Bool {
+    switch status {
+    case errSecSuccess, errSecUserCanceled, errSecAuthFailed, errSecItemNotFound:
+      return false
+    default:
+      return true
+    }
+  }
+
+  /// Reads the browser Safe Storage key in-process via the Security framework.
+  /// The keychain prompt is attributed to this app bundle, not `/usr/bin/security`.
+  /// Returns the decoded password (if any) and the raw `OSStatus` so the caller can
+  /// decide whether an environmental failure warrants the legacy CLI fallback.
+  private static func nativeSafeStoragePassword(for service: String) -> (password: String?, status: OSStatus) {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess,
+      let data = item as? Data,
+      let password = String(data: data, encoding: .utf8),
+      !password.isEmpty
+    else {
+      return (nil, status)
+    }
+    return (password, status)
+  }
+
+  /// Legacy fallback: shells out to `/usr/bin/security`. Retained for resilience when
+  /// the in-process read cannot complete. Note the OS attributes this prompt to
+  /// "security", not this app — this is the fallback, not the primary path.
+  private static func securityCLIPassword(for service: String) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+    process.arguments = ["find-generic-password", "-s", service, "-w"]
+    let pipe = Pipe()
+    let errPipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = errPipe
+    do {
+      try process.run()
+      process.waitUntilExit()
+      guard process.terminationStatus == 0 else { return nil }
+      let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return output?.isEmpty == false ? output : nil
+    } catch {
+      return nil
     }
   }
 
