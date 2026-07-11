@@ -1,7 +1,17 @@
 import Foundation
 import Combine
 
-/// Manages Claude Code agent sessions for code-related tasks
+/// Manages Claude Code agent sessions for code-related tasks.
+///
+/// Isolated to `@MainActor`: `activeSessions` (`@Published`, drives SwiftUI) and
+/// `pollingTasks` were previously mutated on the main actor but READ off-main from
+/// the background polling `Task`, an unsynchronized `Dictionary` data race that
+/// could crash when Stop/restart removed an entry while a poll read it. Making the
+/// whole type main-actor-isolated gives both collections a single executor. The
+/// blocking `tmux`/`Process` helpers are marked `nonisolated` and their call sites
+/// hop off-main (`Task.detached`) so the subprocess `waitUntilExit()` never blocks
+/// the main thread.
+@MainActor
 class TaskAgentManager: ObservableObject {
     static let shared = TaskAgentManager()
 
@@ -132,7 +142,9 @@ class TaskAgentManager: ObservableObject {
             return
         }
         logMessage("TaskAgentManager: Opening terminal for \(session.sessionName)")
-        openTmuxSessionInTerminal(sessionName: session.sessionName)
+        // Runs blocking Process work — hop off the main actor.
+        let sessionName = session.sessionName
+        Task.detached { self.openTmuxSessionInTerminal(sessionName: sessionName) }
     }
 
     /// Update prompt and restart agent
@@ -146,8 +158,8 @@ class TaskAgentManager: ObservableObject {
         pollingTasks[taskId]?.cancel()
         pollingTasks[taskId] = nil
 
-        // Kill existing session
-        killTmuxSession(sessionName: sessionName)
+        // Kill existing session off the main actor.
+        await Task.detached { self.killTmuxSession(sessionName: sessionName) }.value
 
         // Update session directly in activeSessions
         await MainActor.run {
@@ -181,8 +193,9 @@ class TaskAgentManager: ObservableObject {
         pollingTasks[taskId]?.cancel()
         pollingTasks[taskId] = nil
 
-        // Kill tmux session
-        killTmuxSession(sessionName: session.sessionName)
+        // Kill tmux session off the main actor (best-effort, fire-and-forget).
+        let sessionName = session.sessionName
+        Task.detached { self.killTmuxSession(sessionName: sessionName) }
 
         // Remove from active sessions
         activeSessions.removeValue(forKey: taskId)
@@ -211,7 +224,8 @@ class TaskAgentManager: ObservableObject {
         TaskAgentSettings.shared.buildTaskPrompt(for: task)
     }
 
-    private func launchTmuxSession(sessionName: String, prompt: String, workingDir: String) async throws {
+    // nonisolated: blocking Process/waitUntilExit work must run off the main actor.
+    nonisolated private func launchTmuxSession(sessionName: String, prompt: String, workingDir: String) async throws {
         // Kill any stale tmux session with the same name (e.g. survived an app restart)
         killTmuxSession(sessionName: sessionName)
 
@@ -307,7 +321,8 @@ class TaskAgentManager: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                let rawOutput = self.readTmuxOutput(sessionName: sessionName)
+                // Offload the blocking tmux capture off the main actor.
+                let rawOutput = await Task.detached { self.readTmuxOutput(sessionName: sessionName) }.value
                 // Cap stored output to 100KB — tmux scrollback can grow very large
                 let maxOutputSize = 100_000
                 let output = rawOutput.count > maxOutputSize
@@ -370,8 +385,9 @@ class TaskAgentManager: ObservableObject {
                     }
                 }
 
-                // Check if session still exists
-                if !self.isSessionAlive(sessionName: sessionName) {
+                // Check if session still exists (blocking tmux query off the main actor)
+                let sessionAlive = await Task.detached { self.isSessionAlive(sessionName: sessionName) }.value
+                if !sessionAlive {
                     await MainActor.run {
                         let status = self.activeSessions[taskId]?.status
                         if status == .processing || status == .editing {
@@ -394,7 +410,8 @@ class TaskAgentManager: ObservableObject {
         pollingTasks[taskId] = task
     }
 
-    private func readTmuxOutput(sessionName: String) -> String {
+    // nonisolated: blocking Process/waitUntilExit — call off the main actor.
+    nonisolated private func readTmuxOutput(sessionName: String) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-c", "source ~/.zprofile 2>/dev/null; tmux capture-pane -t '\(sessionName)' -p -S -500 2>/dev/null"]
@@ -409,7 +426,8 @@ class TaskAgentManager: ObservableObject {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
-    private func isSessionAlive(sessionName: String) -> Bool {
+    // nonisolated: blocking Process/waitUntilExit — call off the main actor.
+    nonisolated private func isSessionAlive(sessionName: String) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-c", "source ~/.zprofile 2>/dev/null; tmux has-session -t '\(sessionName)' 2>/dev/null"]
@@ -488,7 +506,8 @@ class TaskAgentManager: ObservableObject {
         return String(output.suffix(2000))
     }
 
-    private func openTmuxSessionInTerminal(sessionName: String) {
+    // nonisolated: blocking Process work (isSessionAlive) — call off the main actor.
+    nonisolated private func openTmuxSessionInTerminal(sessionName: String) {
         // Check if session is alive before opening terminal
         guard isSessionAlive(sessionName: sessionName) else {
             logMessage("TaskAgentManager: Cannot open terminal - session '\(sessionName)' does not exist")
@@ -519,7 +538,8 @@ class TaskAgentManager: ObservableObject {
         }
     }
 
-    private func killTmuxSession(sessionName: String) {
+    // nonisolated: blocking Process/waitUntilExit — call off the main actor.
+    nonisolated private func killTmuxSession(sessionName: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-c", "source ~/.zprofile 2>/dev/null; tmux kill-session -t '\(sessionName)' 2>/dev/null"]
@@ -528,7 +548,8 @@ class TaskAgentManager: ObservableObject {
         process.waitUntilExit()
     }
 
-    private func logMessage(_ message: String) {
+    // nonisolated: pure logging shim, safe to call from the nonisolated helpers.
+    nonisolated private func logMessage(_ message: String) {
         log(message)
     }
 
@@ -606,12 +627,13 @@ class TaskAgentManager: ObservableObject {
                     editedFiles: record.agentEditedFiles
                 )
 
-                if isSessionAlive(sessionName: sessionName) {
+                let sessionAlive = await Task.detached { self.isSessionAlive(sessionName: sessionName) }.value
+                if sessionAlive {
                     // Check if the session is actually idle (Claude waiting at prompt)
-                    // by reading output twice with a short delay
-                    let output1 = readTmuxOutput(sessionName: sessionName)
+                    // by reading output twice with a short delay (blocking reads off-main)
+                    let output1 = await Task.detached { self.readTmuxOutput(sessionName: sessionName) }.value
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                    let output2 = readTmuxOutput(sessionName: sessionName)
+                    let output2 = await Task.detached { self.readTmuxOutput(sessionName: sessionName) }.value
 
                     if output1 == output2 && !output1.isEmpty {
                         // Output unchanged — session is idle, mark completed without polling

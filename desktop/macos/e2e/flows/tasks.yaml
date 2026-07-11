@@ -14,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentManager.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift
