@@ -86,6 +86,7 @@ environments:
           --network: omi-dev-vpc-1
           --subnet: omi-us-central1-dev-vpc-1-subnet-1
           --vpc-egress: private-ranges-only
+          --remove-secrets: GOOGLE_APPLICATION_CREDENTIALS
       services:
         backend:
           env:

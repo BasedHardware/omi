@@ -133,7 +133,6 @@ runs:
           --max-instances=4
           --concurrency=1
           --memory=1Gi
-          ${{ steps.backfill-runtime.outputs.remove_secret_flags }}
           ${{ inputs.cloud_run_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
         secrets: ${{ steps.backfill-runtime.outputs.secrets }}

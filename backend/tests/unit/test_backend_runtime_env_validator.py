@@ -789,6 +789,19 @@ def test_prod_cloud_run_replaces_legacy_filename_with_json_signing_credentials()
         assert expected_project in outputs[output_name].splitlines()
 
 
+def test_all_cloud_run_environments_remove_legacy_filename_binding_once():
+    validator = load_validator()
+    workflow = validator._load_yaml(ROOT.parent / '.github/workflows/gcp_backend.yml')
+
+    for env in ('dev', 'prod'):
+        outputs = validator._rendered_runtime_env_outputs(
+            workflow,
+            env=env,
+            manifest_path=ROOT / 'deploy/runtime_env.yaml',
+        )
+        assert outputs['cloud_run_flags'].split().count('--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS') == 1
+
+
 def test_live_cloud_run_excludes_remove_secrets_from_retained_flags(tmp_path, monkeypatch):
     validator = load_validator()
     manifest_path = tmp_path / 'runtime_env.yaml'

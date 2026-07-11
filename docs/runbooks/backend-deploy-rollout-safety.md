@@ -207,10 +207,10 @@ For a bounded resume:
   return 500 and preventing backfill segment processing. Do not restore the
   retired `GOOGLE_APPLICATION_CREDENTIALS` filename secret: it resolves to
   `google-credentials.json`, which is absent from the b939 image and fails startup.
-  The clone renderer drops inherited names before overlays and must emit an
-  explicit removal flag when an overlay omits a dropped secret, because the
-  deploy action merges secrets by default. Test both sides of that ordering
-  contract.
+  The clone renderer drops inherited names before overlays, and the single
+  shared Cloud Run flag removes the legacy binding remotely in both dev and
+  prod. Do not add a second service-specific removal flag: gcloud rejects
+  duplicate map-removal keys. Test the rendered flag count and clone ordering.
 - Add temporary per-revision tags and require the exact tag/revision mapping to
   converge in both `spec.traffic` and `status.traffic`. Remove every attempted
   tag, including after an ambiguous command result, and poll until it is absent

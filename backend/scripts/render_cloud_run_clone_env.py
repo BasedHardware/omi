@@ -70,14 +70,6 @@ def clone_environment(
     )
 
 
-def secret_removal_flags(secret_overlay: str, drop_names: str) -> str:
-    explicit_secret_names = set(_pairs(secret_overlay))
-    names_to_remove = sorted(_names(drop_names) - explicit_secret_names)
-    if not names_to_remove:
-        return ''
-    return f'--remove-secrets={",".join(names_to_remove)}'
-
-
 def _emit(name: str, value: str) -> None:
     delimiter = f'__CLONED_CLOUD_RUN_{name.upper()}__'
     print(f'{name}<<{delimiter}')
@@ -98,7 +90,6 @@ def main() -> int:
     )
     _emit('env_vars', env_vars)
     _emit('secrets', secrets)
-    _emit('remove_secret_flags', secret_removal_flags(os.getenv('SECRET_OVERLAY', ''), os.getenv('DROP_NAMES', '')))
     return 0
 
 
