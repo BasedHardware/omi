@@ -115,6 +115,7 @@ def validate_runtime_env(
     if errors:
         return errors
 
+    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
@@ -234,6 +235,33 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     if entry is None or 'value' not in entry:
         return None
     return str(entry['value'])
+
+
+def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require a configured Parakeet endpoint anywhere the runtime selects Parakeet.
+
+    ``_validate_cloud_run`` then compares these declared values to both rendered and
+    live revisions, so a selected Parakeet route cannot silently lose its endpoint.
+    """
+    errors: list[ValidationError] = []
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    for service_name, raw_service_config in services.items():
+        service_config = _as_config_dict(raw_service_config) or {}
+        service_env = _as_config_dict(service_config.get('env')) or {}
+        configured_models = _manifest_literal_env_value(service_env, 'STT_PRERECORDED_MODEL') or ''
+        selected_models = {model.strip().lower() for model in configured_models.split(',') if model.strip()}
+        if 'parakeet' not in selected_models:
+            continue
+        parakeet_url = (_manifest_literal_env_value(service_env, 'HOSTED_PARAKEET_API_URL') or '').strip()
+        if not parakeet_url:
+            errors.append(
+                ValidationError(
+                    f'{env}/cloud_run/{service_name}',
+                    'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing',
+                )
+            )
+    return errors
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:

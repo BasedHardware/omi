@@ -123,6 +123,14 @@ environments:
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
+            # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
+            # the production-only parakeet.omi.me endpoint.
+            STT_PRERECORDED_MODEL:
+              value: parakeet,dg-nova-3
+              category: stt_routing
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             MEMORY_MODE:
               value: read
               category: memory_rollout
@@ -198,6 +206,12 @@ environments:
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
+            STT_PRERECORDED_MODEL:
+              value: parakeet,dg-nova-3
+              category: stt_routing
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             MEMORY_MODE:
               value: read
               category: memory_rollout
@@ -273,6 +287,12 @@ environments:
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
+            STT_PRERECORDED_MODEL:
+              value: parakeet,dg-nova-3
+              category: stt_routing
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             MEMORY_MODE:
               value: read
               category: memory_rollout

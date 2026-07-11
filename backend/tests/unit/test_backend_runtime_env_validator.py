@@ -37,6 +37,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,dg-nova-3"},
+        {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
@@ -649,6 +651,28 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    services = manifest['environments']['dev']['cloud_run']['services']
+    for service in services.values():
+        del service['env']['HOSTED_PARAKEET_API_URL']
+
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(manifest_path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_rendered_cloud_run=True)
+
+    assert {
+        (error.scope, error.message)
+        for error in errors
+        if error.message == 'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing'
+    } == {
+        (f'dev/cloud_run/{service}', 'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing')
+        for service in services
+    }
 
 
 def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():

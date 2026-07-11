@@ -271,8 +271,10 @@ class TestTranscribeBytes:
     def test_missing_api_url(self):
         wav = _make_wav()
         with patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': ''}):
-            with pytest.raises(ValueError, match='HOSTED_PARAKEET_API_URL'):
+            with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+        assert exc_info.value.provider == pr.PrerecordedSTTService.PARAKEET
+        assert exc_info.value.missing_env == 'HOSTED_PARAKEET_API_URL'
 
 
 class TestTranscribeUrl:
