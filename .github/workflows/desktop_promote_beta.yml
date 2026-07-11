@@ -6,6 +6,11 @@ on:
       release_tag:
         description: 'Qualified v*-macos candidate to promote to beta'
         required: true
+      automatic:
+        description: 'Automatic newest-candidate promotion from the trusted macOS qualification runner'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -31,6 +36,24 @@ jobs:
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Validate automatic beta request
+        if: ${{ inputs.automatic }}
+        env:
+          AUTO_BETA_ENABLED: ${{ vars.DESKTOP_AUTO_BETA_ENABLED }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${AUTO_BETA_ENABLED,,}" == "false" ]]; then
+            echo "Automatic desktop beta promotion is paused by DESKTOP_AUTO_BETA_ENABLED=false." >&2
+            exit 1
+          fi
+          LATEST_TAG=$(git tag -l 'v*-macos' --sort=-v:refname | head -1)
+          if [[ "$RELEASE_TAG" != "$LATEST_TAG" ]]; then
+            echo "Automatic beta promotion refuses stale tag $RELEASE_TAG; newest is $LATEST_TAG." >&2
+            exit 1
+          fi
+          echo "Automatic beta request targets newest candidate $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download and validate qualified candidate
         id: candidate

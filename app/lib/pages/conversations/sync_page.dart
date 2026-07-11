@@ -532,12 +532,15 @@ class _SyncPageState extends State<SyncPage> {
           break;
       }
     } else if (syncProvider.isRateLimited) {
-      title =
-          syncProvider.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
+      title = switch (syncProvider.rateLimitReason) {
+        RateLimitReason.backendBusy => l.syncCardBackendBusy,
+        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToSync),
+        _ => l.syncCardRateLimited,
+      };
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      subtitle = l.syncProcessingBackgroundHint;
+      subtitle = '${l.syncCardProgressOf(uploaded, uploaded + readyToSync)} · ${l.syncProcessingBackgroundHint}';
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
       action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () {

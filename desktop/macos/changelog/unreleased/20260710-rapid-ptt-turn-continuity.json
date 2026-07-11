@@ -1,3 +1,0 @@
-{
-  "change": "Fixed rapid back-to-back push-to-talk so every spoken turn appears in chat and the reply keeps the full transcription context"
-}

@@ -352,12 +352,12 @@ struct ConversationsPage: View {
             .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let error = searchError {
+      } else if searchError != nil {
         VStack(spacing: 12) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
             .foregroundColor(OmiColors.textTertiary)
-          Text(error)
+          Text("Couldn't search conversations. Check your connection and try again.")
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textTertiary)
             .multilineTextAlignment(.center)
@@ -457,7 +457,7 @@ struct ConversationsPage: View {
         // A newer query owns the search UI now.
       } catch {
         logError("Search: Failed", error: error)
-        searchError = error.localizedDescription
+        searchError = UserFacingErrorPresentation.message(for: error, while: .conversationSearch)
         searchResults = []
         isSearching = false
       }
@@ -725,7 +725,7 @@ struct ConversationsPage: View {
       }
     } catch {
       logError("Merge failed", error: error)
-      mergeError = error.localizedDescription
+      mergeError = UserFacingErrorPresentation.message(for: error, while: .conversationMerge)
     }
 
     isMerging = false

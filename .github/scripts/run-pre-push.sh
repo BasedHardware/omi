@@ -10,4 +10,4 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 REMOTE="${1:-origin}"
-exec scripts/pre-push "$REMOTE"
+exec scripts/pre-push-singleflight "$REMOTE"

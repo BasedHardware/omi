@@ -2,7 +2,7 @@ import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
-import { AcpRuntimeAdapter } from "../src/adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "../src/adapters/acp.js";
 import {
   PiMonoAdapter,
   PiMonoRuntimeAdapter,
@@ -86,6 +86,34 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
     }),
   };
 }
+
+describe("ACP authentication recovery classification", () => {
+  it("accepts the canonical ACP auth-required error", () => {
+    expect(isRecoverableAcpAuthError(new AcpError("Authentication required", -32000))).toBe(true);
+  });
+
+  it("accepts the wrapped provider 401 returned during session/prompt", () => {
+    const error = new AcpError(
+      'Internal error: Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}',
+      -32603,
+    );
+
+    expect(isRecoverableAcpAuthError(error)).toBe(true);
+  });
+
+  it("accepts structured auth failure data when the message is generic", () => {
+    const error = new AcpError("Internal error", -32603, {
+      error: { type: "authentication_error", message: "token rejected" },
+    });
+
+    expect(isRecoverableAcpAuthError(error)).toBe(true);
+  });
+
+  it("leaves unrelated internal and non-ACP errors terminal", () => {
+    expect(isRecoverableAcpAuthError(new AcpError("Internal error: database unavailable", -32603))).toBe(false);
+    expect(isRecoverableAcpAuthError(new Error("Invalid authentication credentials"))).toBe(false);
+  });
+});
 
 describe("AcpRuntimeAdapter process spawning", () => {
   beforeEach(() => {
@@ -480,6 +508,15 @@ describe("adapter capability matrix", () => {
     );
     expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
+    expect(Object.fromEntries(PRODUCTION_ADAPTER_IDS.map((adapterId) => [
+      adapterId,
+      ADAPTER_CAPABILITY_MATRIX[adapterId].credentialScope,
+    ]))).toEqual({
+      acp: "local_user",
+      "pi-mono": "managed_cloud",
+      hermes: "local_user",
+      openclaw: "local_user",
+    });
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
       nativeResume: { status: "required" },
@@ -540,6 +577,7 @@ describe("adapter capability matrix", () => {
       const entry = ADAPTER_CAPABILITY_MATRIX[adapterId];
 
       expect(entry.productionAdapter).toBe(true);
+      expect(["managed_cloud", "local_user"]).toContain(entry.credentialScope);
       expect(entry.adapterId).toBe(adapterId);
       expect(Object.keys(entry.expectations).sort()).toEqual([
         "artifactEmission",

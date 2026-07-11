@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+
 """Per-day LLM usage drill-down, a companion to /v1/users/me/llm-usage.
 
 Wires the tested-but-unwired database.llm_usage day getter to a read endpoint. This
@@ -8,7 +10,7 @@ the change contained. The per-feature aggregation itself lives in the database l
 """
 
 from datetime import date as date_type, datetime, timezone
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -18,7 +20,21 @@ from utils.other import endpoints as auth
 router = APIRouter()
 
 
-@router.get('/v1/users/me/llm-usage/daily', tags=['users'])
+class LlmUsageCounters(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+
+
+class DailyLlmUsageResponse(BaseModel):
+    date: str
+    features: Dict[str, LlmUsageCounters] = {}
+    total: LlmUsageCounters
+    has_data: bool = False
+
+
+@router.get('/v1/users/me/llm-usage/daily', response_model=DailyLlmUsageResponse, tags=['users'])
 def get_daily_llm_usage(
     date: Optional[date_type] = Query(default=None, description='UTC day (YYYY-MM-DD); defaults to today'),
     uid: str = Depends(auth.get_current_user_uid),
