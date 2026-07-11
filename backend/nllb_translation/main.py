@@ -1,7 +1,10 @@
+import asyncio
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import Dict, List, Optional
 
 import ctranslate2
@@ -131,20 +134,25 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
     return None
 
 
+_inference_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nllb-infer")
+
+
 def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> List[TranslationResult]:
     if not _translator or not _tokenizer:
         raise RuntimeError("Model not loaded")
 
     tokenized = [_tokenizer.Encode(text, out_type=str) for text in texts]
-    source_prefix = [[source_nllb]] if source_nllb else None
     target_prefix = [[target_nllb]] * len(texts)
 
-    results = _translator.translate_batch(
-        tokenized,
-        target_prefix=target_prefix,
-        max_input_length=MAX_INPUT_LENGTH,
-        beam_size=4,
-    )
+    translate_kwargs = {
+        "target_prefix": target_prefix,
+        "max_input_length": MAX_INPUT_LENGTH,
+        "beam_size": 4,
+    }
+    if source_nllb:
+        tokenized = [[source_nllb] + tokens for tokens in tokenized]
+
+    results = _translator.translate_batch(tokenized, **translate_kwargs)
 
     translations = []
     source_bcp47 = NLLB_TO_BCP47.get(source_nllb, source_nllb.split("_")[0] if source_nllb else "")
@@ -181,7 +189,11 @@ async def translate(req: TranslateRequest):
 
         total_chars = sum(len(c) for c in req.contents)
         t0 = time.monotonic()
-        translations = _translate_batch(req.contents, source_nllb or "", target_nllb)
+        loop = asyncio.get_running_loop()
+        translations = await loop.run_in_executor(
+            _inference_pool,
+            partial(_translate_batch, req.contents, source_nllb or "", target_nllb),
+        )
         latency = time.monotonic() - t0
 
         REQUESTS_TOTAL.labels(target_lang=req.target_language_code, status="ok").inc()
