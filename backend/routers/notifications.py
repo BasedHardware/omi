@@ -41,8 +41,11 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     # Check hourly limit
     hour_count_raw = redis_client.get(hour_key)
     if hour_count_raw is None:
-        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 1)
-        hour_count = 1
+        # Seed to 0, not 1: the unconditional incr below is the single source of truth for the count.
+        # Seeding to 1 AND incrementing made the first request consume two tokens, so only 9 of
+        # MAX_NOTIFICATIONS_PER_HOUR were ever allowed and the remaining header was off by one.
+        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 0)
+        hour_count = 0
     else:
         hour_count = int(hour_count_raw)
 
