@@ -168,7 +168,7 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     ) {
       ChatToolExecutor.permissionExecutionRoute(
         toolName: "spawn_agent",
-        arguments: ["brief": "Run a background task"],
+        arguments: ["brief": "Request Screen Recording permission."],
         originatingUserText: ChatToolExecutor.effectiveOriginatingUserText(nil))
     }
 
