@@ -26,8 +26,6 @@ class F {
         return 'Omi';
       case Environment.dev:
         return 'Omi Dev';
-      default:
-        return 'Omi Dev';
     }
   }
 }
