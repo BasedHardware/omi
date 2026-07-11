@@ -8,7 +8,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #2).
 #
-# Total: 33 entries.
+# Total: 32 entries.
 #
 # The 4 entries marked "surfaced by P2" below were discovered by the alias-
 # resolution hardening of scan_import_time_side_effects.py: the old checker
@@ -49,5 +49,4 @@ backend/utils/other/storage.py
 # surfaced by P2 (from-import alias blind spot)
 backend/database/vector_db.py
 backend/utils/other/chat_file.py
-backend/utils/stt/pre_recorded.py
 backend/utils/stt/streaming.py

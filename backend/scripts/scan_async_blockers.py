@@ -8,6 +8,7 @@ Detects dangerous patterns in async def endpoints and helpers:
   3. Blocking file I/O (open, shutil) in async def
   4. Blocking network I/O (GCS uploads, google auth refresh) in async def
   5. time.sleep on event loop
+  6. The same blocking calls hidden behind module-local sync helpers
 
 Skips calls already wrapped in asyncio.to_thread() or run_in_executor()
 (i.e. calls inside lambda bodies or nested def functions that are passed
@@ -30,7 +31,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
 
 DEFAULT_FAIL_ON = ("high_network_io",)
 FAIL_ON_CATEGORIES = (
@@ -41,6 +42,12 @@ FAIL_ON_CATEGORIES = (
     "no_await_should_be_def",
     "medium_file_io",
 )
+
+FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
+BlockingEffectKey = Tuple[str, int, str]
+LocalHelperPath = Tuple[Tuple[str, int], ...]
+LocalHelperEffects = Dict[str, Dict[BlockingEffectKey, LocalHelperPath]]
+BLOCKING_EFFECT_FIELDS = ("db_calls", "file_io", "network_io", "sleeps")
 
 
 def _node_lineno(node: ast.AST) -> int:
@@ -77,7 +84,7 @@ def get_storage_imports(source: str) -> Set[str]:
     return names
 
 
-def _walk_body(node: ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+def _walk_body(node: FunctionNode) -> Iterator[ast.AST]:
     for stmt in node.body:
         yield from ast.walk(stmt)
 
@@ -98,7 +105,7 @@ def get_route_info(decorators: Sequence[ast.AST]) -> Tuple[str, Any]:
     return "?", "?"
 
 
-def _get_offloaded_lines(node: ast.AsyncFunctionDef) -> Set[int]:
+def _get_offloaded_lines(node: FunctionNode) -> Set[int]:
     """Find line numbers of calls inside recognized executor wrappers.
 
     These are lambda bodies and nested def functions passed as arguments to
@@ -124,7 +131,7 @@ def _get_offloaded_lines(node: ast.AsyncFunctionDef) -> Set[int]:
     return offloaded
 
 
-def _collect_nested_func_lines(node: ast.AsyncFunctionDef) -> Set[int]:
+def _collect_nested_func_lines(node: FunctionNode) -> Set[int]:
     """Collect line numbers inside nested def/lambda within an async function.
 
     Calls inside nested sync functions are not directly on the event loop,
@@ -134,19 +141,19 @@ def _collect_nested_func_lines(node: ast.AsyncFunctionDef) -> Set[int]:
     for child in ast.walk(node):
         if child is node:
             continue
-        if isinstance(child, (ast.FunctionDef, ast.Lambda)):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             for n in ast.walk(child):
                 nested.add(_node_lineno(n))
     return nested
 
 
-def scan_async_function(
-    node: ast.AsyncFunctionDef,
+def _scan_function_body(
+    node: FunctionNode,
     db_names: Set[str],
     db_module_aliases: Set[str],
     storage_names: Set[str],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
-    """Scan an async function body for blocking calls on the event loop."""
+    """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
     file_io: List[Dict[str, Any]] = []
     network_io: List[Dict[str, Any]] = []
@@ -192,6 +199,127 @@ def scan_async_function(
     return db_calls, file_io, network_io, sleeps, body_call_lines
 
 
+def _module_sync_helpers(tree: ast.Module) -> Dict[str, ast.FunctionDef]:
+    """Return unambiguous module-level sync helpers.
+
+    Resolution is deliberately narrow: only a direct ``helper()`` call can
+    resolve to one top-level ``def helper`` in the same module. Imported calls,
+    attributes, callbacks, conditionally defined functions, and async helpers
+    remain outside this analysis so the scanner does not guess at runtime
+    dispatch.
+    """
+    candidates: Dict[str, List[ast.FunctionDef]] = {}
+    for statement in tree.body:
+        if isinstance(statement, ast.FunctionDef):
+            candidates.setdefault(statement.name, []).append(statement)
+    return {name: nodes[0] for name, nodes in candidates.items() if len(nodes) == 1}
+
+
+def _local_helper_calls(node: FunctionNode, helper_names: Set[str]) -> List[Tuple[str, int]]:
+    """Return direct calls to resolvable local sync helpers in this function."""
+    calls: List[Tuple[str, int]] = []
+    offloaded = _get_offloaded_lines(node)
+    nested = _collect_nested_func_lines(node)
+    for child in _walk_body(node):
+        if not isinstance(child, ast.Call):
+            continue
+        line = child.lineno
+        if line in offloaded or line in nested:
+            continue
+        if isinstance(child.func, ast.Name) and child.func.id in helper_names:
+            calls.append((child.func.id, line))
+    return sorted(calls, key=lambda item: (item[1], item[0]))
+
+
+def analyze_local_sync_helpers(
+    tree: ast.Module,
+    db_names: Set[str],
+    db_module_aliases: Set[str],
+    storage_names: Set[str],
+) -> LocalHelperEffects:
+    """Compute the shortest blocking path reachable from each local sync helper.
+
+    A fixed-point calculation makes recursion and mutually recursive helper
+    cycles safe. Each blocking sink is retained once per helper with its
+    shortest call path; cycles therefore cannot grow paths forever.
+    """
+    helpers = _module_sync_helpers(tree)
+    helper_names = set(helpers)
+    effects: LocalHelperEffects = {name: {} for name in helpers}
+    edges: Dict[str, List[Tuple[str, int]]] = {}
+
+    for name, node in helpers.items():
+        db_calls, file_io, network_io, sleeps, _ = _scan_function_body(node, db_names, db_module_aliases, storage_names)
+        direct_by_field = {
+            "db_calls": db_calls,
+            "file_io": file_io,
+            "network_io": network_io,
+            "sleeps": sleeps,
+        }
+        for field, calls in direct_by_field.items():
+            for call in calls:
+                effects[name][(field, call["line"], call["call"])] = ()
+        edges[name] = _local_helper_calls(node, helper_names)
+
+    changed = True
+    while changed:
+        changed = False
+        for caller in sorted(helpers):
+            for callee, edge_line in edges[caller]:
+                for effect, callee_path in sorted(effects[callee].items()):
+                    candidate = ((callee, edge_line),) + callee_path
+                    current = effects[caller].get(effect)
+                    if current is None or len(candidate) < len(current):
+                        effects[caller][effect] = candidate
+                        changed = True
+
+    return effects
+
+
+def _propagated_helper_calls(
+    node: ast.AsyncFunctionDef,
+    local_helper_effects: LocalHelperEffects,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Materialize blocking helper paths at their async call sites."""
+    propagated: Dict[str, List[Dict[str, Any]]] = {field: [] for field in BLOCKING_EFFECT_FIELDS}
+    helper_names = set(local_helper_effects)
+    for helper, call_line in _local_helper_calls(node, helper_names):
+        for (field, sink_line, sink_call), helper_path in sorted(local_helper_effects[helper].items()):
+            via = [helper, *(callee for callee, _ in helper_path)]
+            chain_lines = [call_line, *(line for _, line in helper_path), sink_line]
+            chain = " -> ".join([*(f"{name}()" for name in via), sink_call])
+            propagated[field].append(
+                {
+                    "line": call_line,
+                    "call": chain,
+                    "via": via,
+                    "chain_lines": chain_lines,
+                    "sink_line": sink_line,
+                }
+            )
+    return propagated
+
+
+def scan_async_function(
+    node: ast.AsyncFunctionDef,
+    db_names: Set[str],
+    db_module_aliases: Set[str],
+    storage_names: Set[str],
+    local_helper_effects: Optional[LocalHelperEffects] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
+    """Scan direct and module-local transitive blocking calls on the event loop."""
+    db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
+        node, db_names, db_module_aliases, storage_names
+    )
+    if local_helper_effects:
+        propagated = _propagated_helper_calls(node, local_helper_effects)
+        db_calls.extend(propagated["db_calls"])
+        file_io.extend(propagated["file_io"])
+        network_io.extend(propagated["network_io"])
+        sleeps.extend(propagated["sleeps"])
+    return db_calls, file_io, network_io, sleeps, body_call_lines
+
+
 def collect_py_files(dirs: Sequence[str]) -> List[str]:
     files: List[str] = []
     for d in dirs:
@@ -234,6 +362,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
 
         db_names, db_module_aliases = get_db_imports(source)
         storage_names = get_storage_imports(source)
+        local_helper_effects = analyze_local_sync_helpers(tree, db_names, db_module_aliases, storage_names)
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -249,7 +378,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
 
             is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list)
             db_calls, file_io, network_io, sleeps, body_call_lines = scan_async_function(
-                node, db_names, db_module_aliases, storage_names
+                node, db_names, db_module_aliases, storage_names, local_helper_effects
             )
             endpoint_has_await = has_await(node)
             start_line, end_line = _line_span(node)
@@ -328,7 +457,8 @@ def changed_scope(diff_base: str, dirs: Sequence[str]) -> Dict[str, Any]:
         "git",
         "diff",
         "--unified=0",
-        "--diff-filter=ACMR",
+        "--no-renames",
+        "--diff-filter=ACMRTD",
         f"{diff_base}...HEAD",
         "--",
         *_diff_paths(dirs),
@@ -406,7 +536,19 @@ def finding_in_changed_scope(finding: Dict[str, Any], scope: Dict[str, Any]) -> 
         return False
     start = finding["line"]
     end = finding.get("end_line", start)
-    return any(start <= changed_end and end >= changed_start for changed_start, changed_end in file_ranges)
+    if any(start <= changed_end and end >= changed_start for changed_start, changed_end in file_ranges):
+        return True
+
+    # A diff can add the blocking sink (or a transitive helper edge) while the
+    # async caller itself remains unchanged. Keep every resolved call-graph
+    # line in scope so helper extraction cannot evade the diff gate.
+    related_lines: Set[int] = set()
+    for call in _finding_calls(finding):
+        related_lines.add(call.get("sink_line", call.get("line", 0)))
+        related_lines.update(call.get("chain_lines", []))
+    return any(
+        changed_start <= line <= changed_end for line in related_lines for changed_start, changed_end in file_ranges
+    )
 
 
 def _finding_qualifies(category: str, finding: Dict[str, Any]) -> bool:

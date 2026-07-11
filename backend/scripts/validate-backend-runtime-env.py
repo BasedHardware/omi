@@ -12,6 +12,12 @@ from typing import Any, cast
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / 'backend'
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
 EnvEntry = dict[str, Any]
@@ -115,7 +121,6 @@ def validate_runtime_env(
     if errors:
         return errors
 
-    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
@@ -126,6 +131,7 @@ def validate_runtime_env(
                 env_config,
                 strict_provisional=strict_provisional,
                 manifest_path=manifest_path,
+                manifest=manifest,
             )
         )
 
@@ -238,8 +244,20 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     return str(entry['value'])
 
 
+def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: ConfigDict, key: str) -> bool:
+    """Return whether a manifest binding will yield a non-empty runtime env value."""
+    entry = _as_config_dict(env_map.get(key))
+    if entry is not None:
+        if 'value' in entry:
+            return bool(str(entry['value']).strip())
+        if 'secret' in entry or 'env_var' in entry:
+            return True
+    secret_entry = _as_config_dict(secrets_map.get(key))
+    return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
+
+
 def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require a Parakeet endpoint anywhere the prerecorded model can select Parakeet."""
+    """Keep selected providers and their required runtime bindings deployable together."""
     errors: list[ValidationError] = []
     surfaces: list[tuple[str, ConfigDict, ConfigDict]] = []
 
@@ -257,7 +275,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
     required_cloud_run_scopes: set[str] = set()
-    if env == 'dev':
+    if env in {'dev', 'prod'}:
         for service in ('backend', 'backend-sync', 'backend-integration'):
             if service not in cloud_run_services:
                 continue
@@ -268,14 +286,6 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
             secrets_map = _as_config_dict(service_config.get('secrets')) or {}
             if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
                 errors.append(ValidationError(scope, 'required Cloud Run service is missing STT_PRERECORDED_MODEL'))
-            endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
-            if not endpoint:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
-                    )
-                )
 
     for service, raw_service in cloud_run_services.items():
         service_config = _as_config_dict(raw_service) or {}
@@ -288,16 +298,28 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
-        if scope in required_cloud_run_scopes:
+        model_is_bound = 'STT_PRERECORDED_MODEL' in env_map or 'STT_PRERECORDED_MODEL' in secrets_map
+        is_required_cloud_run = scope in required_cloud_run_scopes
+        if not model_is_bound and not is_required_cloud_run:
             continue
-        if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
-            continue
-        endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
-        if not endpoint:
+
+        literal_models = _manifest_literal_env_value(env_map, 'STT_PRERECORDED_MODEL')
+        source_is_opaque = literal_models is None
+        for required_env in required_env_for_model_config(
+            literal_models,
+            source_is_opaque=source_is_opaque,
+        ):
+            if _manifest_env_binding_is_configured(env_map, secrets_map, required_env):
+                continue
+            message = (
+                f'required Cloud Run service is missing non-empty {required_env}'
+                if is_required_cloud_run
+                else f'STT_PRERECORDED_MODEL requires non-empty {required_env}'
+            )
             errors.append(
                 ValidationError(
                     scope,
-                    'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+                    message,
                 )
             )
     return errors
@@ -573,6 +595,7 @@ def _validate_cloud_run_workflows(
     *,
     strict_provisional: bool,
     manifest_path: Path,
+    manifest: ConfigDict | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -584,13 +607,14 @@ def _validate_cloud_run_workflows(
     expected_jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     workflow_services: dict[str, ConfigDict] = {}
     workflow_jobs: dict[str, ConfigDict] = {}
+    manifest = manifest if manifest is not None else _load_yaml(manifest_path)
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest_path=manifest_path)
+        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
         workflow_services.update(extracted['services'])
         workflow_jobs.update(extracted['jobs'])
 
@@ -820,10 +844,10 @@ def _extract_workflow_cloud_run_targets(
     workflow: ConfigDict,
     *,
     env: str,
-    manifest_path: Path,
+    manifest: ConfigDict,
 ) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
-    rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest_path=manifest_path)
+    rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest=manifest)
     services: dict[str, ConfigDict] = {}
     jobs: dict[str, ConfigDict] = {}
     workflow_jobs = _as_config_dict(workflow.get('jobs'))
@@ -877,7 +901,7 @@ def _resolve_workflow_string(value: object, workflow_env: ConfigDict) -> str | N
     return resolved
 
 
-def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_path: Path) -> StringMap:
+def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: ConfigDict) -> StringMap:
     outputs: StringMap = {}
     for step in _workflow_steps(workflow):
         step_dict = _as_config_dict(step)
@@ -891,7 +915,6 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
         rendered_env = _extract_renderer_env(run, env=env)
         if rendered_env is None:
             continue
-        manifest = _load_yaml(manifest_path)
         env_config = _get_env_config(manifest, rendered_env)
         cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
         network = _as_config_dict(cloud_run.get('network')) or {}

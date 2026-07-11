@@ -19,6 +19,17 @@ export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
 export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
 
+# The file-isolated runner already parallelizes pytest processes. Letting each process
+# start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time
+# depend on which test first initializes NumPy. Keep one native worker per pytest process;
+# callers can still override a setting when intentionally exercising parallel kernels.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
+
 pytest_args=(-v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
