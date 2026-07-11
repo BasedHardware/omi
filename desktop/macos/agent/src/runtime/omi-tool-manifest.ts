@@ -171,13 +171,6 @@ function piLocalApiAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, Omi
   };
 }
 
-function piAndScreenContextOrOnboardingStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {
-    "pi-mono": { advertised: true },
-    "omi-tools-stdio": { advertised: true, condition: "screenContextOrOnboarding" },
-  };
-}
-
 function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
   return {};
 }
@@ -508,8 +501,9 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   request_permission: {
     surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
     capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Use when a tool reports permission_required or the user asks Omi to grant/check a permission.",
-      "Use strict permission types only.",
+      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
     voice: {
       realtimeDescription:
@@ -1051,16 +1045,17 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local desktop app."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    adapters: piAndStdio(),
   },
   {
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Request a specific macOS permission from the user by opening the appropriate system prompt or Settings pane. Use when a tool reports permission_required or when the user asks Omi to get a permission.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "For screen-related requests, if Screen Recording is missing, tell the user Omi cannot see the current screen yet and call request_permission with type=screen_recording.",
+      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
     ],
@@ -1080,8 +1075,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires local desktop app; some macOS permissions require the user to toggle Settings manually."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    runtimePreconditions: ["Requires explicit current-turn user consent; some macOS permissions require the user to toggle Settings manually."],
+    adapters: piAndStdio(),
   },
   {
     name: "scan_files",

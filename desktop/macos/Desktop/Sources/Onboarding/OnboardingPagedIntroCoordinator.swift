@@ -1376,7 +1376,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   private func executeTool(name: String, arguments: [String: Any]) async -> String {
     await ChatToolExecutor.execute(
-      ToolCall(name: name, arguments: arguments, thoughtSignature: nil)
+      ToolCall(name: name, arguments: arguments, thoughtSignature: nil),
+      isOnboardingSurface: true
     )
   }
 

@@ -11,6 +11,7 @@ export type DesktopCoordinatorBundle =
   | "desktop.artifacts.manage"
   | "desktop.automation.read"
   | "desktop.automation.act_dev_only"
+  | "desktop.permissions.request"
   | "external.write_prepare"
   | "external.write_send";
 
@@ -74,7 +75,9 @@ const TASK_WRITE_TOOLS = new Set([
 ]);
 const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen"]);
 const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
-const AUTOMATION_ACT_TOOLS = new Set(["request_permission"]);
+// Coordinator policy classifies this as a production user-approved operation;
+// ChatToolExecutor independently enforces the current-turn consent at execution.
+const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);
 const AUTOMATION_READ_TOOLS = new Set(["check_permission_status"]);
 const LOCAL_READ_TOOLS = new Set([
   "execute_sql",
@@ -124,7 +127,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (SCREEN_IMAGE_TOOLS.has(tool.name)) bundles.add("desktop.context.screenshot_image");
   if (TASK_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.tasks.readwrite");
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
-  if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act_dev_only");
+  if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
   if (tool.executor.kind === "runtimeControl") {
     const control = controlDescriptor(tool.name);
@@ -145,7 +148,8 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
   const sensitive =
     bundles.includes("desktop.context.screenshot_image") ||
     bundles.includes("external.write_send") ||
-    bundles.includes("desktop.automation.act_dev_only");
+    bundles.includes("desktop.automation.act_dev_only") ||
+    bundles.includes("desktop.permissions.request");
   return {
     name: tool.name,
     bundles,
@@ -159,7 +163,7 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
 
 function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): DesktopToolDescriptor {
   const sensitive = bundles.some((bundle) =>
-    ["desktop.context.screenshot_image", "external.write_send", "desktop.automation.act_dev_only"].includes(bundle),
+    ["desktop.context.screenshot_image", "external.write_send", "desktop.automation.act_dev_only", "desktop.permissions.request"].includes(bundle),
   );
   const write = bundles.some((bundle) =>
     [
@@ -169,6 +173,7 @@ function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): De
       "external.write_prepare",
       "external.write_send",
       "desktop.automation.act_dev_only",
+      "desktop.permissions.request",
     ].includes(bundle),
   );
   return {
@@ -231,6 +236,7 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
     requiredBundles.includes("desktop.context.screenshot_image") ||
     requiredBundles.includes("external.write_send") ||
     requiredBundles.includes("desktop.automation.act_dev_only") ||
+    requiredBundles.includes("desktop.permissions.request") ||
     descriptor.approvalPolicy === "user_approval" ||
     descriptor.approvalPolicy === "policy_grant";
 

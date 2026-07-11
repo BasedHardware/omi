@@ -245,6 +245,7 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(prompt.contains("Current screen/current work questions"))
     XCTAssertTrue(prompt.contains("get_work_context first"))
     XCTAssertTrue(prompt.contains("Raw screenshot pixels"))
+    XCTAssertTrue(prompt.contains("only after explicit current-turn consent"))
     XCTAssertTrue(prompt.contains("request_permission"))
   }
 
