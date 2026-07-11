@@ -74,7 +74,7 @@ def create_person(uid: str, name: str) -> dict:
     return users_db.create_person(uid, person_data)
 
 
-def update_person(uid: str, person_id: str, name: str) -> dict:
+def update_person(uid: str, person_id: str, name: str) -> Optional[dict]:
     person_id = _require_str(person_id, "person_id")
     name = _require_str(name, "name").strip()
     if not name:
