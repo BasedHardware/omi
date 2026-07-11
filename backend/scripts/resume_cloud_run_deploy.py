@@ -55,6 +55,20 @@ def main() -> int:
     gke_gate.add_argument('--poll-interval-seconds', type=float, default=15)
     gke_gate.add_argument('--timeout-seconds', type=float, default=900)
 
+    prepare_preflight = subparsers.add_parser(
+        'prepare-preflight', help='Require one aligned serving revision on every backend service.'
+    )
+    prepare_preflight.add_argument('--project', required=True)
+    prepare_preflight.add_argument('--region', default=DEFAULT_REGION)
+
+    verify_prepared = subparsers.add_parser(
+        'verify-prepared', help='Verify a newly prepared zero-traffic candidate set and print its child digest.'
+    )
+    verify_prepared.add_argument('--project', required=True)
+    verify_prepared.add_argument('--region', default=DEFAULT_REGION)
+    verify_prepared.add_argument('--source-sha', required=True)
+    verify_prepared.add_argument('--candidate', action='append', required=True, metavar='SERVICE=REVISION')
+
     integration = subparsers.add_parser(
         'integration-plan', help='Decide whether an exact integration candidate is reusable.'
     )
@@ -89,6 +103,21 @@ def main() -> int:
                 dwell_seconds=args.dwell_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
                 timeout_seconds=args.timeout_seconds,
+            )
+        elif args.command == 'prepare-preflight':
+            snapshot = verify_prepare_preflight(project=args.project, region=args.region)
+            for service in PROMOTION_ORDER:
+                print(f'{service}={snapshot[service]}')
+        elif args.command == 'verify-prepared':
+            _validate_source_sha(args.source_sha)
+            candidates = parse_candidates(args.candidate)
+            print(
+                verify_prepared_candidates(
+                    candidates,
+                    project=args.project,
+                    region=args.region,
+                    source_sha=args.source_sha,
+                )
             )
         elif args.command == 'integration-plan':
             _validate_source_sha(args.source_sha)
@@ -169,6 +198,47 @@ def parse_existing_candidates(entries: list[str]) -> list[Candidate]:
         order=EXISTING_CANDIDATE_ORDER,
         description='three existing',
     )
+
+
+def verify_prepare_preflight(*, project: str, region: str) -> dict[str, str]:
+    """Snapshot one aligned 100% serving revision for every required service."""
+
+    snapshot: dict[str, str] = {}
+    for service_name in PROMOTION_ORDER:
+        service = _describe_service(service_name, project=project, region=region)
+        status_revision = _serving_revision(service)
+        spec_revision = _serving_revision(service, section='spec')
+        if spec_revision != status_revision:
+            raise RuntimeError(
+                f'{service_name} spec/status traffic mismatch: spec={spec_revision} status={status_revision}'
+            )
+        snapshot[service_name] = status_revision
+    return snapshot
+
+
+def verify_prepared_candidates(
+    candidates: list[Candidate],
+    *,
+    project: str,
+    region: str,
+    source_sha: str,
+) -> str:
+    """Verify exact zero-traffic candidates and return their common child digest."""
+
+    if [candidate.service for candidate in candidates] != list(PROMOTION_ORDER):
+        raise ValueError('candidates must be the exact required set in promotion order')
+    backend_candidate = next(candidate for candidate in candidates if candidate.service == 'backend')
+    backend_revision = _describe_revision(backend_candidate.revision, project=project, region=region)
+    expected_digest = _revision_digest(backend_revision)
+    _validate_digest(expected_digest)
+    _validate_candidate_set(
+        candidates,
+        project=project,
+        region=region,
+        source_sha=source_sha,
+        expected_digest=expected_digest,
+    )
+    return expected_digest
 
 
 def _parse_candidate_set(

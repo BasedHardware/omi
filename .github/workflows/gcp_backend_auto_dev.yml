@@ -122,6 +122,7 @@ jobs:
           cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
           backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
           backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
+          revision_labels: release-source-sha=${{ github.sha }}
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync

@@ -179,6 +179,55 @@ def test_existing_candidate_verification_is_read_only(monkeypatch: pytest.Monkey
     assert commands == []
 
 
+def test_prepare_preflight_requires_aligned_serving_revisions(monkeypatch: pytest.MonkeyPatch) -> None:
+    services = {service: _service(service, f'{service}-old') for service in resume.PROMOTION_ORDER}
+    monkeypatch.setattr(
+        resume,
+        '_describe_service',
+        lambda service, **_kwargs: services[service],
+    )
+
+    assert resume.verify_prepare_preflight(project='project', region='region') == {
+        service: f'{service}-old' for service in resume.PROMOTION_ORDER
+    }
+
+    services['backend']['spec']['traffic'][0]['revisionName'] = 'backend-other'
+    with pytest.raises(RuntimeError, match='backend spec/status traffic mismatch'):
+        resume.verify_prepare_preflight(project='project', region='region')
+
+
+def test_verify_prepared_candidates_derives_digest_without_mutating_traffic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    traffic, _, commands = _install_candidate_fakes(monkeypatch)
+
+    assert (
+        resume.verify_prepared_candidates(
+            _candidates(),
+            project='project',
+            region='region',
+            source_sha=SOURCE_SHA,
+        )
+        == DIGEST
+    )
+    assert traffic == {service: f'{service}-old' for service in resume.PROMOTION_ORDER}
+    assert commands == []
+
+
+def test_verify_prepared_candidates_rejects_mixed_child_digests(monkeypatch: pytest.MonkeyPatch) -> None:
+    revisions = {candidate.service: _revision(candidate.service) for candidate in _candidates()}
+    revisions['backend-sync'] = _revision('backend-sync', digest=f'sha256:{"e" * 64}')
+    _install_candidate_fakes(monkeypatch, revisions=revisions)
+
+    with pytest.raises(RuntimeError, match='backend-sync-b939eab-1 image digest'):
+        resume.verify_prepared_candidates(
+            _candidates(),
+            project='project',
+            region='region',
+            source_sha=SOURCE_SHA,
+        )
+
+
 def test_integration_plan_creates_absent_revision(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(resume, '_try_describe_revision', lambda *args, **kwargs: None)
 
@@ -1280,8 +1329,43 @@ def test_workflow_resume_lane_is_pinned_isolated_and_serialized() -> None:
     assert deploy_block.index('deployment topology does not match') < deploy_block.index('Build and Push Docker image')
     current_revision_block = deploy_block.split('      - name: Verify validated revisions are still current', 1)[
         1
-    ].split('      - name: Shift Cloud Run traffic to validated revisions', 1)[0]
+    ].split('      - name: Verify zero-traffic candidates and emit immutable resume handoff', 1)[0]
     assert current_revision_block.count('--project=${{ vars.GCP_PROJECT_ID }}') == 4
+
+
+def test_workflow_prepare_lane_keeps_cloud_run_traffic_unchanged_and_emits_resume_handoff() -> None:
+    workflow = (REPO_ROOT / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    auto_dev = (REPO_ROOT / '.github/workflows/gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+    backfill_action = (REPO_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    deploy_block = workflow.split('\n  deploy:', 1)[1]
+    preflight_block = deploy_block.split('      - name: Preflight Cloud Run deploy', 1)[1].split(
+        '      - name: Snapshot exact serving revisions', 1
+    )[0]
+    shift_header = deploy_block.split('      - name: Shift Cloud Run traffic to validated revisions', 1)[1].split(
+        '        run:', 1
+    )[0]
+
+    assert '- prepare-cloud-run' in workflow
+    assert "github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'prepare-cloud-run'" in workflow
+    assert 'confirm must be prepare-cloud-run-prod' in deploy_block
+    assert 'prepare-cloud-run requires deploy_targets=all' in deploy_block
+    assert 'resume_cloud_run_deploy.py prepare-preflight' in deploy_block
+    assert 'resume_cloud_run_deploy.py verify-prepared' in deploy_block
+    assert 'diff -u /tmp/cloud-run-serving-before-prepare.txt' in deploy_block
+    assert 'expected_revision_digest=$EXPECTED_DIGEST' in deploy_block
+    assert "if [[ \"$INPUT_MODE\" != \"prepare-cloud-run\" ]]" in preflight_block
+    assert 'PREFLIGHT_ARGS+=(--repair-traffic)' in preflight_block
+    assert "github.event.inputs.mode == 'deploy'" in shift_header
+    assert 'Roll back GKE if candidate preparation fails after mutation' in deploy_block
+    assert '--atomic' in deploy_block
+    assert (
+        "github.event.inputs.mode != 'prepare-cloud-run'"
+        in deploy_block.split('      - name: Provision sync-backfill platform', 1)[1].split('        uses:', 1)[0]
+    )
+    assert 'labels: release-source-sha=${{ github.sha }}' in deploy_block
+    assert 'labels: ${{ inputs.revision_labels }}' in backfill_action
+    assert 'revision_labels: release-source-sha=${{ github.sha }}' in workflow
+    assert 'revision_labels: release-source-sha=${{ github.sha }}' in auto_dev
 
 
 def test_resume_helper_never_resolves_mutable_container_tag() -> None:

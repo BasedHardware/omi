@@ -2,6 +2,10 @@
 
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
 
+The `.70` incident-specific cause chain, rollback history, temporary-change
+ledger, and follow-up ownership are preserved in
+[backend-v0.12.70-production-after-action.md](backend-v0.12.70-production-after-action.md).
+
 ## Read GKE rollout state
 
 ```bash
@@ -211,6 +215,20 @@ For a bounded resume:
   shared Cloud Run flag removes the legacy binding remotely in both dev and
   prod. Do not add a second service-specific removal flag: gcloud rejects
   duplicate map-removal keys. Test the rendered flag count and clone ordering.
+- Treat zero-traffic `Ready=True, reason=Retired` as identity readiness only,
+  not proof that application startup ran. After applying a temporary tag,
+  require every revision to reach `Ready=True` and `Active=True` before smoke.
+  Capture its conditions and startup logs before tag cleanup: a failed revision
+  can return to `Ready=True/Retired` afterward while retaining the useful first
+  failure only in logs or an earlier condition snapshot.
+- Before candidate creation, semantically validate the interim signing secret
+  without printing it: the numeric version is enabled, the runtime identity has
+  accessor IAM, JSON type is `service_account`, client email/private-key fields
+  exist, and dummy V4 signing succeeds. After deploy, prove the candidate binds
+  that exact numeric version and has no Cloud Run GAC binding. Startup consumes
+  `SERVICE_ACCOUNT_JSON`, writes `/tmp/omi-google-credentials.json` mode 0600,
+  and sets process-local GAC; that runtime-created path is distinct from the
+  forbidden legacy Cloud Run filename binding.
 - Add temporary per-revision tags and require the exact tag/revision mapping to
   converge in both `spec.traffic` and `status.traffic`. Remove every attempted
   tag, including after an ambiguous command result, and poll until it is absent
@@ -226,6 +244,11 @@ For a bounded resume:
   `Ready=True` and `Active=True` revision warmup; do not probe it directly. Run candidate
   `/v1/health`, OpenAPI POST-route, and safe GET=405 checks through the
   `backend-integration` tag, which is pinned to the same source and image digest.
+- Health, OpenAPI, and offline signature checks do not prove the signed-URL user
+  path. Before cutover, require a redacted authenticated candidate request that
+  generates and fetches at least one real signed object URL, or a narrow
+  service-owned probe exercising the same storage client and object permission.
+  If no representative fixture exists, the gate is not passed.
 - Re-run the stable GKE dwell before cutover.
 
 Measure candidate-tag creation through Uvicorn readiness. In the `.70` rollout,
@@ -242,6 +265,38 @@ instances repeatedly used 517-561 MiB and were terminated. The worker contract
 now requests 1 GiB at concurrency 1. Treat that as a bounded mitigation; capture
 peak and high-percentile memory under representative backfill load before
 shrinking it, and keep the change reversible.
+
+For a fresh production image, do not use ordinary `mode=deploy` as a substitute
+for the guarded rollout. Use the explicit two-phase path:
+
+1. Dispatch `mode=prepare-cloud-run`, `environment=prod`,
+   `deploy_targets=all`, the exact branch/ref pair, and
+   `confirm=prepare-cloud-run-prod`. This mode performs a read-only traffic
+   preflight, refuses missing or split serving services, pushes only the
+   short-SHA image tag (not `latest`), creates all four revisions at zero
+   percent with explicit source labels, and skips backend-secret and backfill
+   platform reprovisioning.
+2. The prepare job snapshots the prior Helm revision/image, rolls GKE with
+   `--atomic`, requires a two-minute stable dwell, verifies Cloud Run traffic is
+   byte-for-byte unchanged, and proves all four candidates are Ready,
+   latest-created, same-digest, exact-source, and zero-percent. Any failure after
+   GKE mutation rolls Helm back to the captured revision and rechecks the old
+   image. Preserve the emitted source SHA, suffix, child digest, and prior
+   serving snapshot.
+3. Dispatch `mode=resume-cloud-run`, `environment=prod`,
+   `deploy_targets=cloud-run-only`, `confirm=resume-cloud-run-prod`, and the
+   exact handoff values. Never transcribe the digest or suffix from an earlier
+   run. The resume lane owns candidate activation, temporary-tag smoke, ordered
+   promotion, convergence, and all-service rollback.
+
+Candidate preparation intentionally leaves GKE on the new SHA after success so
+the resume identity/dwell gate cannot mix two builds. Run the resume promptly.
+If the operator chooses not to proceed, restore the captured Helm revision and
+verify the old image rather than weakening the resume gate. Do not force-cancel
+the prepare job after its GKE snapshot: GitHub cannot run the `failure()`
+rollback step after a hard cancellation. If cancellation is unavoidable, treat
+GKE state as unknown and perform the captured Helm/image reconciliation before
+any new deploy.
 
 Long term, give URL-disabled backend revisions a protected validation route:
 attach the exact traffic tag to a dedicated serverless NEG and expose it only
@@ -274,12 +329,17 @@ still converges in both surfaces; otherwise report the verified reconciliation
 failure and manual command. On any failure, reconcile **all four** services to
 the snapshot in reverse order and verify the rollback.
 
-The bounded resume lane implements this ordering and rollback today. The normal
-`deploy` lane still uses its legacy backend-first sequential traffic commands
-without the same per-service smoke and rollback wrapper. Generalize the verified
-promotion helper to fresh deploys before calling the ordinary path deterministic;
-until then, treat its cutover phase as a known higher-risk gap rather than
-assuming the resume guarantees apply to it.
+The prepare-plus-resume path implements this ordering and rollback today. The
+normal `deploy` lane still uses its legacy backend-first sequential traffic
+commands without the same per-service smoke and rollback wrapper. Generalize the
+verified promotion helper into one atomic fresh-deploy workflow before calling
+the ordinary path deterministic; until then, production must use the explicit
+two-phase path above.
+
+Status reporting must be phase-aware. After a pre-cutover candidate failure,
+zero-percent/not-promoted findings are expected secondary diagnostics; the first
+failed activation, condition, or smoke is the root-cause signal. Preserve it and
+do not let an unconditional post-promotion expectation obscure the actual gate.
 
 ### 5. Keep a temporary-change rollback ledger
 
@@ -310,7 +370,8 @@ Attach this evidence to the deployment summary or PR:
 - eligible node-pool zones and bounds, NEG sizes/attachments, and backend-service
   health;
 - all four Cloud Run latest-created/latest-ready revisions, source labels,
-  images, traffic before/after, default-URL policy, and any rollback result;
+  images, traffic before/after, default-URL policy, first-failure conditions and
+  startup logs, and any rollback result;
 - queue, IAM, TTL, log-metric, and alert-policy checks for two-lane sync;
 - `/v1/health`, desktop OpenAPI/405 probes, websocket/session acceptance, 5xx/502
   checks, and sanitized logs for the observation window;
@@ -343,11 +404,12 @@ incident:
   deploys; add verified Helm rollback rather than relying on rollout timeout alone.
 - Add one verifier for the sync queues, IAM bindings, Firestore TTL, log metrics,
   alert policies, and notification channels.
-- Retry bounded Firestore `ABORTED`/409 transaction-contention failures at the
-  `/v3/memories/batch` ownership boundary, with jitter and an idempotency guard;
-  add a concurrency regression test and a denominator-based route error alert.
-  During the `.70` soak one request returned 503 for cross-transaction contention
-  while the adjacent requests succeeded, so deploy health alone cannot close this
-  failure class.
+- Retry bounded Firestore `ABORTED`/409 transaction-contention failures at both
+  the `/v3/memories/batch` and `/v1/action-items` create/update/batch ownership
+  boundaries, with jitter and idempotency guards. Exhaustion must return a
+  generic retryable 503; add concurrency regression tests and denominator-based
+  route error alerts. During the `.70` soak, memory and action-item requests
+  failed while adjacent requests succeeded, so deploy health alone cannot close
+  this failure class.
 - Gate anomalous reconnect/request amplification independently from raw HPA
   demand so a correctness loop cannot consume the whole capacity envelope.

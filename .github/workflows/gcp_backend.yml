@@ -26,6 +26,7 @@ on:
         type: choice
         options:
           - deploy
+          - prepare-cloud-run
           - resume-cloud-run
           - repair-traffic-only
       deploy_targets:
@@ -49,7 +50,7 @@ on:
         required: false
         default: ''
       confirm:
-        description: 'Type resume-cloud-run-prod to authorize the bounded production resume'
+        description: 'Production guard: prepare-cloud-run-prod or resume-cloud-run-prod'
         required: false
         default: ''
 
@@ -383,7 +384,7 @@ jobs:
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 
   deploy:
-    if: ${{ github.event.inputs.mode == 'deploy' }}
+    if: ${{ github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'prepare-cloud-run' }}
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
@@ -393,7 +394,10 @@ jobs:
     steps:
       - name: Validate Environment Input
         env:
+          INPUT_MODE: ${{ github.event.inputs.mode }}
           INPUT_BRANCH: ${{ github.event.inputs.branch }}
+          INPUT_TARGETS: ${{ github.event.inputs.deploy_targets }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           ENV: ${{ vars.ENV }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
@@ -424,9 +428,23 @@ jobs:
             echo "RUNTIME_GCP_PROJECT_ID must be exactly based-hardware before backend-listen Helm deployment" >&2
             exit 1
           fi
-          if [[ "${{ github.event.inputs.deploy_targets }}" != "all" && "${{ github.event.inputs.deploy_targets }}" != "cloud-run-only" ]]; then
-            echo "Invalid deploy_targets: ${{ github.event.inputs.deploy_targets }}. Must be 'all' or 'cloud-run-only'."
+          if [[ "$INPUT_TARGETS" != "all" && "$INPUT_TARGETS" != "cloud-run-only" ]]; then
+            echo "Invalid deploy_targets: $INPUT_TARGETS. Must be 'all' or 'cloud-run-only'."
             exit 1
+          fi
+          if [[ "$INPUT_MODE" == "prepare-cloud-run" ]]; then
+            if [[ "${{ github.event.inputs.environment }}" != "prod" ]]; then
+              echo "prepare-cloud-run is production-only" >&2
+              exit 1
+            fi
+            if [[ "$INPUT_TARGETS" != "all" ]]; then
+              echo "prepare-cloud-run requires deploy_targets=all so GKE and Cloud Run use one source SHA" >&2
+              exit 1
+            fi
+            if [[ "$CONFIRM" != "prepare-cloud-run-prod" ]]; then
+              echo "confirm must be prepare-cloud-run-prod" >&2
+              exit 1
+            fi
           fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
@@ -455,9 +473,19 @@ jobs:
 
       - name: Compute short SHA
         id: image-tag
+        env:
+          INPUT_MODE: ${{ github.event.inputs.mode }}
         run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          {
+            echo "short_sha=${GITHUB_SHA::7}"
+            echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo 'tags<<EOF'
+            echo "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}"
+            if [[ "$INPUT_MODE" != "prepare-cloud-run" ]]; then
+              echo "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
@@ -472,6 +500,8 @@ jobs:
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
       - name: Preflight Cloud Run deploy
+        env:
+          INPUT_MODE: ${{ github.event.inputs.mode }}
         run: |
           PREFLIGHT_ARGS=(
             --env ${{ vars.ENV }}
@@ -480,10 +510,18 @@ jobs:
             --check-secrets
             --check-traffic
           )
-          if [[ "${{ github.event.inputs.environment }}" == "prod" || "${{ github.event.inputs.environment }}" == "development" ]]; then
+          if [[ "$INPUT_MODE" != "prepare-cloud-run" ]]; then
             PREFLIGHT_ARGS+=(--repair-traffic)
           fi
           python3 backend/scripts/preflight-cloud-run-deploy.py "${PREFLIGHT_ARGS[@]}"
+
+      - name: Snapshot exact serving revisions before candidate preparation
+        if: ${{ github.event.inputs.mode == 'prepare-cloud-run' }}
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py prepare-preflight \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            | tee /tmp/cloud-run-serving-before-prepare.txt
 
       - name: Validate backend runtime env before deploy
         run: |
@@ -495,9 +533,7 @@ jobs:
           context: .
           file: ./backend/Dockerfile
           push: true
-          tags: |
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          tags: ${{ steps.image-tag.outputs.tags }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -515,6 +551,7 @@ jobs:
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
+          labels: release-source-sha=${{ github.sha }}
 
       - name: Capture ${{ env.SERVICE }} revision
         id: capture-backend-revision
@@ -534,6 +571,7 @@ jobs:
           cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
           backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
           backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
+          revision_labels: release-source-sha=${{ github.sha }}
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -551,6 +589,7 @@ jobs:
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
             ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
+          labels: release-source-sha=${{ github.sha }}
 
       - name: Capture ${{ env.SERVICE }}-sync revision
         id: capture-backend-sync-revision
@@ -558,6 +597,7 @@ jobs:
           echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Provision sync-backfill platform
+        if: ${{ github.event.inputs.mode != 'prepare-cloud-run' }}
         uses: ./.github/actions/sync-backfill-lifecycle
         with:
           mode: platform
@@ -580,8 +620,21 @@ jobs:
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         uses: azure/setup-helm@v3
 
+      - name: Snapshot GKE rollback state before candidate preparation
+        id: gke-before
+        if: ${{ github.event.inputs.mode == 'prepare-cloud-run' }}
+        run: |
+          RELEASE=${{ vars.ENV }}-omi-backend-listen
+          NAMESPACE=${{ vars.ENV }}-omi-backend
+          PREVIOUS_HELM_REVISION="$(helm history "$RELEASE" -n "$NAMESPACE" --max 1 -o json | jq -r '.[0].revision')"
+          PREVIOUS_IMAGE="$(kubectl -n "$NAMESPACE" get deployment "$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          test -n "$PREVIOUS_HELM_REVISION"
+          test -n "$PREVIOUS_IMAGE"
+          echo "previous_helm_revision=$PREVIOUS_HELM_REVISION" >> "$GITHUB_OUTPUT"
+          echo "previous_image=$PREVIOUS_IMAGE" >> "$GITHUB_OUTPUT"
+
       - name: Deploy backend-secrets to GKE using Helm
-        if: ${{ github.event.inputs.deploy_targets == 'all' }}
+        if: ${{ github.event.inputs.deploy_targets == 'all' && github.event.inputs.mode != 'prepare-cloud-run' }}
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
@@ -591,6 +644,7 @@ jobs:
         run: backend/scripts/deploy-backend-secrets.sh
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
+        id: deploy-gke
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen \
@@ -598,12 +652,27 @@ jobs:
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
+            --set image.tag=${{ steps.image-tag.outputs.short_sha }} \
+            --atomic \
+            --timeout=10m
           if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      - name: Require stable GKE dwell before finishing candidate preparation
+        if: ${{ github.event.inputs.mode == 'prepare-cloud-run' }}
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py gke-gate \
+            --namespace=${{ vars.ENV }}-omi-backend \
+            --deployment=${{ vars.ENV }}-omi-backend-listen \
+            --hpa=${{ vars.ENV }}-omi-backend-listen \
+            --expected-image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }} \
+            --expected-runtime-project=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --dwell-seconds=120 \
+            --poll-interval-seconds=15 \
+            --timeout-seconds=900
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -619,6 +688,7 @@ jobs:
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
+          labels: release-source-sha=${{ github.sha }}
 
       - name: Capture ${{ env.SERVICE }}-integration revision
         id: capture-backend-integration-revision
@@ -647,7 +717,45 @@ jobs:
           test "$(gcloud run services describe backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
           test "$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
+      - name: Verify zero-traffic candidates and emit immutable resume handoff
+        id: prepared
+        if: ${{ github.event.inputs.mode == 'prepare-cloud-run' }}
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py prepare-preflight \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            > /tmp/cloud-run-serving-after-prepare.txt
+          diff -u /tmp/cloud-run-serving-before-prepare.txt /tmp/cloud-run-serving-after-prepare.txt
+          EXPECTED_DIGEST="$(python3 backend/scripts/resume_cloud_run_deploy.py verify-prepared \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --source-sha=${{ github.sha }} \
+            --candidate=backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            --candidate=backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
+            --candidate=backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --candidate=backend=${{ steps.capture-backend-revision.outputs.revision }})"
+          echo "expected_digest=$EXPECTED_DIGEST" >> "$GITHUB_OUTPUT"
+          {
+            echo ''
+            echo '### Guarded Cloud Run resume handoff'
+            echo ''
+            echo '```text'
+            echo 'environment=prod'
+            echo 'deploy_targets=cloud-run-only'
+            echo 'mode=resume-cloud-run'
+            echo 'branch=${{ github.ref_name }}'
+            echo 'source_sha=${{ github.sha }}'
+            echo 'candidate_suffix=${{ steps.image-tag.outputs.revision_suffix }}'
+            echo "expected_revision_digest=$EXPECTED_DIGEST"
+            echo 'confirm=resume-cloud-run-prod'
+            echo ''
+            echo 'Serving revisions remained unchanged:'
+            cat /tmp/cloud-run-serving-after-prepare.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Shift Cloud Run traffic to validated revisions
+        if: ${{ github.event.inputs.mode == 'deploy' }}
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
@@ -655,7 +763,7 @@ jobs:
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
       - name: Cloud Run deploy status report
-        if: always()
+        if: ${{ always() && github.event.inputs.mode == 'deploy' }}
         run: |
           set -o pipefail
           python3 backend/scripts/deploy_status_report.py \
@@ -682,6 +790,50 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Roll back GKE if candidate preparation fails after mutation
+        if: ${{ failure() && github.event.inputs.mode == 'prepare-cloud-run' && steps.gke-before.outcome == 'success' }}
+        run: |
+          RELEASE=${{ vars.ENV }}-omi-backend-listen
+          NAMESPACE=${{ vars.ENV }}-omi-backend
+          helm rollback "$RELEASE" "${{ steps.gke-before.outputs.previous_helm_revision }}" \
+            -n "$NAMESPACE" \
+            --wait \
+            --cleanup-on-fail \
+            --timeout=10m
+          kubectl -n "$NAMESPACE" rollout status deployment/"$RELEASE" --timeout=300s
+          test "$(kubectl -n "$NAMESPACE" get deployment "$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')" = "${{ steps.gke-before.outputs.previous_image }}"
+          python3 backend/scripts/resume_cloud_run_deploy.py gke-gate \
+            --namespace="$NAMESPACE" \
+            --deployment="$RELEASE" \
+            --hpa="$RELEASE" \
+            --expected-image=${{ steps.gke-before.outputs.previous_image }} \
+            --expected-runtime-project=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --dwell-seconds=60 \
+            --poll-interval-seconds=15 \
+            --timeout-seconds=600
+
+      - name: Candidate preparation status report
+        if: ${{ always() && github.event.inputs.mode == 'prepare-cloud-run' }}
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service backend \
+            --cloud-run-service backend-sync \
+            --cloud-run-service backend-sync-backfill \
+            --cloud-run-service backend-integration \
+            | tee /tmp/cloud-run-prepare-status.txt || true
+          {
+            echo ''
+            echo '### Zero-traffic candidate status'
+            echo ''
+            echo '```text'
+            cat /tmp/cloud-run-prepare-status.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
