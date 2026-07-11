@@ -42,7 +42,8 @@ the current launch.
 - `desktop/macos/Desktop/Tests/AuthTokenStorageTests.swift`
 - `desktop/macos/Desktop/Tests/AuthStorageCanaryTests.swift`
 - `desktop/macos/tests/test-signed-artifact-smoke.sh`
-- `.github/scripts/check_desktop_auth_session.py` — ratchet on 401 handlers
+- `.github/scripts/check_desktop_auth_session.py` — ratchet on 401 handlers and
+  authenticated `session.data` bypasses of the shared refresh/invalidate path
 
 ## Path globs
 

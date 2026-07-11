@@ -246,7 +246,9 @@ actor APIClient {
         "output_audio_tokens": outputAudio,
       ]
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
-      _ = try await session.data(for: request)
+      // Fire-and-forget usage accounting still goes through the shared 401 path so a
+      // dead Firebase session cannot linger as a ghost sign-in after mint succeeded.
+      try await performVoidRequest(request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
     }
@@ -589,12 +591,7 @@ extension APIClient {
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    try await performVoidRequest(request)
   }
 
   /// Gets a shareable link for a conversation by setting it to shared visibility
@@ -3333,14 +3330,7 @@ extension APIClient {
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
-
-    let goal = try decoder.decode(Goal.self, from: data)
+    let goal: Goal = try await performRequest(request)
     goalsCache = nil
     return goal
   }
@@ -3392,20 +3382,7 @@ extension APIClient {
       completed_at: formatter.string(from: Date())
     )
 
-    let url = URL(string: baseURL + "v1/goals/\(id)")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "PATCH"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.httpBody = try JSONEncoder().encode(body)
-
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
-
-    let goal = try decoder.decode(Goal.self, from: data)
+    let goal: Goal = try await patch("v1/goals/\(id)", body: body)
     goalsCache = nil
     return goal
   }
@@ -4307,12 +4284,7 @@ extension APIClient {
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    try await performVoidRequest(request)
   }
 
   /// Fetches private cloud sync setting
@@ -4327,12 +4299,7 @@ extension APIClient {
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    try await performVoidRequest(request)
   }
 
   /// Fetches notification settings
@@ -5364,32 +5331,33 @@ extension APIClient {
     let url = URL(string: baseURL + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
-
-    guard let (data, response) = try? await session.data(for: request),
-          let http = response as? HTTPURLResponse else {
-      return SyncJobFetch(outcome: .transient)
-    }
-
-    if http.statusCode == 404 {
-      return SyncJobFetch(outcome: .notFound)
-    }
-    // 403 means the caller is not permitted to access this sync job. Unlike a
-    // transient transport failure, re-polling will not resolve it — the upload
-    // path already refreshed auth on 401, so a 403 here is a durable permission
-    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
-    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
-    // instead of polling forever.
-    if http.statusCode == 403 {
-      return SyncJobFetch(outcome: .forbidden)
-    }
-    guard http.statusCode == 200 else {
-      return SyncJobFetch(outcome: .transient)
-    }
-
     do {
-      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
-      return SyncJobFetch(outcome: .ok, status: status)
+      request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+      let (data, http) = try await performAuthenticatedData(for: request)
+
+      if http.statusCode == 404 {
+        return SyncJobFetch(outcome: .notFound)
+      }
+      // 403 means the caller is not permitted to access this sync job. Unlike a
+      // transient transport failure, re-polling will not resolve it — surface it
+      // as `.forbidden` so the reconciler reverts the WAL to `.miss` for re-upload
+      // (the backend dedupes by conversation/timestamp) instead of polling forever.
+      if http.statusCode == 403 {
+        return SyncJobFetch(outcome: .forbidden)
+      }
+      guard http.statusCode == 200 else {
+        return SyncJobFetch(outcome: .transient)
+      }
+
+      do {
+        let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+        return SyncJobFetch(outcome: .ok, status: status)
+      } catch {
+        return SyncJobFetch(outcome: .transient)
+      }
+    } catch APIError.unauthorized {
+      // performAuthenticatedData already invalidated the dead Firebase session.
+      return SyncJobFetch(outcome: .forbidden)
     } catch {
       return SyncJobFetch(outcome: .transient)
     }
@@ -6008,12 +5976,7 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    try await performVoidRequest(request)
   }
 
   // MARK: - LLM Usage
