@@ -123,20 +123,23 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 
 ## Backend Integration
 
-The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`:
+The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
 ```bash
-# Auto-detect: set URL, NLLB becomes primary with Google fallback
-HOSTED_TRANSLATION_API_URL=http://nllb-translation:8080
+# 1. Google only (default — no config needed)
+# TRANSLATION_SERVICE_MODELS is unset
 
-# Explicit provider ordering (STT_SERVICE_MODELS pattern)
+# 2. Shadow mode: Google primary, NLLB comparison in background
+TRANSLATION_SERVICE_MODELS=shadow
+
+# 3. NLLB primary with Google fallback
 TRANSLATION_SERVICE_MODELS=nllb,google
 
-# Shadow mode: Google primary, NLLB runs in background for comparison
-TRANSLATION_SERVICE_MODELS=shadow
+# 4. NLLB only
+TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-Provider resolution order: `TRANSLATION_SERVICE_MODELS` > `TRANSLATION_MODE` (legacy) > auto-detect.
+`HOSTED_TRANSLATION_API_URL` must also be set for `nllb` or `shadow` to activate.
 
 ## Deploy
 
