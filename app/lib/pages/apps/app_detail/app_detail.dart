@@ -1879,8 +1879,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                     )
                   : Text(
                       widget.userReview == null
-                          ? AppLocalizations.of(context)!.submitReview
-                          : AppLocalizations.of(context)!.updateReview,
+                          ? AppLocalizations.of(context).submitReview
+                          : AppLocalizations.of(context).updateReview,
                     ),
             ),
           ),
@@ -1890,7 +1890,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
   }
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     final displayName =
         isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;

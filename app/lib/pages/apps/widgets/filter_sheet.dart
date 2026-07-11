@@ -28,7 +28,7 @@ class FilterBottomSheet extends StatelessWidget {
                 child: Row(
                   children: [
                     Text(
-                      AppLocalizations.of(context)!.filters,
+                      AppLocalizations.of(context).filters,
                       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                     if (provider.filters.isNotEmpty) ...[
@@ -62,28 +62,28 @@ class FilterBottomSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Rating
-                      _buildSectionTitle(AppLocalizations.of(context)!.rating),
+                      _buildSectionTitle(AppLocalizations.of(context).rating),
                       const SizedBox(height: 12),
                       _buildRatingSelector(provider),
 
                       const SizedBox(height: 32),
 
                       // Categories
-                      _buildSectionTitle(AppLocalizations.of(context)!.categories),
+                      _buildSectionTitle(AppLocalizations.of(context).categories),
                       const SizedBox(height: 12),
                       _buildCategoryChips(context, provider),
 
                       const SizedBox(height: 32),
 
                       // Sort Options
-                      _buildSectionTitle(AppLocalizations.of(context)!.sortBy),
+                      _buildSectionTitle(AppLocalizations.of(context).sortBy),
                       const SizedBox(height: 12),
                       _buildSortOptions(context, provider),
 
                       const SizedBox(height: 32),
 
                       // Capabilities
-                      _buildSectionTitle(AppLocalizations.of(context)!.capabilities),
+                      _buildSectionTitle(AppLocalizations.of(context).capabilities),
                       const SizedBox(height: 12),
                       _buildCapabilities(context, provider),
 
@@ -118,7 +118,7 @@ class FilterBottomSheet extends StatelessWidget {
                           ),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.resetFilters,
+                          AppLocalizations.of(context).resetFilters,
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
                         ),
                       ),
@@ -136,7 +136,7 @@ class FilterBottomSheet extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.applyFilters,
+                          AppLocalizations.of(context).applyFilters,
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ),
@@ -235,7 +235,7 @@ class FilterBottomSheet extends StatelessWidget {
   }
 
   Widget _buildSortOptions(BuildContext context, AppProvider provider) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     final sortOptions = [
       {'label': 'A-Z', 'key': 'A-Z'},
       {'label': 'Z-A', 'key': 'Z-A'},

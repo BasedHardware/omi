@@ -147,7 +147,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         final convDate = conv.createdAt;
         if (convDate.isAfter(today) && convDate.isBefore(todayEnd)) {
           if (conv.structured?.actionItems != null) {
-            for (var item in conv.structured!.actionItems) {
+            for (var item in conv.structured.actionItems) {
               todayTasksTotal++;
               if (item.completed) {
                 todayTasksDone++;
@@ -198,7 +198,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
           final convDate = conv.createdAt;
           if (convDate.isAfter(dayStart) && convDate.isBefore(dayEnd)) {
             if (conv.structured?.actionItems != null) {
-              for (var item in conv.structured!.actionItems) {
+              for (var item in conv.structured.actionItems) {
                 tasksTotal++;
                 if (item.completed) {
                   tasksDone++;

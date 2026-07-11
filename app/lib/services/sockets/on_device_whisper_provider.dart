@@ -86,11 +86,11 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
         final res = await _whisper!.transcribe(transcribeRequest: req);
 
-        if (res.text == null || res.text!.isEmpty) {
+        if (res.text == null || res.text.isEmpty) {
           return null;
         }
 
-        String cleanText = res.text!.trim();
+        String cleanText = res.text.trim();
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
