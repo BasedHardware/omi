@@ -208,39 +208,45 @@ async fn apple_domain_association() -> impl IntoResponse {
 /// Whether a client-supplied `redirect_uri` is allowed to receive the OAuth code.
 ///
 /// The desktop app only ever uses two forms: its loopback callback server
-/// (`http://127.0.0.1:<port>/...` or `localhost`) and its custom app scheme deep
-/// link (e.g. `omi-computer://auth/callback`). Everything else — in particular
-/// any `https://…` or non-loopback `http://…` — is rejected, because the callback
-/// page redirects the freshly minted auth code to this URI; without an allowlist
-/// an attacker could set `redirect_uri=https://evil.example/cb`, have a victim
-/// complete sign-in, and receive the victim's code (open redirect → code theft).
+/// (`http://127.0.0.1:<port>/...` or `localhost`) and its app-owned custom scheme
+/// deep link. Every desktop build registers an `omi-…` scheme (prod
+/// `omi-computer`, dev `omi-computer-dev`, named bundles `omi-<slug>`), so custom
+/// schemes are restricted to that prefix. Everything else — any `https://…`,
+/// non-loopback `http://…`, or foreign scheme (`ftp://`, `file://`, `attacker://`)
+/// — is rejected, because the callback page navigates the browser to
+/// `redirect_uri?code=…`; without a tight allowlist an attacker could set
+/// `redirect_uri` to a target they control and receive the victim's code (open
+/// redirect → code theft).
 fn is_allowed_redirect_uri(uri: &str) -> bool {
     let trimmed = uri.trim();
     if trimmed.is_empty() {
         return false;
     }
 
-    // Loopback HTTP callback server (any port).
+    // Loopback HTTP callback server (any port). Parse the authority as everything
+    // between "http://" and the first '/', '?' or '#'. Reject any userinfo ('@'):
+    // "http://127.0.0.1:80@evil.example/" has authority host `evil.example`, so a
+    // naive "split on ':' and match 127.0.0.1" would wrongly allow it.
     if let Some(rest) = trimmed.strip_prefix("http://") {
-        let host = rest.split(['/', ':', '?', '#']).next().unwrap_or("");
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        if authority.contains('@') {
+            return false;
+        }
+        let host = authority.split(':').next().unwrap_or("");
         return host == "127.0.0.1" || host == "localhost";
     }
 
-    // Any other http/https is an open-redirect vector.
+    // Any https:// is an open-redirect vector.
     if trimmed.starts_with("https://") {
         return false;
     }
 
-    // Custom app-scheme deep link: "<scheme>://…" where scheme is a valid,
-    // non-http URL scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )).
+    // App-owned custom scheme deep link only: "omi-…://…". Allowing arbitrary
+    // schemes (ftp://, file://, foo://) would still let the callback navigate the
+    // browser to an attacker-controlled target carrying the code.
     if let Some(scheme_end) = trimmed.find("://") {
-        let scheme = &trimmed[..scheme_end];
-        let mut chars = scheme.chars();
-        let first_ok = chars.next().map_or(false, |c| c.is_ascii_alphabetic());
-        let rest_ok = scheme
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.');
-        return first_ok && rest_ok;
+        let scheme = trimmed[..scheme_end].to_ascii_lowercase();
+        return scheme.starts_with("omi-");
     }
 
     false
@@ -921,14 +927,13 @@ mod tests {
 
     #[test]
     fn redirect_uri_allowlist_accepts_desktop_forms() {
-        // Loopback callback server (any port) and the custom app scheme.
+        // Loopback callback server (any port).
         assert!(is_allowed_redirect_uri("http://127.0.0.1:52001/callback"));
         assert!(is_allowed_redirect_uri("http://localhost:8080/callback"));
+        // App-owned custom schemes: prod, dev, and named-bundle (omi-<slug>).
         assert!(is_allowed_redirect_uri("omi-computer://auth/callback"));
-        // Named/dev bundles use their own custom scheme — still allowed.
-        assert!(is_allowed_redirect_uri(
-            "com.omi.desktop-dev://auth/callback"
-        ));
+        assert!(is_allowed_redirect_uri("omi-computer-dev://auth/callback"));
+        assert!(is_allowed_redirect_uri("omi-fix-rewind://auth/callback"));
     }
 
     #[test]
@@ -942,6 +947,27 @@ mod tests {
         assert!(!is_allowed_redirect_uri("   "));
         assert!(!is_allowed_redirect_uri("not-a-uri"));
         assert!(!is_allowed_redirect_uri("://missing-scheme"));
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_rejects_userinfo_and_foreign_scheme_bypasses() {
+        // Userinfo authority trick: real host is evil.example, not 127.0.0.1.
+        assert!(!is_allowed_redirect_uri(
+            "http://127.0.0.1:80@evil.example/cb"
+        ));
+        assert!(!is_allowed_redirect_uri("http://127.0.0.1@evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://localhost@evil.example/cb"));
+        // Foreign / non-http network schemes must not be treated as app deep links.
+        assert!(!is_allowed_redirect_uri("ftp://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("file:///etc/passwd"));
+        assert!(!is_allowed_redirect_uri("attacker://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("javascript://alert(1)"));
+        // A scheme that merely contains "omi-" but doesn't start with it is foreign.
+        assert!(!is_allowed_redirect_uri("evil-omi-://x"));
+        // A '@' in the path (not the authority) is harmless and still allowed.
+        assert!(is_allowed_redirect_uri(
+            "http://127.0.0.1:52001/callback@ok"
+        ));
     }
 
     #[test]
