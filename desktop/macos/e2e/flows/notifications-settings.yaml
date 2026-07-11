@@ -5,6 +5,7 @@ description: Settings Notifications section snapshot and API update
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift
 preconditions:
   - automation_bridge_ready
 

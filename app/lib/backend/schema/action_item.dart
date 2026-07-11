@@ -11,6 +11,8 @@ typedef ActionItemWithMetadata = wire.GeneratedActionItemResponse;
 typedef ActionItemsResponse = wire.GeneratedActionItemsResponse;
 typedef PendingSyncResponse = wire.GeneratedPendingSyncResponse;
 
+const Object _actionItemCopyWithUnset = Object();
+
 /// copyWith for [ActionItemWithMetadata]; preserved from the deleted hand-written
 /// class because the provider mutates items in place via this method.
 extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
@@ -30,6 +32,18 @@ extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
     String? appleReminderId,
     int? sortOrder,
     int? indentLevel,
+    double? dueConfidence,
+    Object? goalId = _actionItemCopyWithUnset,
+    Object? workstreamId = _actionItemCopyWithUnset,
+    String? owner,
+    String? source,
+    String? status,
+    String? priority,
+    List<wire.GeneratedEvidenceRef>? provenance,
+    String? recurrenceRule,
+    String? recurrenceParentId,
+    String? supersededBy,
+    String? taskId,
   }) {
     return wire.GeneratedActionItemResponse(
       id: id ?? this.id,
@@ -47,6 +61,18 @@ extension ActionItemWithMetadataCopyWith on wire.GeneratedActionItemResponse {
       appleReminderId: appleReminderId ?? this.appleReminderId,
       sortOrder: sortOrder ?? this.sortOrder,
       indentLevel: indentLevel ?? this.indentLevel,
+      dueConfidence: dueConfidence ?? this.dueConfidence,
+      goalId: identical(goalId, _actionItemCopyWithUnset) ? this.goalId : goalId as String?,
+      workstreamId: identical(workstreamId, _actionItemCopyWithUnset) ? this.workstreamId : workstreamId as String?,
+      owner: owner ?? this.owner,
+      source: source ?? this.source,
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      provenance: provenance ?? this.provenance,
+      recurrenceRule: recurrenceRule ?? this.recurrenceRule,
+      recurrenceParentId: recurrenceParentId ?? this.recurrenceParentId,
+      supersededBy: supersededBy ?? this.supersededBy,
+      taskId: taskId ?? this.taskId,
     );
   }
 }

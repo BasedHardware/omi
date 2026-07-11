@@ -19,6 +19,7 @@ import { serializeArtifact } from "./artifact-serialization.js";
 import { failureFromError, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
+import { executionRoleForSurface } from "./execution-policy.js";
 
 export type JsonlTransportSend = (message: OutboundMessageDraft) => void;
 export type JsonlTransportLog = (message: string) => void;
@@ -37,6 +38,7 @@ export interface McpServerBuildContext {
   adapterId?: string;
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export type McpServerBuilder = (
@@ -46,8 +48,8 @@ export type McpServerBuilder = (
   context: McpServerBuildContext
 ) => Record<string, unknown>[];
 
-export type RecoverableErrorPredicate = (error: unknown) => boolean;
-export type RecoverableErrorHandler = (error: unknown) => Promise<void>;
+export type RecoverableErrorPredicate = (error: unknown, adapterId: string) => boolean;
+export type RecoverableErrorHandler = (error: unknown, adapterId: string) => Promise<void>;
 
 export interface JsonlTransportOptions {
   kernel: AgentRuntimeKernel;
@@ -450,11 +452,13 @@ export class JsonlTransport {
     const hint = this.warmupHints.get(warmupKey);
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
     const ownerId = message.ownerId ?? this.ownerId;
+    const executionRole = executionRoleForSurface(message);
 
     return {
       ownerId,
       sessionId: message.sessionId,
       surfaceKind: message.surfaceKind,
+      executionRole,
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
       defaultAdapterId: requestedAdapterId,
@@ -474,9 +478,10 @@ export class JsonlTransport {
         protocolVersion: PROTOCOL_VERSION,
         sessionId: message.sessionId,
         adapterId: requestedAdapterId,
+        executionRole,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
-      recoverAfterError: this.recoverAfterError(),
+      recoverAfterError: this.recoverAfterError(requestedAdapterId),
       attachmentMetadataJson: message.attachmentMetadataJson ?? null,
       surfaceContextJson: message.surfaceContextJson ?? null,
       imagePresent: Boolean(message.imageBase64),
@@ -631,17 +636,17 @@ export class JsonlTransport {
     return undefined;
   }
 
-  private recoverAfterError(): ExecuteAgentRunInput["recoverAfterError"] | undefined {
+  private recoverAfterError(adapterId: string): ExecuteAgentRunInput["recoverAfterError"] | undefined {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
     let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error)) {
+      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
       recoveries += 1;
-      await this.onRecoverableError?.(error);
+      await this.onRecoverableError?.(error, adapterId);
       return true;
     };
   }

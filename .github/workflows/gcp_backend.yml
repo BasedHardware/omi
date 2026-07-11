@@ -201,6 +201,52 @@ jobs:
         run: |
           echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve backfill service URL
+        id: backfill-service
+        run: |
+          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
+          echo "url=https://${{ env.SERVICE }}-sync-backfill-${PROJECT_NUMBER}.${{ env.REGION }}.run.app" >> "$GITHUB_OUTPUT"
+
+      - name: Clone complete backend-sync runtime contract for backfill worker
+        id: backfill-runtime
+        env:
+          ENV_OVERLAY: |-
+            ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+            SYNC_TASKS_QUEUE=sync-backfill
+            SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
+            SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
+          SECRET_OVERLAY: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
+        run: |
+          gcloud run services describe backend-sync \
+            --region=${{ env.REGION }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --format=json > /tmp/backend-sync-live.json
+          python3 backend/scripts/render_cloud_run_clone_env.py \
+            --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ${{ env.SERVICE }}-sync-backfill to Cloud Run
+        id: deploy-backend-sync-backfill
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}-sync-backfill
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --min-instances=0
+            --max-instances=4
+            --concurrency=1
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
+          secrets: ${{ steps.backfill-runtime.outputs.secrets }}
+
+      - name: Capture ${{ env.SERVICE }}-sync-backfill revision
+        id: capture-backend-sync-backfill-revision
+        run: |
+          echo "revision=backend-sync-backfill-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
         uses: google-github-actions/deploy-cloudrun@v2
@@ -213,13 +259,110 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+          env_vars: |-
+            ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+            SYNC_BACKFILL_TASKS_QUEUE=sync-backfill
+            SYNC_BACKFILL_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
+            SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
       - name: Capture ${{ env.SERVICE }}-sync revision
         id: capture-backend-sync-revision
         run: |
           echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure bounded sync backfill queue
+        run: |
+          INVOKER_SA="$(
+            gcloud run services describe backend-sync \
+              --region=${{ env.REGION }} \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[] | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+          )"
+          test -n "$INVOKER_SA"
+          gcloud run services add-iam-policy-binding backend-sync-backfill \
+            --region=${{ env.REGION }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --member="serviceAccount:${INVOKER_SA}" \
+            --role=roles/run.invoker \
+            --quiet
+          if gcloud tasks queues describe sync-backfill --location=${{ env.REGION }} --project=${{ vars.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+            gcloud tasks queues update sync-backfill \
+              --location=${{ env.REGION }} \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --max-concurrent-dispatches=4
+          else
+            gcloud tasks queues create sync-backfill \
+              --location=${{ env.REGION }} \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --max-concurrent-dispatches=4
+          fi
+
+      - name: Provision and verify sync ledger TTL
+        run: |
+          gcloud firestore fields ttls update expires_at \
+            --collection-group=sync_content_ledger \
+            --database='(default)' \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --enable-ttl \
+            --quiet
+          gcloud firestore fields ttls list \
+            --collection-group=sync_content_ledger \
+            --database='(default)' \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --format='value(name)' | grep '/fields/expires_at$'
+
+      - name: Provision routed backfill budget alerts
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          test -n "$ALERT_CHANNELS"
+          for THRESHOLD in 70 90; do
+            METRIC="sync_backfill_budget_${THRESHOLD}"
+            DISPLAY_NAME="Sync backfill daily budget ${THRESHOLD}%"
+            LOG_FILTER="resource.type=\"cloud_run_revision\" resource.labels.service_name=\"backend-sync-backfill\" \"sync_backfill_budget_threshold threshold=${THRESHOLD}\""
+            if gcloud logging metrics describe "$METRIC" --project=${{ vars.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+              gcloud logging metrics update "$METRIC" \
+                --project=${{ vars.GCP_PROJECT_ID }} \
+                --description="$DISPLAY_NAME threshold crossing" \
+                --log-filter="$LOG_FILTER"
+            else
+              gcloud logging metrics create "$METRIC" \
+                --project=${{ vars.GCP_PROJECT_ID }} \
+                --description="$DISPLAY_NAME threshold crossing" \
+                --log-filter="$LOG_FILTER"
+            fi
+
+            POLICY="$(
+              gcloud monitoring policies list \
+                --project=${{ vars.GCP_PROJECT_ID }} \
+                --filter="displayName=\"${DISPLAY_NAME}\"" \
+                --format='value(name)' \
+                --limit=1
+            )"
+            if [[ -z "$POLICY" ]]; then
+              POLICY="$(
+                gcloud monitoring policies create \
+                  --project=${{ vars.GCP_PROJECT_ID }} \
+                  --display-name="$DISPLAY_NAME" \
+                  --condition-display-name="$DISPLAY_NAME" \
+                  --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+                  --duration=0s \
+                  --if='> 0' \
+                  --trigger-count=1 \
+                  --combiner=OR \
+                  --notification-channels="$ALERT_CHANNELS" \
+                  --documentation="Backfill has crossed ${THRESHOLD}% of the 555-hour UTC-day allowance." \
+                  --format='value(name)'
+              )"
+            fi
+            test -n "$POLICY"
+            gcloud monitoring policies describe "$POLICY" \
+              --project=${{ vars.GCP_PROJECT_ID }} \
+              --format='value(notificationChannels)' | grep -q .
+          done
 
       - name: Get GKE credentials
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
@@ -286,6 +429,7 @@ jobs:
             --region ${{ env.REGION }} \
             --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync-backfill=${{ steps.capture-backend-sync-backfill-revision.outputs.revision }} \
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
@@ -296,12 +440,14 @@ jobs:
         run: |
           test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
           test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-backfill-revision.outputs.revision }}"
           test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-backfill-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
       - name: Cloud Run deploy status report
@@ -315,9 +461,11 @@ jobs:
             --include-cloud-run \
             --cloud-run-service backend \
             --cloud-run-service backend-sync \
+            --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration \
             --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --expect-cloud-run-traffic backend-sync-backfill=${{ steps.capture-backend-sync-backfill-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
             | tee /tmp/cloud-run-deploy-status.txt
           if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
