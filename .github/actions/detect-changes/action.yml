@@ -36,6 +36,8 @@ outputs:
     value: ${{ steps.changed.outputs.has_app_l10n }}
   has_app_compile_smoke:
     value: ${{ steps.changed.outputs.has_app_compile_smoke }}
+  has_app_dart:
+    value: ${{ steps.changed.outputs.has_app_dart }}
   has_desktop_rust:
     value: ${{ steps.changed.outputs.has_desktop_rust }}
   has_desktop_defaults_ratchet:
@@ -92,6 +94,7 @@ runs:
         has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_compile_smoke=$(echo "$APP_COMPILE_FILES" | grep -qE '^app/(lib/|android/|ios/|pubspec\.yaml$|pubspec\.lock$|build\.yaml$|analysis_options\.yaml$|l10n\.yaml$|flavorizr\.yaml$|setup/prebuilt/|setup/scripts/|config/|assets/)|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_app_dart=$(echo "$FILES" | grep -qE '^app/(lib|test|integration_test)/.*\.dart$|^app/pubspec\.(yaml|lock)$|^app/analysis_options\.yaml$|^app/analysis_baseline\.json$|^app/scripts/analyze_ratchet\.sh$|^app/test\.sh$|^\.github/workflows/mobile-app-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
@@ -115,6 +118,7 @@ runs:
           echo "has_app_codegen=$has_app_codegen"
           echo "has_app_l10n=$has_app_l10n"
           echo "has_app_compile_smoke=$has_app_compile_smoke"
+          echo "has_app_dart=$has_app_dart"
           echo "has_desktop_rust=$has_desktop_rust"
           echo "has_desktop_defaults_ratchet=$has_desktop_defaults_ratchet"
           echo "has_desktop_async_after_ratchet=$has_desktop_async_after_ratchet"

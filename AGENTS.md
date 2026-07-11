@@ -201,6 +201,8 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
+- PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes.
+- Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 #### Verifying UI Changes (agent-flutter)
 
