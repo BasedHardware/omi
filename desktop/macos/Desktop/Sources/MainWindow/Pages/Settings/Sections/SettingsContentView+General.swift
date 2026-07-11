@@ -111,59 +111,6 @@ extension SettingsContentView {
         }
       }
 
-      // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
-      if #available(macOS 14.4, *) {
-        settingsCard(settingId: "general.systemaudio") {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.lg) {
-              Image(systemName: "speaker.wave.2.fill")
-                .scaledFont(size: OmiType.subheading)
-                .foregroundColor(OmiColors.info)
-
-              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("System Audio")
-                  .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
-
-                Text("Choose when Omi records audio from other apps (calls, videos, music).")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-
-              Spacer()
-
-              Picker(
-                "",
-                selection: Binding(
-                  get: { systemAudioCaptureMode },
-                  set: { newValue in
-                    systemAudioCaptureMode = newValue
-                    setSystemAudioCaptureMode(newValue)
-                  }
-                )
-              ) {
-                Text("Always").tag(AssistantSettings.SystemAudioCaptureMode.always)
-                Text("Only during meetings").tag(
-                  AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
-                Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
-              }
-              .pickerStyle(.menu)
-              .labelsHidden()
-              .frame(width: 200)
-            }
-
-            if systemAudioCaptureMode == .onlyDuringMeetings {
-              Text(
-                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
-              )
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-              .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
-      }
-
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
@@ -257,6 +204,59 @@ extension SettingsContentView {
               RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                 .fill(OmiColors.warning.opacity(0.1))
             )
+          }
+        }
+      }
+
+      // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
+      if #available(macOS 14.4, *) {
+        settingsCard(settingId: "general.systemaudio") {
+          VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.lg) {
+              Image(systemName: "speaker.wave.2.fill")
+                .scaledFont(size: OmiType.subheading)
+                .foregroundColor(OmiColors.info)
+
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+                Text("System Audio")
+                  .scaledFont(size: OmiType.subheading, weight: .semibold)
+                  .foregroundColor(OmiColors.textPrimary)
+
+                Text("Choose when Omi records audio from other apps (calls, videos, music).")
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+
+              Spacer()
+
+              Picker(
+                "",
+                selection: Binding(
+                  get: { systemAudioCaptureMode },
+                  set: { newValue in
+                    systemAudioCaptureMode = newValue
+                    setSystemAudioCaptureMode(newValue)
+                  }
+                )
+              ) {
+                Text("Always").tag(AssistantSettings.SystemAudioCaptureMode.always)
+                Text("Only during meetings").tag(
+                  AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
+                Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
+              }
+              .pickerStyle(.menu)
+              .labelsHidden()
+              .frame(width: 200)
+            }
+
+            if systemAudioCaptureMode == .onlyDuringMeetings {
+              Text(
+                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
+              )
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
           }
         }
       }
