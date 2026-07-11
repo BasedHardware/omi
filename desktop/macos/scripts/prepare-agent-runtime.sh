@@ -529,8 +529,8 @@ validate_runtime_tree() {
     "$AGENT_DIR/src/runtime/control-tool-manifest.ts" \
     "$AGENT_DIR/src/runtime/node-tools.ts" \
     "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" \
-    "$AGENT_DIR/node_modules/@mariozechner/pi-coding-agent/dist/cli.js" \
-    "$AGENT_PACKAGED_NODE_MODULES/@mariozechner/pi-coding-agent/dist/cli.js" \
+    "$AGENT_DIR/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
+    "$AGENT_PACKAGED_NODE_MODULES/@earendil-works/pi-coding-agent/dist/cli.js" \
     "$AGENT_DIR/node_modules/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
     "$AGENT_PACKAGED_NODE_MODULES/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
     "$PI_MONO_DIR/index.ts" \
