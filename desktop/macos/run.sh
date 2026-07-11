@@ -42,29 +42,31 @@ Examples:
   ./run.sh                                  # Full local dev (backend + tunnel + app)
   OMI_SKIP_BACKEND=1 ./run.sh               # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
-  ./run.sh --yolo                            # Quick start: use prod backend, no local services
+  ./run.sh --yolo                            # Quick start: use dev backend, no local services
 USAGE
     exit 0
 fi
 
-# ─── YOLO mode: use prod backend, zero local setup ───────────────────
-# WARNING: Temporary shortcut while desktop dev setup is being cleaned up.
-# Will be removed once all desktop slop is fixed.
+# ─── YOLO mode: use dev backend, zero local setup ────────────────────
+# Keep these endpoint values aligned with DesktopBackendEnvironment's dev
+# defaults. The dev services currently mint prod Firebase identities, so this
+# is a service-revision target, not an isolated local-data harness.
 apply_yolo_env() {
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omi.me"
+    export OMI_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
+    export OMI_PYTHON_API_URL="https://api.omiapi.com"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 
 if [ "$1" = "--yolo" ]; then
     echo ""
     echo "=========================================="
-    echo "  YOLO MODE — using production backend"
+    echo "  YOLO MODE — using development backend"
     echo "=========================================="
     echo ""
-    echo "  WARNING: This connects directly to the prod Cloud Run backend."
+    echo "  WARNING: This connects directly to the dev Cloud Run backends."
+    echo "  They currently use production Firebase identities and data stores."
     echo "  No local Rust backend, no local auth, no tunnel."
     echo "  This is a temporary shortcut — will be removed once"
     echo "  desktop dev setup friction is fully resolved."
@@ -336,7 +338,7 @@ if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
     echo "  OMI_SKIP_BACKEND=1 ./run.sh"
     echo "  (set OMI_DESKTOP_API_URL and OMI_PYTHON_API_URL in .env.app to point to remote backends)"
     echo ""
-    echo "Or just use the production backend (no setup needed):"
+    echo "Or just use the development backend (no setup needed):"
     echo "  ./run.sh --yolo"
     echo "==========================="
     exit 1

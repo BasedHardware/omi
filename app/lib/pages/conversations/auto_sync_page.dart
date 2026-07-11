@@ -163,11 +163,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       }
       action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
-      title = p.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
+      title = switch (p.rateLimitReason) {
+        RateLimitReason.backendBusy => l.syncCardBackendBusy,
+        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToBackUp),
+        _ => l.syncCardRateLimited,
+      };
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
+      progressText = l.syncCardProgressOf(uploaded, uploaded + readyToBackUp);
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;

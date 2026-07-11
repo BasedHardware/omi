@@ -33,6 +33,26 @@ extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
 
+/// Consumes the one transition that hands a buffered PTT turn from a warming
+/// realtime hub to an active hub. Recording the new route before returning is
+/// critical: beginning the hub turn can synchronously publish another voice-turn
+/// snapshot, which must not resolve the same warm wait again.
+struct RealtimeHubWarmWaitResolutionGate {
+  private(set) var route: VoiceTurnRoute?
+
+  mutating func observe(_ nextRoute: VoiceTurnRoute?) -> Bool {
+    let wasWaitingForHub = route == .hubWarmWait
+    route = nextRoute
+    guard wasWaitingForHub else { return false }
+    if case .hub = nextRoute { return true }
+    return false
+  }
+
+  var isWaitingForHub: Bool {
+    route == .hubWarmWait
+  }
+}
+
 /// Push-to-talk manager for voice input via the Option (⌥) key.
 ///
 /// State machine:
@@ -57,7 +77,7 @@ class PushToTalkManager: ObservableObject {
   private let voiceTurnCoordinator = VoiceTurnCoordinator.shared
   private var currentVoiceTurnID: VoiceTurnID?
   private var finalizationTurnID: VoiceTurnID?
-  private var lastCoordinatorRoute: VoiceTurnRoute?
+  private var hubWarmWaitResolutionGate = RealtimeHubWarmWaitResolutionGate()
 
   // MARK: - Private Properties
 
@@ -89,7 +109,7 @@ class PushToTalkManager: ObservableObject {
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
   // True once the omni model returned any transcript this turn — gates the
-  // Deepgram fallback so a benign trailing socket error doesn't trigger it.
+  // Batch-STT fallback so a benign trailing socket error doesn't trigger it.
   private var omniReceivedTranscript = false
   private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
@@ -216,11 +236,8 @@ class PushToTalkManager: ObservableObject {
       state = nextState
     }
 
-    let route = model.turn?.route
-    defer { lastCoordinatorRoute = route }
-    guard lastCoordinatorRoute == .hubWarmWait else { return }
-    if case .hub = route {
-      resolveRealtimeHubWarmWait(ready: true)
+    if hubWarmWaitResolutionGate.observe(model.turn?.route) {
+      resolveRealtimeHubWarmWait(ready: true, consumedReadyTransition: true)
     }
   }
 
@@ -888,7 +905,9 @@ class PushToTalkManager: ObservableObject {
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-      log("PushToTalkManager: hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed")")
+      log(
+        "PushToTalkManager: hub turn "
+          + "\(commitResult == .accepted ? "committed" : "deferred until its realtime session is ready")")
       return
     }
 
@@ -950,10 +969,10 @@ class PushToTalkManager: ObservableObject {
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
       // The relay already died this turn (omniDidError nilled it) — don't wait on a dead
-      // socket; transcribe the buffered turn audio via Deepgram now so PTT still answers.
+      // socket; transcribe the buffered turn audio through routed batch STT now so PTT still answers.
       if realtimeOmniService == nil {
-        log("PushToTalkManager: omni relay unavailable — transcribing turn via Deepgram")
-        fallBackToDeepgram(reason: "other")
+        log("PushToTalkManager: omni relay unavailable — transcribing turn through backend batch STT")
+        fallBackToBatchTranscription(reason: "other")
         return
       }
       // QueryTracer: the omni provider's post-commit finalization (VAD close +
@@ -966,10 +985,10 @@ class PushToTalkManager: ObservableObject {
         Task { @MainActor in
           guard let self, self.state == .finalizing else { return }
           // No clean final transcript from the relay in time — don't ship the garbage
-          // interim it may have left behind; fall back to Deepgram on the full buffered
-          // turn audio. fallBackToDeepgram() no-ops if the turn was already sent.
-          log("PushToTalkManager: omni finalization timeout — falling back to Deepgram")
-          self.fallBackToDeepgram(reason: "timeout")
+          // interim it may have left behind; fall back to routed batch STT on the full buffered
+          // turn audio. fallBackToBatchTranscription() no-ops if the turn was already sent.
+          log("PushToTalkManager: omni finalization timeout — falling back to backend batch STT")
+          self.fallBackToBatchTranscription(reason: "timeout")
         }
       }
       liveFinalizationTimeout = timeout
@@ -1011,16 +1030,18 @@ class PushToTalkManager: ObservableObject {
           log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), pttLanguage=\(language), selectedLanguage=\(AssistantSettings.shared.transcriptionLanguage), autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect)")
 
           self.activeTracer?.begin("batch_transcribe", metadata: ["method": "TranscriptionService.batchTranscribe"])
-          var transcript = try await TranscriptionService.batchTranscribe(
+          var batchResult = try await TranscriptionService.batchTranscribe(
             audioData: audioData,
             language: language,
             contextKeywords: self.currentContextSnapshot?.keywords ?? []
           )
           guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
 
-          if (transcript == nil || transcript?.isEmpty == true) && language != "en" && language != "multi" && audioSeconds < 5.0 {
+          if (batchResult.transcript == nil || batchResult.transcript?.isEmpty == true)
+            && language != "en" && language != "multi" && audioSeconds < 5.0
+          {
             log("PushToTalkManager: selected language returned empty on short audio, retrying with 'en'")
-            transcript = try await TranscriptionService.batchTranscribe(
+            batchResult = try await TranscriptionService.batchTranscribe(
               audioData: audioData,
               language: "en",
               contextKeywords: self.currentContextSnapshot?.keywords ?? []
@@ -1028,8 +1049,11 @@ class PushToTalkManager: ObservableObject {
             guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
           }
           self.activeTracer?.end("batch_transcribe")
+          log(
+            "PushToTalkManager: batch STT selected provider=\(batchResult.provider ?? "unknown") "
+              + "model=\(batchResult.model ?? "unknown")")
 
-          if let transcript, !transcript.isEmpty {
+          if let transcript = batchResult.transcript, !transcript.isEmpty {
             self.transcriptSegments = [transcript]
           } else {
             log("PushToTalkManager: transcription returned empty after retry")
@@ -1346,8 +1370,8 @@ class PushToTalkManager: ObservableObject {
     // with a typed session ID; expiry emits fallbackToTranscription.
   }
 
-  private func resolveRealtimeHubWarmWait(ready: Bool) {
-    guard lastCoordinatorRoute == .hubWarmWait else { return }
+  private func resolveRealtimeHubWarmWait(ready: Bool, consumedReadyTransition: Bool = false) {
+    guard consumedReadyTransition || hubWarmWaitResolutionGate.isWaitingForHub else { return }
     guard state == .listening || state == .lockedListening || state == .pendingLockDecision || state == .finalizing else {
       return
     }
@@ -1417,7 +1441,9 @@ class PushToTalkManager: ObservableObject {
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-    log("PushToTalkManager: buffered hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed") after warm wait")
+    log(
+      "PushToTalkManager: buffered hub turn "
+        + "\(commitResult == .accepted ? "committed" : "deferred until its realtime session is ready") after warm wait")
   }
 
   private func transcribeBufferedWarmWaitAudio() {
@@ -1457,14 +1483,17 @@ class PushToTalkManager: ObservableObject {
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
         self.activeTracer?.begin("batch_transcribe", metadata: ["reason": "hub_warm_timeout"])
-        let transcript = try await TranscriptionService.batchTranscribe(
+        let batchResult = try await TranscriptionService.batchTranscribe(
           audioData: audio,
           language: language,
           contextKeywords: self.currentContextSnapshot?.keywords ?? []
         )
         guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
         self.activeTracer?.end("batch_transcribe")
-        if let transcript, !transcript.isEmpty {
+        log(
+          "PushToTalkManager: warm-wait batch STT selected provider=\(batchResult.provider ?? "unknown") "
+            + "model=\(batchResult.model ?? "unknown")")
+        if let transcript = batchResult.transcript, !transcript.isEmpty {
           self.transcriptSegments = [transcript]
         }
       } catch {
@@ -1889,7 +1918,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     // Benign ONLY if the turn already completed (final transcript sent). A mid-turn relay
     // death — even after a spurious interim like "Olha olha" that set omniReceivedTranscript
     // — must NOT be ignored, or the turn is lost (garbage/no reply). The full turn audio is
-    // always buffered in batchAudioBuffer, so we re-transcribe it via Deepgram.
+    // always buffered in batchAudioBuffer, so we re-transcribe it through routed batch STT.
     guard !omniTurnSent,
           state == .listening || state == .lockedListening
             || state == .pendingLockDecision || state == .finalizing
@@ -1898,25 +1927,18 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     realtimeOmniService?.stop()
     realtimeOmniService = nil
     // If the user already released, transcribe the buffered turn now. If they're still
-    // holding, keep capturing — finalize()'s dead-relay branch falls back to Deepgram with
+    // holding, keep capturing — finalize()'s dead-relay branch falls back to batch STT with
     // the full turn audio (avoids cutting them off mid-sentence).
     if state == .finalizing {
-      fallBackToDeepgram(reason: "other")
+      fallBackToBatchTranscription(reason: "other")
     }
   }
 
-  /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
-  fileprivate func fallBackToDeepgram(reason: String = "other") {
+  /// Transcribe the buffered turn audio through the backend's selected batch-STT provider.
+  fileprivate func fallBackToBatchTranscription(reason: String = "other") {
     guard !omniTurnSent else { return }
     omniTurnSent = true
-    DesktopDiagnosticsManager.shared.recordFallback(
-      area: "ptt_cascade",
-      from: "omni",
-      to: "deepgram",
-      reason: reason,
-      outcome: .recovered,
-      extra: ["user_visible": false])
-    log("PushToTalkManager: omni unavailable — falling back to Deepgram for this turn")
+    log("PushToTalkManager: omni unavailable — falling back to backend batch STT for this turn")
     realtimeOmniService?.stop()
     realtimeOmniService = nil
     batchAudioLock.lock()
@@ -1936,20 +1958,30 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
       guard let self, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let transcript = try await TranscriptionService.batchTranscribe(
+        let batchResult = try await TranscriptionService.batchTranscribe(
           audioData: audio, language: language,
           contextKeywords: self.currentContextSnapshot?.keywords ?? [])
         guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
-        if let transcript, !transcript.isEmpty { self.transcriptSegments = [transcript] }
-      } catch {
-        logError("PushToTalkManager: Deepgram fallback failed", error: error)
+        let provider = batchResult.provider ?? "unknown"
+        let model = batchResult.model ?? "unknown"
+        log("PushToTalkManager: omni batch fallback selected provider=\(provider) model=\(model)")
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "ptt_cascade",
           from: "omni",
-          to: "deepgram",
+          to: provider,
+          reason: capturedReason,
+          outcome: .recovered,
+          extra: ["stt_provider": provider, "stt_model": model, "user_visible": false])
+        if let transcript = batchResult.transcript, !transcript.isEmpty { self.transcriptSegments = [transcript] }
+      } catch {
+        logError("PushToTalkManager: batch-STT fallback failed", error: error)
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_cascade",
+          from: "omni",
+          to: "batch_stt",
           reason: capturedReason,
           outcome: .exhausted,
-          extra: ["user_visible": false])
+          extra: ["stt_provider": "unknown", "stt_model": "unknown", "user_visible": false])
         self.voiceTurnCoordinator.send(
           .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
         return

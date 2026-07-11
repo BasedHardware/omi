@@ -18,6 +18,8 @@ enum HubTool: String {
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case updateActionItem = "update_action_item"
+  case checkPermissionStatus = "check_permission_status"
+  case requestPermission = "request_permission"
   case getTasks = "get_tasks"
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
@@ -515,6 +517,54 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "id"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "check_permission_status",
+    "description": "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Optional permission type. Omit to return all supported permissions."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "request_permission",
+    "description": "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
+        }
+      },
+      "required": [
+        "type"
       ]
     }
   },

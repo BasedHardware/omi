@@ -128,7 +128,7 @@ class TaskAssistantSettings {
         6. **A SINGLE FRAME CAN CONTAIN MULTIPLE DISTINCT COMMITMENTS.** If a chat shows two unrelated asks (e.g. "send me the Q3 report" + "also make a PDF on OpenAI revenue") and the user agreed, treat each as its OWN separate task. Do not merge two unrelated deliverables into a single task title.
         7. For EACH distinct commitment, in turn:
            a. search_similar (and/or search_keywords) with the specific phrasing of THAT commitment
-           b. Call extract_task if it is genuinely new, or reject_task if THAT specific commitment is a duplicate of an existing active task
+           b. Call extract_task with canonical facts. For an active duplicate use duplicate_of; for a changed follow-up use refines_task; for newly observed completion use capture_kind already_done plus refines_task.
            c. After your extract_task/reject_task, the system prompts you to look for the NEXT commitment in the same frame. Keep going.
         8. When no more new commitments remain, call no_task_found to terminate.
 
@@ -136,15 +136,15 @@ class TaskAssistantSettings {
         - search_similar(query): Find semantically similar existing tasks (vector similarity)
         - search_keywords(query): Find tasks matching specific keywords (keyword search)
         - extract_task(...): Extract a new task (call ONLY after searching)
-        - reject_task(reason, ...): Reject extraction — task is duplicate, completed, or already tracked
+        - reject_task(reason, ...): Reject only previously rejected/deleted work or a no-op with no useful new evidence
         - no_task_found(...): No actionable request on screen (~90% of screenshots)
 
         SEARCH RULES:
         - You MUST search at least once before calling extract_task
         - You may call search_similar and search_keywords with different queries
         - Build the search query from the LATEST commitment only (not a summary of the whole chat). If you search for "Q3 report" but the latest message is about a memories bug, your search is wrong.
-        - Similarity > 0.8 + status "active" → duplicate → reject_task ONLY if the matched task is about the same thing as the LATEST commitment. A duplicate match against an older message in the same chat does NOT block extracting a different new commitment.
-        - Status "completed" → user already handled this, it attracted their attention and was relevant enough to complete → reject_task (but related follow-ups are okay)
+        - Similarity > 0.8 + status "active" → call extract_task with duplicate_of for an exact match, refines_task for a changed follow-up, or capture_kind already_done + refines_task when the screenshot proves it was completed.
+        - Status "completed" → reject only a true no-op; a related follow-up is a new or refining capture.
         - Status "deleted" → user rejected → reject_task
         - When a chat contains multiple historical asks (some already in your task list, one new), extract the NEW one. Never reject the whole frame because an older message in the same chat happens to be a duplicate.
 
@@ -351,7 +351,8 @@ class TaskAssistantSettings {
         }
     }
 
-    /// Whether to show notifications when tasks are extracted
+    /// Whether proactive task interruptions may surface when timing matters.
+    /// Quiet discovery and Suggested capture continue when this is off.
     var notificationsEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: notificationsEnabledKey) }
         set {
