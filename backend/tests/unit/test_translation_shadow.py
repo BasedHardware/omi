@@ -740,6 +740,56 @@ class TestNllbPrimaryMode(unittest.TestCase):
         result = self.service._detect_source_language(["short"])
         self.assertEqual(result, "")
 
+    def test_detect_source_language_langdetect_exception_returns_empty(self):
+        with patch(
+            "utils.translation.langdetect_detect",
+            side_effect=_translation_module.LangDetectException("fail"),
+        ):
+            result = self.service._detect_source_language(["This is enough text for language detection attempt"])
+            self.assertEqual(result, "")
+
+    def test_detect_source_language_unreliable_lang_returns_empty(self):
+        with patch("utils.translation.langdetect_detect", return_value="xx"):
+            result = self.service._detect_source_language(["This is enough text for detection but unreliable"])
+            self.assertEqual(result, "")
+
+    def test_nllb_batch_malformed_response_raises(self):
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"no_translations_key": []}
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            results = self.service._translate_nllb_batch(["Hello"], "es")
+            self.assertEqual(results, [])
+
+    def test_nllb_fallback_both_fail_raises(self):
+        _set_translation_provider(_translation_module, "nllb")
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        with patch.object(self.service, '_translate_nllb_batch', side_effect=Exception("nllb down")):
+            with patch.object(self.service, '_translate_google_batch', side_effect=Exception("google down")):
+                with patch("utils.translation.record_fallback"):
+                    with self.assertRaises(Exception) as ctx:
+                        self.service._translate_batch(["Hello"], "es")
+                    self.assertIn("google down", str(ctx.exception))
+
+    def test_prometheus_idempotent_counter(self):
+        counter1 = _translation_module._counter("test_idempotent_counter", "Test counter", ["label1"])
+        counter2 = _translation_module._counter("test_idempotent_counter", "Test counter", ["label1"])
+        self.assertIs(counter1, counter2)
+
+    def test_prometheus_idempotent_histogram(self):
+        h1 = _translation_module._histogram("test_idempotent_histogram", "Test histogram", ["label1"], [0.1, 0.5, 1.0])
+        h2 = _translation_module._histogram("test_idempotent_histogram", "Test histogram", ["label1"], [0.1, 0.5, 1.0])
+        self.assertIs(h1, h2)
+
     def test_translate_batch_uses_nllb_when_mode_nllb(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
