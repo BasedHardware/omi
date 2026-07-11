@@ -559,7 +559,9 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
 
     Uses Firestore count() aggregation with the same conversation_id predicate as
     get_action_items_by_conversation, so a client can render a task-progress badge
-    (e.g. 2 of 3 done) without paging the items. incomplete = total - completed,
+    (e.g. 2 of 3 done) without paging the items. Soft-retired items (``deleted: true``)
+    are hidden from the list/read paths, so they are excluded here too; otherwise the
+    badge would drift from what the client can list. incomplete = total - completed,
     clamped at 0 so the three values stay internally consistent.
     """
     base = (
@@ -570,6 +572,19 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
     )
     total = int(base.count().get()[0][0].value)
     completed = int(base.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+
+    # Exclude soft-retired items so the badge matches the visible list (get_action_items skips
+    # data.get('deleted')). Deleted items are rare, so stream just that subset and subtract, rather
+    # than requiring a filtered-aggregation composite index.
+    deleted_total = 0
+    deleted_completed = 0
+    for doc in base.where(filter=FieldFilter('deleted', '==', True)).stream():
+        deleted_total += 1
+        if (doc.to_dict() or {}).get('completed'):
+            deleted_completed += 1
+
+    total = max(0, total - deleted_total)
+    completed = max(0, completed - deleted_completed)
     return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
 
 
