@@ -1079,3 +1079,26 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/users/daily-summaries/by-date
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend

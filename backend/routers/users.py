@@ -1593,7 +1593,7 @@ def get_daily_summaries(
 
 
 # Declared before /daily-summaries/{summary_id} so "by-date" is not read as a summary id.
-@router.get('/v1/users/daily-summaries/by-date', tags=['v1'])
+@router.get('/v1/users/daily-summaries/by-date', tags=['v1'], response_model=DailySummaryResponse)
 def get_daily_summary_for_date(
     date: str = Query(..., description="Date in YYYY-MM-DD format"),
     uid: str = Depends(auth.get_current_user_uid),

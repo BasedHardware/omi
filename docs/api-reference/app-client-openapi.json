@@ -45945,7 +45945,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryResponse"
+                }
               }
             },
             "description": "Successful Response"
