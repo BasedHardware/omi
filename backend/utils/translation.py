@@ -22,6 +22,7 @@ import httpx
 from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
 from utils.executors import postprocess_executor, submit_with_context
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -613,12 +614,13 @@ class TranslationService:
             nllb_latency = time.monotonic() - t0
 
             if resp.status_code != 200:
-                logger.warning(
-                    "translation_shadow_error callsite=%s target=%s count=%d status=%d",
-                    callsite,
-                    dest_language,
-                    len(source_texts),
-                    resp.status_code,
+                record_fallback(
+                    component='other',
+                    from_mode='shadow',
+                    to_mode='google',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
                 )
                 return
 
@@ -653,13 +655,14 @@ class TranslationService:
                 nllb_latency * 1000,
                 nllb_data.get("model", "unknown"),
             )
-        except Exception as e:
-            logger.warning(
-                "translation_shadow_error callsite=%s target=%s count=%d error_type=%s",
-                callsite,
-                dest_language,
-                len(source_texts),
-                type(e).__name__,
+        except Exception:
+            record_fallback(
+                component='other',
+                from_mode='shadow',
+                to_mode='google',
+                reason='other',
+                outcome='degraded',
+                log=logger,
             )
 
     def _schedule_shadow_compare(

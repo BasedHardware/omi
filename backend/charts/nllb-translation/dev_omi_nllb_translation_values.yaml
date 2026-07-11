@@ -107,7 +107,7 @@ initContainers:
         pip install -q huggingface_hub
         python3 -c "
         from huggingface_hub import snapshot_download
-        snapshot_download('JustFrederik/nllb-200-distilled-600M-ct2-int8', local_dir='/models/nllb-200-distilled-600M-ct2-int8')
+        snapshot_download('JustFrederik/nllb-200-distilled-600M-ct2-int8', local_dir='/models/nllb-200-distilled-600M-ct2-int8', revision='302d78f00e6fdb50a1064059df7c392b735e9d05')
         "
     volumeMounts:
       - name: model-data

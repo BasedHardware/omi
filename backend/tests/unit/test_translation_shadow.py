@@ -427,13 +427,14 @@ class TestShadowTimeoutHandling(unittest.TestCase):
 
         try:
             with patch("utils.translation.httpx.Client", return_value=mock_client):
-                with patch("utils.translation.logger") as mock_logger:
+                with patch("utils.translation.record_fallback") as mock_fallback:
                     self.service._shadow_client = None
                     self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
-                    mock_logger.warning.assert_called()
-                    warning_call = mock_logger.warning.call_args
-                    self.assertIn("translation_shadow_error", warning_call[0][0])
-                    self.assertIn("TimeoutException", str(warning_call))
+                    mock_fallback.assert_called_once()
+                    call_kwargs = mock_fallback.call_args[1]
+                    self.assertEqual(call_kwargs["from_mode"], "shadow")
+                    self.assertEqual(call_kwargs["to_mode"], "google")
+                    self.assertEqual(call_kwargs["outcome"], "degraded")
         finally:
             _translation_module.TRANSLATION_MODE = original_mode
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
