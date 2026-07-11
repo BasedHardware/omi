@@ -688,6 +688,42 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
+    // prove the counter is deterministic without spending LLM calls. Read-only.
+    register(
+      name: "usage_limiter_snapshot",
+      summary: "Read the free-tier monthly chat usage-limiter state (deterministic counter) — CHAT-05 harness read."
+    ) { _ in
+      await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        return [
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+          "limit_description": limiter.limitDescription,
+        ]
+      }
+    }
+
+    // CHAT-05: reset the usage-limiter counter so a harness can prove it is
+    // dev-resettable (the criterion's second half) without driving real LLM usage.
+    register(
+      name: "reset_usage_limiter",
+      summary: "Reset the free-tier monthly chat usage-limiter counter (dev-resettable proof) — CHAT-05. Non-prod only."
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_usage_limiter is disabled on production bundles"]
+      }
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.reset()
+        return [
+          "reset": "true",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+        ]
+      }
+    }
+
     register(
       name: "task_capture_fixture",
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
