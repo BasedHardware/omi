@@ -3,6 +3,15 @@ import XCTest
 @testable import Omi_Computer
 
 final class TaskAssistantPromptTests: XCTestCase {
+  func testBrowserKeywordMatchingUsesUserLocaleRules() {
+    XCTAssertTrue(
+      TaskAssistantSettings.windowTitle("Résumé – Safari", matchesAny: ["resume"])
+    )
+    XCTAssertFalse(
+      TaskAssistantSettings.windowTitle("Calendar – Safari", matchesAny: ["resume"])
+    )
+  }
+
   @MainActor
   func testDefaultPromptSkipsPublicChannelRequestsNotDirectedAtUser() {
     let prompt = TaskAssistantSettings.defaultAnalysisPrompt
