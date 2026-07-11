@@ -451,6 +451,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
                 await context.read<DeviceProvider>().setConnectedDevice(null);
+              }
+              if (mounted) {
                 context.read<DeviceProvider>().updateConnectingStatus(false);
               }
 
@@ -499,7 +501,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
-                      if (context.mounted) {
+                      if (mounted) {
                         context.read<DeviceProvider>().setIsConnected(false);
                         context.read<DeviceProvider>().setConnectedDevice(null);
                         context.read<DeviceProvider>().updateConnectingStatus(false);
