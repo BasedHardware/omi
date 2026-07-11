@@ -125,6 +125,7 @@ final class MeetingDetector {
     /// can block (notably right after wake) — then apply the result back on the main actor.
     private func tick() {
         let probe = isMeetingNow
+        probeGeneration &+= 1
         let generation = probeGeneration
         let weakSelf = WeakMeetingDetector(self)
         probeTask?.cancel()
@@ -176,4 +177,10 @@ final class MeetingDetector {
         log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
         onChange(active)
     }
+
+    #if DEBUG
+    func triggerProbeForTesting() {
+        tick()
+    }
+    #endif
 }
