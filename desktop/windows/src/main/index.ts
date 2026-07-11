@@ -58,6 +58,7 @@ import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
 import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
+import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -548,6 +549,9 @@ app.whenReady().then(async () => {
   // Screen-activity synthesis IPC (cheap handler registration; the renderer drives
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
+  // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
+  // only when a task actually runs).
+  registerCodingAgentHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
