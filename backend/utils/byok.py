@@ -20,7 +20,7 @@ import socket
 import threading
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional
 from urllib.parse import urlparse
 
 from cachetools import TTLCache
@@ -124,7 +124,7 @@ def has_byok_keys() -> bool:
     return any(not k.startswith('__') for k in keys)
 
 
-def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
+def _is_blocked_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
     """True for any address the backend must never make an outbound call to."""
     return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
 
