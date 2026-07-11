@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
@@ -36,6 +37,8 @@ from models.workstream import (
     WorkstreamStatus,
     WorkstreamUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 WORKSTREAMS_COLLECTION = 'workstreams'
 EVENTS_COLLECTION = 'events'
@@ -509,7 +512,14 @@ def list_workstream_events(
         .order_by('sequence', direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    return [WorkstreamEvent.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    events: list[WorkstreamEvent] = []
+    for snapshot in query.stream():
+        try:
+            events.append(WorkstreamEvent.model_validate(_snapshot_dict(snapshot)))
+        except Exception:
+            # One malformed/legacy event must not 500 the whole workstream event stream.
+            logger.warning('Skipping malformed workstream event %s', getattr(snapshot, 'id', None))
+    return events
 
 
 def create_artifact_descriptor(
