@@ -95,6 +95,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
               constraints: const BoxConstraints(maxHeight: 250),
               child: SingleChildScrollView(
                 child: TextField(
+                  key: const ValueKey('memory_content_field'),
                   controller: contentController,
                   autofocus: true,
                   maxLines: null,
@@ -124,6 +125,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
+                key: const ValueKey('memory_save_button'),
                 onPressed: _isSaving ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
