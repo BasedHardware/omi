@@ -146,6 +146,10 @@ sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
 )
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
 sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
+# Stubbing this module must not strip the real @timeit decorator: other collected
+# test modules do `from utils.other.endpoints import timeit`, and a MagicMock there
+# corrupts decorated signatures (see backend/AGENTS.md). Provide a real passthrough.
+sys.modules['utils.other.endpoints'].timeit = lambda _fn: _fn
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()

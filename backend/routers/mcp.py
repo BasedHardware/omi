@@ -776,7 +776,24 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/calendar-meetings", tags=["mcp"])
+class McpMeetingParticipant(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+class McpMeeting(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    start_time: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    platform: Optional[str] = None
+    meeting_link: Optional[str] = None
+    participants: List[McpMeetingParticipant] = []
+    notes: Optional[str] = None
+    calendar_source: Optional[str] = None
+
+
+@router.get("/v1/mcp/calendar-meetings", response_model=List[McpMeeting], tags=["mcp"])
 def get_calendar_meetings(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -790,7 +807,7 @@ def get_calendar_meetings(
     return [clean_meeting(m) for m in meetings]
 
 
-@router.get("/v1/mcp/calendar-meetings/{meeting_id}", tags=["mcp"])
+@router.get("/v1/mcp/calendar-meetings/{meeting_id}", response_model=McpMeeting, tags=["mcp"])
 def get_calendar_meeting_by_id(meeting_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     meeting = calendar_meetings_db.get_meeting(uid, meeting_id)
     if not meeting:
