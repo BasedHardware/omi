@@ -12,6 +12,7 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
+  - desktop/macos/Desktop/Sources/AgentSyncService.swift
   - desktop/macos/Desktop/Sources/APIKeyService.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift

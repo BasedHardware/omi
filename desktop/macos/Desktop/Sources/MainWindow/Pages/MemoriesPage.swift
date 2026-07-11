@@ -1083,8 +1083,18 @@ class MemoriesViewModel: ObservableObject {
       if !moreFromCache.isEmpty {
         let visibleMemories = displayCacheMemories(moreFromCache, for: token)
         memories.append(contentsOf: visibleMemories)
-        currentOffset += visibleMemories.count
-        hasMoreMemories = visibleMemories.count >= pageSize
+        // Advance the SQLite paging cursor by the RAW row count returned by the
+        // query, not the tier-filtered visible count. getLocalMemories(offset:)
+        // pages over raw rows, so advancing by the smaller filtered count makes the
+        // next page re-fetch the filtered-out rows — duplicate/stuck paging once
+        // hasMoreMemories (below) correctly stays true on a filtered page.
+        currentOffset += moreFromCache.count
+        // Derive hasMoreMemories from the RAW cache count, not the tier-filtered
+        // visible count. A full raw page whose visible subset is < pageSize still
+        // has more cached rows to page; using the filtered count here disabled
+        // scrolling and permanently hid those memories (the initial-load path
+        // already documents this exact raw-vs-filtered pagination rule).
+        hasMoreMemories = moreFromCache.count >= pageSize
         log(
           "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
         )
