@@ -181,12 +181,15 @@ def _interleave(a: List[dict], b: List[dict], limit: int) -> List[dict]:
     return out
 
 
-def search(uid: str, query: str, limit=None) -> dict:
+def search(uid: str, query: object, limit=None) -> dict:
     """Unified search over memories and conversations.
 
     Returns the ChatGPT connector shape: ``{"results": [{id, title, url, text}, ...]}``.
+
+    ``query`` arrives straight from the tool arguments, so it may be any JSON
+    type; a non-string (or blank) query is an invalid request.
     """
-    if not query.strip():
+    if not isinstance(query, str) or not query.strip():
         raise InvalidRequest("query is required")
     query = query.strip()
     limit = _clamp_limit(limit)
@@ -195,12 +198,15 @@ def search(uid: str, query: str, limit=None) -> dict:
     return {"results": _interleave(memories, conversations, limit)}
 
 
-def fetch(uid: str, item_id: str) -> dict:
+def fetch(uid: str, item_id: object) -> dict:
     """Fetch a single document by a namespaced id returned from ``search``.
 
     Returns the ChatGPT connector shape: ``{id, title, text, url, metadata}``.
+
+    ``item_id`` arrives straight from the tool arguments, so it may be any JSON
+    type; a non-string (or blank) id is an invalid request, not a 404.
     """
-    if not item_id.strip():
+    if not isinstance(item_id, str) or not item_id.strip():
         raise InvalidRequest("id is required")
     item_id = item_id.strip()
 
