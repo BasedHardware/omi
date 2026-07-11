@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
@@ -682,7 +683,12 @@ def update_person(uid: str, person_id: str, name: str) -> bool:
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     if not person_ref.get().exists:
         return False
-    person_ref.update({'name': name})
+    try:
+        person_ref.update({'name': name})
+    except NotFound:
+        # The person was deleted between the existence check and the update; treat as missing so
+        # the caller 404s instead of 500ing on the Firestore NotFound race.
+        return False
     return True
 
 
