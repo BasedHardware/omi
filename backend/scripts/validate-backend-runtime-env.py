@@ -33,6 +33,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
     }
 )
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
+_CLOUD_RUN_DEPLOY_ONLY_FLAGS = frozenset({'--remove-secrets'})
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -181,7 +182,7 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
 
 
 def _rendered_network_flags(env_config: ConfigDict) -> StringMap:
-    flags = _network_flags(env_config)
+    flags = _retained_cloud_run_flags(env_config)
     rendered: StringMap = {}
     for name, raw_entry in flags.items():
         entry = _as_config_dict(raw_entry)
@@ -532,6 +533,7 @@ def _validate_cloud_run(
 
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
     service_configs = _as_config_dict(cloud_run.get('services')) or {}
+    removed_secret_bindings = _cloud_run_secret_bindings_to_remove(env_config)
     for service, raw_service_config in service_configs.items():
         service_config = _as_config_dict(raw_service_config) or {}
         service_state = _as_config_dict(state_services.get(service))
@@ -557,9 +559,16 @@ def _validate_cloud_run(
             )
         )
         errors.extend(
+            _validate_absent_cloud_run_bindings(
+                scope=f'cloud_run/{service}',
+                names=removed_secret_bindings,
+                actual=actual_env,
+            )
+        )
+        errors.extend(
             _validate_workflow_flags(
                 scope=f'cloud_run/{service}',
-                expected=_network_flags(env_config),
+                expected=_retained_cloud_run_flags(env_config),
                 actual=service_state.get('flags', {}),
                 strict_provisional=strict_provisional,
             )
@@ -700,6 +709,19 @@ def _network_flags(env_config: ConfigDict) -> ConfigDict:
     return _as_config_dict(network.get('flags')) or {}
 
 
+def _retained_cloud_run_flags(env_config: ConfigDict) -> ConfigDict:
+    return {
+        name: entry for name, entry in _network_flags(env_config).items() if name not in _CLOUD_RUN_DEPLOY_ONLY_FLAGS
+    }
+
+
+def _cloud_run_secret_bindings_to_remove(env_config: ConfigDict) -> set[str]:
+    raw_entry = _network_flags(env_config).get('--remove-secrets')
+    if raw_entry is None:
+        return set()
+    return {name.strip() for name in _expected_flag_value(raw_entry).split(',') if name.strip()}
+
+
 def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
     for raw_service_config in expected_services.values():
         service_config = _as_config_dict(raw_service_config) or {}
@@ -772,6 +794,21 @@ def _validate_cloud_run_secret_entries(
         if actual_secret != expected_secret:
             errors.append(ValidationError(scope, f'secret binding {name} mismatch: expected {expected_secret!r}'))
     return errors
+
+
+def _validate_absent_cloud_run_bindings(
+    *,
+    scope: str,
+    names: set[str],
+    actual: EnvEntryMap,
+) -> list[ValidationError]:
+    return [
+        ValidationError(
+            scope,
+            f'secret/env binding {name} must be absent because deploy uses --remove-secrets',
+        )
+        for name in sorted(names.intersection(actual))
+    ]
 
 
 def _env_entries_by_name(raw_env: object) -> EnvEntryMap:

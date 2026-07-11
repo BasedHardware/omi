@@ -26,6 +26,7 @@ on:
         type: choice
         options:
           - deploy
+          - resume-cloud-run
           - repair-traffic-only
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
@@ -35,6 +36,22 @@ on:
         options:
           - all
           - cloud-run-only
+      source_sha:
+        description: 'Approved 40-character source SHA (resume-cloud-run only)'
+        required: false
+        default: ''
+      candidate_suffix:
+        description: 'Existing Cloud Run candidate suffix (resume-cloud-run only)'
+        required: false
+        default: ''
+      expected_revision_digest:
+        description: 'Immutable Cloud Run platform child digest (resume-cloud-run only)'
+        required: false
+        default: ''
+      confirm:
+        description: 'Type resume-cloud-run-prod to authorize the bounded production resume'
+        required: false
+        default: ''
 
 env:
   SERVICE: backend
@@ -54,16 +71,22 @@ jobs:
     runs-on: ubuntu-latest-m
     steps:
       - name: Validate Environment Input
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "$INPUT_BRANCH" != "$GITHUB_REF_NAME" ]]; then
+            echo "branch input must match the dispatched ref: input=$INPUT_BRANCH ref=$GITHUB_REF_NAME" >&2
             exit 1
           fi
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.sha }}
 
       - name: Google Auth
         id: auth
@@ -94,6 +117,271 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
+  resume-cloud-run:
+    if: ${{ github.event.inputs.mode == 'resume-cloud-run' }}
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Validate bounded resume inputs
+        id: resume-inputs
+        env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+          INPUT_TARGETS: ${{ github.event.inputs.deploy_targets }}
+          SOURCE_SHA: ${{ github.event.inputs.source_sha }}
+          CANDIDATE_SUFFIX: ${{ github.event.inputs.candidate_suffix }}
+          EXPECTED_DIGEST: ${{ github.event.inputs.expected_revision_digest }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          ENV: ${{ vars.ENV }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          CONTROL_PLANE_URL: ${{ vars.CONTROL_PLANE_URL }}
+        run: |
+          if [[ "$INPUT_ENVIRONMENT" != "prod" ]]; then
+            echo "resume-cloud-run is production-only" >&2
+            exit 1
+          fi
+          if [[ "$INPUT_TARGETS" != "cloud-run-only" ]]; then
+            echo "resume-cloud-run requires deploy_targets=cloud-run-only" >&2
+            exit 1
+          fi
+          if [[ "$INPUT_BRANCH" != "$GITHUB_REF_NAME" ]]; then
+            echo "branch input must match the dispatched ref: input=$INPUT_BRANCH ref=$GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          if [[ "$CONFIRM" != "resume-cloud-run-prod" ]]; then
+            echo "confirm must be resume-cloud-run-prod" >&2
+            exit 1
+          fi
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_sha must be exactly 40 lowercase hexadecimal characters" >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "expected_revision_digest must be an immutable sha256 child digest" >&2
+            exit 1
+          fi
+          if [[ ! "$CANDIDATE_SUFFIX" =~ ^[a-z0-9-]+$ || "$CANDIDATE_SUFFIX" != "${SOURCE_SHA::7}-"* ]]; then
+            echo "candidate_suffix must begin with the approved source short SHA" >&2
+            exit 1
+          fi
+          if [[ "$GCP_PROJECT_ID" != "based-hardware" ]]; then
+            echo "GCP_PROJECT_ID must be exactly based-hardware for production resume" >&2
+            exit 1
+          fi
+          if [[ "$ENV" != "prod" ]]; then
+            echo "ENV must be exactly prod for production resume" >&2
+            exit 1
+          fi
+          if [[ "$GKE_CLUSTER" != "prod-omi-gke" ]]; then
+            echo "GKE_CLUSTER must be exactly prod-omi-gke for production resume" >&2
+            exit 1
+          fi
+          if [[ "$RUNTIME_GCP_PROJECT_ID" != "based-hardware" ]]; then
+            echo "RUNTIME_GCP_PROJECT_ID must be exactly based-hardware for production resume" >&2
+            exit 1
+          fi
+          if [[ "$CONTROL_PLANE_URL" != "https://api.omi.me" ]]; then
+            echo "CONTROL_PLANE_URL must be exactly https://api.omi.me for production resume" >&2
+            exit 1
+          fi
+          echo "short_sha=${SOURCE_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact workflow snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Render backend runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+
+      - name: Validate rendered backend runtime contract
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
+
+      - name: Read-only Cloud Run resume preflight
+        run: |
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --check-secrets \
+            --check-traffic
+
+      - name: Get GKE credentials for read-only gate
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Require stable backend-listen before Cloud Run resume
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py gke-gate \
+            --namespace=${{ vars.ENV }}-omi-backend \
+            --deployment=${{ vars.ENV }}-omi-backend-listen \
+            --hpa=${{ vars.ENV }}-omi-backend-listen \
+            --expected-image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.resume-inputs.outputs.short_sha }} \
+            --expected-runtime-project=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --dwell-seconds=120 \
+            --poll-interval-seconds=15 \
+            --timeout-seconds=900
+
+      - name: Verify existing Cloud Run candidates before mutation
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py verify-existing \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --source-sha=${{ github.event.inputs.source_sha }} \
+            --expected-digest=${{ github.event.inputs.expected_revision_digest }} \
+            --candidate=backend-sync-backfill=backend-sync-backfill-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend-sync=backend-sync-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend=backend-${{ github.event.inputs.candidate_suffix }}
+
+      - name: Plan backend-integration candidate
+        id: integration-plan
+        env:
+          INTEGRATION_REVISION: backend-integration-${{ github.event.inputs.candidate_suffix }}
+        run: |
+          ACTION="$(python3 backend/scripts/resume_cloud_run_deploy.py integration-plan \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --source-sha=${{ github.event.inputs.source_sha }} \
+            --expected-digest=${{ github.event.inputs.expected_revision_digest }} \
+            --service=backend-integration \
+            --revision="$INTEGRATION_REVISION")"
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+
+      - name: Create missing backend-integration candidate from pinned digest
+        if: steps.integration-plan.outputs.action == 'create'
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: backend-integration
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ github.event.inputs.expected_revision_digest }}
+          no_traffic: true
+          flags: >-
+            --revision-suffix=${{ github.event.inputs.candidate_suffix }}
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
+          labels: release-source-sha=${{ github.event.inputs.source_sha }}
+
+      - name: Wait for all exact Cloud Run candidates
+        run: |
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --wait-revision-ready backend=backend-${{ github.event.inputs.candidate_suffix }} \
+            --wait-revision-ready backend-sync=backend-sync-${{ github.event.inputs.candidate_suffix }} \
+            --wait-revision-ready backend-sync-backfill=backend-sync-backfill-${{ github.event.inputs.candidate_suffix }} \
+            --wait-revision-ready backend-integration=backend-integration-${{ github.event.inputs.candidate_suffix }}
+
+      - name: Validate live runtime contract after integration candidate
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+
+      - name: Verify and smoke tagged candidates before cutover
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py validate \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --source-sha=${{ github.event.inputs.source_sha }} \
+            --expected-digest=${{ github.event.inputs.expected_revision_digest }} \
+            --candidate-tag="resume-${GITHUB_RUN_ID}" \
+            --candidate=backend-integration=backend-integration-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend-sync-backfill=backend-sync-backfill-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend-sync=backend-sync-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend=backend-${{ github.event.inputs.candidate_suffix }}
+
+      - name: Reconfirm stable backend-listen before traffic cutover
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py gke-gate \
+            --namespace=${{ vars.ENV }}-omi-backend \
+            --deployment=${{ vars.ENV }}-omi-backend-listen \
+            --hpa=${{ vars.ENV }}-omi-backend-listen \
+            --expected-image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.resume-inputs.outputs.short_sha }} \
+            --expected-runtime-project=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --dwell-seconds=60 \
+            --poll-interval-seconds=15 \
+            --timeout-seconds=600
+
+      - name: Promote candidates with verified rollback
+        env:
+          CONTROL_PLANE_URL: ${{ vars.CONTROL_PLANE_URL }}
+        run: |
+          python3 backend/scripts/resume_cloud_run_deploy.py promote \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --source-sha=${{ github.event.inputs.source_sha }} \
+            --expected-digest=${{ github.event.inputs.expected_revision_digest }} \
+            --control-plane-url="$CONTROL_PLANE_URL" \
+            --candidate=backend-integration=backend-integration-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend-sync-backfill=backend-sync-backfill-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend-sync=backend-sync-${{ github.event.inputs.candidate_suffix }} \
+            --candidate=backend=backend-${{ github.event.inputs.candidate_suffix }}
+
+      - name: Cloud Run resume status report
+        if: always()
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --include-cloud-run \
+            --cloud-run-service backend \
+            --cloud-run-service backend-sync \
+            --cloud-run-service backend-sync-backfill \
+            --cloud-run-service backend-integration \
+            --expect-cloud-run-traffic backend=backend-${{ github.event.inputs.candidate_suffix }} \
+            --expect-cloud-run-traffic backend-sync=backend-sync-${{ github.event.inputs.candidate_suffix }} \
+            --expect-cloud-run-traffic backend-sync-backfill=backend-sync-backfill-${{ github.event.inputs.candidate_suffix }} \
+            --expect-cloud-run-traffic backend-integration=backend-integration-${{ github.event.inputs.candidate_suffix }}
+
+      - name: Generate deployment summary
+        if: always()
+        uses: ./.github/actions/deployment-summary
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always()
+        uses: ./.github/actions/deployment-notifier
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
   deploy:
     if: ${{ github.event.inputs.mode == 'deploy' }}
     environment: ${{ github.event.inputs.environment }}
@@ -104,9 +392,20 @@ jobs:
     runs-on: ubuntu-latest-m
     steps:
       - name: Validate Environment Input
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "$INPUT_BRANCH" != "$GITHUB_REF_NAME" ]]; then
+            echo "branch input must match the dispatched ref: input=$INPUT_BRANCH ref=$GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.deploy_targets }}" == "all" && -z "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "RUNTIME_GCP_PROJECT_ID must be set before backend-listen Helm deployment" >&2
             exit 1
           fi
           if [[ "${{ github.event.inputs.deploy_targets }}" != "all" && "${{ github.event.inputs.deploy_targets }}" != "cloud-run-only" ]]; then
@@ -121,7 +420,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.sha }}
 
       - name: Google Auth
         id: auth
@@ -142,7 +441,7 @@ jobs:
         id: image-tag
         run: |
           echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
@@ -327,10 +626,10 @@ jobs:
 
       - name: Verify validated revisions are still current
         run: |
-          test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-          test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
+          test "$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |

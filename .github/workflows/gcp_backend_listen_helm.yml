@@ -22,6 +22,10 @@ on:
 env:
   REGION: us-central1
 
+concurrency:
+  group: backend-deploy-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
 jobs:
   helm-upgrade:
     # On manual dispatch use the chosen environment; on auto push only deploy
@@ -35,16 +39,31 @@ jobs:
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "$INPUT_BRANCH" != "$GITHUB_REF_NAME" ]]; then
+            echo "branch input must match the dispatched ref: input=$INPUT_BRANCH ref=$GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Validate runtime GCP project
+        env:
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+        run: |
+          if [[ -z "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "RUNTIME_GCP_PROJECT_ID must be set before backend-listen Helm deployment" >&2
             exit 1
           fi
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Install Helm
         uses: azure/setup-helm@v3

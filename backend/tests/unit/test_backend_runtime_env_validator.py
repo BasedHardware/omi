@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 import re
 import sys
 from pathlib import Path
@@ -99,6 +100,44 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', user
             'TYPESENSE_HOST': {'secret': 'TYPESENSE_HOST', 'version': 'latest'},
             'TYPESENSE_API_KEY': {'secret': 'TYPESENSE_API_KEY', 'version': 'latest'},
         },
+    }
+
+
+def live_removal_manifest() -> dict:
+    return {
+        'schema_version': 1,
+        'environments': {
+            'prod': {
+                'gcp_project': 'based-hardware',
+                'region': 'us-central1',
+                'gke': {},
+                'cloud_run': {
+                    'network': {
+                        'flags': {
+                            '--remove-secrets': 'GOOGLE_APPLICATION_CREDENTIALS',
+                        }
+                    },
+                    'services': {
+                        'backend': {'env': {}, 'secrets': {}},
+                        'backend-sync': {'env': {}, 'secrets': {}},
+                    },
+                    'jobs': {
+                        'memory-maintenance-job': memory_maintenance_job_block(),
+                    },
+                },
+            }
+        },
+    }
+
+
+def live_cloud_run_service_state(*, env: list[dict] | None = None) -> dict:
+    return {
+        'spec': {
+            'template': {
+                'metadata': {'annotations': {}},
+                'spec': {'containers': [{'env': env or []}]},
+            }
+        }
     }
 
 
@@ -718,6 +757,91 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+def test_prod_remove_secrets_remains_in_rendered_deploy_flags():
+    validator = load_validator()
+    workflow = validator._load_yaml(ROOT.parent / '.github/workflows/gcp_backend.yml')
+
+    outputs = validator._rendered_runtime_env_outputs(
+        workflow,
+        env='prod',
+        manifest_path=ROOT / 'deploy/runtime_env.yaml',
+    )
+
+    assert '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS' in outputs['cloud_run_flags'].split()
+
+
+def test_live_cloud_run_excludes_remove_secrets_from_retained_flags(tmp_path, monkeypatch):
+    validator = load_validator()
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(manifest_path, live_removal_manifest())
+    described_services: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        described_services.append(command[4])
+        return validator.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(live_cloud_run_service_state()),
+            stderr='',
+        )
+
+    monkeypatch.setattr(validator.subprocess, 'run', fake_run)
+
+    errors = validator.validate_runtime_env(
+        env='prod',
+        manifest_path=manifest_path,
+        check_live_cloud_run=True,
+    )
+
+    assert errors == []
+    assert described_services == ['backend', 'backend-sync']
+
+
+def test_live_cloud_run_rejects_removed_secret_binding_on_any_service(tmp_path, monkeypatch):
+    validator = load_validator()
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(manifest_path, live_removal_manifest())
+    service_states = {
+        'backend': live_cloud_run_service_state(),
+        'backend-sync': live_cloud_run_service_state(
+            env=[
+                {
+                    'name': 'GOOGLE_APPLICATION_CREDENTIALS',
+                    'valueFrom': {
+                        'secretKeyRef': {
+                            'name': 'GOOGLE_APPLICATION_CREDENTIALS',
+                            'key': 'latest',
+                        }
+                    },
+                }
+            ]
+        ),
+    }
+
+    def fake_run(command, **_kwargs):
+        return validator.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(service_states[command[4]]),
+            stderr='',
+        )
+
+    monkeypatch.setattr(validator.subprocess, 'run', fake_run)
+
+    errors = validator.validate_runtime_env(
+        env='prod',
+        manifest_path=manifest_path,
+        check_live_cloud_run=True,
+    )
+
+    assert errors == [
+        validator.ValidationError(
+            'cloud_run/backend-sync',
+            'secret/env binding GOOGLE_APPLICATION_CREDENTIALS must be absent because deploy uses --remove-secrets',
+        )
+    ]
 
 
 def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):

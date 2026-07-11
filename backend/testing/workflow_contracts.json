@@ -358,21 +358,29 @@
       "risk": "high",
       "sources": [
         ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_listen_helm.yml",
         "backend/scripts/preflight-cloud-run-deploy.py",
         "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/resume_cloud_run_deploy.py",
         "backend/scripts/pre-deploy-check.sh"
       ],
       "tests": [
         "tests/unit/test_preflight_cloud_run_deploy.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_deploy_status_report.py",
-        "tests/unit/test_backend_runtime_env_validator.py"
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_resume_cloud_run_deploy.py"
       ],
       "checks": [],
       "invariants": [
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
-        "spec.traffic mismatches are repaired or block deploy with an explicit command"
+        "spec.traffic mismatches are repaired or block deploy with an explicit command",
+        "resume reuses an immutable candidate image and never rebuilds or reapplies GKE",
+        "resume reconciles every captured Cloud Run service after any cutover error including an ambiguous command result",
+        "resume cleans every attempted candidate tag after validation including an ambiguous command result",
+        "resume fails closed unless the production project environment cluster and runtime project match the approved topology",
+        "backend-listen Helm deploys require a non-empty runtime GCP project"
       ]
     }
   ]
