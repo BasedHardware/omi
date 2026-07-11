@@ -790,6 +790,12 @@ For every compatibility query, the facade resolves a session in this order:
 
 A `sessionKey` is never an adapter-native session ID. It is only a compatibility alias.
 
+Legacy main-chat mappings created before provider boundaries were persisted may
+initially carry the old ACP default. Before their first run or adapter binding,
+the resolver MAY repair that empty mapping to the active main-chat provider
+boundary. Once either execution record exists, the persisted boundary remains
+immutable and mismatched provider requests fail closed.
+
 ### 13.4 Stable surface references
 
 Canonical surfaces MUST supply:
@@ -959,8 +965,9 @@ Rules:
 - Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
 - `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
 - Swift app surfaces that manage existing agents outside an active query MUST use the dedicated `direct_control_tool`
-  JSONL envelope. It requires a signed-in `ownerId` guard and is limited to observe/manage tools; request-scoped
-  `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
+  JSONL envelope. It requires a signed-in `ownerId` guard. If it starts a long-lived run, it MUST mint and retain a
+  distinct `(clientId, requestId)` context through that run's terminal event so worker tool relays remain authorized;
+  request-scoped `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
 - Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
 - Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
 - Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
@@ -1092,6 +1099,10 @@ Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agen
 `inspect_agent_artifacts`, and `update_agent_artifact_lifecycle`) are cross-surface capabilities for desktop chat
 and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
 until realtime has an equally explicit creation UX, control envelope, and correlation policy.
+
+For PTT/realtime, `AgentControlService` resolves an opaque `agentRef` to only the canonical `runId` required by
+strict run-scoped tools. A completed `get_agent_run` result supplies its bounded final output as untrusted data for
+the coordinator to summarize; raw canonical identifiers remain hidden from user-facing speech.
 
 ### 16.3 Delegation semantics
 

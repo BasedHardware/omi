@@ -2879,6 +2879,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           ToolCall(name: "get_daily_recap", arguments: ["days_ago": daysAgo], thoughtSignature: nil)
         )
       }
+    case .checkPermissionStatus, .requestPermission:
+      // Permission prompts belong to this desktop process. Reuse the canonical
+      // chat executor so PTT and main chat trigger exactly the same native flow.
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name,
+        emptyText: "The permission status did not return a result.",
+        errorText: "Could not open the permission request right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(name: name, arguments: arguments, thoughtSignature: nil)
+        )
+      }
     case .getActionItems:
       // Backend READ of the full task list with filters (completed / due-date range) — the
       // capable sibling of the local get_tasks. Same APIClient path the chat agent uses.
@@ -3094,6 +3108,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     expectedTurnEpoch: Int
   ) async {
     let userText = turnTranscript
+    if let permissionRedirect = RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief) {
+      guard
+        isCurrentToolTurn(
+          source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)
+      else {
+        log("RealtimeHub[\(providerTag)]: dropping stale spawn_agent permission redirect before side effects")
+        return
+      }
+      log(
+        "RealtimeHub[\(providerTag)]: redirecting spawn_agent permission request to \(permissionRedirect.tool.rawValue) type=\(permissionRedirect.type)"
+      )
+      let output = await ChatToolExecutor.execute(
+        ToolCall(
+          name: permissionRedirect.tool.rawValue,
+          arguments: ["type": permissionRedirect.type],
+          thoughtSignature: nil
+        )
+      )
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name, output: output,
+        expectedTurnEpoch: expectedTurnEpoch)
+      return
+    }
     var directedProvider: AgentPillsManager.DirectedProvider?
     switch providerName {
     case "openclaw": directedProvider = .openclaw

@@ -41,7 +41,7 @@ steps:
     bridge.action:
       name: memories_search
       params:
-        query: "the"
+        query: "connector-import"
     expect:
       result.detail.search_active: "true"
       result.detail.result_count: { min: 1 }

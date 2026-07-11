@@ -2218,6 +2218,10 @@ export interface MemorySummaryRatingResponse {
   rating?: number | null;
 }
 
+export interface MemoryValueRequest {
+  value: string;
+}
+
 export interface MentorNotificationSettingsResponse {
   frequency: number;
 }
@@ -3966,6 +3970,7 @@ export interface OmiApiSchemas {
   "MemoryMutationResponse": MemoryMutationResponse;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
+  "MemoryValueRequest": MemoryValueRequest;
   "MentorNotificationSettingsResponse": MentorNotificationSettingsResponse;
   "MentorNotificationSettingsUpdate": MentorNotificationSettingsUpdate;
   "MergeConversationsRequest": MergeConversationsRequest;
@@ -15286,7 +15291,7 @@ export async function resolve_memory_review_item_v3_memories_review_queue__revie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function edit_memory_v3_memories__memory_id__patch(path: { memory_id: string }, query: { value: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+export async function edit_memory_v3_memories__memory_id__patch(path: { memory_id: string }, query: { value?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryValueRequest | null, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}`;
   const _params = query ? Object.entries(query)
@@ -15296,6 +15301,7 @@ export async function edit_memory_v3_memories__memory_id__patch(path: { memory_i
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
@@ -15303,6 +15309,7 @@ export async function edit_memory_v3_memories__memory_id__patch(path: { memory_i
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15349,7 +15356,7 @@ export async function review_memory_v3_memories__memory_id__review_post(path: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_memory_visibility_v3_memories__memory_id__visibility_patch(path: { memory_id: string }, query: { value: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+export async function update_memory_visibility_v3_memories__memory_id__visibility_patch(path: { memory_id: string }, query: { value?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryValueRequest | null, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}/visibility`;
   const _params = query ? Object.entries(query)
@@ -15359,6 +15366,7 @@ export async function update_memory_visibility_v3_memories__memory_id__visibilit
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
@@ -15366,6 +15374,7 @@ export async function update_memory_visibility_v3_memories__memory_id__visibilit
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

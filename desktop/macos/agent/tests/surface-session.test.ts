@@ -170,6 +170,84 @@ describe("surface_conversations", () => {
     expect(resolved.agentSessionId).toBe("ses_legacy_1");
   });
 
+  it("repairs an empty legacy ACP main-chat session to the active Omi route", () => {
+    importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      },
+      () => 1,
+    );
+
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "pi-mono",
+      },
+      () => 2,
+    );
+
+    expect(resolved.agentSessionId).toBe("ses_legacy_1");
+    const session = store.getRow(
+      "SELECT default_adapter_id, provider_boundary FROM sessions WHERE session_id = ?",
+      [resolved.agentSessionId],
+    );
+    expect(String(session.default_adapter_id)).toBe("pi-mono");
+    expect(String(session.provider_boundary)).toBe("managed_cloud");
+  });
+
+  it("does not rewrite a main-chat provider boundary after execution starts", () => {
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "acp",
+      },
+      () => 1,
+    );
+    store.insertRun({
+      sessionId: resolved.agentSessionId,
+      clientId: "client-a",
+      requestId: "request-a",
+      status: "queued",
+      mode: "ask",
+      inputJson: "{}",
+    });
+
+    resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "pi-mono",
+      },
+      () => 2,
+    );
+
+    const session = store.getRow(
+      "SELECT default_adapter_id, provider_boundary FROM sessions WHERE session_id = ?",
+      [resolved.agentSessionId],
+    );
+    expect(String(session.default_adapter_id)).toBe("acp");
+    expect(String(session.provider_boundary)).toBe("local_user:acp");
+  });
+
   it("imports legacy sessions with distinct conversationId from agentSessionId", () => {
     importLegacyMainChatSessions(
       store,
