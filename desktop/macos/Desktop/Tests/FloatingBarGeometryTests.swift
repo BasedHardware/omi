@@ -44,6 +44,30 @@ final class FloatingBarGeometryTests: XCTestCase {
         )
     }
 
+    func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() throws {
+        // omi-test-quality: source-inspection -- static contract: AppKit delegate callback must retain the reconciliation wiring
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
+            encoding: .utf8
+        )
+        guard let methodStart = source.range(of: "func windowDidChangeScreen(_ notification: Notification)") else {
+            return XCTFail("Expected the floating bar to reconcile direct window screen changes")
+        }
+        guard let nextMethod = source.range(of: "func windowDidResignKey", range: methodStart.upperBound..<source.endIndex) else {
+            return XCTFail("Expected windowDidChangeScreen to precede the next window delegate method")
+        }
+
+        let method = String(source[methodStart.lowerBound..<nextMethod.lowerBound])
+        XCTAssertTrue(method.contains("let previousUsesNotchIsland = state.usesNotchIsland"))
+        XCTAssertTrue(method.contains("updateNotchIslandState()"))
+        XCTAssertTrue(method.contains("guard !state.showingAIConversation else { return }"))
+        XCTAssertTrue(method.contains("frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)"))
+        XCTAssertTrue(method.contains("resizeToFrame("))
+    }
+
     func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {
         let compactFrame = NSRect(x: 586, y: 876, width: 268, height: 58)
         let expandedFrame = FloatingControlBarGeometry.topCenterAnchoredFrame(
