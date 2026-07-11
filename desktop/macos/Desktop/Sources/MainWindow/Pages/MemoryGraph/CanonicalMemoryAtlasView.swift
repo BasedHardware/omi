@@ -31,9 +31,9 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .projects: return "Building & projects"
+    case .projects: return "Projects & ideas"
     case .collaborators: return "People & organizations"
-    case .tools: return "Tools & platforms"
+    case .tools: return "Tools & places"
     }
   }
 
@@ -65,6 +65,7 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
 struct MemoryAtlasNodePlacement: Identifiable {
   let node: KnowledgeGraphNode
   let cluster: MemoryAtlasCluster?
+  let communityID: String?
   let normalizedPosition: CGPoint
   let degree: Int
   let clusterRank: Int
@@ -85,11 +86,20 @@ struct MemoryAtlasEdgePlacement: Identifiable {
   let source: CGPoint
   let target: CGPoint
   let cluster: MemoryAtlasCluster
+  let isCrossCommunity: Bool
   /// A deterministic bend used to route dense relationships through their
   /// semantic cluster instead of drawing an unreadable owner fan.
   let routeControl: CGPoint
 
   var id: String { edge.id }
+}
+
+struct MemoryAtlasCommunityPlacement: Identifiable {
+  let community: MemoryAtlasCommunityProjection.Community
+  let center: CGPoint
+  let memberCount: Int
+
+  var id: String { community.id }
 }
 
 struct MemoryAtlasSnapshot {
@@ -105,15 +115,23 @@ struct MemoryAtlasSnapshot {
   let detailEdges: [MemoryAtlasEdgePlacement]
   let edgesByNodeID: [String: [MemoryAtlasEdgePlacement]]
   let neighborIDsByNodeID: [String: Set<String>]
+  let communityProjection: MemoryAtlasCommunityProjection
+  let communities: [MemoryAtlasCommunityPlacement]
+  let communityByID: [String: MemoryAtlasCommunityPlacement]
 
   init(
     nodes: [MemoryAtlasNodePlacement],
     edges: [MemoryAtlasEdgePlacement],
-    anchorNodeID: String?
+    anchorNodeID: String?,
+    communityProjection: MemoryAtlasCommunityProjection,
+    communities: [MemoryAtlasCommunityPlacement]
   ) {
     self.nodes = nodes
     self.edges = edges
     self.anchorNodeID = anchorNodeID
+    self.communityProjection = communityProjection
+    self.communities = communities
+    communityByID = Dictionary(lastWriteWins: communities.map { ($0.id, $0) })
     let indexedNodes = Dictionary(lastWriteWins: nodes.map { ($0.id, $0) })
     nodeByID = indexedNodes
 
@@ -459,24 +477,25 @@ enum MemoryAtlasRenderPlanner {
     limit: Int
   ) -> [MemoryAtlasNodePlacement] {
     var unclustered: [MemoryAtlasNodePlacement] = []
-    var byCluster: [MemoryAtlasCluster: [MemoryAtlasNodePlacement]] = [:]
+    var byCommunity: [String: [MemoryAtlasNodePlacement]] = [:]
     for placement in candidates {
-      if let cluster = placement.cluster {
-        byCluster[cluster, default: []].append(placement)
+      if let communityID = placement.communityID {
+        byCommunity[communityID, default: []].append(placement)
       } else {
         unclustered.append(placement)
       }
     }
 
     var result = Array(unclustered.prefix(limit))
-    var nextIndexes = [Int](repeating: 0, count: MemoryAtlasCluster.allCases.count)
+    let communityIDs = byCommunity.keys.sorted()
+    var nextIndexes = Dictionary(lastWriteWins: communityIDs.map { ($0, 0) })
     while result.count < limit {
       var appended = false
-      for (clusterIndex, cluster) in MemoryAtlasCluster.allCases.enumerated() where result.count < limit {
-        let index = nextIndexes[clusterIndex]
-        guard let placements = byCluster[cluster], index < placements.count else { continue }
+      for communityID in communityIDs where result.count < limit {
+        let index = nextIndexes[communityID] ?? 0
+        guard let placements = byCommunity[communityID], index < placements.count else { continue }
         result.append(placements[index])
-        nextIndexes[clusterIndex] = index + 1
+        nextIndexes[communityID] = index + 1
         appended = true
       }
       if !appended { break }
@@ -529,7 +548,8 @@ enum MemoryAtlasRenderPlanner {
 enum MemoryAtlasLayoutEngine {
   static func makeSnapshot(
     graph: KnowledgeGraphResponse,
-    userName: String?
+    userName: String?,
+    previousCommunityProjection: MemoryAtlasCommunityProjection? = nil
   ) -> MemoryAtlasSnapshot {
     // Graph responses are external data. Coalesce duplicate identifiers at the
     // boundary so a malformed server response cannot trap while building a UI.
@@ -537,7 +557,11 @@ enum MemoryAtlasLayoutEngine {
     let edges = uniqueEdges(from: graph.edges)
 
     guard !nodes.isEmpty else {
-      return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil)
+      let projection = MemoryAtlasCommunityProjection(version: 1, communities: [], communityIDByNodeID: [:])
+      return MemoryAtlasSnapshot(
+        nodes: [], edges: [], anchorNodeID: nil,
+        communityProjection: projection, communities: []
+      )
     }
 
     var degree: [String: Int] = [:]
@@ -576,10 +600,25 @@ enum MemoryAtlasLayoutEngine {
       }
     }
 
-    var grouped: [MemoryAtlasCluster: [KnowledgeGraphNode]] = [:]
+    let communityProjection = MemoryAtlasCommunityDetector.detect(
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges),
+      ownerNodeID: anchor?.id,
+      previous: previousCommunityProjection
+    )
+    let communityPlacements = communityProjection.communities.map { community in
+      MemoryAtlasCommunityPlacement(
+        community: community,
+        center: communityCenter(for: community.layoutSlot),
+        memberCount: communityProjection.communityIDByNodeID.values.filter { $0 == community.id }.count
+      )
+    }
+    let communityCenterByID = Dictionary(lastWriteWins: communityPlacements.map { ($0.id, $0.center) })
+
+    var grouped: [String: [KnowledgeGraphNode]] = [:]
     for node in nodes where node.id != anchor?.id {
-      let labels = anchorRelationLabels[node.id] ?? relationLabels[node.id] ?? []
-      grouped[cluster(for: node, relationLabels: labels), default: []].append(node)
+      if let communityID = communityProjection.communityIDByNodeID[node.id] {
+        grouped[communityID, default: []].append(node)
+      }
     }
 
     var placements: [MemoryAtlasNodePlacement] = []
@@ -588,6 +627,7 @@ enum MemoryAtlasLayoutEngine {
         MemoryAtlasNodePlacement(
           node: anchor,
           cluster: nil,
+          communityID: communityProjection.communityIDByNodeID[anchor.id],
           normalizedPosition: CGPoint(x: 0.5, y: 0.77),
           degree: degree[anchor.id] ?? 0,
           clusterRank: 0,
@@ -598,8 +638,8 @@ enum MemoryAtlasLayoutEngine {
       )
     }
 
-    for cluster in MemoryAtlasCluster.allCases {
-      let sorted = (grouped[cluster] ?? []).sorted {
+    for community in communityPlacements {
+      let sorted = (grouped[community.id] ?? []).sorted {
         let lhsScore = salience(node: $0, degree: degree[$0.id] ?? 0)
         let rhsScore = salience(node: $1, degree: degree[$1.id] ?? 0)
         if lhsScore == rhsScore { return $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
@@ -608,14 +648,15 @@ enum MemoryAtlasLayoutEngine {
 
       for (index, node) in sorted.enumerated() {
         placements.append(
-          MemoryAtlasNodePlacement(
-            node: node,
-            cluster: cluster,
-            normalizedPosition: position(
-              in: cluster,
-              index: index,
-              count: sorted.count,
-              nodeID: node.id
+            MemoryAtlasNodePlacement(
+              node: node,
+              cluster: cluster(for: node, relationLabels: anchorRelationLabels[node.id] ?? relationLabels[node.id] ?? []),
+              communityID: community.id,
+              normalizedPosition: position(
+                around: community.center,
+                index: index,
+                count: sorted.count,
+                nodeID: node.id
             ),
             degree: degree[node.id] ?? 0,
             clusterRank: index,
@@ -631,19 +672,38 @@ enum MemoryAtlasLayoutEngine {
     let clusters = Dictionary(lastWriteWins: placements.compactMap { placement in
       placement.cluster.map { (placement.id, $0) }
     })
+    let communityIDs = Dictionary(lastWriteWins: placements.compactMap { placement in
+      placement.communityID.map { (placement.id, $0) }
+    })
     let edgePlacements = edges.compactMap { edge -> MemoryAtlasEdgePlacement? in
       guard let source = positions[edge.sourceId], let target = positions[edge.targetId] else { return nil }
       let cluster = clusters[edge.sourceId] ?? clusters[edge.targetId] ?? .collaborators
+      let sourceCommunityID = communityIDs[edge.sourceId]
+      let targetCommunityID = communityIDs[edge.targetId]
       return MemoryAtlasEdgePlacement(
         edge: edge,
         source: source,
         target: target,
         cluster: cluster,
-        routeControl: routeControl(source: source, target: target, cluster: cluster, anchorID: anchor?.id, edge: edge)
+        isCrossCommunity: sourceCommunityID != nil && targetCommunityID != nil && sourceCommunityID != targetCommunityID,
+        routeControl: routeControl(
+          source: source,
+          target: target,
+          sourceCommunityCenter: sourceCommunityID.flatMap { communityCenterByID[$0] },
+          targetCommunityCenter: targetCommunityID.flatMap { communityCenterByID[$0] },
+          anchorID: anchor?.id,
+          edge: edge
+        )
       )
     }
 
-    return MemoryAtlasSnapshot(nodes: placements, edges: edgePlacements, anchorNodeID: anchor?.id)
+    return MemoryAtlasSnapshot(
+      nodes: placements,
+      edges: edgePlacements,
+      anchorNodeID: anchor?.id,
+      communityProjection: communityProjection,
+      communities: communityPlacements
+    )
   }
 
   private static func uniqueNodes(from nodes: [KnowledgeGraphNode]) -> [KnowledgeGraphNode] {
@@ -695,13 +755,26 @@ enum MemoryAtlasLayoutEngine {
   private static func routeControl(
     source: CGPoint,
     target: CGPoint,
-    cluster: MemoryAtlasCluster,
+    sourceCommunityCenter: CGPoint?,
+    targetCommunityCenter: CGPoint?,
     anchorID: String?,
     edge: KnowledgeGraphEdge
   ) -> CGPoint {
     let touchesAnchor = edge.sourceId == anchorID || edge.targetId == anchorID
     if touchesAnchor {
-      return CGPoint(x: cluster.center.x, y: min(cluster.center.y + 0.13, 0.7))
+      return sourceCommunityCenter ?? targetCommunityCenter
+        ?? CGPoint(x: (source.x + target.x) / 2, y: (source.y + target.y) / 2)
+    }
+    if let sourceCommunityCenter, let targetCommunityCenter,
+      sourceCommunityCenter != targetCommunityCenter
+    {
+      return CGPoint(
+        x: (sourceCommunityCenter.x + targetCommunityCenter.x) / 2,
+        y: min(sourceCommunityCenter.y, targetCommunityCenter.y) - 0.04
+      )
+    }
+    if let center = sourceCommunityCenter ?? targetCommunityCenter {
+      return center
     }
     if abs(source.x - target.x) > 0.18 {
       return CGPoint(x: (source.x + target.x) / 2, y: min(source.y, target.y) - 0.055)
@@ -744,24 +817,33 @@ enum MemoryAtlasLayoutEngine {
     "app", "apps", "user", "calendar event", "document", "documents", "download", "downloads",
   ]
 
+  private static func communityCenter(for slot: Int) -> CGPoint {
+    let centers = [
+      CGPoint(x: 0.22, y: 0.31), CGPoint(x: 0.5, y: 0.27), CGPoint(x: 0.78, y: 0.31),
+      CGPoint(x: 0.18, y: 0.52), CGPoint(x: 0.43, y: 0.49), CGPoint(x: 0.7, y: 0.5),
+      CGPoint(x: 0.32, y: 0.65), CGPoint(x: 0.66, y: 0.65),
+    ]
+    return centers[min(max(slot, 0), centers.count - 1)]
+  }
+
   private static func position(
-    in cluster: MemoryAtlasCluster,
+    around center: CGPoint,
     index: Int,
     count: Int,
     nodeID: String
   ) -> CGPoint {
-    guard count > 0 else { return cluster.center }
-    if index == 0 { return cluster.center }
+    guard count > 0 else { return center }
+    if index == 0 { return center }
 
     let ringIndex = index - 1
     let jitter = stableFraction(nodeID)
     let angle = Double(ringIndex) * 2.399_963_229_728_653 + (jitter - 0.5) * 0.7
     let normalizedIndex = Double(ringIndex + 1) / Double(max(count, 1))
     let radialJitter = 0.9 + jitter * 0.2
-    let radiusX = (0.075 + 0.115 * sqrt(normalizedIndex)) * radialJitter
-    let radiusY = (0.065 + 0.12 * sqrt(normalizedIndex)) * radialJitter
-    let x = cluster.center.x + cos(angle) * radiusX
-    let y = cluster.center.y + sin(angle) * radiusY
+    let radiusX = (0.035 + 0.075 * sqrt(normalizedIndex)) * radialJitter
+    let radiusY = (0.03 + 0.065 * sqrt(normalizedIndex)) * radialJitter
+    let x = center.x + cos(angle) * radiusX
+    let y = center.y + sin(angle) * radiusY
     return CGPoint(
       x: min(max(x, 0.08), 0.92),
       y: min(max(y, 0.2), 0.68)
@@ -779,6 +861,27 @@ enum MemoryAtlasLayoutEngine {
 }
 
 // MARK: - Canonical Atlas Containers
+
+private enum MemoryAtlasCommunityProjectionStore {
+  private static let detectorVersion = 1
+
+  private static var key: String {
+    let userID = UserDefaults.standard.string(forKey: "auth_userId") ?? "anonymous"
+    return "memoryAtlas.communityProjection.v\(detectorVersion).\(userID)"
+  }
+
+  static func load() -> MemoryAtlasCommunityProjection? {
+    guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    return try? JSONDecoder().decode(MemoryAtlasCommunityProjection.self, from: data)
+  }
+
+  static func save(_ projection: MemoryAtlasCommunityProjection) {
+    guard let data = try? JSONEncoder().encode(projection) else { return }
+    if UserDefaults.standard.data(forKey: key) != data {
+      UserDefaults.standard.set(data, forKey: key)
+    }
+  }
+}
 
 struct CanonicalMemoryAtlasInlineCard: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
@@ -971,10 +1074,14 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.compact = compact
     self.onViewEvidence = onViewEvidence
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+    let previousProjection = MemoryAtlasCommunityProjectionStore.load()
+    let nextSnapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: graph,
-      userName: givenName.isEmpty ? nil : givenName
+      userName: givenName.isEmpty ? nil : givenName,
+      previousCommunityProjection: previousProjection
     )
+    snapshot = nextSnapshot
+    MemoryAtlasCommunityProjectionStore.save(nextSnapshot.communityProjection)
   }
 
   private var selectedNode: MemoryAtlasNodePlacement? {
@@ -1210,10 +1317,11 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func drawClusterContours(context: inout GraphicsContext, size: CGSize) {
-    for cluster in MemoryAtlasCluster.allCases {
-      let center = point(for: cluster.center, in: size)
-      let width = size.width * 0.29 * zoom
-      let height = size.height * 0.64 * zoom
+    for community in snapshot.communities {
+      let center = point(for: community.center, in: size)
+      let density = min(1, sqrt(Double(max(community.memberCount, 1))) / 16)
+      let width = size.width * (0.16 + density * 0.07) * zoom
+      let height = size.height * (0.18 + density * 0.09) * zoom
       let rect = CGRect(
         x: center.x - width / 2,
         y: center.y - height / 2,
@@ -1223,7 +1331,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       context.fill(
         Path(ellipseIn: rect),
         with: .radialGradient(
-          Gradient(colors: [cluster.color.opacity(0.065), cluster.color.opacity(0)]),
+          Gradient(colors: [OmiColors.textSecondary.opacity(0.045), Color.clear]),
           center: center,
           startRadius: 0,
           endRadius: max(width, height) / 2
@@ -1237,9 +1345,25 @@ private struct CanonicalMemoryAtlasSurface: View {
     size: CGSize,
     plan: MemoryAtlasRenderPlan
   ) {
+    var crossCommunityPath = Path()
+    for placement in plan.visibleEdges where placement.isCrossCommunity {
+      crossCommunityPath.move(to: point(for: placement.source, in: size))
+      crossCommunityPath.addQuadCurve(
+        to: point(for: placement.target, in: size),
+        control: point(for: placement.routeControl, in: size)
+      )
+    }
+    if !crossCommunityPath.isEmpty {
+      context.stroke(
+        crossCommunityPath,
+        with: .color(OmiColors.textQuaternary.opacity(selectedNodeID == nil ? 0.24 : 0.5)),
+        lineWidth: selectedNodeID == nil ? 0.9 : 1.5
+      )
+    }
+
     for cluster in MemoryAtlasCluster.allCases {
       var path = Path()
-      for placement in plan.visibleEdges where placement.cluster == cluster {
+      for placement in plan.visibleEdges where placement.cluster == cluster && !placement.isCrossCommunity {
         path.move(to: point(for: placement.source, in: size))
         path.addQuadCurve(
           to: point(for: placement.target, in: size),
@@ -1349,15 +1473,18 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   @ViewBuilder
   private func clusterTitles(size: CGSize) -> some View {
-    ForEach(MemoryAtlasCluster.allCases) { cluster in
-      Text(cluster.title)
+    ForEach(snapshot.communities) { community in
+      Text(community.community.displayName)
         .scaledFont(size: compact ? 10 : 11, weight: .semibold)
         .textCase(.uppercase)
         .tracking(0.7)
         .foregroundColor(OmiColors.textTertiary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: compact ? 120 : 170)
         .position(
-          x: point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).x,
-          y: max(18, point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).y)
+          x: point(for: CGPoint(x: community.center.x, y: community.center.y - 0.11), in: size).x,
+          y: max(18, point(for: CGPoint(x: community.center.x, y: community.center.y - 0.11), in: size).y)
         )
     }
   }
@@ -1467,6 +1594,17 @@ private struct CanonicalMemoryAtlasSurface: View {
           .stroke(OmiColors.border.opacity(0.35), lineWidth: 0.7)
 
         Canvas { context, _ in
+          for community in snapshot.communities {
+            let center = CGPoint(
+              x: community.center.x * mapSize.width,
+              y: community.center.y * mapSize.height
+            )
+            context.stroke(
+              Path(ellipseIn: CGRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8)),
+              with: .color(OmiColors.textSecondary.opacity(0.45)),
+              lineWidth: 0.8
+            )
+          }
           for placement in snapshot.nodes.prefix(240) {
             let point = CGPoint(
               x: placement.normalizedPosition.x * mapSize.width,
