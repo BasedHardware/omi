@@ -205,6 +205,47 @@ async fn apple_domain_association() -> impl IntoResponse {
     ""
 }
 
+/// Whether a client-supplied `redirect_uri` is allowed to receive the OAuth code.
+///
+/// The desktop app only ever uses two forms: its loopback callback server
+/// (`http://127.0.0.1:<port>/...` or `localhost`) and its custom app scheme deep
+/// link (e.g. `omi-computer://auth/callback`). Everything else — in particular
+/// any `https://…` or non-loopback `http://…` — is rejected, because the callback
+/// page redirects the freshly minted auth code to this URI; without an allowlist
+/// an attacker could set `redirect_uri=https://evil.example/cb`, have a victim
+/// complete sign-in, and receive the victim's code (open redirect → code theft).
+fn is_allowed_redirect_uri(uri: &str) -> bool {
+    let trimmed = uri.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Loopback HTTP callback server (any port).
+    if let Some(rest) = trimmed.strip_prefix("http://") {
+        let host = rest.split(['/', ':', '?', '#']).next().unwrap_or("");
+        return host == "127.0.0.1" || host == "localhost";
+    }
+
+    // Any other http/https is an open-redirect vector.
+    if trimmed.starts_with("https://") {
+        return false;
+    }
+
+    // Custom app-scheme deep link: "<scheme>://…" where scheme is a valid,
+    // non-http URL scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )).
+    if let Some(scheme_end) = trimmed.find("://") {
+        let scheme = &trimmed[..scheme_end];
+        let mut chars = scheme.chars();
+        let first_ok = chars.next().map_or(false, |c| c.is_ascii_alphabetic());
+        let rest_ok = scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.');
+        return first_ok && rest_ok;
+    }
+
+    false
+}
+
 /// Start OAuth flow
 async fn auth_authorize(
     State(state): State<AuthState>,
@@ -214,6 +255,14 @@ async fn auth_authorize(
         return Err(ErrorResponse {
             error: "invalid_provider".to_string(),
             message: "Unsupported provider. Use 'google' or 'apple'.".to_string(),
+        });
+    }
+
+    if !is_allowed_redirect_uri(&params.redirect_uri) {
+        return Err(ErrorResponse {
+            error: "invalid_redirect_uri".to_string(),
+            message: "redirect_uri must be the app's loopback callback or custom scheme."
+                .to_string(),
         });
     }
 
@@ -868,6 +917,31 @@ mod tests {
             js_string_escape("http://127.0.0.1:52001/callback"),
             "http:\\/\\/127.0.0.1:52001\\/callback"
         );
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_accepts_desktop_forms() {
+        // Loopback callback server (any port) and the custom app scheme.
+        assert!(is_allowed_redirect_uri("http://127.0.0.1:52001/callback"));
+        assert!(is_allowed_redirect_uri("http://localhost:8080/callback"));
+        assert!(is_allowed_redirect_uri("omi-computer://auth/callback"));
+        // Named/dev bundles use their own custom scheme — still allowed.
+        assert!(is_allowed_redirect_uri(
+            "com.omi.desktop-dev://auth/callback"
+        ));
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_rejects_open_redirect_vectors() {
+        // The phishing vector: code delivered to an attacker HTTPS URL.
+        assert!(!is_allowed_redirect_uri("https://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://127.0.0.1.evil.com/cb"));
+        assert!(!is_allowed_redirect_uri("https://127.0.0.1/cb"));
+        assert!(!is_allowed_redirect_uri(""));
+        assert!(!is_allowed_redirect_uri("   "));
+        assert!(!is_allowed_redirect_uri("not-a-uri"));
+        assert!(!is_allowed_redirect_uri("://missing-scheme"));
     }
 
     #[test]
