@@ -1168,7 +1168,7 @@ struct RewindPage: View {
         }
     }
 
-    private func errorView(_ message: String) -> some View {
+    private func errorView(_: String) -> some View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
@@ -1184,7 +1184,7 @@ struct RewindPage: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(.white)
 
-            Text(message)
+            Text("Try again. If this continues, restart Omi.")
                 .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
 

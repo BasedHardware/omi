@@ -189,16 +189,24 @@ maybe_teardown_dev_stack() {
 }
 
 bridge_health() {
-  python3 - "$PORT" <<'PY'
+  local expected_bundle_id
+  # shellcheck source=app-config.sh
+  source "$SCRIPT_DIR/app-config.sh"
+  derive_omi_app_config "$BUNDLE"
+  expected_bundle_id="$BUNDLE_ID"
+  python3 - "$PORT" "$expected_bundle_id" <<'PY'
 import json
 import sys
 import urllib.request
 
-port = sys.argv[1]
+port, expected = sys.argv[1:3]
 with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
     payload = json.loads(response.read().decode("utf-8"))
 if not payload.get("ok"):
     raise SystemExit(f"bridge unhealthy: {payload}")
+actual = payload.get("bundleIdentifier")
+if actual != expected:
+    raise SystemExit(f"wrong bundle on port {port}: expected {expected}, got {actual}")
 PY
 }
 

@@ -18,7 +18,7 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
-from models.goal import GoalHistoryEntryResponse
+from models.goal import GoalHistoryEntryResponse, GoalMetric
 from utils.client_device import resolve_client_device_from_request
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
@@ -1986,7 +1986,16 @@ class GoalResponse(BaseModel):
     model_config = ConfigDict(title='DeveloperGoal')
 
     id: str
+    goal_id: str
     title: str
+    desired_outcome: str
+    why_it_matters: Optional[str] = None
+    success_criteria: List[str] = Field(default_factory=list)
+    horizon_at: Optional[datetime] = None
+    status: str
+    focus_rank: Optional[int] = None
+    metric: Optional[GoalMetric] = None
+    source: str
     goal_type: str
     target_value: float
     current_value: float
@@ -2002,11 +2011,15 @@ class CreateGoalRequest(BaseModel):
     model_config = ConfigDict(title='CreateGoalRequest')
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
-    goal_type: GoalType = Field(default=GoalType.scale, description="Type of goal metric: boolean, scale, or numeric")
-    target_value: float = Field(description="Target value to achieve")
-    current_value: float = Field(default=0, description="Current progress value")
-    min_value: float = Field(default=0, description="Minimum value of the scale")
-    max_value: float = Field(default=10, description="Maximum value of the scale")
+    desired_outcome: Optional[str] = Field(default=None, max_length=2000)
+    why_it_matters: Optional[str] = Field(default=None, max_length=2000)
+    success_criteria: List[str] = Field(default_factory=list, max_length=20)
+    horizon_at: Optional[datetime] = None
+    goal_type: Optional[GoalType] = Field(default=None, description="Optional metric type")
+    target_value: Optional[float] = Field(default=None, description="Optional target value")
+    current_value: Optional[float] = Field(default=None, description="Optional current progress")
+    min_value: Optional[float] = Field(default=None, description="Optional minimum scale value")
+    max_value: Optional[float] = Field(default=None, description="Optional maximum scale value")
     unit: Optional[str] = Field(default=None, description="Unit label (e.g., 'users', 'points')")
 
 
@@ -2014,11 +2027,36 @@ class UpdateGoalRequest(BaseModel):
     model_config = ConfigDict(title='UpdateGoalRequest')
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
+    desired_outcome: Optional[str] = Field(default=None, max_length=2000)
+    why_it_matters: Optional[str] = Field(default=None, max_length=2000)
+    success_criteria: Optional[List[str]] = Field(default=None, max_length=20)
+    horizon_at: Optional[datetime] = None
     target_value: Optional[float] = Field(default=None, description="New target value")
     current_value: Optional[float] = Field(default=None, description="New progress value")
     min_value: Optional[float] = Field(default=None, description="New minimum value")
     max_value: Optional[float] = Field(default=None, description="New maximum value")
     unit: Optional[str] = Field(default=None, description="New unit label")
+
+    @field_validator('title', 'desired_outcome')
+    @classmethod
+    def required_text_cannot_be_null_or_blank(cls, value: Optional[str]) -> str:
+        if value is None or not value.strip():
+            raise ValueError('required goal text cannot be null or blank')
+        return value.strip()
+
+    @field_validator('success_criteria')
+    @classmethod
+    def success_criteria_cannot_be_null(cls, value: Optional[List[str]]) -> List[str]:
+        if value is None:
+            raise ValueError('success_criteria cannot be null; use an empty list to clear it')
+        return value
+
+    @field_validator('target_value', 'current_value')
+    @classmethod
+    def required_metric_values_cannot_be_null(cls, value: Optional[float]) -> float:
+        if value is None:
+            raise ValueError('metric value cannot be null')
+        return value
 
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
@@ -2075,15 +2113,17 @@ def create_goal(
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """
-    Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.
+    Create a durable goal. Metrics are optional and other goals are never changed implicitly.
 
     - **title**: The goal title/description (1-500 characters)
-    - **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)
-    - **target_value**: Target value to achieve
-    - **current_value**: Current progress (default: 0)
-    - **min_value**: Minimum scale value (default: 0)
-    - **max_value**: Maximum scale value (default: 10)
+    - **goal_type**: Optional metric type: boolean, scale, or numeric
+    - **target_value**: Optional target value
+    - **current_value**: Optional current progress
+    - **min_value**: Optional minimum scale value
+    - **max_value**: Optional maximum scale value
     - **unit**: Optional unit label (e.g., 'users', 'points')
+
+    Omit all metric fields to create a qualitative goal.
     """
     if not request.title or len(request.title.strip()) == 0:
         raise HTTPException(status_code=422, detail="title cannot be empty")
@@ -2091,7 +2131,11 @@ def create_goal(
     goal_data = {
         'id': f"goal_{uuid.uuid4().hex[:12]}",
         'title': request.title.strip(),
-        'goal_type': request.goal_type.value,
+        'desired_outcome': request.desired_outcome or request.title.strip(),
+        'why_it_matters': request.why_it_matters,
+        'success_criteria': request.success_criteria,
+        'horizon_at': request.horizon_at,
+        'goal_type': request.goal_type.value if request.goal_type is not None else None,
         'target_value': request.target_value,
         'current_value': request.current_value,
         'min_value': request.min_value,

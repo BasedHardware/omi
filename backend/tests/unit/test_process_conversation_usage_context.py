@@ -128,6 +128,21 @@ def _build_fakes() -> dict[str, ModuleType]:
     ]:
         add(name, AutoMockModule(name))
 
+    task_intelligence = ModuleType("utils.task_intelligence")
+    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    add("utils.task_intelligence", task_intelligence)
+    conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
+    conversation_capture.capture_enabled = MagicMock(return_value=False)
+    conversation_capture.process_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.legacy_document_ids = MagicMock(return_value=None)
+    conversation_capture.reconcile_after_legacy = MagicMock()
+    add("utils.task_intelligence.conversation_capture", conversation_capture)
+    task_intelligence.conversation_capture = conversation_capture
+    workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
+    workstream_association.associate_canonical_evidence = MagicMock()
+    add("utils.task_intelligence.workstream_association", workstream_association)
+
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
     firebase_admin.auth = MagicMock()

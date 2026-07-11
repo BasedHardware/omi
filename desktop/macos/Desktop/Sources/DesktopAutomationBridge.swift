@@ -355,6 +355,36 @@ enum DesktopAutomationActionError: LocalizedError {
   }
 }
 
+enum DesktopAutomationRevisionComparator {
+  static func matchesAtMillisecondPrecision(_ lhs: Date?, _ rhs: Date?) -> Bool {
+    guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+    let lhsMilliseconds = Int64((lhs.timeIntervalSince1970 * 1_000).rounded())
+    let rhsMilliseconds = Int64((rhs.timeIntervalSince1970 * 1_000).rounded())
+    return lhsMilliseconds == rhsMilliseconds
+  }
+}
+
+private func automationSafeErrorDetail(_ raw: String) -> String {
+  var detail = raw.replacingOccurrences(of: #"[\r\n\t]+"#, with: " ", options: .regularExpression)
+  let redactions: [(String, String)] = [
+    (#"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#, "[redacted-jwt]"),
+    (#"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}"#, "Bearer [redacted]"),
+    (#"sk-[A-Za-z0-9_-]{20,}"#, "sk-[redacted]"),
+  ]
+  for (pattern, replacement) in redactions {
+    detail = detail.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+  }
+  return String(detail.prefix(500))
+}
+
+private func automationActionErrorDescription(_ error: Error) -> String {
+  if case let APIError.httpError(statusCode, detail) = error {
+    let suffix = detail.map { " detail=\(automationSafeErrorDetail($0))" } ?? ""
+    return "api_http_error status=\(statusCode)\(suffix)"
+  }
+  return automationSafeErrorDetail(error.localizedDescription)
+}
+
 private struct DesktopAutomationResponse<T: Codable>: Codable {
   let ok: Bool
   let result: T?
@@ -577,6 +607,10 @@ final class DesktopAutomationActionRegistry {
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
   private var harnessBusyUntil: Date?
+  /// The current typed floating-bar submission and its pre-submit timeline size.
+  /// The wait action must observe this turn before it may accept an idle state.
+  private var pendingFloatingBarSubmission: (generation: Int, baselineMessageCount: Int)?
+  private var floatingBarSubmissionGeneration = 0
 
   private func harnessBusyLatchActive(now: Date = Date()) -> Bool {
     guard let until = harnessBusyUntil else { return false }
@@ -654,13 +688,281 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    register(
+      name: "task_capture_fixture",
+      summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
+      params: ["facts_json"]
+    ) { params in
+      guard let json = params["facts_json"], let data = json.data(using: .utf8) else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be canonical capture facts JSON")
+      }
+      guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be a JSON object")
+      }
+      func value<T>(_ camel: String, _ snake: String, default fallback: T) -> T {
+        payload[camel] as? T ?? payload[snake] as? T ?? fallback
+      }
+      let facts = ScreenCaptureFacts(
+        explicitCommand: value("explicitCommand", "explicit_command", default: false),
+        clearCommitment: value("clearCommitment", "clear_commitment", default: false),
+        concreteDeliverable: value("concreteDeliverable", "concrete_deliverable", default: false),
+        directRequest: value("directRequest", "direct_request", default: false),
+        inferredNextStep: value("inferredNextStep", "inferred_next_step", default: false),
+        owner: value("owner", "owner", default: "unknown"),
+        publicBroadcast: value("publicBroadcast", "public_broadcast", default: false),
+        directMention: value("directMention", "direct_mention", default: false),
+        alreadyDone: value("alreadyDone", "already_done", default: false),
+        duplicateOf: payload["duplicateOf"] as? String ?? payload["duplicate_of"] as? String,
+        refinesTask: payload["refinesTask"] as? String ?? payload["refines_task"] as? String,
+        captureConfidence: value("captureConfidence", "capture_confidence", default: 0.5),
+        ownershipConfidence: value("ownershipConfidence", "ownership_confidence", default: 0.5)
+      )
+      return ["outcome": ScreenCapturePolicy.evaluate(facts).rawValue]
+    }
+
+    register(
+      name: "configure_contextual_task_interruptions",
+      summary: "Configure the non-production contextual task interruption gate",
+      params: [
+        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
+        "task_notifications_enabled",
+      ]
+    ) { params in
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.userOptedIn = boolParam(params["enabled"], default: false)
+      configuration.shippedCohortsEnabled = boolParam(
+        params["shipped_cohorts_enabled"], default: false)
+      configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
+      configuration.minimumSpacing = TimeInterval(max(
+        0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(max(
+        0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(max(
+        0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      if params["notifications_enabled"] != nil {
+        UserDefaults.standard.set(
+          boolParam(params["notifications_enabled"], default: false),
+          forKey: NotificationService.masterEnabledDefaultsKey
+        )
+      }
+      if params["frequency"] != nil {
+        UserDefaults.standard.set(
+          max(0, min(5, intParam(params["frequency"], default: 0))),
+          forKey: NotificationService.frequencyDefaultsKey
+        )
+      }
+      if params["task_notifications_enabled"] != nil {
+        TaskAssistantSettings.shared.notificationsEnabled = boolParam(
+          params["task_notifications_enabled"], default: false)
+      }
+      return [
+        "enabled": configuration.userOptedIn ? "true" : "false",
+        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
+        "cohort": ProactiveTaskCohort.current.rawValue,
+      ]
+    }
+
+    register(
+      name: "probe_contextual_task_interruption",
+      summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
+      params: ["can_wait", "expires_in_seconds"]
+    ) { params in
+      let nonce = UUID().uuidString.lowercased()
+      let trace = NotificationService.shared.sendContextualTaskInterruption(
+        TaskInterruptionCandidate(
+          recommendationID: "automation:\(nonce)",
+          interventionID: "automation-intervention:\(nonce)",
+          dedupeKey: "automation-dedupe:\(nonce)",
+          headline: "Review a relevant update",
+          whyNow: "The linked context changed materially.",
+          recommendedAction: "Review update",
+          expiresAt: Date().addingTimeInterval(TimeInterval(
+            intParam(params["expires_in_seconds"], default: 300))),
+          canWait: boolParam(params["can_wait"], default: false)
+        )
+      )
+      return [
+        "reason": trace.reason.rawValue,
+        "cohort": trace.cohort.rawValue,
+        "dedupe_hash": trace.dedupeHash,
+        "intervention_id": trace.interventionID,
+      ]
+    }
+
+    register(
+      name: "set_contextual_task_focus",
+      summary: "Set deterministic focus suppression for contextual task interruptions",
+      params: ["suppressed"]
+    ) { params in
+      let suppressed = boolParam(params["suppressed"], default: true)
+      UserDefaults.standard.set(
+        suppressed, forKey: ProactiveTaskInterruptionSettings.focusSuppressedKey)
+      return ["suppressed": suppressed ? "true" : "false"]
+    }
+
+    register(
+      name: "observe_task_context",
+      summary: "Submit a normalized task-context event and optionally flush re-evaluation",
+      params: [
+        "kind", "reference", "subject_kind", "subject_id", "workstream_id", "urgency", "flush",
+      ]
+    ) { params in
+      guard let kind = TaskContextEventKind(rawValue: params["kind"] ?? "app_window") else {
+        throw DesktopAutomationActionError.invalidParams("kind is invalid")
+      }
+      guard let reference = params["reference"], !reference.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("reference is required")
+      }
+      let subject: TaskContextSubject?
+      if let subjectID = params["subject_id"], !subjectID.isEmpty,
+        let kind = OmiAPI.RecommendationSubjectKind(rawValue: params["subject_kind"] ?? "task")
+      {
+        subject = TaskContextSubject(
+          kind: kind,
+          id: subjectID,
+          workstreamID: params["workstream_id"]?.isEmpty == false ? params["workstream_id"] : nil
+        )
+      } else {
+        subject = nil
+      }
+      guard let event = TaskLocalContextEvent.normalized(
+        kind: kind,
+        rawReference: reference,
+        subject: subject,
+        urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
+      ) else {
+        throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
+      }
+      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      await TaskContextualResurfacingService.shared.observe(matched)
+      let shouldFlush = boolParam(params["flush"], default: true)
+      if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
+      return [
+        "reference_hash": matched.referenceHash,
+        "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
+        "flushed": shouldFlush ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "prepare_task_artifact_fixture",
+      summary: "Persist an allowlisted prepared artifact through the workstream kernel",
+      params: ["workstream_id", "logical_key", "kind", "content", "execution_ready", "grant_id"]
+    ) { params in
+      guard let workstreamID = params["workstream_id"], !workstreamID.isEmpty,
+        let logicalKey = params["logical_key"], !logicalKey.isEmpty,
+        let kind = params["kind"], !kind.isEmpty,
+        let content = params["content"], !content.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams(
+          "workstream_id, logical_key, kind, and content are required")
+      }
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.allowedPreparationKinds.insert(kind)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      let referenceDigest = SHA256.hash(data: Data("automation-preparation:\(logicalKey)".utf8))
+        .map { String(format: "%02x", $0) }.joined()
+      let evidence = OmiAPI.EvidenceRef(
+        deviceId: ClientDeviceService.shared.clientDeviceId,
+        excerptHash: "sha256:\(referenceDigest)",
+        id: "sha256:\(referenceDigest)",
+        kind: .local_screen,
+        scope: .device_local,
+        version: "automation-preparation.v1"
+      )
+      let grantID: String
+      if let supplied = params["grant_id"], !supplied.isEmpty {
+        grantID = supplied
+      } else {
+        func object(_ raw: String) throws -> [String: Any] {
+          guard let data = raw.data(using: .utf8),
+            let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+          else { throw DesktopAutomationActionError.invalidParams("kernel returned invalid JSON") }
+          return value
+        }
+        let prepared = try object(try await TaskChatRuntime.controlTool(
+          name: "prepare_workstream_continuity",
+          input: ["workstreamId": workstreamID, "taskIds": []]
+        ))
+        guard let session = prepared["session"] as? [String: Any],
+          let sessionID = session["agentSessionId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel session unavailable") }
+        let capability = "desktop.workstream.artifact.prepare"
+        let operation = "prepare_artifact"
+        let resource = "workstream:\(workstreamID)"
+        let expiry = Int(Date().addingTimeInterval(5 * 60).timeIntervalSince1970 * 1_000)
+        let dispatch = try object(try await TaskChatRuntime.controlTool(
+          name: "create_desktop_dispatch",
+          input: [
+            "kind": "approval",
+            "priority": 1,
+            "title": "Automation prepared artifact fixture",
+            "decisionPrompt": "Authorize this non-production artifact fixture?",
+            "sourceSessionId": sessionID,
+            "capability": capability,
+            "operation": operation,
+            "resourceRef": resource,
+            "payload": ["automation_fixture": true],
+            "expiresAtMs": expiry,
+          ]
+        ))
+        guard let dispatchObject = dispatch["dispatch"] as? [String: Any],
+          let dispatchID = dispatchObject["dispatchId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel dispatch unavailable") }
+        let resolved = try object(try await TaskChatRuntime.controlTool(
+          name: "resolve_desktop_dispatch",
+          input: [
+            "dispatchId": dispatchID,
+            "status": "resolved",
+            "resolvedBy": "desktop_automation",
+            "resolution": ["decision": "allow"],
+            "grant": [
+              "sessionId": sessionID,
+              "capability": capability,
+              "operation": operation,
+              "resourcePattern": resource,
+              "effect": "allow",
+              "source": "user",
+              "expiresAtMs": expiry,
+            ],
+          ]
+        ))
+        guard let grant = resolved["grant"] as? [String: Any],
+          let createdGrantID = grant["grantId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel grant unavailable") }
+        grantID = createdGrantID
+      }
+      let artifact = try await KernelPreparedArtifactBridge().prepare(
+        ProactiveTaskArtifactProposal(
+          workstreamID: workstreamID,
+          logicalKey: logicalKey,
+          kind: kind,
+          content: Data(content.utf8),
+          evidenceRefs: [evidence],
+          executionReady: boolParam(params["execution_ready"], default: true),
+          coordinatorGrantID: grantID
+        ),
+        configuration: configuration
+      )
+      return [
+        "prepared": artifact == nil ? "false" : "true",
+        "version": artifact.map { "\($0.version)" } ?? "",
+        "content_hash": artifact?.contentHash ?? "",
+        "file": artifact?.fileURL.path ?? "",
+        "supersedes_artifact_id": artifact?.supersedesArtifactID ?? "",
+        "delivery_count": artifact.map { "\($0.deliveryIDs.count)" } ?? "0",
+      ]
+    }
+
     // Runs the exact service + outcome mapping the ChatGPT/Claude import
     // sheets use, so harnesses can assert outcome copy without driving the
     // TextEditor. Writes real memories on success, like the sheet would.
     register(
       name: "memory_log_import_probe",
       summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text"]
+      params: ["source", "text", "fixture"]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -668,7 +970,26 @@ final class DesktopAutomationActionRegistry {
       guard let text = params["text"], !text.isEmpty else {
         throw DesktopAutomationActionError.invalidParams("text must be non-empty")
       }
-      switch await ConnectorImportOperations.importMemoryLog(text: text, source: source) {
+      let outcome: ConnectorImportOperations.Outcome
+      if params["fixture"] == "structured" {
+        guard AppBuild.isNonProduction else {
+          return ["error": "structured memory-log fixture is disabled on production bundles"]
+        }
+        // Offline providers intentionally return a marker echo rather than JSON.
+        // Inject only the extracted provider result; the real connector operation
+        // still owns validation, durable save, and user-facing outcome mapping.
+        outcome = await ConnectorImportOperations.importMemoryLog(
+          text: text,
+          source: source,
+          extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog(
+            memories: [text],
+            profileSummary: "desktop qualification fixture"
+          )
+        )
+      } else {
+        outcome = await ConnectorImportOperations.importMemoryLog(text: text, source: source)
+      }
+      switch outcome {
       case .success(let result, let message):
         return [
           "outcome": "success",
@@ -794,7 +1115,9 @@ final class DesktopAutomationActionRegistry {
         "detail_has_revision": detail.updatedAt == nil ? "false" : "true",
         "detail_transcript_included": detail.transcriptSegmentsIncluded ? "true" : "false",
         "cache_id_matches": persisted?.id == detail.id ? "true" : "false",
-        "cache_revision_matches": persisted?.updatedAt == detail.updatedAt ? "true" : "false",
+        "cache_revision_matches": DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(
+          persisted?.updatedAt, detail.updatedAt)
+          ? "true" : "false",
         "opened_detail": "true",
       ]
     }
@@ -1094,11 +1417,21 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      let baselineSnapshot = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 1)
+      guard baselineSnapshot["error"] == nil,
+        let baselineRaw = baselineSnapshot["message_count"],
+        let baseline = Int(baselineRaw)
+      else {
+        return ["error": baselineSnapshot["error"] ?? "floating chat timeline unavailable"]
+      }
+      self.floatingBarSubmissionGeneration += 1
+      let generation = self.floatingBarSubmissionGeneration
+      self.pendingFloatingBarSubmission = (generation: generation, baselineMessageCount: baseline)
       if !FloatingControlBarManager.shared.isVisible {
         FloatingControlBarManager.shared.show()
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
-      return ["sent": query]
+      return ["sent": query, "submission_generation": "\(generation)"]
     }
 
     // Force the floating-bar active state so the pill↔notch-island morph and the
@@ -1394,19 +1727,34 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "wait_floating_bar_chat_idle",
-      summary: "Block until floating-bar chat is not sending or streaming",
+      summary: "Block until the latest submitted floating-bar turn is observed and becomes idle",
       params: ["timeoutMs", "pollMs"]
     ) { params in
       let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
       let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let submission = self.pendingFloatingBarSubmission else {
+        return ["error": "no pending floating-bar submission to observe"]
+      }
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      var observedSubmission = false
       while Date() < deadline {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
-        if detail["error"] == nil,
+        let messageCount = Int(detail["message_count"] ?? "") ?? 0
+        observedSubmission = observedSubmission
+          || messageCount > submission.baselineMessageCount
+          || detail["is_sending"] == "true"
+          || detail["is_streaming"] == "true"
+        if observedSubmission,
+           detail["error"] == nil,
            detail["is_sending"] == "false",
            detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
+          detail["submission_observed"] = "true"
+          detail["submission_generation"] = "\(submission.generation)"
+          if self.pendingFloatingBarSubmission?.generation == submission.generation {
+            self.pendingFloatingBarSubmission = nil
+          }
           return detail
         }
         try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
@@ -1414,6 +1762,8 @@ final class DesktopAutomationActionRegistry {
       var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
       detail["error"] = "timeout"
       detail["timeout_ms"] = "\(timeoutMs)"
+      detail["submission_observed"] = observedSubmission ? "true" : "false"
+      detail["submission_generation"] = "\(submission.generation)"
       return detail
     }
 
@@ -1917,7 +2267,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
-      params: ["conversationId", "showTranscript"]
+      params: ["conversationId", "showTranscript", "timeoutMs"]
     ) { params in
       guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
         !conversationId.isEmpty
@@ -1931,16 +2281,24 @@ final class DesktopAutomationActionRegistry {
         object: nil,
         userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
       )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
       return [
         "opened": conversationId,
         "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
     }
 
     register(
       name: "open_latest_conversation",
       summary: "Open the most recently loaded conversation detail view",
-      params: ["showTranscript"]
+      params: ["showTranscript", "timeoutMs"]
     ) { params in
       guard let appState = AppState.current else {
         return ["error": "app state unavailable"]
@@ -1958,9 +2316,17 @@ final class DesktopAutomationActionRegistry {
         object: nil,
         userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
       )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
       return [
         "opened": conversationId,
         "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
     }
 
@@ -2139,11 +2505,14 @@ final class DesktopAutomationActionRegistry {
       let terms = raw.split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
-      AssistantSettings.shared.transcriptionVocabulary = terms
-      _ = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      // Persist remotely first. A Settings-page hydration already in flight may
+      // write its response into UserDefaults; the final assignment makes this
+      // completed mutation authoritative without relying on a settle delay.
+      let saved = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary
       return [
         "saved": "true",
-        "term_count": "\(terms.count)",
+        "term_count": "\(saved.vocabulary.count)",
       ]
     }
 
@@ -2190,7 +2559,7 @@ final class DesktopAutomationActionRegistry {
         goalType: .numeric,
         targetValue: targetValue,
         currentValue: currentValue,
-        source: "harness"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       let goals = (try? await GoalStorage.shared.getLocalGoals()) ?? []
@@ -2207,7 +2576,7 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       let v2 = try await APIClient.shared.getAppsV2()
       let marketplaceCount = v2.groups.reduce(0) { $0 + $1.data.count }
-      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 200)
+      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 100)
       return [
         "marketplace_count": "\(marketplaceCount)",
         "group_count": "\(v2.meta.groupCount)",
@@ -3109,7 +3478,7 @@ final class DesktopAutomationBridge {
       } catch {
         return jsonResponse(
           DesktopAutomationResponse<DesktopAutomationActionResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: automationActionErrorDescription(error)),
           statusCode: 400
         )
       }
@@ -3303,6 +3672,8 @@ final class DesktopAutomationBridge {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
       } else if payload.target == "overlay" {
         window = CloudConnectorGuidanceOverlay.shared.automationWindow
+      } else if payload.target == "task_thread" {
+        window = NSApp.windows.first(where: { $0.title == "Omi — Task thread scenario" && $0.isVisible })
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow

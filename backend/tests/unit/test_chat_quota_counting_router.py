@@ -127,6 +127,8 @@ def _make_chat_client():
     auth.get_current_user_uid = get_current_user_uid
     auth.get_current_user_uid_ws_listen = get_current_user_uid
     auth.with_rate_limit = with_rate_limit
+    # chat.py imports utils.stt.pre_recorded, which needs @timeit from this module.
+    auth.timeit = lambda f: f
     storage = _install_module('utils.other.storage', ModuleType('utils.other.storage'))
     storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
     storage.schedule_syncing_temporal_file_deletion = MagicMock()

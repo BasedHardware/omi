@@ -16,7 +16,7 @@ const APPS_ENDPOINT = "/v1/apps";
  * @param uid - The UID of the authenticated user.
  */
 export async function getApps(uid: string): Promise<OmiApp[]> {
-  return get_apps_v1_apps_get({}, adminInit(uid));
+  return get_apps_v1_apps_get({}, {}, adminInit(uid));
 }
 
 /**
@@ -26,6 +26,7 @@ export async function getApps(uid: string): Promise<OmiApp[]> {
 export async function getAppById(uid: string, appId: string): Promise<OmiApp> {
   return get_app_details_v1_apps__app_id__get(
     { app_id: appId },
+    {},
     adminInit(uid),
   );
 }
@@ -67,14 +68,19 @@ export async function updateApp(
  * @param uid - The UID of the authenticated user.
  */
 export async function deleteApp(uid: string, appId: string): Promise<void> {
-  await delete_app_v1_apps__app_id__delete({ app_id: appId }, adminInit(uid));
+  await delete_app_v1_apps__app_id__delete({ app_id: appId }, {}, adminInit(uid));
 }
 
 // Fetch all public unapproved apps
 export const getUnapprovedApps = async (
   uid: string,
 ): Promise<UnapprovedPublicAppResponse[]> => {
+  const secretKey = process.env.OMI_API_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error("OMI_API_SECRET_KEY environment variable is not set.");
+  }
   return get_unapproved_public_apps_v1_apps_public_unapproved_get(
+    { secret_key: secretKey },
     adminInit(uid),
   );
 };

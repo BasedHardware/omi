@@ -144,6 +144,28 @@ import { StaleAdapterBindingError } from "./kernel-types.js";
 import { KernelArtifacts } from "./kernel-artifacts.js";
 
 export class KernelSessions extends KernelArtifacts {
+  executionPolicyForSession(sessionId: string): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
+    const session = this.readSession(sessionId);
+    return {
+      executionRole: session.executionRole,
+      providerBoundary: session.providerBoundary,
+      defaultAdapterId: session.defaultAdapterId,
+    };
+  }
+
+  executionPolicyForOwnedSession(
+    sessionId: string,
+    ownerId: string,
+  ): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
+    const session = this.readSession(sessionId);
+    this.assertSessionOwner(session, ownerId);
+    return {
+      executionRole: session.executionRole,
+      providerBoundary: session.providerBoundary,
+      defaultAdapterId: session.defaultAdapterId,
+    };
+  }
+
   listSessions(input: ListSessionsInput = {}): KernelSessionSummary[] {
     const where: string[] = [];
     const values: unknown[] = [];

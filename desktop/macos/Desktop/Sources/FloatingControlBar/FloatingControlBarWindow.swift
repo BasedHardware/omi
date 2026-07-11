@@ -750,11 +750,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func topCenteredOrigin(for size: NSSize, on screen: NSScreen, usesNotchIsland: Bool) -> NSPoint {
         let anchorFrame = usesNotchIsland ? screen.frame : screen.visibleFrame
-        let x = (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
-        let y = usesNotchIsland
-            ? anchorFrame.maxY - size.height
-            : anchorFrame.maxY - size.height - topInsetForPillFallback
-        return NSPoint(x: x, y: y)
+        var frame = FloatingControlBarGeometry.topCenteredFrame(size: size, anchorFrame: anchorFrame)
+        if !usesNotchIsland {
+            frame.origin.y -= topInsetForPillFallback
+        }
+        return frame.origin
     }
 
     private func growOutFromNotch(on targetScreen: NSScreen) {
@@ -1395,9 +1395,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         FloatingControlBarGeometry.centerAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
-    /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
+    /// Top-center: keeps top edge fixed. A notch island is fixed to its display's
+    /// hardware camera housing, so it re-centers on the display rather than
+    /// preserving a potentially stale panel midpoint.
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        return FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
+        FloatingControlBarGeometry.topAnchoredFrame(
+            currentFrame: frame,
+            targetSize: newSize,
+            screenFrame: screenForPlacement?.frame,
+            pinsToScreenCenter: notchModeEnabled
+        ).origin
     }
 
     private func resizeAnchored(
@@ -2774,6 +2781,7 @@ class FloatingControlBarManager {
         assistantId: String,
         sound: NotificationSound,
         context: FloatingBarNotificationContext? = nil,
+        action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil
     ) {
         let notification = FloatingBarNotification(
@@ -2781,6 +2789,7 @@ class FloatingControlBarManager {
             message: message,
             assistantId: assistantId,
             context: context,
+            action: action,
             screenshotData: screenshotData
         )
         guard let window else {
@@ -3564,6 +3573,10 @@ class FloatingControlBarManager {
         notificationDismissWorkItem?.cancel()
         notificationDismissWorkItem = nil
         dismissNotificationAndAdvanceQueue(trackDismissal: false)
+        if case .openWhatMattersNow(let recommendationID) = notification.action {
+            ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
+            return
+        }
         _ = openNotificationConversation(notificationID: notification.id, in: window)
     }
 
@@ -3827,6 +3840,7 @@ class FloatingControlBarManager {
                 idempotencyKey: continuityKey
             )
         }
+        observeAgentCompletionContext(pillID: pillID, runId: runId)
     }
 
     /// Project one terminal pill summary into kernel `main_chat` for cross-surface continuity.
@@ -3846,6 +3860,7 @@ class FloatingControlBarManager {
         } else {
             idempotencyKey = "pill_completion:\(pillID.uuidString)"
         }
+        observeAgentCompletionContext(pillID: pillID, runId: runId)
 
         // Assistant-only projection: the spawn handoff already recorded the user's
         // request on main_chat; repeating it here would double-spend the voice seed budget.
@@ -3896,6 +3911,25 @@ class FloatingControlBarManager {
             origin: "pill_completion",
             idempotencyKey: idempotencyKey
         )
+    }
+
+    private func observeAgentCompletionContext(pillID: UUID, runId: String?) {
+        guard AuthService.shared.isSignedIn else { return }
+        let stableReference = runId.flatMap { $0.isEmpty ? nil : $0 } ?? pillID.uuidString
+        let subject: TaskContextSubject? = runId
+            .flatMap { AgentRuntimeStatusStore.shared.projection(forRunID: $0) }
+            .flatMap { projection in
+                guard projection.surface.surfaceKind == "workstream" else { return nil }
+                let workstreamID = projection.surface.externalRefId
+                return TaskContextSubject(kind: .workstream, id: workstreamID, workstreamID: workstreamID)
+            }
+        guard let event = TaskLocalContextEvent.normalized(
+            kind: .agent,
+            rawReference: "agent-completed:\(stableReference)",
+            subject: subject
+        ) else { return }
+        let matched = TaskContextSubjectMatcher.shared.resolve(event)
+        Task { await TaskContextualResurfacingService.shared.observe(matched) }
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {

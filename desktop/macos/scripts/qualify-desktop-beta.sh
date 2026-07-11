@@ -13,6 +13,9 @@ KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
 
 KEEP_STACK=0
 PROMOTE=1
+AUTOMATIC=0
+SIGNED_SMOKE_RESULT=""
+CANDIDATE_GATE_RESULT=""
 RELEASE_TAG=""
 
 usage() {
@@ -20,11 +23,15 @@ usage() {
 Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] <vX.Y.Z+BUILD-macos>
+  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] \
+    [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
   --keep-stack   Leave dev-harness stack running on exit (default: make dev-down)
   --no-promote   Write qualification evidence without dispatching beta promotion
+  --automatic    Run richer automatic gates and require this to remain the newest candidate
+  --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
+  --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
 USAGE
 }
 
@@ -37,6 +44,20 @@ while [[ $# -gt 0 ]]; do
     --no-promote)
       PROMOTE=0
       shift
+      ;;
+    --automatic)
+      AUTOMATIC=1
+      shift
+      ;;
+    --signed-smoke-result)
+      [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--signed-smoke-result requires a path" >&2; exit 2; }
+      SIGNED_SMOKE_RESULT="$2"
+      shift 2
+      ;;
+    --candidate-gate-result)
+      [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--candidate-gate-result requires a path" >&2; exit 2; }
+      CANDIDATE_GATE_RESULT="$2"
+      shift 2
       ;;
     --help|-h)
       usage
@@ -62,6 +83,22 @@ done
 if [[ -z "$RELEASE_TAG" ]]; then
   usage >&2
   exit 2
+fi
+if [[ "$AUTOMATIC" -eq 1 ]]; then
+  [[ -f "$SIGNED_SMOKE_RESULT" ]] || { echo "automatic qualification requires --signed-smoke-result" >&2; exit 2; }
+  [[ -f "$CANDIDATE_GATE_RESULT" ]] || { echo "automatic qualification requires --candidate-gate-result" >&2; exit 2; }
+  python3 - "$RELEASE_TAG" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" <<'PY'
+import json
+import sys
+
+release_tag, smoke_path, gate_path = sys.argv[1:]
+smoke = json.load(open(smoke_path, encoding="utf-8"))
+gate = json.load(open(gate_path, encoding="utf-8"))
+if smoke.get("ok") is not True or smoke.get("release_tag") != release_tag:
+    raise SystemExit("automatic qualification requires passing signed-smoke evidence for the release tag")
+if gate.get("passed") is not True or gate.get("release_tag") != release_tag:
+    raise SystemExit("automatic qualification requires passing candidate-gate evidence for the release tag")
+PY
 fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -197,6 +234,25 @@ PY
   return 1
 }
 
+prepare_qualification_defaults() {
+  local bundle_id="$1" bundle_name="$2"
+  case "$bundle_name" in
+    omi-qualification-*) ;;
+    *) echo "refusing to reset non-qualification profile: $bundle_name" >&2; return 1 ;;
+  esac
+  # Qualification is a fresh, synthetic profile. Never inherit stale onboarding,
+  # capture, or shortcut state from this bundle's previous run or from Omi Dev.
+  rm -rf "$HOME/Library/Application Support/$bundle_name" "$HOME/Library/Caches/$bundle_name"
+  defaults delete "$bundle_id" >/dev/null 2>&1 || true
+  defaults write "$bundle_id" hasCompletedOnboarding -bool true
+  defaults write "$bundle_id" devLazyPermissionsEnabled -bool true
+  defaults write "$bundle_id" screenAnalysisEnabled -bool false
+  defaults write "$bundle_id" transcriptionEnabled -bool false
+  defaults write "$bundle_id" systemAudioCaptureMode -string never
+  defaults write "$bundle_id" screenAnalysisAutoStartFixed_v2 -bool true
+  defaults write "$bundle_id" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
+}
+
 cleanup() {
   local exit_code=$?
   if [[ -n "$BUNDLE" ]]; then
@@ -215,10 +271,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+QUALIFICATION_BUNDLE_ID="$(derive_bundle_id "$BUNDLE")"
+terminate_qualification_desktop "$BUNDLE"
+prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
+
 (
   cd "$WORKTREE"
   PROVIDER_MODE=offline make dev-up
-  make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
+  OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
 
@@ -230,6 +290,9 @@ fi
 
 (
   cd "$WORKTREE/desktop/macos"
+  if [[ "$AUTOMATIC" -eq 1 ]]; then
+    ./scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
+  fi
   ./scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack
 )
 
@@ -244,9 +307,53 @@ if ! python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"; then
   exit 1
 fi
 
+FAULT_EVIDENCE=""
+if [[ "$AUTOMATIC" -eq 1 ]]; then
+  (
+    cd "$WORKTREE/desktop/macos"
+    ./scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"
+  )
+  FAULT_EVIDENCE=$(ls -td "$WORKTREE/desktop/macos/.harness/desktop-core"/*-fault 2>/dev/null | head -1)
+  if [[ -z "$FAULT_EVIDENCE" || ! -f "$FAULT_EVIDENCE/manifest.json" ]]; then
+    echo "automatic qualification failed: missing fault-suite evidence" >&2
+    exit 1
+  fi
+  python3 - "$FAULT_EVIDENCE/manifest.json" <<'PY'
+import json
+import sys
+
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+if manifest.get("passed") is not True or manifest.get("tier") != "fault":
+    raise SystemExit("automatic qualification failed: fault-suite manifest did not pass")
+PY
+fi
+
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
 cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
+
+if [[ "$AUTOMATIC" -eq 1 ]]; then
+  git -C "$REPO_ROOT" fetch origin --tags --force
+  LATEST_TAG=$(git -C "$REPO_ROOT" tag -l 'v*-macos' --sort=-v:refname | head -1)
+  if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]; then
+    echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
+    exit 1
+  fi
+  python3 - "/tmp/$ASSET" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+evidence_path, smoke_path, gate_path, fault_path = map(Path, sys.argv[1:5])
+evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+evidence["qualification_mode"] = "automatic"
+evidence["signed_artifact_smoke"] = json.loads(smoke_path.read_text(encoding="utf-8"))
+evidence["candidate_gate"] = json.loads(gate_path.read_text(encoding="utf-8"))
+evidence["fault_suite"] = json.loads(fault_path.read_text(encoding="utf-8"))
+evidence["automatic_gates"] = ["signed-artifact", "static-self-check", "tier-2", "fault-suite"]
+evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+fi
 
 BODY_FILE=/tmp/desktop-qualification-release-body.md
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
@@ -257,9 +364,11 @@ gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobbe
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
 if [[ "$PROMOTE" -eq 1 ]]; then
-  gh workflow run desktop_promote_beta.yml \
-    --repo BasedHardware/omi \
-    -f release_tag="$RELEASE_TAG"
+  PROMOTION_ARGS=(--repo BasedHardware/omi -f release_tag="$RELEASE_TAG")
+  if [[ "$AUTOMATIC" -eq 1 ]]; then
+    PROMOTION_ARGS+=(-f automatic=true)
+  fi
+  gh workflow run desktop_promote_beta.yml "${PROMOTION_ARGS[@]}"
 fi
 
 QUALIFICATION_SUCCESS=1
