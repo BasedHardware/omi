@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Sequence
+from typing import cast, Any, Dict, List, Sequence
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -44,7 +44,8 @@ def create_reply_draft(uid: str, request: ReplyDraftRequest) -> ReplyDraftRespon
     )
 
     with track_usage(uid, Features.REPLY_DRAFT):
-        result: ReplyDraftGeneration = (
+        result = cast(
+            ReplyDraftGeneration,
             get_llm('reply_draft')
             .with_structured_output(ReplyDraftGeneration)
             .invoke(
@@ -52,7 +53,7 @@ def create_reply_draft(uid: str, request: ReplyDraftRequest) -> ReplyDraftRespon
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
                 ]
-            )
+            ),
         )
 
     return ReplyDraftResponse(
