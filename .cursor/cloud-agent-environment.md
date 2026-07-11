@@ -17,7 +17,7 @@ cd backend && source .venv/bin/activate
 bash testing/e2e/run.sh -q --tb=short
 ```
 
-This is the best way to validate backend changes end-to-end on this VM (real routers, auth, encryption, middleware against the fakes). It is the same harness CI runs (`.github/workflows/backend-hermetic-e2e.yml`). Verified here: **72 passed, 6 skipped**. Add new hermetic scenarios under `backend/testing/e2e/`; fixtures and the `client`/`auth_headers` fixtures live in `backend/testing/e2e/conftest.py` (dev auth is `Authorization: Bearer dev-token` → uid `123`).
+This is the best way to validate backend changes end-to-end on this VM (real routers, auth, encryption, middleware against the fakes). It is the same harness CI runs (`.github/workflows/backend-hermetic-e2e.yml`). Verified here: **103 passed, 3 skipped**. Add new hermetic scenarios under `backend/testing/e2e/`; fixtures and the `client`/`auth_headers` fixtures live in `backend/testing/e2e/conftest.py` (dev auth is `Authorization: Bearer dev-token` → uid `123`).
 
 ## Unit tests (known pre-existing failures on `main`)
 
@@ -25,11 +25,13 @@ This is the best way to validate backend changes end-to-end on this VM (real rou
 
 ## Running the backend live (manual API calls)
 
-Only needed when the hermetic harness isn't enough (e.g. poking endpoints with `curl`). Unlike the harness, a live `uvicorn` process has no fakes injected, so it needs the import-time clients satisfied. `backend/.env` is pre-seeded for this (gitignored, persists via snapshot): Firestore emulator (`FIRESTORE_EMULATOR_HOST=127.0.0.1:8081`, `GOOGLE_CLOUD_PROJECT=demo-omi`), a dummy `GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json` so the GCS client constructs, placeholder `OPENAI_API_KEY`/`TYPESENSE_*`, `ENCRYPTION_SECRET`, `ADMIN_KEY=local_dev_admin_key`, and **Pinecone left unset** so `database/vector_db.py` takes its `index = None` no-op path. If `backend/.env` is missing, recreate it from `.env.template` plus those values, and regenerate `google-credentials.json` as any syntactically valid service-account JSON (a generated RSA key — Firestore I/O goes to the emulator, not real GCP).
+Only needed when the hermetic harness isn't enough (e.g. poking endpoints with `curl`). Unlike the harness, a live `uvicorn` process has no fakes injected, so it needs the import-time clients satisfied. `backend/.env` is pre-seeded for this (gitignored, persists via snapshot): Firestore emulator (`FIRESTORE_EMULATOR_HOST=127.0.0.1:8085`, `GOOGLE_CLOUD_PROJECT=demo-omi`), a dummy `GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json` so the GCS client constructs, placeholder `OPENAI_API_KEY`/`TYPESENSE_*`, `ENCRYPTION_SECRET`, `ADMIN_KEY=local_dev_admin_key`, and **Pinecone left unset** so `database/vector_db.py` takes its `index = None` no-op path. If `backend/.env` is missing, recreate it from `.env.template` plus those values, and regenerate `google-credentials.json` as any syntactically valid service-account JSON (a generated RSA key — Firestore I/O goes to the emulator, not real GCP).
+
+The committed repo-root `firebase.json` already pins the Firestore emulator to `127.0.0.1:8085` (match `FIRESTORE_EMULATOR_HOST` to it), so no `firebase.json` needs to be created:
 
 ```bash
 redis-server --daemonize yes
-firebase emulators:start --only firestore --project demo-omi   # needs a firebase.json pinning firestore to :8081
+firebase emulators:start --only firestore --project demo-omi   # uses repo-root firebase.json (firestore :8085)
 cd backend && source .venv/bin/activate && python -m uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
