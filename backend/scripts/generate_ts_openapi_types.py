@@ -117,6 +117,25 @@ def schema_to_ts(schema: Any) -> str:
     return result
 
 
+def is_plain_object_type_literal(ts_type: str) -> bool:
+    """Return True when ts_type is a single `{ ... }` object literal.
+
+    Top-level unions/intersections (e.g. oneOf/anyOf results, or `{...} | null`)
+    cannot be expressed as `interface` and must use `type`.
+    """
+    if not ts_type.startswith('{'):
+        return False
+    depth = 0
+    for index, char in enumerate(ts_type):
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return index == len(ts_type) - 1
+    return False
+
+
 def object_schema_to_ts(schema: dict[str, Any]) -> str:
     properties = schema.get('properties')
     additional = schema.get('additionalProperties')
@@ -239,6 +258,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []
             query_params: list[tuple[str, str, bool]] = []
+            header_params: list[tuple[str, str, bool]] = []
             if isinstance(raw_params, list):
                 for p in raw_params:
                     if not isinstance(p, dict):
@@ -251,6 +271,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                         path_params.append((pname, ts_type))
                     elif location == 'query':
                         query_params.append((pname, ts_type, required))
+                    elif location == 'header':
+                        header_params.append((pname, ts_type, required))
 
             # Parse requestBody
             body_type: str | None = None
@@ -270,6 +292,9 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             if query_params:
                 fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in query_params)
                 sig_parts.append(f'query: {{ {fields} }}')
+            if header_params:
+                fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in header_params)
+                sig_parts.append(f'header: {{ {fields} }}')
             if body_type:
                 sig_parts.append(f'body: {body_type}')
             sig_parts.append('init?: OmiApiClientInit')
@@ -300,6 +325,14 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                 body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
             body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
             body_lines.append('      ...init?.headers,')
+            for pname, _ptype, required in header_params:
+                prop = ts_identifier(pname)
+                if required:
+                    body_lines.append(f"      {string_literal(pname)}: String(header.{prop}),")
+                else:
+                    body_lines.append(
+                        f"      ...(header.{prop} !== undefined ? {{ {string_literal(pname)}: String(header.{prop}) }} : {{}}),"
+                    )
             body_lines.append('    },')
             if body_type:
                 body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
@@ -337,8 +370,9 @@ def generate(spec: dict[str, Any], source_label: str) -> str:
     for schema_name in sorted(schemas):
         ts_name = ts_identifier(schema_name)
         ts_type = schema_to_ts(schemas[schema_name])
-        declaration = 'interface' if ts_type.startswith('{\n') else 'type'
-        if declaration == 'interface':
+        # Interfaces can only declare a single object shape. Unions/intersections
+        # (oneOf/anyOf/allOf, nullable object wrappers) must be `export type`.
+        if is_plain_object_type_literal(ts_type):
             lines.append(f'export interface {ts_name} {ts_type}')
         else:
             lines.append(f'export type {ts_name} = {ts_type};')

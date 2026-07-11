@@ -23,7 +23,8 @@ void main() {
         statusCalls++;
         return {'stage': 'none'};
       },
-      uploader: (files, {onUploadProgress, conversationId}) async => UploadFilesResult.queued('unused'),
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+          UploadFilesResult.queued('unused'),
     );
     final provider = SyncProvider(walService: WalService(), uploadGate: gate, startBackgroundSync: false);
 

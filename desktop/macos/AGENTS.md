@@ -30,7 +30,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` changes queues them for the next weekday or manually dispatched candidate; it does not expose a beta automatically:
+Merging `desktop/macos/**` changes queues them for the next daily or manually dispatched candidate. A candidate advances to beta automatically only after every qualification gate passes:
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
@@ -39,8 +39,8 @@ Merging `desktop/macos/**` changes queues them for the next weekday or manually 
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Qualification** (`scripts/qualify-desktop-beta.sh`) — rebuilds the exact tag, runs the T2 desktop harness, and writes canonical `qualifiedBeta*` evidence metadata
-4. **Beta promotion** (`desktop_promote_beta.yml`) — validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
+3. **Automatic qualification** (`scripts/qualify-desktop-beta.sh --automatic`) — verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata
+4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — rejects stale automatic targets, honors `DESKTOP_AUTO_BETA_ENABLED=false` as an emergency pause, validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
 
@@ -49,8 +49,10 @@ Signed artifact smoke scope:
 - Codemagic uploads `build/desktop-smoke-result.json` with artifact digests and completed checks; promotion tooling should compare this result to the exact release asset before changing channels.
 - The synthetic `--auth-storage-canary` is mandatory before beta publication and runs inside the exact signed app without real credentials. Optional broader live probes (`--launch --network --auth --chat --permissions --storage`) require an isolated release runner and explicit canary env vars; production-bundle launch is fail-closed unless `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` requires `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence rather than a raw bearer-token curl.
 - Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance beta/stable visibility only after digest-matched qualification passes.
+- Automatic beta is fail-closed: any signed-smoke, digest, static, T2, fault-suite, newest-tag, manifest, or pointer failure leaves the candidate non-live. Set `DESKTOP_AUTO_BETA_ENABLED=false` in Codemagic or the GitHub `prod` environment to pause automatic qualification/promotion without changing stable.
 
 Stable/prod is manual:
+- Automatic qualification never nominates or promotes stable. Stable workflows remain `workflow_dispatch` only.
 - Nominate the current qualified beta with `desktop_nominate_stable_candidate.yml`. Nomination records the tag/SHA, operator, rationale, soak review, telemetry review, release-note review, and qualification evidence. It never changes beta/stable pointers or deploys production.
 - Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.
 - Run GitHub Actions workflow `desktop_promote_prod.yml` with the nominated `release_tag=v*-macos` stable candidate and `confirm=promote-stable`.

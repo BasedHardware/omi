@@ -197,7 +197,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _failedName = rec.fileName;
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await SyncUploadGate.instance.upload([file]);
+        final lane = syncUploadLaneForTimestamp(
+          rec.timerStart,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          hasServerCaptureProof: false,
+        );
+        final result = await SyncUploadGate.instance.upload([file], lane: lane);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);

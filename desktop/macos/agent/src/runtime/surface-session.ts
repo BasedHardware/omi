@@ -1,5 +1,5 @@
 import { generateAgentId } from "./sqlite-store.js";
-import type { AgentStore } from "./types.js";
+import type { AgentExecutionRole, AgentStore, ProviderBoundary } from "./types.js";
 
 export interface SurfaceRef {
   surfaceKind: string;
@@ -11,6 +11,8 @@ export interface ResolveSurfaceSessionInput {
   ownerId: string;
   surfaceRef: SurfaceRef;
   defaultAdapterId?: string;
+  executionRole?: AgentExecutionRole;
+  providerBoundary?: ProviderBoundary;
   title?: string | null;
 }
 
@@ -153,6 +155,8 @@ export function resolveSurfaceSession(
         externalRefId: input.surfaceRef.externalRefId,
         title: input.title ?? null,
         defaultAdapterId: input.defaultAdapterId ?? "acp",
+        executionRole: input.executionRole,
+        providerBoundary: input.providerBoundary,
       });
       return createSurfaceConversationMapping(store, input, session.sessionId, now);
     } catch (error) {

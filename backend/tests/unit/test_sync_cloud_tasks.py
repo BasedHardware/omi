@@ -11,9 +11,10 @@ import hashlib
 import json
 import os
 import sys
+import time
 import types
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -241,6 +242,26 @@ class TestVerifyCloudTasksOidc:
             with pytest.raises(RuntimeError):
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
+    def test_backfill_uses_dedicated_queue_handler_and_audience(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_TASKS_QUEUE': 'sync-jobs',
+            'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+
+        enqueue.assert_called_once_with(
+            'sync-backfill',
+            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'job-1',
+            {'job_id': 'job-1', 'lane': 'backfill'},
+            audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        )
+
     def test_enqueue_account_deletion_task_is_named_by_uid(self):
         cloud_tasks = _load_cloud_tasks()
         env = {
@@ -362,6 +383,7 @@ def _load_sync_router_for_fast_path():
         'database.conversations',
         'database.users',
         'database.user_usage',
+        'database.sync_ledger',
         'firebase_admin',
         'google',
         'google.cloud',
@@ -398,6 +420,9 @@ def _load_sync_router_for_fast_path():
         'utils.request_validation',
         'utils.sync.files',
         'utils.sync.playback',
+        'utils.sync.backfill',
+        'utils.sync.content_id',
+        'utils.sync.capture_manifest',
         'utils.speaker_assignment',
         'utils.speaker_identification',
         'utils.stt.speaker_embedding',
@@ -445,7 +470,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
     sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
-    sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+    sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
     sync_pkg = types.ModuleType('utils.sync')
     sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
     sys.modules['utils.sync'] = sync_pkg
@@ -457,11 +482,31 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
     sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
     sys.modules['utils.client_device'].resolve_client_device = MagicMock(
-        return_value=types.SimpleNamespace(client_device_id=None, platform=None)
+        return_value=types.SimpleNamespace(
+            client_device_id='ios_a1b2c3d4',
+            device_hash='a1b2c3d4',
+            platform='ios',
+            app_version=None,
+        )
     )
     sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
         return_value=types.SimpleNamespace(client_device_id=None, platform=None)
     )
+    sys.modules['database.sync_ledger'].claim_sync_content = MagicMock(return_value={'outcome': 'owned'})
+    sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+    sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+    sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+    sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
+    sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+    sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
+        return_value=MagicMock(allowed=True, reason=None, retry_after=None)
+    )
+    sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
+    sys.modules['utils.sync.capture_manifest'].verify_capture_manifest = MagicMock(
+        return_value=[{'name': 'test.opus', 'sha256': '0' * 64}]
+    )
+    sys.modules['utils.sync.capture_manifest'].manifest_claims_match_paths = MagicMock(return_value=True)
+    sys.modules['utils.sync.capture_manifest'].issue_capture_manifest = MagicMock(return_value='manifest')
 
     sync_dispatch_fallback_calls = []
     sync_dispatch_attempt_modes = []
@@ -514,6 +559,7 @@ def _load_sync_router_for_fast_path():
 
     module.run_blocking = _passthrough_run_blocking
     module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
+    module._capture_matches_server_conversation = MagicMock(return_value=True)
     module._stage_files_to_gcs = MagicMock()
     module._cleanup_files = MagicMock()
 
@@ -598,7 +644,12 @@ async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypat
 
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.start_background_task = MagicMock()
-    module.resolve_client_device.return_value = types.SimpleNamespace(client_device_id='ios_a1b2c3d4', platform='ios')
+    module.resolve_client_device.return_value = types.SimpleNamespace(
+        client_device_id='ios_a1b2c3d4',
+        device_hash='a1b2c3d4',
+        platform='ios',
+        app_version=None,
+    )
 
     try:
         upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
@@ -629,6 +680,15 @@ async def test_sync_dispatch_enqueue_failed_records_degraded_inline(monkeypatch)
     module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
     module.start_background_task = MagicMock()
     module.enqueue_sync_job = MagicMock(side_effect=RuntimeError('enqueue boom'))
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
 
     try:
         upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
@@ -665,6 +725,15 @@ async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
     module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
     module.has_byok_keys = MagicMock(return_value=True)
     module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
 
     try:
         upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
@@ -700,6 +769,15 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
     module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
     module.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
     module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
 
     try:
         upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
@@ -718,6 +796,79 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
         assert attempt_modes == ['inline']
         module.start_background_task.assert_called_once()
         module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_backfill_enqueue_failure_never_falls_back_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.enqueue_sync_job = MagicMock(side_effect=RuntimeError('backfill queue unavailable'))
+    module._delete_staged_blobs_async = AsyncMock(return_value=None)
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='historical_capture',
+            maximum_age_seconds=8 * 86400,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='historical.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 503
+        assert response.headers['x-omi-rate-limit-reason'] == 'backfill_capacity'
+        module.start_background_task.assert_not_called()
+        assert not fallback_calls
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('dispatch_enabled,byok', [(False, False), (True, True)])
+async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=dispatch_enabled)
+    module.has_byok_keys = MagicMock(return_value=byok)
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='historical_capture',
+            maximum_age_seconds=8 * 86400,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='historical.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 503
+        assert response.headers['x-omi-rate-limit-reason'] == 'backfill_capacity'
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
