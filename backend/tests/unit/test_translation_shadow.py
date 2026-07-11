@@ -210,7 +210,6 @@ class TestShadowCompareIsolation(unittest.TestCase):
                 mock_shadow.assert_not_called()
         finally:
             _translation_module.TRANSLATION_PROVIDER = original
-            _translation_module.TRANSLATION_MODE = original.value
 
     def test_shadow_not_called_without_url(self):
         original_provider = _translation_module.TRANSLATION_PROVIDER
@@ -223,7 +222,7 @@ class TestShadowCompareIsolation(unittest.TestCase):
                 mock_shadow.assert_not_called()
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
     def test_shadow_error_does_not_propagate(self):
@@ -237,7 +236,7 @@ class TestShadowCompareIsolation(unittest.TestCase):
             self.fail("Shadow compare should not propagate exceptions")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
@@ -270,7 +269,7 @@ class TestShadowNeverWritesCache(unittest.TestCase):
                 self.assertEqual(call_args[0][1], "es")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
@@ -306,7 +305,7 @@ class TestShadowCompareLogging(unittest.TestCase):
                         self.assertNotIn("Hello world", call_str)
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -343,7 +342,7 @@ class TestShadowCompareLogging(unittest.TestCase):
                     self.assertAlmostEqual(call_args[0][5], 1.0)
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -378,7 +377,7 @@ class TestShadowCallsitesCoverage(unittest.TestCase):
                 self.assertEqual(call_args[0][1], "es")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
     def test_translate_units_batch_schedules_shadow(self):
@@ -404,7 +403,7 @@ class TestShadowCallsitesCoverage(unittest.TestCase):
                 self.assertEqual(call_args[0][1], "es")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
@@ -433,7 +432,7 @@ class TestShadowTimeoutHandling(unittest.TestCase):
             self.fail("Shadow timeout should not propagate")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -461,7 +460,7 @@ class TestShadowTimeoutHandling(unittest.TestCase):
                     self.assertEqual(call_kwargs["outcome"], "degraded")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -487,7 +486,7 @@ class TestShadowExecutorScheduling(unittest.TestCase):
                 self.assertEqual(args[1], self.service._run_shadow_compare)
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
 
 
@@ -520,7 +519,7 @@ class TestShadowNon200Fallback(unittest.TestCase):
                     self.assertEqual(call_kwargs["outcome"], "degraded")
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -556,7 +555,7 @@ class TestShadowCacheIsolation(unittest.TestCase):
                         mock_mem.assert_not_called()
         finally:
             _translation_module.TRANSLATION_PROVIDER = original_provider
-            _translation_module.TRANSLATION_MODE = original_provider.value
+
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
             self.service._shadow_client = None
 
@@ -617,9 +616,8 @@ class TestNLLBLanguageMapping(unittest.TestCase):
 
 
 def _set_translation_provider(module, mode_str: str):
-    """Helper: set both TRANSLATION_PROVIDER enum and TRANSLATION_MODE string."""
+    """Helper: set TRANSLATION_PROVIDER enum."""
     module.TRANSLATION_PROVIDER = module.TranslationProvider(mode_str)
-    module.TRANSLATION_MODE = mode_str
 
 
 class TestNllbPrimaryMode(unittest.TestCase):
@@ -628,12 +626,10 @@ class TestNllbPrimaryMode(unittest.TestCase):
     def setUp(self):
         self.service = _TranslationService()
         self._orig_provider = _translation_module.TRANSLATION_PROVIDER
-        self._orig_mode = _translation_module.TRANSLATION_MODE
         self._orig_url = _translation_module.HOSTED_TRANSLATION_API_URL
 
     def tearDown(self):
         _translation_module.TRANSLATION_PROVIDER = self._orig_provider
-        _translation_module.TRANSLATION_MODE = self._orig_mode
         _translation_module.HOSTED_TRANSLATION_API_URL = self._orig_url
         self.service._nllb_client = None
 
@@ -860,108 +856,59 @@ class TestNllbPrimaryMode(unittest.TestCase):
             mock_batch.assert_called()
 
 
-class TestTranslationModeAutoDetect(unittest.TestCase):
-    """Tests for auto-detection of TRANSLATION_MODE based on HOSTED_TRANSLATION_API_URL."""
+class TestTranslationProviderAutoDetect(unittest.TestCase):
+    """Tests for auto-detection of TRANSLATION_PROVIDER based on HOSTED_TRANSLATION_API_URL."""
+
+    def _reimport(self):
+        for mod_name in list(sys.modules.keys()):
+            if 'translation' in mod_name and 'test' not in mod_name:
+                del sys.modules[mod_name]
+        _restore_real_backend_package("utils")
+        import utils.translation as tm_fresh
+
+        return tm_fresh
+
+    def _cleanup(self, orig_envs):
+        for key, val in orig_envs.items():
+            if val is not None:
+                os.environ[key] = val
+            else:
+                os.environ.pop(key, None)
+        for mod_name in list(sys.modules.keys()):
+            if 'translation' in mod_name and 'test' not in mod_name:
+                del sys.modules[mod_name]
+        _restore_real_backend_package("utils")
+        from utils.translation import TranslationService
+        import utils.translation as tm_restored
+
+        globals()['_TranslationService'] = TranslationService
+        globals()['_translation_module'] = tm_restored
 
     def test_auto_detect_nllb_when_url_set(self):
-        import importlib
-
-        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
-        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+        orig = {
+            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
+            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
+        }
         try:
-            os.environ.pop("TRANSLATION_MODE", None)
+            os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
             os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            import utils.translation as tm_fresh
-
-            self.assertEqual(tm_fresh.TRANSLATION_MODE, "nllb")
+            tm_fresh = self._reimport()
+            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "nllb")
         finally:
-            if orig_env_mode:
-                os.environ["TRANSLATION_MODE"] = orig_env_mode
-            else:
-                os.environ.pop("TRANSLATION_MODE", None)
-            if orig_env_url:
-                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
-            else:
-                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            from utils.translation import TranslationService
-            import utils.translation as tm_restored
-
-            globals()['_TranslationService'] = TranslationService
-            globals()['_translation_module'] = tm_restored
+            self._cleanup(orig)
 
     def test_auto_detect_google_when_no_url(self):
-        import importlib
-
-        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
-        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+        orig = {
+            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
+            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
+        }
         try:
-            os.environ.pop("TRANSLATION_MODE", None)
+            os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
             os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            import utils.translation as tm_fresh
-
-            self.assertEqual(tm_fresh.TRANSLATION_MODE, "google")
+            tm_fresh = self._reimport()
+            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
         finally:
-            if orig_env_mode:
-                os.environ["TRANSLATION_MODE"] = orig_env_mode
-            else:
-                os.environ.pop("TRANSLATION_MODE", None)
-            if orig_env_url:
-                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
-            else:
-                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            from utils.translation import TranslationService
-            import utils.translation as tm_restored
-
-            globals()['_TranslationService'] = TranslationService
-            globals()['_translation_module'] = tm_restored
-
-    def test_explicit_mode_overrides_auto_detect(self):
-        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
-        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
-        try:
-            os.environ["TRANSLATION_MODE"] = "shadow"
-            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            import utils.translation as tm_fresh
-
-            self.assertEqual(tm_fresh.TRANSLATION_MODE, "shadow")
-        finally:
-            if orig_env_mode:
-                os.environ["TRANSLATION_MODE"] = orig_env_mode
-            else:
-                os.environ.pop("TRANSLATION_MODE", None)
-            if orig_env_url:
-                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
-            else:
-                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            for mod_name in list(sys.modules.keys()):
-                if 'translation' in mod_name and 'test' not in mod_name:
-                    del sys.modules[mod_name]
-            _restore_real_backend_package("utils")
-            from utils.translation import TranslationService
-            import utils.translation as tm_restored
-
-            globals()['_TranslationService'] = TranslationService
-            globals()['_translation_module'] = tm_restored
+            self._cleanup(orig)
 
 
 class TestTranslationServiceModels(unittest.TestCase):
@@ -995,28 +942,23 @@ class TestTranslationServiceModels(unittest.TestCase):
     def test_service_models_nllb_with_url(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "TRANSLATION_MODE": os.environ.get("TRANSLATION_MODE"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
         }
         try:
             os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb,google"
-            os.environ.pop("TRANSLATION_MODE", None)
             os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
             tm = self._reimport()
             self.assertEqual(tm.TRANSLATION_PROVIDER.value, "nllb")
-            self.assertEqual(tm.TRANSLATION_MODE, "nllb")
         finally:
             self._cleanup(orig)
 
     def test_service_models_google_first(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "TRANSLATION_MODE": os.environ.get("TRANSLATION_MODE"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
         }
         try:
             os.environ["TRANSLATION_SERVICE_MODELS"] = "google,nllb"
-            os.environ.pop("TRANSLATION_MODE", None)
             os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
             tm = self._reimport()
             self.assertEqual(tm.TRANSLATION_PROVIDER.value, "google")
@@ -1026,12 +968,10 @@ class TestTranslationServiceModels(unittest.TestCase):
     def test_service_models_nllb_skipped_without_url(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "TRANSLATION_MODE": os.environ.get("TRANSLATION_MODE"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
         }
         try:
             os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb,google"
-            os.environ.pop("TRANSLATION_MODE", None)
             os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
             tm = self._reimport()
             self.assertEqual(tm.TRANSLATION_PROVIDER.value, "google")
@@ -1041,30 +981,13 @@ class TestTranslationServiceModels(unittest.TestCase):
     def test_service_models_shadow_with_url(self):
         orig = {
             "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "TRANSLATION_MODE": os.environ.get("TRANSLATION_MODE"),
             "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
         }
         try:
             os.environ["TRANSLATION_SERVICE_MODELS"] = "shadow"
-            os.environ.pop("TRANSLATION_MODE", None)
             os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
             tm = self._reimport()
             self.assertEqual(tm.TRANSLATION_PROVIDER.value, "shadow")
-        finally:
-            self._cleanup(orig)
-
-    def test_service_models_overrides_legacy_mode(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "TRANSLATION_MODE": os.environ.get("TRANSLATION_MODE"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ["TRANSLATION_SERVICE_MODELS"] = "google"
-            os.environ["TRANSLATION_MODE"] = "nllb"
-            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            tm = self._reimport()
-            self.assertEqual(tm.TRANSLATION_PROVIDER.value, "google")
         finally:
             self._cleanup(orig)
 

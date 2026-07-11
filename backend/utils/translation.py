@@ -61,9 +61,6 @@ class TranslationProvider(str, Enum):
 #   HOSTED_TRANSLATION_API_URL empty → google
 _TRANSLATION_SERVICE_MODELS_RAW = os.environ.get("TRANSLATION_SERVICE_MODELS", "")
 
-# Legacy env var support: TRANSLATION_MODE maps to the new enum
-_TRANSLATION_MODE_RAW = os.environ.get("TRANSLATION_MODE", "")
-
 
 def _resolve_translation_provider() -> TranslationProvider:
     """Resolve translation provider from config, following the STT provider pattern."""
@@ -84,13 +81,6 @@ def _resolve_translation_provider() -> TranslationProvider:
             "set" if HOSTED_TRANSLATION_API_URL else "unset",
         )
 
-    # Legacy env var (TRANSLATION_MODE)
-    if _TRANSLATION_MODE_RAW:
-        try:
-            return TranslationProvider(_TRANSLATION_MODE_RAW)
-        except ValueError:
-            logger.warning("Unknown TRANSLATION_MODE=%s, using auto-detect", _TRANSLATION_MODE_RAW)
-
     # Auto-detect
     if HOSTED_TRANSLATION_API_URL:
         return TranslationProvider.nllb
@@ -98,8 +88,6 @@ def _resolve_translation_provider() -> TranslationProvider:
 
 
 TRANSLATION_PROVIDER = _resolve_translation_provider()
-# Keep TRANSLATION_MODE for backward compatibility in metrics/logging
-TRANSLATION_MODE = TRANSLATION_PROVIDER.value
 
 # --- Prometheus metrics ---
 # Metric constructors are idempotent w.r.t. the default registry: if the module
@@ -195,14 +183,9 @@ TRANSLATION_MODE_INFO = _info(
 
 TRANSLATION_MODE_INFO.info(
     {
-        "mode": TRANSLATION_MODE,
         "provider": TRANSLATION_PROVIDER.value,
         "nllb_url": HOSTED_TRANSLATION_API_URL or "none",
-        "config_source": (
-            "TRANSLATION_SERVICE_MODELS"
-            if _TRANSLATION_SERVICE_MODELS_RAW
-            else "TRANSLATION_MODE" if _TRANSLATION_MODE_RAW else "auto_detect"
-        ),
+        "config_source": "TRANSLATION_SERVICE_MODELS" if _TRANSLATION_SERVICE_MODELS_RAW else "auto_detect",
     }
 )
 
@@ -1074,7 +1057,7 @@ class TranslationService:
 
         translated_text = ' '.join(r for r in results if r is not None)
         elapsed = time.monotonic() - t0
-        provider = TRANSLATION_MODE if uncached_indices else "cache"
+        provider = TRANSLATION_PROVIDER.value if uncached_indices else "cache"
         TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
         TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="by_sentence").inc()
         return (translated_text, dominant_lang)
@@ -1279,7 +1262,7 @@ class TranslationService:
                 final_results.append((uid, orig_text, ''))
 
         elapsed = time.monotonic() - t0
-        provider = TRANSLATION_MODE if uncached_sent_hashes else "cache"
+        provider = TRANSLATION_PROVIDER.value if uncached_sent_hashes else "cache"
         TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
         TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="units_batch").inc()
 
@@ -1320,13 +1303,13 @@ class TranslationService:
             cache_translation(text_hash, dest_language, translated_text, detected_lang)
 
             elapsed = time.monotonic() - t0
-            TRANSLATION_LATENCY.labels(provider=TRANSLATION_MODE, target_lang=dest_language).observe(elapsed)
+            TRANSLATION_LATENCY.labels(provider=TRANSLATION_PROVIDER.value, target_lang=dest_language).observe(elapsed)
             TRANSLATION_REQUESTS.labels(
-                provider=TRANSLATION_MODE, target_lang=dest_language, method="translate_text"
+                provider=TRANSLATION_PROVIDER.value, target_lang=dest_language, method="translate_text"
             ).inc()
 
             return (translated_text, detected_lang)
         except Exception as e:
             logger.error(f"Translation error: {e}")
-            TRANSLATION_ERRORS.labels(provider=TRANSLATION_MODE, error_type="translate_text_error").inc()
+            TRANSLATION_ERRORS.labels(provider=TRANSLATION_PROVIDER.value, error_type="translate_text_error").inc()
             return (text, "")
