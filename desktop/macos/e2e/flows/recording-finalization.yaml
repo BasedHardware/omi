@@ -1,5 +1,6 @@
 version: 2
 name: recording-finalization
+tier: manual
 description: Desktop recording finalization flow - verify a granted microphone recording stops into one durable backend conversation and opens in detail view
 app: com.omi.computer-macos
 covers:
