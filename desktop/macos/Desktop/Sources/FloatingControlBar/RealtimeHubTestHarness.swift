@@ -136,6 +136,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
+    case .checkPermissionStatus: stub = "Screen Recording: not granted."
+    case .requestPermission: stub = "Screen Recording permission request opened."
     case .listAgentSessions:
       stub = "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
     case .getAgentRun: stub = "The selected canonical run is running, mode ask. Attempts: 1. Events returned: 3."
