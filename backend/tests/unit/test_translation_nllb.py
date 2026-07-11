@@ -386,6 +386,20 @@ class TestNllbPrimaryMode(unittest.TestCase):
             result = self.service._detect_source_language(["This is enough text for detection but unreliable"])
             self.assertEqual(result, "")
 
+    def test_detect_source_language_nllb_unsupported_returns_empty(self):
+        """langdetect returning a language not in NLLB's supported set should return empty."""
+        _set_translation_provider(_translation_module, "nllb")
+        with patch("utils.translation.langdetect_detect", return_value="so"):
+            result = self.service._detect_source_language(["This is enough text for Somali false detection"])
+            self.assertEqual(result, "")
+
+    def test_detect_source_language_nllb_supported_returns_lang(self):
+        """langdetect returning a language in NLLB's supported set should return it."""
+        _set_translation_provider(_translation_module, "nllb")
+        with patch("utils.translation.langdetect_detect", return_value="en"):
+            result = self.service._detect_source_language(["This is enough text for English detection"])
+            self.assertEqual(result, "en")
+
     def test_nllb_batch_malformed_response_returns_empty(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"

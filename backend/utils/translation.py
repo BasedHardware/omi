@@ -339,6 +339,27 @@ LANGDETECT_RELIABLE_LANGUAGES = {
     'zh',
 }
 
+NLLB_SUPPORTED_SOURCE_LANGUAGES = {
+    'en',
+    'es',
+    'zh',
+    'hi',
+    'pt',
+    'ru',
+    'ja',
+    'de',
+    'ar',
+    'fr',
+    'it',
+    'ko',
+    'nl',
+    'th',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+}
+
 # Redis translation cache TTL (14 days)
 TRANSLATION_CACHE_TTL = int(os.environ.get("TRANSLATION_CACHE_TTL", 60 * 60 * 24 * 14))
 
@@ -713,8 +734,11 @@ class TranslationService:
             if not detected:
                 return ""
             base = detected.split('-')[0].lower()
-            if base in LANGDETECT_RELIABLE_LANGUAGES:
-                return detected
+            if base not in LANGDETECT_RELIABLE_LANGUAGES:
+                return ""
+            if TRANSLATION_PROVIDER == TranslationProvider.nllb and base not in NLLB_SUPPORTED_SOURCE_LANGUAGES:
+                return ""
+            return detected
         except LangDetectException:
             pass
         return ""
