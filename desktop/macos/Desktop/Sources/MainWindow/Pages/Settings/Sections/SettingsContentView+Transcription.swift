@@ -6,17 +6,17 @@ import OmiTheme
 
 extension SettingsContentView {
   var transcriptionSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "globe")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Language Mode")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
@@ -29,41 +29,41 @@ extension SettingsContentView {
             updateTranscriptionPreferences(singleLanguageMode: false)
             restartTranscriptionIfNeeded()
           }) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
               Image(systemName: transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                .scaledFont(size: 20)
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                  transcriptionAutoDetect ? OmiColors.accent : OmiColors.textTertiary)
 
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Auto-Detect (Multi-Language)")
-                  .scaledFont(size: 14, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textPrimary)
 
                 Text("Automatically detects and transcribes:")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
 
                 // List of supported languages
                 Text(
                   "English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch"
                 )
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
               }
 
               Spacer()
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(transcriptionAutoDetect ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .fill(transcriptionAutoDetect ? OmiColors.accent.opacity(0.1) : Color.clear)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 8)
+                  RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(
                       transcriptionAutoDetect
-                        ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary,
+                        ? OmiColors.accent.opacity(0.3) : OmiColors.backgroundQuaternary,
                       lineWidth: 1)
                 )
             )
@@ -77,26 +77,26 @@ extension SettingsContentView {
             updateTranscriptionPreferences(singleLanguageMode: true)
             restartTranscriptionIfNeeded()
           }) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
               Image(systemName: !transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                .scaledFont(size: 20)
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  !transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                  !transcriptionAutoDetect ? OmiColors.accent : OmiColors.textTertiary)
 
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Single Language (Better Accuracy)")
-                  .scaledFont(size: 14, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textPrimary)
 
                 Text("Best for speaking in one specific language")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
 
                 // Language picker (only shown when single language is selected)
                 if !transcriptionAutoDetect {
                   HStack {
                     Text("Language:")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                       .foregroundColor(OmiColors.textTertiary)
 
                     SearchableDropdown(
@@ -117,21 +117,21 @@ extension SettingsContentView {
                       restartTranscriptionIfNeeded()
                     }
                   }
-                  .padding(.top, 4)
+                  .padding(.top, OmiSpacing.xxs)
                 }
               }
 
               Spacer()
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(!transcriptionAutoDetect ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .fill(!transcriptionAutoDetect ? OmiColors.accent.opacity(0.1) : Color.clear)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 8)
+                  RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(
                       !transcriptionAutoDetect
-                        ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary,
+                        ? OmiColors.accent.opacity(0.3) : OmiColors.backgroundQuaternary,
                       lineWidth: 1)
                 )
             )
@@ -139,15 +139,15 @@ extension SettingsContentView {
           .buttonStyle(.plain)
 
           // Info about language support
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "info.circle")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
 
             Text(
               "Single language mode supports \(AssistantSettings.supportedLanguages.count) languages including Chinese, Ukrainian, Russian, and more."
             )
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
           }
         }
@@ -160,19 +160,19 @@ extension SettingsContentView {
 
       // Custom Vocabulary
       settingsCard(settingId: "transcription.vocabulary") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "text.book.closed")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Custom Vocabulary")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Improve recognition of names, brands, and technical terms")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -180,33 +180,33 @@ extension SettingsContentView {
 
             if !vocabularyList.isEmpty {
               Text("\(vocabularyList.count) terms")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
 
           // Current vocabulary display with removable tags
           if !vocabularyList.isEmpty {
-            FlowLayout(spacing: 6) {
+            FlowLayout(spacing: OmiSpacing.xs) {
               ForEach(vocabularyList, id: \.self) { term in
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                   Text(term)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
 
                   Button(action: {
                     removeVocabularyWord(term)
                   }) {
                     Image(systemName: "xmark")
-                      .scaledFont(size: 9, weight: .medium)
+                      .scaledFont(size: OmiType.micro, weight: .medium)
                       .foregroundColor(OmiColors.textTertiary)
                   }
                   .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.xs)
                 .background(
-                  RoundedRectangle(cornerRadius: 6)
+                  RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                     .fill(OmiColors.backgroundQuaternary)
                 )
               }
@@ -217,7 +217,7 @@ extension SettingsContentView {
             .background(OmiColors.backgroundQuaternary)
 
           // Add new word input
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             TextField("Add a word...", text: $newVocabularyWord)
               .textFieldStyle(.roundedBorder)
               .onSubmit {
@@ -228,38 +228,38 @@ extension SettingsContentView {
               addVocabularyWord()
             }) {
               Image(systemName: "plus.circle.fill")
-                .scaledFont(size: 20)
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
                   newVocabularyWord.trimmingCharacters(in: .whitespaces).isEmpty
-                    ? OmiColors.textTertiary : OmiColors.purplePrimary)
+                    ? OmiColors.textTertiary : OmiColors.accent)
             }
             .buttonStyle(.plain)
             .disabled(newVocabularyWord.trimmingCharacters(in: .whitespaces).isEmpty)
           }
 
           Text("Press Enter or click + to add • Click × to remove")
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
 
       // Local VAD Gate
       settingsCard(settingId: "transcription.vadgate") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "waveform.badge.minus")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Local VAD Gate")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
                 "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
               )
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
               .fixedSize(horizontal: false, vertical: true)
             }
@@ -267,7 +267,7 @@ extension SettingsContentView {
             Spacer()
 
             Toggle("", isOn: $vadGateEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .onChange(of: vadGateEnabled) { _, newValue in
                 AssistantSettings.shared.vadGateEnabled = newValue
                 restartTranscriptionIfNeeded()
@@ -359,19 +359,19 @@ private struct VoiceAssistantLanguagesCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack {
         Image(systemName: "person.wave.2")
-          .scaledFont(size: 16)
+          .scaledFont(size: OmiType.subheading)
           .foregroundColor(OmiColors.textSecondary)
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Voice Assistant Languages")
-            .scaledFont(size: 15, weight: .medium)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
           Text("Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn.")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -379,7 +379,7 @@ private struct VoiceAssistantLanguagesCard: View {
         Spacer()
       }
 
-      FlowLayout(spacing: 6) {
+      FlowLayout(spacing: OmiSpacing.xs) {
         ForEach(chipOptions, id: \.code) { option in
           languageChip(option)
         }
@@ -416,10 +416,10 @@ private struct VoiceAssistantLanguagesCard: View {
       persist()
     }) {
       Text(isPrimary ? "\(option.name) ✓" : option.name)
-        .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
+        .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
         .foregroundColor(isSelected ? OmiColors.backgroundPrimary : OmiColors.textSecondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
         .background(
           Capsule().fill(isSelected ? Color.white.opacity(0.9) : Color.clear)
             .overlay(Capsule().stroke(OmiColors.backgroundQuaternary, lineWidth: isSelected ? 0 : 1))

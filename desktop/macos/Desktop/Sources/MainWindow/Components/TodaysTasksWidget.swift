@@ -22,11 +22,11 @@ struct TasksWidget: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
             // Header
             HStack {
                 Text("Tasks")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
             }
 
@@ -35,12 +35,12 @@ struct TasksWidget: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    VStack(spacing: 8) {
+                    VStack(spacing: OmiSpacing.sm) {
                         Image(systemName: "checkmark.circle")
-                            .scaledFont(size: 28)
+                            .scaledFont(size: OmiType.title)
                             .foregroundColor(OmiColors.textQuaternary)
                         Text("No incomplete tasks")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -56,7 +56,7 @@ struct TasksWidget: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: OmiSpacing.sm) {
                         ForEach(Array(allTasks)) { task in
                             TaskRowView(
                                 task: task,
@@ -74,23 +74,23 @@ struct TasksWidget: View {
                         HStack {
                             Spacer()
                             Text("View all tasks")
-                                .scaledFont(size: 12, weight: .semibold)
+                                .scaledFont(size: OmiType.caption, weight: .semibold)
                                 .foregroundColor(OmiColors.textSecondary)
                             Image(systemName: "chevron.right")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                                 .foregroundColor(OmiColors.textSecondary)
                             Spacer()
                         }
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 8)
+                    .padding(.top, OmiSpacing.sm)
 
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(22)
+        .padding(OmiSpacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .omiPanel(fill: OmiColors.backgroundSecondary)
     }
@@ -105,7 +105,7 @@ struct TaskRowView: View {
     @State private var isToggling = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // Checkbox
             Button(action: {
                 guard !isToggling else { return }
@@ -116,47 +116,47 @@ struct TaskRowView: View {
                 }
             }) {
                 Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                    .scaledFont(size: 18)
+                    .scaledFont(size: OmiType.heading)
                     .foregroundColor(task.completed ? OmiColors.textPrimary : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
             .disabled(isToggling)
             .opacity(isToggling ? 0.5 : 1)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+                HStack(spacing: OmiSpacing.xs) {
                     Text(task.description)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
                         .strikethrough(task.completed)
                         .lineLimit(2)
 
                     if task.recurrenceRule == "daily" {
                         Image(systemName: "repeat")
-                            .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.purplePrimary.opacity(0.7))
+                            .scaledFont(size: OmiType.micro)
+                            .foregroundColor(OmiColors.accent.opacity(0.7))
                     }
                 }
 
                 if task.recurrenceRule == "daily" {
                     Text("Daily")
-                        .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .scaledFont(size: OmiType.micro, weight: .medium)
+                        .foregroundColor(OmiColors.accent.opacity(0.8))
+                        .padding(.horizontal, OmiSpacing.xs)
+                        .padding(.vertical, OmiSpacing.hairline)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(OmiColors.purplePrimary.opacity(0.1))
+                            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+                                .fill(OmiColors.accent.opacity(0.1))
                         )
                 }
             }
 
             Spacer()
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .padding(.vertical, OmiSpacing.sm)
+        .padding(.horizontal, OmiSpacing.md)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(task.completed ? OmiColors.backgroundRaised.opacity(0.55) : OmiColors.backgroundTertiary.opacity(0.45))
         )
     }

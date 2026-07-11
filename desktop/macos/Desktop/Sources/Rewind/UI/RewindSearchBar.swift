@@ -14,12 +14,12 @@ struct RewindSearchBar: View {
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
             // Search field
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : OmiColors.textTertiary)
-                    .animation(.easeInOut(duration: 0.15), value: isSearchFocused)
+                    .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+                    .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
                 TextField("Search your screen history...", text: $searchQuery)
                     .textFieldStyle(.plain)
@@ -45,27 +45,27 @@ struct RewindSearchBar: View {
                 // Keyboard shortcut hint
                 if searchQuery.isEmpty && !isSearchFocused {
                     Text("⌘F")
-                        .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                        .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
                         .foregroundColor(OmiColors.textQuaternary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, OmiSpacing.xs)
+                        .padding(.vertical, OmiSpacing.hairline)
                         .background(OmiColors.backgroundQuaternary)
-                        .cornerRadius(3)
+                        .cornerRadius(OmiChrome.stripRadius)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                     .fill(OmiColors.backgroundTertiary)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSearchFocused ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                            .stroke(isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
                     )
             )
 
             // Filters row
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 // App filter
                 Menu {
                     Button {
@@ -100,28 +100,28 @@ struct RewindSearchBar: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: OmiSpacing.xs) {
                         if let app = selectedApp {
                             AppIconView(appName: app, size: 14)
                         } else {
                             Image(systemName: "square.grid.2x2")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                         }
 
                         Text(selectedApp ?? "All Apps")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .lineLimit(1)
 
                         Image(systemName: "chevron.down")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                     }
                     .foregroundColor(selectedApp != nil ? OmiColors.textPrimary : OmiColors.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.vertical, OmiSpacing.xs)
                     .background(selectedApp != nil ? Color.white : OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
+                    .cornerRadius(OmiChrome.elementRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .stroke(selectedApp != nil ? OmiColors.border : Color.clear, lineWidth: 1)
                     )
                 }
@@ -142,7 +142,7 @@ struct RewindSearchBar: View {
                 Spacer()
 
                 // Quick date buttons
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     quickDateButton("Today", date: Date())
                     quickDateButton("Yesterday", date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!)
                     quickDateButton("This Week", date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!)
@@ -156,16 +156,16 @@ struct RewindSearchBar: View {
                         onAppFilterChanged(nil)
                         onDateChanged(Date())
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "xmark")
                             Text("Clear")
                         }
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, OmiSpacing.sm)
+                        .padding(.vertical, OmiSpacing.xxs)
                         .background(OmiColors.backgroundQuaternary)
-                        .cornerRadius(4)
+                        .cornerRadius(OmiChrome.stripRadius)
                     }
                     .buttonStyle(.plain)
                 }
@@ -181,14 +181,14 @@ struct RewindSearchBar: View {
             onDateChanged(date)
         } label: {
             Text(title)
-                .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
+                .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.xxs)
                 .background(isSelected ? Color.white : Color.clear)
-                .cornerRadius(6)
+                .cornerRadius(OmiChrome.badgeRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                         .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
                 )
         }

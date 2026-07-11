@@ -17,7 +17,7 @@ struct SafeDismissButton: View {
 
     var body: some View {
         Image(systemName: icon)
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
             .frame(width: 28, height: 28)
             .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
@@ -85,12 +85,12 @@ struct DismissButton: View {
             // Commit any in-progress field editing before tearing the sheet down.
             NSApp.keyWindow?.makeFirstResponder(nil)
 
-            withAnimation(.easeOut(duration: 0.2)) {
+            OmiMotion.withGated(.easeOut(duration: 0.2)) {
                 action()
             }
         } label: {
             Image(systemName: icon)
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
                 .frame(width: 28, height: 28)
                 .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
@@ -148,26 +148,26 @@ struct AppsPage: View {
                 // The marketplace sections inside the else branch are each
                 // self-gated and skip when empty.
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
+                    LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                         if hasActiveFilters {
                             // Show filtered/search results in a flat grid
                             if appProvider.isSearching {
                                 // Loading state for category filter
-                                VStack(spacing: 16) {
+                                VStack(spacing: OmiSpacing.lg) {
                                     ProgressView()
                                         .scaleEffect(1.2)
                                     Text("Loading...")
-                                        .scaledFont(size: 14)
+                                        .scaledFont(size: OmiType.body)
                                         .foregroundColor(OmiColors.textTertiary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
                             } else if filteredApps.isEmpty {
-                                VStack(spacing: 12) {
+                                VStack(spacing: OmiSpacing.md) {
                                     Image(systemName: "magnifyingglass")
                                         .scaledFont(size: 32)
                                         .foregroundColor(OmiColors.textTertiary)
                                     Text("No apps found")
-                                        .scaledFont(size: 16, weight: .medium)
+                                        .scaledFont(size: OmiType.subheading, weight: .medium)
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
@@ -175,11 +175,11 @@ struct AppsPage: View {
                                 // Back button for "See more" view
                                 if viewAllSection != nil {
                                     Button(action: { viewAllSection = nil }) {
-                                        HStack(spacing: 6) {
+                                        HStack(spacing: OmiSpacing.xs) {
                                             Image(systemName: "chevron.left")
-                                                .scaledFont(size: 12, weight: .medium)
+                                                .scaledFont(size: OmiType.caption, weight: .medium)
                                             Text("Back")
-                                                .scaledFont(size: 13, weight: .medium)
+                                                .scaledFont(size: OmiType.body, weight: .medium)
                                         }
                                         .foregroundColor(OmiColors.textSecondary)
                                     }
@@ -201,7 +201,7 @@ struct AppsPage: View {
                                             ProgressView()
                                                 .scaleEffect(0.8)
                                             Text("Loading more...")
-                                                .scaledFont(size: 13)
+                                                .scaledFont(size: OmiType.body)
                                                 .foregroundColor(OmiColors.textTertiary)
                                         } else {
                                             Color.clear
@@ -214,7 +214,7 @@ struct AppsPage: View {
                                         }
                                         Spacer()
                                     }
-                                    .padding(.vertical, 16)
+                                    .padding(.vertical, OmiSpacing.lg)
                                 }
                             }
                         } else {
@@ -390,7 +390,7 @@ struct AppsPage: View {
 
     private var searchBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 searchField
                     .layoutPriority(1)
                 filterControls
@@ -399,13 +399,13 @@ struct AppsPage: View {
                 dismissControl
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.sm) {
                     searchField
                     dismissControl
                 }
 
-                HStack(spacing: 10) {
+                HStack(spacing: OmiSpacing.sm) {
                     filterControls
                     Spacer(minLength: 8)
                     createAppButton
@@ -432,13 +432,13 @@ struct AppsPage: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(10)
+        .padding(OmiSpacing.sm)
         .background(OmiColors.backgroundSecondary)
-        .cornerRadius(10)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 
     private var filterControls: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: OmiSpacing.sm) {
             FilterToggle(
                 icon: "arrow.down.circle",
                 label: "Installed",
@@ -485,22 +485,22 @@ struct AppsPage: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                 Text(selectedCategoryLabel)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .scaledFont(size: 9, weight: .medium)
+                    .scaledFont(size: OmiType.micro, weight: .medium)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(OmiColors.backgroundSecondary)
             .foregroundColor(OmiColors.textPrimary)
-            .cornerRadius(8)
+            .cornerRadius(OmiChrome.elementRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
             )
         }
@@ -579,16 +579,16 @@ struct AppsPage: View {
 
     private var loadingShimmerView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                 // Shimmer sections
                 ForEach(0..<3, id: \.self) { _ in
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         ShimmerView()
                             .frame(width: 120, height: 24)
-                            .cornerRadius(6)
+                            .cornerRadius(OmiChrome.badgeRadius)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
+                            HStack(spacing: OmiSpacing.lg) {
                                 ForEach(0..<4, id: \.self) { _ in
                                     ShimmerAppCard()
                                 }
@@ -602,13 +602,13 @@ struct AppsPage: View {
     }
 
     private var emptyView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "square.grid.2x2")
                 .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No apps found")
-                .scaledFont(size: 20, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             if !searchText.isEmpty {
@@ -1133,9 +1133,9 @@ struct ImportsSection: View {
     let onSelectConnector: (ImportConnector) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Imports")
-                .scaledFont(size: 18, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             VStack(spacing: 0) {
@@ -1165,17 +1165,17 @@ struct ImportConnectorRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 ConnectorBrandIcon(brand: connector.brand, size: 34, cornerRadius: 9)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(connector.title)
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     Text(connector.description)
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -1185,8 +1185,8 @@ struct ImportConnectorRow: View {
 
                 ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
             .contentShape(Rectangle())
         }
@@ -1204,18 +1204,18 @@ struct ImportConnectorCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: 12)
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.md) {
+                    ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         Text(connector.title)
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .lineLimit(1)
 
                         Text(connector.subtitle)
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
                     }
@@ -1224,20 +1224,20 @@ struct ImportConnectorCard: View {
                 }
 
                 Text(connector.description)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 HStack {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         Text(snapshot.primaryText)
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                             .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
 
                         if let secondaryText = snapshot.secondaryText {
                             Text(secondaryText)
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textTertiary)
                                 .lineLimit(1)
                         }
@@ -1248,11 +1248,11 @@ struct ImportConnectorCard: View {
                     ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
                 }
             }
-            .padding(14)
+            .padding(OmiSpacing.md)
             .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                     .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
             )
         }
@@ -1269,13 +1269,13 @@ struct ImportConnectorActionButton: View {
 
     var body: some View {
         Text(title)
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
             .frame(width: isConnected ? 84 : 72, height: 28)
             .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
-            .cornerRadius(14)
+            .cornerRadius(OmiChrome.chipRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                     .stroke(OmiColors.border, lineWidth: 1)
             )
     }
@@ -1287,16 +1287,16 @@ struct ConnectionModalActionButton: View {
 
     var body: some View {
         Text(title)
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
             .lineLimit(1)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, OmiSpacing.md)
             .frame(minWidth: isConnected ? 84 : 72)
             .frame(height: 28)
             .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
-            .cornerRadius(14)
+            .cornerRadius(OmiChrome.chipRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                     .stroke(OmiColors.border, lineWidth: 1)
             )
     }
@@ -1328,23 +1328,23 @@ struct ImportConnectorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                ConnectorBrandIcon(brand: connector.brand, size: 56, cornerRadius: 16)
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
+                ConnectorBrandIcon(brand: connector.brand, size: 56, cornerRadius: OmiChrome.controlRadius)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text(connector.title)
-                        .scaledFont(size: 20, weight: .semibold)
+                        .scaledFont(size: OmiType.heading, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(connector.subtitle)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text(connector.description)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
-                        .padding(.top, 4)
+                        .padding(.top, OmiSpacing.xxs)
                 }
 
                 Spacer()
@@ -1353,7 +1353,7 @@ struct ImportConnectorSheet: View {
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: OmiSpacing.lg) {
                     if connector.id == "chatgpt" || connector.id == "claude" {
                         memoryImportContent
                     } else {
@@ -1365,7 +1365,7 @@ struct ImportConnectorSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(24)
+        .padding(OmiSpacing.xxl)
         .background(OmiColors.backgroundPrimary)
         .onChange(of: runState?.phase) { _, newPhase in
             // A successful import consumed the pasted draft, so clear it —
@@ -1389,10 +1389,10 @@ struct ImportConnectorSheet: View {
     }
 
     private var connectorActionContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             if let metricText = connector.metricText {
                 Text(metricText)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -1409,16 +1409,16 @@ struct ImportConnectorSheet: View {
 
             if connector.id == "local-files" {
                 Text("Local files are indexed on-device and used to build your memory graph.")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
     }
 
     private var memoryImportContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Open \(connector.title), paste the copied prompt, then drop the full response here.")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
 
             Button {
@@ -1429,10 +1429,10 @@ struct ImportConnectorSheet: View {
             .buttonStyle(.plain)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                             .stroke(
                                 Color.white.opacity(draftFocused ? 0.18 : 0.08),
                                 lineWidth: 1
@@ -1441,7 +1441,7 @@ struct ImportConnectorSheet: View {
 
                 if draftText.isEmpty {
                     Text("Paste the full \(connector.title) response here…")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, draftFieldHorizontalInset)
                         .padding(.vertical, draftFieldVerticalInset)
@@ -1468,7 +1468,7 @@ struct ImportConnectorSheet: View {
             // Collapsed until the user engages, per the macOS convention for
             // paste-blob inputs in compact modals: grow on focus or content.
             .frame(height: draftFieldExpanded ? 200 : 64)
-            .animation(.easeInOut(duration: 0.18), value: draftFieldExpanded)
+            .omiAnimation(.easeInOut(duration: 0.18), value: draftFieldExpanded)
 
             Button {
                 startMemoryLogImport()
@@ -1620,23 +1620,23 @@ struct ImportConnectorSheet: View {
     private var statusSection: some View {
         if let run = runState, run.phase == .running {
             statusCard {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: OmiSpacing.md) {
                     ProgressView()
                         .controlSize(.small)
-                        .padding(.top, 2)
+                        .padding(.top, OmiSpacing.hairline)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         Text(run.progressTitle)
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(run.progressDetail)
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text("You can close this window now. Omi keeps importing in the background.")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1644,27 +1644,27 @@ struct ImportConnectorSheet: View {
             }
         } else if let statusMessage = runState?.statusMessage {
             Text(statusMessage)
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.success)
         } else if let errorMessage = runState?.errorMessage {
             Text(errorMessage)
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.warning)
         } else if snapshot.isConnected || snapshot.secondaryText != nil {
             statusCard {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                     Text("Current import status")
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text(snapshot.primaryText)
-                        .scaledFont(size: 12, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let secondaryText = snapshot.secondaryText {
                         Text(secondaryText)
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1672,17 +1672,17 @@ struct ImportConnectorSheet: View {
             }
         } else {
             Text("Start the import here. Once it starts, you can close this window and Omi keeps importing in the background.")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }
 
     private func statusCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(14)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(OmiColors.backgroundSecondary)
-            .cornerRadius(16)
+            .cornerRadius(OmiChrome.controlRadius)
     }
 }
 
@@ -1706,25 +1706,25 @@ struct ShimmerView: View {
             )
             .mask(Rectangle())
             .offset(x: isAnimating ? 200 : -200)
-            .animation(.linear(duration: 1.5).repeatForever(autoreverses: false), value: isAnimating)
+            .omiAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false), value: isAnimating)
             .onAppear { isAnimating = true }
     }
 }
 
 struct ShimmerAppCard: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             ShimmerView()
                 .frame(width: 60, height: 60)
-                .cornerRadius(12)
+                .cornerRadius(OmiChrome.smallControlRadius)
 
             ShimmerView()
                 .frame(width: 80, height: 14)
-                .cornerRadius(4)
+                .cornerRadius(OmiChrome.stripRadius)
 
             ShimmerView()
                 .frame(width: 60, height: 12)
-                .cornerRadius(4)
+                .cornerRadius(OmiChrome.stripRadius)
         }
         .frame(width: 100)
     }
@@ -1740,20 +1740,20 @@ struct FilterToggle: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: icon)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                 Text(label)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(isActive ? Color.white : OmiColors.backgroundSecondary)
             .foregroundColor(isActive ? Color.black : OmiColors.textSecondary)
-            .cornerRadius(8)
+            .cornerRadius(OmiChrome.elementRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
             )
             .fixedSize(horizontal: true, vertical: false)
@@ -1774,19 +1774,19 @@ struct SmallHeaderButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: icon)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(color)
                 Text(label)
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
             .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-            .cornerRadius(6)
+            .cornerRadius(OmiChrome.badgeRadius)
             .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.plain)
@@ -1806,13 +1806,13 @@ struct HorizontalAppSection: View {
     var onViewAll: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text(title)
-                .scaledFont(size: 18, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
+                HStack(spacing: OmiSpacing.lg) {
                     ForEach(apps) { app in
                         CompactAppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
                     }
@@ -1820,9 +1820,9 @@ struct HorizontalAppSection: View {
                     // "See more" button inline with cards
                     if showSeeMore, let onSeeMore = onSeeMore {
                         Button(action: onSeeMore) {
-                            VStack(spacing: 6) {
+                            VStack(spacing: OmiSpacing.xs) {
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: 14)
+                                    RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                                         .fill(OmiColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
@@ -1830,7 +1830,7 @@ struct HorizontalAppSection: View {
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 Text("See more")
-                                    .scaledFont(size: 11)
+                                    .scaledFont(size: OmiType.caption)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .frame(width: 70)
@@ -1838,9 +1838,9 @@ struct HorizontalAppSection: View {
                         .buttonStyle(.plain)
                     } else if let onViewAll = onViewAll {
                         Button(action: onViewAll) {
-                            VStack(spacing: 6) {
+                            VStack(spacing: OmiSpacing.xs) {
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: 14)
+                                    RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                                         .fill(OmiColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
@@ -1848,7 +1848,7 @@ struct HorizontalAppSection: View {
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 Text("View all")
-                                    .scaledFont(size: 11)
+                                    .scaledFont(size: OmiType.caption)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .frame(width: 70)
@@ -1872,21 +1872,21 @@ struct AppGridSection: View {
     var onSeeMore: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
                 Text(title)
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 if showSeeMore, let onSeeMore = onSeeMore {
                     Button(action: onSeeMore) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Text("See all")
-                                .scaledFont(size: 13, weight: .medium)
+                                .scaledFont(size: OmiType.body, weight: .medium)
                             Image(systemName: "chevron.right")
-                                .scaledFont(size: 10, weight: .medium)
+                                .scaledFont(size: OmiType.micro, weight: .medium)
                         }
                         .foregroundColor(OmiColors.textSecondary)
                     }
@@ -1895,8 +1895,8 @@ struct AppGridSection: View {
             }
 
             LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 220), spacing: 16)
-            ], spacing: 16) {
+                GridItem(.adaptive(minimum: 220), spacing: OmiSpacing.lg)
+            ], spacing: OmiSpacing.lg) {
                 ForEach(apps) { app in
                     AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
                 }
@@ -1916,7 +1916,7 @@ struct CompactAppCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .center, spacing: OmiSpacing.sm) {
                 // App icon
                 AsyncImage(url: URL(string: app.image)) { phase in
                     switch phase {
@@ -1929,33 +1929,33 @@ struct CompactAppCard: View {
                     }
                 }
                 .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.chipRadius))
                 .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
 
-                VStack(spacing: 2) {
+                VStack(spacing: OmiSpacing.hairline) {
                     Text(app.name)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     // Rating and installs
-                    HStack(spacing: 3) {
+                    HStack(spacing: OmiSpacing.hairline) {
                         if let rating = app.formattedRating {
                             Image(systemName: "star.fill")
                                 .scaledFont(size: 8)
                                 .foregroundColor(.yellow)
                             Text(rating)
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         if let installs = app.formattedInstalls {
                             if app.formattedRating != nil {
                                 Text("·")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             Text(installs)
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     }
@@ -1965,16 +1965,16 @@ struct CompactAppCard: View {
                 SmallAppButton(app: app, appProvider: appProvider, onOpen: onSelect)
             }
             .frame(width: 90)
-            .padding(.vertical, 8)
+            .padding(.vertical, OmiSpacing.sm)
             .background(isHovering ? OmiColors.backgroundSecondary.opacity(0.5) : Color.clear)
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
     }
 
     private var appIconPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 14)
+        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
             .fill(OmiColors.backgroundTertiary)
             .overlay(
                 Image(systemName: "app.fill")
@@ -2006,13 +2006,13 @@ struct SmallAppButton: View {
                     .frame(width: 50, height: 22)
             } else {
                 Text(app.enabled ? "Open" : "Install")
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(.black)
                     .frame(width: 50, height: 22)
                     .background(Color.white)
-                    .cornerRadius(11)
+                    .cornerRadius(OmiChrome.smallControlRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 11)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                             .stroke(OmiColors.border, lineWidth: 1)
                     )
             }
@@ -2033,8 +2033,8 @@ struct AppCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.md) {
                     // App icon
                     AsyncImage(url: URL(string: app.image)) { phase in
                         switch phase {
@@ -2047,16 +2047,16 @@ struct AppCard: View {
                         }
                     }
                     .frame(width: 50, height: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         Text(app.name)
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .lineLimit(1)
 
                         Text(app.author)
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
                     }
@@ -2065,31 +2065,31 @@ struct AppCard: View {
                 }
 
                 Text(app.description)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 HStack {
                     // Rating and installs
-                    HStack(spacing: 6) {
+                    HStack(spacing: OmiSpacing.xs) {
                         if let rating = app.formattedRating {
-                            HStack(spacing: 3) {
+                            HStack(spacing: OmiSpacing.hairline) {
                                 Image(systemName: "star.fill")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                                     .foregroundColor(.yellow)
                                 Text(rating)
-                                    .scaledFont(size: 11)
+                                    .scaledFont(size: OmiType.caption)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                         }
                         if let installs = app.formattedInstalls {
-                            HStack(spacing: 3) {
+                            HStack(spacing: OmiSpacing.hairline) {
                                 Image(systemName: "arrow.down.circle")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                                     .foregroundColor(OmiColors.textTertiary)
                                 Text(installs)
-                                    .scaledFont(size: 11)
+                                    .scaledFont(size: OmiType.caption)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                         }
@@ -2101,9 +2101,9 @@ struct AppCard: View {
                     AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
                 }
             }
-            .padding(14)
+            .padding(OmiSpacing.md)
             .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -2112,7 +2112,7 @@ struct AppCard: View {
     }
 
     private var appIconPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 12)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
             .fill(OmiColors.backgroundTertiary)
             .overlay(
                 Image(systemName: "app.fill")
@@ -2144,13 +2144,13 @@ struct AppActionButton: View {
                     .frame(width: 60, height: 28)
             } else {
                 Text(app.enabled ? "Open" : "Install")
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(.black)
                     .frame(width: 60, height: 28)
                     .background(Color.white)
-                    .cornerRadius(14)
+                    .cornerRadius(OmiChrome.chipRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14)
+                        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                             .stroke(OmiColors.border, lineWidth: 1)
                     )
             }
@@ -2181,7 +2181,7 @@ struct AppFilterSheet: View {
             // Header
             HStack {
                 Text("Filters")
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -2191,7 +2191,7 @@ struct AppFilterSheet: View {
                         appProvider.clearFilters()
                         Task { await appProvider.searchApps() }
                     }
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                 }
 
@@ -2203,14 +2203,14 @@ struct AppFilterSheet: View {
                 .background(OmiColors.backgroundTertiary)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                     // Categories
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         Text("Category")
-                            .scaledFont(size: 14, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        FlowLayout(spacing: 8) {
+                        FlowLayout(spacing: OmiSpacing.sm) {
                             ForEach(appProvider.categories) { category in
                                 FilterChip(
                                     label: category.title,
@@ -2228,12 +2228,12 @@ struct AppFilterSheet: View {
                     }
 
                     // Capabilities
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         Text("Capability")
-                            .scaledFont(size: 14, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        FlowLayout(spacing: 8) {
+                        FlowLayout(spacing: OmiSpacing.sm) {
                             ForEach(appProvider.capabilities) { capability in
                                 FilterChip(
                                     label: capability.title,
@@ -2251,13 +2251,13 @@ struct AppFilterSheet: View {
                     }
 
                     // Other filters
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         Text("Other")
-                            .scaledFont(size: 14, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
-                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.success))
+                            .toggleStyle(OmiToggleStyle())
                             .foregroundColor(OmiColors.textSecondary)
                             .onChange(of: appProvider.showInstalledOnly) { _, _ in
                                 Task { await appProvider.searchApps() }
@@ -2288,14 +2288,14 @@ struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .scaledFont(size: 13)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .scaledFont(size: OmiType.body)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(isSelected ? Color.white : OmiColors.backgroundSecondary)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-                .cornerRadius(20)
+                .cornerRadius(OmiChrome.sectionRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20)
+                    RoundedRectangle(cornerRadius: OmiChrome.sectionRadius)
                         .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
                 )
         }
@@ -2334,13 +2334,13 @@ struct CategoryAppsSheet: View {
                     accessibilityLabel: "Back")
 
                 Text(category.title)
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Text("\(categoryApps.count) apps")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .padding()
@@ -2350,9 +2350,9 @@ struct CategoryAppsSheet: View {
 
             ScrollView {
                 LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: 16),
-                    GridItem(.flexible(), spacing: 16)
-                ], spacing: 16) {
+                    GridItem(.flexible(), spacing: OmiSpacing.lg),
+                    GridItem(.flexible(), spacing: OmiSpacing.lg)
+                ], spacing: OmiSpacing.lg) {
                     ForEach(categoryApps) { app in
                         AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
                     }
@@ -2405,9 +2405,9 @@ struct AppDetailSheet: View {
             .padding()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xl) {
                     // App header
-                    HStack(spacing: 16) {
+                    HStack(spacing: OmiSpacing.lg) {
                         AsyncImage(url: URL(string: app.image)) { phase in
                             switch phase {
                             case .success(let image):
@@ -2415,39 +2415,39 @@ struct AppDetailSheet: View {
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                             default:
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                                     .fill(OmiColors.backgroundTertiary)
                             }
                         }
                         .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
 
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                             Text(app.name)
                                 .scaledFont(size: 24, weight: .bold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text(app.author)
-                                .scaledFont(size: 14)
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(OmiColors.textTertiary)
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: OmiSpacing.md) {
                                 let ratingAvg = appDetails?.ratingAvg ?? app.ratingAvg
                                 let ratingCount = appDetails?.ratingCount ?? app.ratingCount
                                 let installs = appDetails?.installs ?? app.installs
                                 if let ratingAvg, ratingCount > 0 {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: OmiSpacing.xxs) {
                                         Image(systemName: "star.fill")
                                             .foregroundColor(.yellow)
                                         Text(String(format: "%.1f", ratingAvg))
                                         Text("(\(ratingCount))")
                                     }
-                                    .scaledFont(size: 13)
+                                    .scaledFont(size: OmiType.body)
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
                                 if installs > 0 {
                                     Text("\(installs) installs")
-                                        .scaledFont(size: 13)
+                                        .scaledFont(size: OmiType.body)
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                             }
@@ -2456,7 +2456,7 @@ struct AppDetailSheet: View {
                         Spacer()
 
                         // Action button
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             Button(action: {
                                 Task {
                                     if isEnabled && app.worksExternally {
@@ -2473,23 +2473,23 @@ struct AppDetailSheet: View {
                                     ProgressView()
                                         .frame(width: 100, height: 36)
                                 } else if isSettingUp {
-                                    HStack(spacing: 6) {
+                                    HStack(spacing: OmiSpacing.xs) {
                                         ProgressView()
                                             .scaleEffect(0.7)
                                         Text("Setting up...")
-                                            .scaledFont(size: 12, weight: .semibold)
+                                            .scaledFont(size: OmiType.caption, weight: .semibold)
                                     }
                                     .foregroundColor(OmiColors.textSecondary)
                                     .frame(width: 120, height: 36)
                                 } else {
                                     Text(isEnabled ? "Open" : "Install")
-                                        .scaledFont(size: 14, weight: .semibold)
+                                        .scaledFont(size: OmiType.body, weight: .semibold)
                                         .foregroundColor(.black)
                                         .frame(width: 100, height: 36)
                                         .background(Color.white)
-                                        .cornerRadius(18)
+                                        .cornerRadius(OmiChrome.controlRadius)
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 18)
+                                            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                                                 .stroke(OmiColors.border, lineWidth: 1)
                                         )
                                 }
@@ -2502,11 +2502,11 @@ struct AppDetailSheet: View {
                                     Task { await appProvider.toggleApp(app) }
                                 }) {
                                     Image(systemName: "trash")
-                                        .scaledFont(size: 14)
+                                        .scaledFont(size: OmiType.body)
                                         .foregroundColor(OmiColors.error)
                                         .frame(width: 36, height: 36)
                                         .background(OmiColors.error.opacity(0.1))
-                                        .cornerRadius(18)
+                                        .cornerRadius(OmiChrome.controlRadius)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -2517,20 +2517,20 @@ struct AppDetailSheet: View {
                         .background(OmiColors.backgroundTertiary)
 
                     // Description
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                         Text("About")
-                            .scaledFont(size: 16, weight: .semibold)
+                            .scaledFont(size: OmiType.subheading, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.description)
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     // Setup steps (external integration)
                     if let integration = appDetails?.externalIntegration, !integration.authSteps.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                             ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                                 Button(action: {
                                     if let uid = AuthState.shared.userId,
@@ -2538,41 +2538,41 @@ struct AppDetailSheet: View {
                                         NSWorkspace.shared.open(url)
                                     }
                                 }) {
-                                    HStack(spacing: 12) {
+                                    HStack(spacing: OmiSpacing.md) {
                                         // Step number / checkmark
                                         ZStack {
-                                            RoundedRectangle(cornerRadius: 10)
+                                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                                 .fill(isSetupCompleted ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
                                                 .frame(width: 40, height: 40)
                                             if isSetupCompleted {
                                                 Image(systemName: "checkmark")
-                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .scaledFont(size: OmiType.body, weight: .semibold)
                                                     .foregroundColor(.green)
                                             } else {
                                                 Text("\(index + 1)")
-                                                    .scaledFont(size: 14, weight: .semibold)
+                                                    .scaledFont(size: OmiType.body, weight: .semibold)
                                                     .foregroundColor(OmiColors.textSecondary)
                                             }
                                         }
 
-                                        VStack(alignment: .leading, spacing: 2) {
+                                        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                                             Text(step.name)
-                                                .scaledFont(size: 14, weight: .medium)
+                                                .scaledFont(size: OmiType.body, weight: .medium)
                                                 .foregroundColor(OmiColors.textPrimary)
                                             Text(isSetupCompleted ? "Completed" : "Click to complete")
-                                                .scaledFont(size: 12)
+                                                .scaledFont(size: OmiType.caption)
                                                 .foregroundColor(isSetupCompleted ? .green : OmiColors.textTertiary)
                                         }
 
                                         Spacer()
 
                                         Image(systemName: "arrow.up.right.square")
-                                            .scaledFont(size: 14)
+                                            .scaledFont(size: OmiType.body)
                                             .foregroundColor(OmiColors.textTertiary)
                                     }
-                                    .padding(12)
+                                    .padding(OmiSpacing.md)
                                     .background(OmiColors.backgroundSecondary)
-                                    .cornerRadius(12)
+                                    .cornerRadius(OmiChrome.smallControlRadius)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -2581,12 +2581,12 @@ struct AppDetailSheet: View {
 
                     // Capabilities
                     if !app.capabilities.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                             Text("Capabilities")
-                                .scaledFont(size: 16, weight: .semibold)
+                                .scaledFont(size: OmiType.subheading, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
-                            FlowLayout(spacing: 8) {
+                            FlowLayout(spacing: OmiSpacing.sm) {
                                 ForEach(app.capabilities, id: \.self) { capability in
                                     CapabilityBadge(capability: capability)
                                 }
@@ -2595,13 +2595,13 @@ struct AppDetailSheet: View {
                     }
 
                     // Category
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                         Text("Category")
-                            .scaledFont(size: 16, weight: .semibold)
+                            .scaledFont(size: OmiType.subheading, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.category.replacingOccurrences(of: "-", with: " ").capitalized)
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textSecondary)
                     }
 
@@ -2609,21 +2609,21 @@ struct AppDetailSheet: View {
                         .background(OmiColors.backgroundTertiary)
 
                     // Add Review Section
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         HStack {
                             Text("Reviews")
-                                .scaledFont(size: 16, weight: .semibold)
+                                .scaledFont(size: OmiType.subheading, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Spacer()
 
                             if userReview == nil {
                                 Button(action: { showAddReview = true }) {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: OmiSpacing.xxs) {
                                         Image(systemName: "plus")
-                                            .scaledFont(size: 12, weight: .medium)
+                                            .scaledFont(size: OmiType.caption, weight: .medium)
                                         Text("Add Review")
-                                            .scaledFont(size: 13, weight: .medium)
+                                            .scaledFont(size: OmiType.body, weight: .medium)
                                     }
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
@@ -2633,17 +2633,17 @@ struct AppDetailSheet: View {
 
                         // User's own review (if exists)
                         if let userReview = userReview {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                                 HStack {
                                     Text("Your Review")
-                                        .scaledFont(size: 13, weight: .medium)
+                                        .scaledFont(size: OmiType.body, weight: .medium)
                                         .foregroundColor(OmiColors.textPrimary)
 
                                     Spacer()
 
                                     Button(action: { showAddReview = true }) {
                                         Text("Edit")
-                                            .scaledFont(size: 12, weight: .medium)
+                                            .scaledFont(size: OmiType.caption, weight: .medium)
                                             .foregroundColor(OmiColors.textTertiary)
                                     }
                                     .buttonStyle(.plain)
@@ -2660,10 +2660,10 @@ struct AppDetailSheet: View {
                                 ReviewCard(review: review)
                             }
                         } else if userReview == nil && reviews.isEmpty {
-                            Text("No reviews yet. Be the first to review this app!")
-                                .scaledFont(size: 13)
+                            Text("No reviews yet. Be the first to review this app.")
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(OmiColors.textTertiary)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, OmiSpacing.sm)
                         }
                     }
                 }
@@ -2871,7 +2871,7 @@ struct AddReviewSheet: View {
                 Spacer()
 
                 Text(existingReview != nil ? "Edit Review" : "Add Review")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -2884,9 +2884,9 @@ struct AddReviewSheet: View {
                 .background(OmiColors.backgroundTertiary)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                     // App info
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                         AsyncImage(url: URL(string: app.image)) { phase in
                             switch phase {
                             case .success(let image):
@@ -2894,20 +2894,20 @@ struct AddReviewSheet: View {
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                             default:
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                     .fill(OmiColors.backgroundTertiary)
                             }
                         }
                         .frame(width: 50, height: 50)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                             Text(app.name)
-                                .scaledFont(size: 16, weight: .semibold)
+                                .scaledFont(size: OmiType.subheading, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text(app.author)
-                                .scaledFont(size: 13)
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -2915,39 +2915,39 @@ struct AddReviewSheet: View {
                     }
 
                     // Star Rating Picker
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         Text("Your Rating")
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         StarRatingPicker(rating: $selectedRating)
                     }
 
                     // Review Text
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.md) {
                         HStack {
                             Text("Your Review")
-                                .scaledFont(size: 14, weight: .medium)
+                                .scaledFont(size: OmiType.body, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Spacer()
 
                             Text("\(reviewText.count)/\(maxReviewLength)")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(reviewText.count > maxReviewLength ? OmiColors.error : OmiColors.textTertiary)
                         }
 
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $reviewText)
-                                .scaledFont(size: 14)
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(OmiColors.textPrimary)
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 120, maxHeight: 200)
-                                .padding(12)
+                                .padding(OmiSpacing.md)
                                 .background(OmiColors.backgroundSecondary)
-                                .cornerRadius(10)
+                                .cornerRadius(OmiChrome.smallControlRadius)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                         .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
                                 )
                                 .onChange(of: reviewText) { _, newValue in
@@ -2958,10 +2958,10 @@ struct AddReviewSheet: View {
 
                             if reviewText.isEmpty {
                                 Text("Share your experience with this app...")
-                                    .scaledFont(size: 14)
+                                    .scaledFont(size: OmiType.body)
                                     .foregroundColor(OmiColors.textTertiary)
-                                    .padding(.leading, 17)
-                                    .padding(.top, 20)
+                                    .padding(.leading, OmiSpacing.lg)
+                                    .padding(.top, OmiSpacing.xl)
                                     .allowsHitTesting(false)
                             }
                         }
@@ -2969,11 +2969,11 @@ struct AddReviewSheet: View {
 
                     // Error message
                     if let errorMessage = errorMessage {
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             Image(systemName: "exclamationmark.circle.fill")
                                 .foregroundColor(OmiColors.error)
                             Text(errorMessage)
-                                .scaledFont(size: 13)
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(OmiColors.error)
                         }
                     }
@@ -2987,16 +2987,16 @@ struct AddReviewSheet: View {
                                     .tint(OmiColors.textPrimary)
                             } else {
                                 Text(existingReview != nil ? "Update Review" : "Submit Review")
-                                    .scaledFont(size: 14, weight: .semibold)
+                                    .scaledFont(size: OmiType.body, weight: .semibold)
                             }
                         }
                         .foregroundColor(OmiColors.textPrimary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(isFormValid ? Color.white : Color.white.opacity(0.5))
-                        .cornerRadius(10)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                 .stroke(OmiColors.border, lineWidth: 1)
                         )
                     }
@@ -3047,13 +3047,13 @@ struct StarRatingPicker: View {
     @State private var hoverRating: Int = 0
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
             ForEach(1...maxRating, id: \.self) { star in
                 Image(systemName: starImage(for: star))
                     .scaledFont(size: starSize)
                     .foregroundColor(starColor(for: star))
                     .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.15)) {
+                        OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                             rating = star
                         }
                     }
@@ -3061,14 +3061,14 @@ struct StarRatingPicker: View {
                         hoverRating = hovering ? star : 0
                     }
                     .scaleEffect(scaleEffect(for: star))
-                    .animation(.easeInOut(duration: 0.1), value: hoverRating)
+                    .omiAnimation(.easeInOut(duration: 0.1), value: hoverRating)
             }
 
             if rating > 0 {
                 Text(ratingLabel)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
-                    .padding(.leading, 8)
+                    .padding(.leading, OmiSpacing.sm)
             }
         }
     }
@@ -3119,17 +3119,17 @@ struct CapabilityBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
             Image(systemName: icon)
-                .scaledFont(size: 10)
+                .scaledFont(size: OmiType.micro)
             Text(capability.replacingOccurrences(of: "_", with: " ").capitalized)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.xs)
         .background(OmiColors.backgroundSecondary)
         .foregroundColor(OmiColors.textSecondary)
-        .cornerRadius(16)
+        .cornerRadius(OmiChrome.controlRadius)
     }
 }
 
@@ -3139,13 +3139,13 @@ struct ReviewCard: View {
     let review: OmiAppReview
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
                 // Rating stars
-                HStack(spacing: 2) {
+                HStack(spacing: OmiSpacing.hairline) {
                     ForEach(1...5, id: \.self) { star in
                         Image(systemName: star <= review.score ? "star.fill" : "star")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                             .foregroundColor(star <= review.score ? .yellow : OmiColors.textTertiary)
                     }
                 }
@@ -3153,34 +3153,34 @@ struct ReviewCard: View {
                 Spacer()
 
                 Text(review.ratedAt, style: .date)
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Text(review.review)
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
                 .lineLimit(3)
 
             if let response = review.response {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Developer Response")
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text(response)
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textSecondary)
                         .lineLimit(2)
                 }
-                .padding(10)
+                .padding(OmiSpacing.sm)
                 .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
             }
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .background(OmiColors.backgroundSecondary.opacity(0.5))
-        .cornerRadius(10)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 }
 
@@ -3343,7 +3343,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 log("DISMISSABLE_SHEET: Background tapped, dismissing")
-                                withAnimation(.easeOut(duration: 0.2)) {
+                                OmiMotion.withGated(.easeOut(duration: 0.2)) {
                                     isPresented = false
                                 }
                             }
@@ -3354,7 +3354,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
                         // does not end up clipped or visually hidden behind the scrim.
                         sheetContent()
                             .background(OmiColors.backgroundPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -3363,7 +3363,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
 
                         OverlayModalEscapeCatcher {
                             log("DISMISSABLE_SHEET: Escape pressed, dismissing")
-                            withAnimation(.easeOut(duration: 0.2)) {
+                            OmiMotion.withGated(.easeOut(duration: 0.2)) {
                                 isPresented = false
                             }
                         }
@@ -3372,7 +3372,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .animation(.easeOut(duration: 0.2), value: isPresented)
+            .omiAnimation(.easeOut(duration: 0.2), value: isPresented)
     }
 }
 
@@ -3413,7 +3413,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 log("DISMISSABLE_SHEET: Background tapped, dismissing item")
-                                withAnimation(.easeOut(duration: 0.2)) {
+                                OmiMotion.withGated(.easeOut(duration: 0.2)) {
                                     item = nil
                                 }
                             }
@@ -3424,7 +3424,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
                         // does not end up clipped or visually hidden behind the scrim.
                         sheetContent(presentedItem)
                             .background(OmiColors.backgroundPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
                             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -3433,7 +3433,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
 
                         OverlayModalEscapeCatcher {
                             log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
-                            withAnimation(.easeOut(duration: 0.2)) {
+                            OmiMotion.withGated(.easeOut(duration: 0.2)) {
                                 item = nil
                             }
                         }
@@ -3442,7 +3442,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .animation(.easeOut(duration: 0.2), value: item?.id != nil)
+            .omiAnimation(.easeOut(duration: 0.2), value: item?.id != nil)
     }
 }
 
@@ -3458,35 +3458,35 @@ struct CreateAppCard: View {
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // Icon
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                     .fill(iconColor.opacity(0.15))
                     .frame(width: 44, height: 44)
 
                 Image(systemName: icon)
-                    .scaledFont(size: 20)
+                    .scaledFont(size: OmiType.heading)
                     .foregroundColor(iconColor)
             }
 
             Text(title)
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                         .stroke(iconColor.opacity(0.3), lineWidth: 1)
                 )
         )

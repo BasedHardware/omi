@@ -468,7 +468,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))
     XCTAssertTrue(responseSource.contains("if showsHeader {"))
-    XCTAssertTrue(responseSource.contains(".padding(.top, state.usesNotchIsland ? 0 : 16)"))
+    XCTAssertTrue(responseSource.contains(".padding(.top, state.usesNotchIsland ? 0 : OmiSpacing.lg)"))
     XCTAssertFalse(source.contains("NotchAgentSwitcherMenu("))
     XCTAssertFalse(source.contains("Text(\"Subagents\")"))
     XCTAssertFalse(source.contains(".fill(Color.white.opacity(0.025))"))

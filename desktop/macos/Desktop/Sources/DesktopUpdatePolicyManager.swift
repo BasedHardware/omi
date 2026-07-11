@@ -77,20 +77,20 @@ struct DesktopUpdatePolicyBanner: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
       Image(systemName: "arrow.down.circle.fill")
-        .scaledFont(size: 16)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(.white)
         .frame(width: 22)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(policy.title ?? "Update Omi")
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(.white)
           .lineLimit(1)
         if let message = policy.message {
           Text(message)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(.white.opacity(0.82))
             .lineLimit(2)
             .truncationMode(.tail)
@@ -104,9 +104,9 @@ struct DesktopUpdatePolicyBanner: View {
         onDownload()
       }
       .buttonStyle(.plain)
-      .scaledFont(size: 12, weight: .semibold)
+      .scaledFont(size: OmiType.caption, weight: .semibold)
       .foregroundColor(Color(red: 0.08, green: 0.09, blue: 0.10))
-      .padding(.horizontal, 14)
+      .padding(.horizontal, OmiSpacing.md)
       .frame(height: 32)
       .background(Color.white.opacity(0.94))
       .clipShape(RoundedRectangle(cornerRadius: 7))
@@ -118,7 +118,7 @@ struct DesktopUpdatePolicyBanner: View {
           onDismiss()
         } label: {
           Image(systemName: "xmark")
-            .scaledFont(size: 11, weight: .semibold)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
         }
         .buttonStyle(.plain)
         .foregroundColor(.white.opacity(0.72))
@@ -126,14 +126,14 @@ struct DesktopUpdatePolicyBanner: View {
         .help("Dismiss")
       }
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .background(Color(red: 0.10, green: 0.12, blue: 0.14).opacity(0.98))
     .overlay(
-      RoundedRectangle(cornerRadius: 8)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .stroke(Color.white.opacity(0.12), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
     .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 8)
   }
 }
@@ -143,17 +143,17 @@ struct DesktopRequiredUpdatePrompt: View {
   let onDownload: () -> Void
 
   var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "arrow.down.circle.fill")
         .scaledFont(size: 30)
         .foregroundColor(.white)
 
-      VStack(spacing: 8) {
+      VStack(spacing: OmiSpacing.sm) {
         Text(policy.title ?? "Update Required")
-          .scaledFont(size: 20, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(.white)
         Text(policy.message ?? "Please install the latest Omi desktop app to continue.")
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(.white.opacity(0.72))
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
@@ -166,13 +166,13 @@ struct DesktopRequiredUpdatePrompt: View {
       .controlSize(.large)
     }
     .frame(width: 420)
-    .padding(28)
+    .padding(OmiSpacing.xxl)
     .background(Color(red: 0.08, green: 0.09, blue: 0.10))
     .overlay(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .stroke(Color.white.opacity(0.14), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 10))
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
     .shadow(color: Color.black.opacity(0.36), radius: 24, x: 0, y: 14)
   }
 }

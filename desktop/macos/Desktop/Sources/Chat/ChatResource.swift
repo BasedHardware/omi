@@ -335,7 +335,7 @@ struct ChatResourceStrip: View {
       // Always stack vertically: a single full-width column keeps file names
       // and metadata readable. Side-by-side cards squeezed titles down to
       // "d...ml" / "te...KB", which looked broken with 2+ artifacts.
-      VStack(alignment: alignment, spacing: 6) {
+      VStack(alignment: alignment, spacing: OmiSpacing.xs) {
         ForEach(resources) { resource in
           ChatResourceCard(
             resource: resource,
@@ -368,7 +368,7 @@ private struct ChatResourceCard: View {
   @State private var didCopyPath = false
 
   private var isCompact: Bool { density == .compact }
-  private var cornerRadius: CGFloat { isCompact ? 12 : 14 }
+  private var cornerRadius: CGFloat { isCompact ? OmiChrome.smallControlRadius : OmiChrome.chipRadius }
 
   var body: some View {
     Group {
@@ -398,18 +398,18 @@ private struct ChatResourceCard: View {
   // MARK: Document tile
 
   private var documentTile: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: OmiSpacing.sm) {
       iconBadge
 
-      VStack(alignment: .leading, spacing: 1) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(resource.title)
-          .scaledFont(size: isCompact ? 12 : 13, weight: .semibold)
+          .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
           .lineLimit(1)
           .truncationMode(.middle)
         if let subtitle = resource.subtitle, !subtitle.isEmpty {
           Text(subtitle)
-            .scaledFont(size: isCompact ? 10 : 11)
+            .scaledFont(size: isCompact ? OmiType.micro : OmiType.caption)
             .foregroundColor(subtitleColor)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -420,17 +420,17 @@ private struct ChatResourceCard: View {
 
       trailingAccessory
     }
-    .padding(.horizontal, isCompact ? 8 : 10)
-    .padding(.vertical, isCompact ? 8 : 9)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.sm)
     .background(fillColor)
   }
 
   private var iconBadge: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: isCompact ? 8 : 9, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
         .fill(iconBadgeFill)
       Image(systemName: iconName)
-        .scaledFont(size: isCompact ? 14 : 16, weight: .medium)
+        .scaledFont(size: isCompact ? OmiType.body : OmiType.subheading, weight: .medium)
         .foregroundColor(iconTint)
     }
     .frame(width: isCompact ? 30 : 36, height: isCompact ? 30 : 36)
@@ -462,12 +462,12 @@ private struct ChatResourceCard: View {
       ProgressView().controlSize(.small)
     case .failed:
       Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.warning)
         .help(resource.subtitle ?? "Unavailable")
     default:
       if resource.canOpen {
-        HStack(spacing: 2) {
+        HStack(spacing: OmiSpacing.hairline) {
           copyPathButton
           openIndicator
         }
@@ -480,10 +480,10 @@ private struct ChatResourceCard: View {
   /// beyond the cursor change.
   private var openIndicator: some View {
     Image(systemName: "arrow.up.right")
-      .scaledFont(size: isCompact ? 10 : 11, weight: .semibold)
+      .scaledFont(size: isCompact ? OmiType.micro : OmiType.caption, weight: .semibold)
       .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textQuaternary)
       .frame(width: 18, height: 26)
-      .animation(.easeInOut(duration: 0.12), value: isHovering)
+      .omiAnimation(.easeInOut(duration: 0.12), value: isHovering)
   }
 
   private var copyPathButton: some View {
@@ -491,20 +491,20 @@ private struct ChatResourceCard: View {
       copyPath()
     } label: {
       Image(systemName: didCopyPath ? "checkmark" : "doc.on.clipboard")
-        .scaledFont(size: isCompact ? 12 : 13, weight: .medium)
+        .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .medium)
         .foregroundColor(didCopyPath ? OmiColors.success : OmiColors.textTertiary)
         .frame(width: 26, height: 26)
         .background(
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
             .fill(Color.white.opacity(isHovering ? 0.08 : 0))
         )
-        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous))
     }
     .buttonStyle(.plain)
     .help(didCopyPath ? "Copied path" : "Copy path")
     .opacity(isHovering || didCopyPath ? 1 : 0)
-    .animation(.easeInOut(duration: 0.12), value: isHovering)
-    .animation(.easeInOut(duration: 0.15), value: didCopyPath)
+    .omiAnimation(.easeInOut(duration: 0.12), value: isHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: didCopyPath)
   }
 
   private func copyPath() {
@@ -528,34 +528,34 @@ private struct ChatResourceCard: View {
         endPoint: .bottom
       )
 
-      HStack(spacing: 6) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: iconName)
-          .scaledFont(size: 11, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
         Text(resource.title)
-          .scaledFont(size: 11, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .lineLimit(1)
           .truncationMode(.middle)
         Spacer(minLength: 0)
         if resource.canOpen {
           Image(systemName: "arrow.up.right")
-            .scaledFont(size: 10, weight: .semibold)
+            .scaledFont(size: OmiType.micro, weight: .semibold)
             .foregroundColor(.white.opacity(isHovering ? 0.95 : 0.7))
         }
       }
       .foregroundColor(.white)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.sm)
 
       if resource.canOpen {
         Image(systemName: didCopyPath ? "checkmark" : "doc.on.clipboard")
-          .scaledFont(size: 12, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundColor(.white)
           .frame(width: 28, height: 28)
           .background(Circle().fill(Color.black.opacity(0.42)))
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-          .padding(8)
+          .padding(OmiSpacing.sm)
           .opacity(isHovering || didCopyPath ? 1 : 0)
-          .animation(.easeInOut(duration: 0.12), value: isHovering)
+          .omiAnimation(.easeInOut(duration: 0.12), value: isHovering)
           .onTapGesture { copyPath() }
       }
     }

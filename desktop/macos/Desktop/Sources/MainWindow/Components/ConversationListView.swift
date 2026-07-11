@@ -106,77 +106,77 @@ struct ConversationListView: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       ProgressView()
         .scaleEffect(1.2)
-        .tint(OmiColors.purplePrimary)
+        .tint(OmiColors.accent)
 
       Text("Loading conversations...")
-        .scaledFont(size: 14)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private func errorView(_ error: String) -> some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: 40)
+        .scaledFont(size: OmiType.hero)
         .foregroundColor(OmiColors.warning)
 
       Text("Failed to load conversations")
-        .scaledFont(size: 16, weight: .medium)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
         .foregroundColor(OmiColors.textPrimary)
 
       Text(error)
-        .scaledFont(size: 14)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
         .multilineTextAlignment(.center)
 
       Button(action: onRefresh) {
         Text("Try Again")
-          .scaledFont(size: 14, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textPrimary)
-          .padding(.horizontal, 20)
-          .padding(.vertical, 10)
+          .padding(.horizontal, OmiSpacing.xl)
+          .padding(.vertical, OmiSpacing.sm)
           .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
       }
       .buttonStyle(.plain)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(32)
+    .padding(OmiSpacing.section)
   }
 
   private var emptyView: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "bubble.left.and.bubble.right")
         .scaledFont(size: 48)
         .foregroundColor(OmiColors.textTertiary)
 
       Text("No Conversations")
-        .scaledFont(size: 18, weight: .semibold)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
       Text("Start recording to capture your first conversation")
-        .scaledFont(size: 14)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
         .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(32)
+    .padding(OmiSpacing.section)
   }
 
   private var conversationListContent: some View {
     let items = flatListItems
-    return LazyVStack(alignment: .leading, spacing: 12) {
+    return LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
       ForEach(items) { item in
         switch item {
         case .header(let key, let isFirst):
           Text(key)
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.top, isFirst ? 0 : 18)
-            .padding(.bottom, 6)
+            .padding(.top, isFirst ? 0 : OmiSpacing.lg)
+            .padding(.bottom, OmiSpacing.xs)
         case .conversation(let conversation):
           ConversationRowView(
             conversation: conversation,
@@ -192,8 +192,8 @@ struct ConversationListView: View {
         }
       }
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 20)
+    .padding(.horizontal, OmiSpacing.xxl)
+    .padding(.vertical, OmiSpacing.xl)
   }
 
   private var conversationList: some View {

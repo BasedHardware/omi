@@ -128,12 +128,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     @ViewBuilder
     private func scrollContent(proxy: ScrollViewProxy) -> some View {
         ScrollView {
-            LazyVStack(spacing: 18) {
+            LazyVStack(spacing: OmiSpacing.lg) {
                 loadMoreButton
                 messageContent
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.xl)
             // Do not enable text selection on the whole stack. SelectionOverlay on every
             // chrome Text (agent card headers, tool summaries, timestamps) can peg the
             // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
@@ -392,18 +392,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, OmiSpacing.sm)
         }
     }
 
     @ViewBuilder
     private var messageContent: some View {
         if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
-            VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.md) {
                 ProgressView()
                     .scaleEffect(0.8)
                 Text("Loading...")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -436,34 +436,34 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func errorContent(error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.triangle")
-                .scaledFont(size: 40)
+                .scaledFont(size: OmiType.hero)
                 .foregroundColor(OmiColors.warning)
 
             Text("Failed to load chats")
-                .scaledFont(size: 16, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(error)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             if let onRetry {
                 Button(action: onRetry) {
                     Text("Try Again")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, OmiSpacing.xl)
+                            .padding(.vertical, OmiSpacing.sm)
                             .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
                 }
                 .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(32)
+        .padding(OmiSpacing.section)
         .padding(.vertical, 48)
     }
 
@@ -524,7 +524,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         .frame(width: 36, height: 36)
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                     Image(systemName: "arrow.down.circle.fill")
-                        .scaledFont(size: 28)
+                        .scaledFont(size: OmiType.title)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 // Activity pulse: subtle white glow when new content arrived below
@@ -537,10 +537,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Jump to latest message")
-            .padding(.bottom, 16)
+            .padding(.bottom, OmiSpacing.lg)
             .transition(.scale.combined(with: .opacity))
-            .animation(.easeInOut(duration: 0.2), value: scrollMode)
-            .animation(.easeInOut(duration: 0.3), value: hasActivityBelow)
+            .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
+            .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)
         }
     }
 

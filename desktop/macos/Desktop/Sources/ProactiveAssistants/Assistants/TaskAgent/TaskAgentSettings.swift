@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OmiTheme
 
 /// Settings for the Task Agent feature
 class TaskAgentSettings: ObservableObject {
@@ -239,7 +240,7 @@ struct TaskAgentSettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     } else if let validation = validation {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                             ValidationRow(label: "tmux", isValid: validation.tmuxInstalled)
                             ValidationRow(label: "Claude CLI", isValid: validation.claudeInstalled)
                             ValidationRow(label: "Working directory", isValid: validation.workingDirectoryValid)

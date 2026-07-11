@@ -18,17 +18,17 @@ struct SettingsPage: View {
           // Section header
           HStack {
             Text(selectedSection.rawValue)
-              .scaledFont(size: 28, weight: .bold)
+              .scaledFont(size: OmiType.title, weight: .bold)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
               .transition(.opacity)
-              .animation(.easeInOut(duration: 0.15), value: selectedSection)
+              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
 
             Spacer()
           }
-          .padding(.horizontal, 32)
-          .padding(.top, 32)
-          .padding(.bottom, 24)
+          .padding(.horizontal, OmiSpacing.section)
+          .padding(.top, OmiSpacing.section)
+          .padding(.bottom, OmiSpacing.xxl)
 
           // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
@@ -37,7 +37,7 @@ struct SettingsPage: View {
             highlightedSettingId: $highlightedSettingId,
             chatProvider: chatProvider
           )
-          .padding(.horizontal, 32)
+          .padding(.horizontal, OmiSpacing.section)
 
           Spacer()
         }
@@ -45,7 +45,7 @@ struct SettingsPage: View {
       .onChange(of: highlightedSettingId) { _, newId in
         guard let newId = newId else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          withAnimation(.easeInOut(duration: 0.3)) {
+          OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             proxy.scrollTo(newId, anchor: .center)
           }
         }
@@ -490,7 +490,7 @@ struct SettingsContentView: View {
   }
 
   var body: some View {
-    VStack(spacing: 24) {
+    VStack(spacing: OmiSpacing.xxl) {
       // Section content
       Group {
         switch selectedSection {
@@ -522,7 +522,7 @@ struct SettingsContentView: View {
       }
       .id(selectedSection)
       .transition(.opacity)
-      .animation(.easeInOut(duration: 0.15), value: selectedSection)
+      .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
     }
     .onAppear {
       if AppBuild.isProductionBundle && selectedSection == .aiChat {

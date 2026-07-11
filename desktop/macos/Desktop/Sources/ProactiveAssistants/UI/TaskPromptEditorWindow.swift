@@ -15,16 +15,16 @@ struct TaskPromptEditorView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             // Header
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Task Extraction Prompt")
-                        .scaledFont(size: 16, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundColor(.primary)
 
                     Text("Customize the AI instructions for task extraction")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
 
@@ -32,11 +32,11 @@ struct TaskPromptEditorView: View {
 
                 // Reset button
                 Button(action: resetToDefault) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "arrow.counterclockwise")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                         Text("Reset to Default")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                     }
                 }
                 .buttonStyle(.bordered)
@@ -45,14 +45,14 @@ struct TaskPromptEditorView: View {
 
             // Text editor
             TextEditor(text: $prompt)
-                .scaledFont(size: 13, design: .monospaced)
-                .padding(12)
+                .scaledFont(size: OmiType.body, design: .monospaced)
+                .padding(OmiSpacing.md)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .fill(Color(nsColor: .textBackgroundColor))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
                 )
                 .onChange(of: prompt) { _, newValue in
@@ -62,7 +62,7 @@ struct TaskPromptEditorView: View {
             // Footer with character count
             HStack {
                 Text("\(prompt.count) characters")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.secondary)
 
                 Spacer()
@@ -75,7 +75,7 @@ struct TaskPromptEditorView: View {
                 .controlSize(.regular)
             }
         }
-        .padding(20)
+        .padding(OmiSpacing.xl)
         .frame(width: 600, height: 500)
         .background(Color(nsColor: .windowBackgroundColor))
     }

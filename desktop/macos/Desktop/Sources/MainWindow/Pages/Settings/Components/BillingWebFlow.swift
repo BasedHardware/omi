@@ -21,9 +21,9 @@ struct BillingWebFlowSheet: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         Text(flow.title)
-          .scaledFont(size: 18, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
@@ -34,8 +34,8 @@ struct BillingWebFlowSheet: View {
         .buttonStyle(.plain)
         .foregroundColor(OmiColors.textSecondary)
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.lg)
       .background(OmiColors.backgroundTertiary)
 
       Divider()

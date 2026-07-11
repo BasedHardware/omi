@@ -30,7 +30,7 @@ struct FolderTabsStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 // "All" tab
                 folderTab(
                     label: "All",
@@ -95,17 +95,17 @@ struct FolderTabsStrip: View {
                 // "+" create button
                 Button(action: onCreateFolder) {
                     Image(systemName: "plus")
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 26, height: 26)
                         .background(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                                 .fill(OmiColors.backgroundTertiary.opacity(0.6))
                         )
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, OmiSpacing.hairline)
         }
         .disabled(isFilteringFolder)
     }
@@ -118,24 +118,24 @@ struct FolderTabsStrip: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
+            HStack(spacing: OmiSpacing.xxs) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                 }
                 Text(label)
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .lineLimit(1)
             }
             .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(isSelected ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundTertiary.opacity(0.6))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(isSelected ? OmiColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
@@ -163,65 +163,65 @@ struct FolderFormSheet: View {
             // Header
             HStack {
                 Text(isEditing ? "Edit Folder" : "New Folder")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
 
             Divider().background(OmiColors.backgroundTertiary)
 
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: OmiSpacing.lg) {
                 // Name field
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                     Text("Name")
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                     TextField("Folder name", text: $name)
                         .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, OmiSpacing.sm)
+                        .padding(.vertical, OmiSpacing.sm)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .stroke(OmiColors.border, lineWidth: 1)
                         )
                 }
 
                 // Description field
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                     Text("Description")
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                     TextField("Optional description", text: $descriptionText)
                         .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, OmiSpacing.sm)
+                        .padding(.vertical, OmiSpacing.sm)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .stroke(OmiColors.border, lineWidth: 1)
                         )
                 }
 
                 // Color picker
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                     Text("Color")
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 8), count: 5), spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: OmiSpacing.sm), count: 5), spacing: OmiSpacing.sm) {
                         ForEach(FolderColors.palette, id: \.hex) { item in
                             let isSelected = selectedColor == item.hex
                             Button(action: {
@@ -233,7 +233,7 @@ struct FolderFormSheet: View {
                                     .overlay(
                                         Circle()
                                             .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
-                                            .padding(2)
+                                            .padding(OmiSpacing.hairline)
                                     )
                                     .overlay(
                                         Circle()
@@ -245,7 +245,7 @@ struct FolderFormSheet: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
 
             Divider().background(OmiColors.backgroundTertiary)
 
@@ -257,8 +257,8 @@ struct FolderFormSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
 
                 Button(action: save) {
                     if isSaving {
@@ -271,15 +271,15 @@ struct FolderFormSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.textTertiary : .white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .fill(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.backgroundTertiary : Color(hex: selectedColor) ?? OmiColors.textPrimary)
                 )
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
         }
         .onAppear {
             if let folder = folder {
@@ -332,27 +332,27 @@ struct DeleteFolderSheet: View {
             // Header
             HStack {
                 Text("Delete Folder")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
 
             Divider().background(OmiColors.backgroundTertiary)
 
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: OmiSpacing.lg) {
                 Text("Are you sure you want to delete \"\(folder.name)\"?")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if folder.conversationCount > 0 {
                     Text("This folder has \(folder.conversationCount) conversation\(folder.conversationCount == 1 ? "" : "s"). Choose where to move them:")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
 
                     // Move destination picker
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         moveOption(label: "No folder (unfiled)", folderId: nil)
 
                         ForEach(appState.folders.filter { $0.id != folder.id }) { otherFolder in
@@ -361,7 +361,7 @@ struct DeleteFolderSheet: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
 
             Divider().background(OmiColors.backgroundTertiary)
 
@@ -373,8 +373,8 @@ struct DeleteFolderSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
 
                 Button(action: performDelete) {
                     if isDeleting {
@@ -387,15 +387,15 @@ struct DeleteFolderSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .fill(Color.red)
                 )
                 .disabled(isDeleting)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
         }
     }
 
@@ -405,31 +405,31 @@ struct DeleteFolderSheet: View {
         Button(action: {
             moveToFolderId = folderId
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 if let color = color, let c = Color(hex: color) {
                     Circle()
                         .fill(c)
                         .frame(width: 8, height: 8)
                 } else {
                     Image(systemName: "tray")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 8)
                 }
                 Text(label)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                     .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
             )
         }

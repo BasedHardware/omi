@@ -41,20 +41,20 @@ struct ConnectDestinationSheet: View {
   var body: some View {
     if members.count > 1 {
       VStack(alignment: .leading, spacing: 0) {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
           ConnectorBrandIcon(brand: groupBrand, size: 48, cornerRadius: 13)
-          VStack(alignment: .leading, spacing: 3) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text("Connect \(groupName)")
-              .scaledFont(size: 20, weight: .semibold)
+              .scaledFont(size: OmiType.heading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text("Pick how to connect.")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
           Spacer()
           Button(action: onDismiss) {
             Image(systemName: "xmark")
-              .scaledFont(size: 13, weight: .semibold)
+              .scaledFont(size: OmiType.body, weight: .semibold)
               .foregroundColor(OmiColors.textTertiary)
               .frame(width: 28, height: 28)
               .background(Circle().fill(OmiColors.backgroundTertiary))
@@ -62,16 +62,16 @@ struct ConnectDestinationSheet: View {
           .buttonStyle(.plain)
           .accessibilityLabel("Close")
         }
-        .padding(24)
+        .padding(OmiSpacing.xxl)
 
         ScrollView {
-          VStack(spacing: 12) {
+          VStack(spacing: OmiSpacing.md) {
             ForEach(members, id: \.self) { d in
               ConnectOptionCard(destination: d, statuses: $statuses)
             }
           }
-          .padding(.horizontal, 24)
-          .padding(.bottom, 24)
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.bottom, OmiSpacing.xxl)
         }
       }
       .background(OmiColors.backgroundPrimary)
@@ -125,22 +125,22 @@ private struct ConnectOptionCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 12) {
-        ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: 10)
-        VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(spacing: OmiSpacing.md) {
+        ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(optionLabel)
-            .scaledFont(size: 15, weight: .semibold)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Text(destination.description)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
         Spacer(minLength: 8)
       }
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         if let completion = connectionPresentation.completion {
           setupCompleteBlock(completion)
         } else {
@@ -159,31 +159,31 @@ private struct ConnectOptionCard: View {
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
           ManualInstallationDisclosure(isExpanded: $showManual, fontSize: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
                 Text("\(idx + 1). \(step)")
-                  .scaledFont(size: 11)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
                   .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
               }
               manualBlock(manualText(for: setup))
             }
-            .padding(.top, 8)
+            .padding(.top, OmiSpacing.sm)
           }
         }
       }
 
       if let resultMessage {
         Text(resultMessage.text)
-          .scaledFont(size: 11, weight: .medium)
+          .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(resultMessage.foregroundColor)
       }
     }
-    .padding(16)
+    .padding(OmiSpacing.lg)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
@@ -248,28 +248,28 @@ private struct ConnectOptionCard: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: 15, weight: .semibold)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(OmiColors.success)
         .padding(.top, 1)
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(completion.title)
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text(completion.subtitle)
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
-    .padding(10)
+    .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
         .fill(OmiColors.backgroundTertiary)
         .overlay(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
     )
   }
@@ -307,7 +307,7 @@ private struct ConnectOptionCard: View {
   }
 
   private func manualBlock(_ text: String) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(text)
         .font(.system(size: 11, design: .monospaced))
         .foregroundColor(OmiColors.textSecondary)
@@ -320,18 +320,18 @@ private struct ConnectOptionCard: View {
         resultMessage = .success("Copied.")
       } label: {
         Text("Copy")
-          .scaledFont(size: 11, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundColor(.black)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 6)
-          .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white))
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.xs)
+          .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(Color.white))
       }
       .buttonStyle(.plain)
     }
-    .padding(10)
+    .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OmiColors.backgroundTertiary))
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(OmiColors.backgroundTertiary))
   }
 }
 

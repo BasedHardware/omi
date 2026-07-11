@@ -6,22 +6,22 @@ import OmiTheme
 
 extension SettingsContentView {
   var focusAssistantSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.focusassistant") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "eye.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Focus Assistant")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Toggle("", isOn: $focusEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: focusEnabled) { _, newValue in
                 FocusAssistantSettings.shared.isEnabled = newValue
@@ -31,7 +31,7 @@ extension SettingsContentView {
           }
 
           Text("Detect distractions and help you stay focused")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if focusEnabled {
@@ -43,7 +43,7 @@ extension SettingsContentView {
               settingId: "advanced.focusassistant.glow"
             ) {
               Toggle("", isOn: $glowOverlayEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .disabled(isPreviewRunning)
                 .onChange(of: glowOverlayEnabled) { _, newValue in
@@ -81,15 +81,15 @@ extension SettingsContentView {
               subtitle: "Customize AI instructions for focus analysis",
               settingId: "advanced.focusassistant.prompt"
             ) {
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Button(action: {
                   FocusTestRunnerWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "play.circle")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Test Run")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -98,11 +98,11 @@ extension SettingsContentView {
                 Button(action: {
                   PromptEditorWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Text("Edit")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                     Image(systemName: "arrow.up.right.square")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -114,45 +114,45 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Excluded Apps for Focus Analysis
-            VStack(alignment: .leading, spacing: 12) {
-              VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Excluded Apps")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text("Focus coaching won't trigger for these apps")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
               }
 
               // Built-in system exclusions (non-removable)
               DisclosureGroup {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: OmiSpacing.xxs) {
                   ForEach(Array(TaskAssistantSettings.builtInExcludedApps).sorted(), id: \.self) {
                     appName in
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                       AppIconView(appName: appName, size: 20)
 
                       Text(appName)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
 
                       Spacer()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.vertical, OmiSpacing.xxs)
                   }
                 }
               } label: {
                 Text(
                   "System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))"
                 )
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
               }
               .tint(OmiColors.textTertiary)
 
               if !focusExcludedApps.isEmpty {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: OmiSpacing.sm) {
                   ForEach(Array(focusExcludedApps).sorted(), id: \.self) { appName in
                     ExcludedAppRow(
                       appName: appName,
@@ -184,22 +184,22 @@ extension SettingsContentView {
   }
 
   var taskAssistantSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.taskassistant") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "checklist")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Task Assistant")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Toggle("", isOn: $taskEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: taskEnabled) { _, newValue in
                 TaskAssistantSettings.shared.isEnabled = newValue
@@ -209,7 +209,7 @@ extension SettingsContentView {
           }
 
           Text("Extract tasks and action items from your screen")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if taskEnabled {
@@ -218,19 +218,19 @@ extension SettingsContentView {
 
             // Task Agent (chat / investigate) toggle
             HStack {
-              VStack(alignment: .leading, spacing: 2) {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 Text("Task Agent")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text("Investigate button and sidebar chat for tasks")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
               }
 
               Spacer()
 
               Toggle("", isOn: $taskChatAgentEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: taskChatAgentEnabled) { _, newValue in
                   TaskAgentSettings.shared.isChatEnabled = newValue
@@ -238,16 +238,16 @@ extension SettingsContentView {
             }
 
             // Working Directory (shared by chat agent and terminal agent)
-            HStack(spacing: 8) {
-              VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: OmiSpacing.sm) {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 Text("Working Directory")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text(
                   taskAgentWorkingDirectory.isEmpty
                     ? "Not set — chat agent defaults to ~" : taskAgentWorkingDirectory
                 )
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -269,14 +269,14 @@ extension SettingsContentView {
                   TaskAgentSettings.shared.workingDirectory = url.path
                 }
               }
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
 
               if !taskAgentWorkingDirectory.isEmpty {
                 Button("Clear") {
                   taskAgentWorkingDirectory = ""
                   TaskAgentSettings.shared.workingDirectory = ""
                 }
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
               }
             }
@@ -285,21 +285,21 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Extraction Interval Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Extraction Interval")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("How often to scan for new tasks")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text(formatExtractionInterval(taskExtractionInterval))
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 80, alignment: .trailing)
               }
@@ -310,7 +310,7 @@ extension SettingsContentView {
                   set: { taskExtractionInterval = extractionIntervalOptions[Int($0)] }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(OmiColors.purplePrimary)
+              .tint(OmiColors.accent)
               .onChange(of: taskExtractionInterval) { _, newValue in
                 TaskAssistantSettings.shared.extractionInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
@@ -320,27 +320,27 @@ extension SettingsContentView {
             }
 
             // Minimum Confidence Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Minimum Confidence")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("Only show tasks above this confidence level")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text("\(Int(taskMinConfidence * 100))%")
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 40, alignment: .trailing)
               }
 
               Slider(value: $taskMinConfidence, in: 0.3...0.9, step: 0.1)
-                .tint(OmiColors.purplePrimary)
+                .tint(OmiColors.accent)
                 .onChange(of: taskMinConfidence) { _, newValue in
                   TaskAssistantSettings.shared.minConfidence = newValue
                   SettingsSyncManager.shared.pushPartialUpdate(
@@ -353,15 +353,15 @@ extension SettingsContentView {
               subtitle: "Customize AI instructions for task extraction",
               settingId: "advanced.taskassistant.prompt"
             ) {
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Button(action: {
                   TaskTestRunnerWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "play.circle")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Test Run")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -370,11 +370,11 @@ extension SettingsContentView {
                 Button(action: {
                   TaskPromptEditorWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Text("Edit")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                     Image(systemName: "arrow.up.right.square")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -386,36 +386,36 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Allowed Apps for Task Extraction (Whitelist)
-            VStack(alignment: .leading, spacing: 12) {
-              VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Allowed Apps")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text(
                   "Tasks will only be extracted from these apps. Browsers are also filtered by keywords below."
                 )
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
               }
 
               // Editable list of all allowed apps
-              LazyVStack(spacing: 4) {
+              LazyVStack(spacing: OmiSpacing.xxs) {
                 ForEach(Array(taskAllowedApps).sorted(), id: \.self) { appName in
-                  HStack(spacing: 12) {
+                  HStack(spacing: OmiSpacing.md) {
                     AppIconView(appName: appName, size: 20)
 
                     Text(appName)
-                      .scaledFont(size: 13)
+                      .scaledFont(size: OmiType.body)
                       .foregroundColor(OmiColors.textPrimary)
 
                     if TaskAssistantSettings.isBrowser(appName) {
                       Text("browser")
-                        .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.purplePrimary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(OmiColors.purplePrimary.opacity(0.15))
-                        .cornerRadius(4)
+                        .scaledFont(size: OmiType.micro)
+                        .foregroundColor(OmiColors.accent)
+                        .padding(.horizontal, OmiSpacing.xs)
+                        .padding(.vertical, OmiSpacing.hairline)
+                        .background(OmiColors.accent.opacity(0.15))
+                        .cornerRadius(OmiChrome.stripRadius)
                     }
 
                     Spacer()
@@ -425,13 +425,13 @@ extension SettingsContentView {
                       taskAllowedApps = TaskAssistantSettings.shared.allowedApps
                     } label: {
                       Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                   }
-                  .padding(.horizontal, 12)
-                  .padding(.vertical, 4)
+                  .padding(.horizontal, OmiSpacing.md)
+                  .padding(.vertical, OmiSpacing.xxs)
                 }
               }
 
@@ -452,15 +452,15 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Browser Window Keywords
-            VStack(alignment: .leading, spacing: 12) {
-              VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Browser Window Keywords")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text(
                   "For browser apps, only analyze windows whose title contains one of these keywords."
                 )
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
               }
 
@@ -498,11 +498,11 @@ extension SettingsContentView {
                     await MainActor.run { isRescoringTasks = false }
                   }
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "arrow.trianglehead.counterclockwise")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Re-score")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -521,22 +521,22 @@ extension SettingsContentView {
   }
 
   var insightAssistantSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.insightassistant") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "lightbulb.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Insight Assistant")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Toggle("", isOn: $insightEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: insightEnabled) { _, newValue in
                 InsightAssistantSettings.shared.isEnabled = newValue
@@ -546,7 +546,7 @@ extension SettingsContentView {
           }
 
           Text("Get proactive insights and suggestions")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if insightEnabled {
@@ -554,21 +554,21 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Frequency Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Frequency")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("How often to check for insight opportunities")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text(formatExtractionInterval(insightExtractionInterval))
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 80, alignment: .trailing)
               }
@@ -579,7 +579,7 @@ extension SettingsContentView {
                   set: { insightExtractionInterval = extractionIntervalOptions[Int($0)] }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(OmiColors.purplePrimary)
+              .tint(OmiColors.accent)
               .onChange(of: insightExtractionInterval) { _, newValue in
                 InsightAssistantSettings.shared.extractionInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
@@ -589,27 +589,27 @@ extension SettingsContentView {
             }
 
             // Minimum Confidence Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Minimum Confidence")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("Only show insights above this confidence level")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text("\(Int(insightMinConfidence * 100))%")
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 40, alignment: .trailing)
               }
 
               Slider(value: $insightMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(OmiColors.purplePrimary)
+                .tint(OmiColors.accent)
                 .onChange(of: insightMinConfidence) { _, newValue in
                   InsightAssistantSettings.shared.minConfidence = newValue
                   SettingsSyncManager.shared.pushPartialUpdate(
@@ -622,15 +622,15 @@ extension SettingsContentView {
               title: "Insight Prompt", subtitle: "Customize AI instructions for insights",
               settingId: "advanced.insightassistant.prompt"
             ) {
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Button(action: {
                   InsightTestRunnerWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "play.circle")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Test Run")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -639,11 +639,11 @@ extension SettingsContentView {
                 Button(action: {
                   InsightPromptEditorWindow.show()
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Text("Edit")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                     Image(systemName: "arrow.up.right.square")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
                 .buttonStyle(.bordered)
@@ -655,45 +655,45 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Excluded Apps for Advice
-            VStack(alignment: .leading, spacing: 12) {
-              VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Excluded Apps")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text("Advice won't be generated from these apps")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
               }
 
               // Built-in system exclusions (non-removable, shared with Task Extractor)
               DisclosureGroup {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: OmiSpacing.xxs) {
                   ForEach(Array(TaskAssistantSettings.builtInExcludedApps).sorted(), id: \.self) {
                     appName in
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                       AppIconView(appName: appName, size: 20)
 
                       Text(appName)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
 
                       Spacer()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.vertical, OmiSpacing.xxs)
                   }
                 }
               } label: {
                 Text(
                   "System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))"
                 )
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
               }
               .tint(OmiColors.textTertiary)
 
               if !insightExcludedApps.isEmpty {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: OmiSpacing.sm) {
                   ForEach(Array(insightExcludedApps).sorted(), id: \.self) { appName in
                     ExcludedAppRow(
                       appName: appName,
@@ -725,22 +725,22 @@ extension SettingsContentView {
   }
 
   var memoryAssistantSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.memoryassistant") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "brain.head.profile")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Memory Assistant")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Toggle("", isOn: $memoryEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: memoryEnabled) { _, newValue in
                 MemoryAssistantSettings.shared.isEnabled = newValue
@@ -750,7 +750,7 @@ extension SettingsContentView {
           }
 
           Text("Extract facts and wisdom from your screen")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if memoryEnabled {
@@ -758,21 +758,21 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Extraction Interval Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Extraction Interval")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("How often to scan for new memories")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text(formatExtractionInterval(memoryExtractionInterval))
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 80, alignment: .trailing)
               }
@@ -783,7 +783,7 @@ extension SettingsContentView {
                   set: { memoryExtractionInterval = extractionIntervalOptions[Int($0)] }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(OmiColors.purplePrimary)
+              .tint(OmiColors.accent)
               .onChange(of: memoryExtractionInterval) { _, newValue in
                 MemoryAssistantSettings.shared.extractionInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
@@ -793,27 +793,27 @@ extension SettingsContentView {
             }
 
             // Minimum Confidence Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text("Minimum Confidence")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                   Text("Only save memories above this confidence level")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Text("\(Int(memoryMinConfidence * 100))%")
-                  .scaledFont(size: 13, weight: .medium)
+                  .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(OmiColors.textSecondary)
                   .frame(width: 40, alignment: .trailing)
               }
 
               Slider(value: $memoryMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(OmiColors.purplePrimary)
+                .tint(OmiColors.accent)
                 .onChange(of: memoryMinConfidence) { _, newValue in
                   MemoryAssistantSettings.shared.minConfidence = newValue
                   SettingsSyncManager.shared.pushPartialUpdate(
@@ -830,11 +830,11 @@ extension SettingsContentView {
               Button(action: {
                 MemoryPromptEditorWindow.show()
               }) {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                   Text("Edit")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                   Image(systemName: "arrow.up.right.square")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                 }
               }
               .buttonStyle(.bordered)
@@ -845,45 +845,45 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             // Excluded Apps for Memory Extraction
-            VStack(alignment: .leading, spacing: 12) {
-              VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Excluded Apps")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textSecondary)
                 Text("Memories won't be extracted from these apps")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textTertiary)
               }
 
               // Built-in system exclusions (non-removable, shared across assistants)
               DisclosureGroup {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: OmiSpacing.xxs) {
                   ForEach(Array(TaskAssistantSettings.builtInExcludedApps).sorted(), id: \.self) {
                     appName in
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                       AppIconView(appName: appName, size: 20)
 
                       Text(appName)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
 
                       Spacer()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.vertical, OmiSpacing.xxs)
                   }
                 }
               } label: {
                 Text(
                   "System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))"
                 )
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
               }
               .tint(OmiColors.textTertiary)
 
               if !memoryExcludedApps.isEmpty {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: OmiSpacing.sm) {
                   ForEach(Array(memoryExcludedApps).sorted(), id: \.self) { appName in
                     ExcludedAppRow(
                       appName: appName,
@@ -915,23 +915,23 @@ extension SettingsContentView {
   }
 
   var analysisThrottleSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.analysisthrottle") {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text("Analysis Throttle")
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
               Text("Wait before analyzing after switching apps")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
 
             Spacer()
 
             Text(formatAnalysisDelay(analysisDelay))
-              .scaledFont(size: 13, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
               .frame(width: 80, alignment: .trailing)
           }
@@ -942,7 +942,7 @@ extension SettingsContentView {
               set: { analysisDelay = analysisDelayOptions[Int($0)] }
             ), in: 0...Double(analysisDelayOptions.count - 1), step: 1
           )
-          .tint(OmiColors.purplePrimary)
+          .tint(OmiColors.accent)
           .onChange(of: analysisDelay) { _, newValue in
             AssistantSettings.shared.analysisDelay = newValue
             SettingsSyncManager.shared.pushPartialUpdate(
@@ -955,23 +955,23 @@ extension SettingsContentView {
   }
 
   var goalsSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.goals") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "target")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
             Text("Goals")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
           }
 
           Text("Track personal goals with AI-powered progress detection from your conversations")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           Divider()
@@ -983,7 +983,7 @@ extension SettingsContentView {
             settingId: "advanced.goals.autogenerate"
           ) {
             Toggle("", isOn: $goalsAutoGenerateEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: goalsAutoGenerateEnabled) { _, newValue in
                 GoalGenerationService.shared.isAutoGenerationEnabled = newValue
@@ -995,18 +995,18 @@ extension SettingsContentView {
   }
 
   var preferencesSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Multiple Chat Sessions toggle
       settingsCard(settingId: "advanced.preferences.multichat") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "bubble.left.and.bubble.right")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Multiple Chat Sessions")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text(
@@ -1014,32 +1014,32 @@ extension SettingsContentView {
                 ? "Create separate chat threads"
                 : "Single chat synced with mobile app"
             )
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
           }
 
           Spacer()
 
           Toggle("", isOn: $multiChatEnabled)
-            .toggleStyle(.switch)
+            .toggleStyle(OmiToggleStyle())
             .labelsHidden()
         }
       }
 
       settingsCard(settingId: "advanced.preferences.legacyhome") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "rectangle.split.2x1")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Use old Home design")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text("Show the previous chat-first dashboard instead of the simplified Home")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -1053,19 +1053,19 @@ extension SettingsContentView {
 
       // Launch at Login toggle
       settingsCard(settingId: "advanced.preferences.launchatlogin") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "power")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Launch at Login")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text(launchAtLoginManager.statusDescription)
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -1082,7 +1082,7 @@ extension SettingsContentView {
               }
             )
           )
-          .toggleStyle(.switch)
+          .toggleStyle(OmiToggleStyle())
           .labelsHidden()
         }
       }
@@ -1090,22 +1090,22 @@ extension SettingsContentView {
   }
 
   var troubleshootingSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Report Issue
       settingsCard(settingId: "advanced.troubleshooting.reportissue") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "exclamationmark.bubble")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Report Issue")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text("Send app logs and report a problem")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -1115,13 +1115,13 @@ extension SettingsContentView {
             FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
           }) {
             Text("Report")
-              .scaledFont(size: 13, weight: .medium)
-              .foregroundColor(.white)
-              .padding(.horizontal, 14)
-              .padding(.vertical, 6)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(OmiColors.backgroundPrimary)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.xs)
               .background(
-                RoundedRectangle(cornerRadius: 6)
-                  .fill(OmiColors.purplePrimary)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+                  .fill(OmiColors.accent)
               )
           }
           .buttonStyle(.plain)
@@ -1130,19 +1130,19 @@ extension SettingsContentView {
 
       // Rescan Files
       settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "folder.badge.gearshape")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Rescan Files")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text("Re-index your files and update your AI profile")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -1150,13 +1150,13 @@ extension SettingsContentView {
 
           Button(action: { showRescanFilesAlert = true }) {
             Text("Rescan")
-              .scaledFont(size: 13, weight: .medium)
-              .foregroundColor(.white)
-              .padding(.horizontal, 14)
-              .padding(.vertical, 6)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(OmiColors.backgroundPrimary)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.xs)
               .background(
-                RoundedRectangle(cornerRadius: 6)
-                  .fill(OmiColors.purplePrimary)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+                  .fill(OmiColors.accent)
               )
           }
           .buttonStyle(.plain)
@@ -1179,21 +1179,21 @@ extension SettingsContentView {
   // MARK: - Reset Onboarding Subsection
 
   var resetOnboardingSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.resetonboarding") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "arrow.counterclockwise")
-            .scaledFont(size: 16)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textSecondary)
             .frame(width: 24, height: 24)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Reset Onboarding")
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text("Restart setup wizard for this app build only")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -1201,12 +1201,12 @@ extension SettingsContentView {
 
           Button(action: { showResetOnboardingAlert = true }) {
             Text("Reset")
-              .scaledFont(size: 13, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(.black)
-              .padding(.horizontal, 14)
-              .padding(.vertical, 6)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.xs)
               .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                   .fill(.white)
               )
           }

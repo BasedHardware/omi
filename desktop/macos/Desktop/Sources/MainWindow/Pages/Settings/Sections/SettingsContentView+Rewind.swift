@@ -6,27 +6,27 @@ import OmiTheme
 
 extension SettingsContentView {
   var rewindSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Storage Stats
       settingsCard(settingId: "rewind.storage") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "internaldrive.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Storage")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               if let stats = rewindStats {
                 Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                  .scaledFont(size: 13)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textTertiary)
               } else {
                 Text("Loading...")
-                  .scaledFont(size: 13)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textTertiary)
               }
             }
@@ -41,19 +41,19 @@ extension SettingsContentView {
 
       // Excluded Apps
       settingsCard(settingId: "rewind.excludedapps") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "eye.slash.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Excluded Apps")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Screen capture is paused when these apps are active")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -73,19 +73,19 @@ extension SettingsContentView {
           if rewindSettings.excludedApps.isEmpty {
             HStack {
               Spacer()
-              VStack(spacing: 8) {
+              VStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "checkmark.shield")
                   .scaledFont(size: 24)
                   .foregroundColor(OmiColors.textTertiary)
                 Text("No apps excluded")
-                  .scaledFont(size: 13)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textTertiary)
               }
-              .padding(.vertical, 16)
+              .padding(.vertical, OmiSpacing.lg)
               Spacer()
             }
           } else {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: OmiSpacing.sm) {
               ForEach(Array(rewindSettings.excludedApps).sorted(), id: \.self) { appName in
                 ExcludedAppRow(
                   appName: appName,
@@ -116,28 +116,28 @@ extension SettingsContentView {
 
       // Battery Settings
       settingsCard(settingId: "rewind.battery") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "battery.75percent")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Battery Optimization")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
                 "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
               )
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
             }
 
             Spacer()
 
             Text("Automatic")
-              .scaledFont(size: 13, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
           }
         }
@@ -145,19 +145,19 @@ extension SettingsContentView {
 
       // Retention Settings
       settingsCard(settingId: "rewind.retention") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "clock.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Data Retention")
-                .scaledFont(size: 15, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("How long to keep screen recordings")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
             }
 

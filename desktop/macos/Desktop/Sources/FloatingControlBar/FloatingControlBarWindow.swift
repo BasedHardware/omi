@@ -776,7 +776,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.notchRevealProgress = 0.001
         setFrame(targetFrame, display: true, animate: false)
 
-        withAnimation(.easeOut(duration: duration)) {
+        OmiMotion.withGated(.easeOut(duration: duration)) {
             state.notchRevealProgress = 1
         }
 
@@ -1100,7 +1100,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             PushToTalkManager.shared.cancelListening()
         }
 
-        withAnimation(.easeOut(duration: 0.08)) {
+        OmiMotion.withGated(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.activeAgentChatPillID = nil
@@ -1208,7 +1208,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.easeOut(duration: 0.08)) {
+            OmiMotion.withGated(.easeOut(duration: 0.08)) {
                 state.present(.mainResponse)
                 state.isAILoading = false
             }
@@ -1230,7 +1230,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 anchorTop: true
             )
 
-            withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
+            OmiMotion.withGated(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.present(.mainInput)
                 state.isAILoading = false
                 state.setLocalAnswerOverride(nil)
@@ -1264,7 +1264,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseHeightCancellable = nil
         cancelInputHeightObserver()
 
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+        OmiMotion.withGated(.spring(response: 0.22, dampingFraction: 0.9)) {
             state.hideConversationSurface()
         }
         if notchModeEnabled {
@@ -1300,7 +1300,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let token = frameAnimationToken
         state.notchRevealProgress = startProgress
 
-        withAnimation(.easeOut(duration: duration)) {
+        OmiMotion.withGated(.easeOut(duration: duration)) {
             state.notchRevealProgress = 1
         }
 
@@ -1324,7 +1324,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseHeightCancellable = nil
         cancelInputHeightObserver()
 
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+        OmiMotion.withGated(.spring(response: 0.22, dampingFraction: 0.9)) {
             state.clearVisibleConversation()
             state.present(.mainInput)
             state.inputViewHeight = inputPanelHeight
@@ -1364,7 +1364,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         switch type {
         case "data":
             if state.isAILoading {
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = false
                     state.present(.mainResponse)
                 }
@@ -1372,14 +1372,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             }
             state.appendLocalAnswerText(text)
         case "done":
-            withAnimation(.easeOut(duration: 0.12)) {
+            OmiMotion.withGated(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             if !text.isEmpty {
                 state.replaceLocalAnswerText(text)
             }
         case "error":
-            withAnimation(.easeOut(duration: 0.12)) {
+            OmiMotion.withGated(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             state.replaceLocalAnswerText(text.isEmpty ? "An unknown error occurred." : text)
@@ -1850,7 +1850,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func playNotchRevealAnimation() {
         guard notchModeEnabled else { return }
         state.notchRevealProgress = 0.01
-        withAnimation(.easeOut(duration: 0.24)) {
+        OmiMotion.withGated(.easeOut(duration: 0.24)) {
             state.notchRevealProgress = 1
         }
     }
@@ -2254,7 +2254,7 @@ class FloatingControlBarManager {
             AgentPillsManager.shared.markViewed(pillID: pillID)
             window.state.setNotchHoverMenuOpen(false)
             window.makeKeyAndOrderFront(nil)
-            withAnimation(.easeOut(duration: 0.10)) {
+            OmiMotion.withGated(.easeOut(duration: 0.10)) {
                 window.state.present(.agent(pillID))
                 window.state.isAILoading = false
             }
@@ -2617,7 +2617,7 @@ class FloatingControlBarManager {
         let pill = pills[index]
         let start = ContinuousClock.now
         AgentPillsManager.shared.markViewed(pillID: pill.id)
-        withAnimation(.easeOut(duration: 0.10)) {
+        OmiMotion.withGated(.easeOut(duration: 0.10)) {
             window.state.present(.agent(pill.id))
             window.state.isAILoading = false
         }
@@ -2895,7 +2895,7 @@ class FloatingControlBarManager {
                     if let barWindow, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
-                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                            OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
                                 barWindow.state.present(.mainResponse)
                             }
                         }
@@ -4267,7 +4267,7 @@ class FloatingControlBarManager {
                     if let barWindow = barWindow, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
-                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                            OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
                                 barWindow.state.present(.mainResponse)
                             }
                         }
@@ -4345,7 +4345,7 @@ class FloatingControlBarManager {
         // Ensure the response view is visible and resized (handles the case where
         // the sink never fired because no streaming data arrived before the error)
         if !barWindow.state.showingAIResponse {
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+            OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
                 barWindow.state.present(.mainResponse)
             }
             barWindow.resizeToResponseHeightPublic(animated: true)

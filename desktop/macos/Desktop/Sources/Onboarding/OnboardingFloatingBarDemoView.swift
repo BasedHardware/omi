@@ -30,8 +30,8 @@ struct OnboardingFloatingBarDemoView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
@@ -39,8 +39,8 @@ struct OnboardingFloatingBarDemoView: View {
             Spacer()
 
             // Content
-            VStack(spacing: 28) {
-                VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.xxl) {
+                VStack(spacing: OmiSpacing.md) {
                     if !barActivated {
                         Text("Omi sees your screen and gives you hyper-personalized responses")
                             .font(.system(size: 20, weight: .bold))
@@ -63,8 +63,8 @@ struct OnboardingFloatingBarDemoView: View {
                 }
 
                 if !barActivated {
-                    VStack(spacing: 12) {
-                        HStack(spacing: 6) {
+                    VStack(spacing: OmiSpacing.md) {
+                        HStack(spacing: OmiSpacing.xs) {
                             ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { index, symbol in
                                 if index > 0 {
                                     Text("+")
@@ -79,7 +79,7 @@ struct OnboardingFloatingBarDemoView: View {
                             .font(.system(size: 13))
                             .foregroundColor(OmiColors.textTertiary)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, OmiSpacing.xxs)
                     .transition(.opacity)
                 } else {
                     MacLineupPreview()
@@ -89,7 +89,7 @@ struct OnboardingFloatingBarDemoView: View {
 
             }
             .padding(.top, 88)
-            .padding(.horizontal, 40)
+            .padding(.horizontal, OmiSpacing.page)
 
             Spacer()
 
@@ -100,13 +100,13 @@ struct OnboardingFloatingBarDemoView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.black)
                         .frame(maxWidth: 280)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, OmiSpacing.md)
                         .background(Color.white)
-                        .cornerRadius(12)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
-                .padding(.bottom, 32)
+                .padding(.bottom, OmiSpacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -134,7 +134,7 @@ struct OnboardingFloatingBarDemoView: View {
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
             guard !barActivated,
                   FloatingControlBarManager.shared.barState?.showingAIConversation == true else { return }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            OmiMotion.withGated(.spring(response: 0.4, dampingFraction: 0.8)) {
                 barActivated = true
             }
         }
@@ -152,14 +152,14 @@ struct OnboardingFloatingBarDemoView: View {
             if barState.showingAIResponse,
                let msg = barState.currentAIMessage(from: FloatingControlBarManager.shared.sharedFloatingProvider),
                !msg.isStreaming {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                OmiMotion.withGated(.easeInOut(duration: 0.3)) {
                     showContinue = true
                 }
                 return
             }
         }
         // Timeout — show Continue anyway
-        withAnimation(.easeInOut(duration: 0.3)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             showContinue = true
         }
     }
@@ -170,13 +170,13 @@ struct OnboardingFloatingBarDemoView: View {
         Text(key)
             .font(.system(size: 15, weight: .medium, design: .rounded))
             .foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundTertiary)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
@@ -197,9 +197,9 @@ private struct MacLineupPreview: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 24)
+                RoundedRectangle(cornerRadius: OmiChrome.cardRadius)
                     .fill(Color.white.opacity(0.06))
                     .frame(height: 280)
                     .overlay(

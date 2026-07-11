@@ -143,7 +143,7 @@ actor AppIconCache {
 
 #if canImport(PreviewsMacros)
 #Preview {
-    HStack(spacing: 16) {
+    HStack(spacing: OmiSpacing.lg) {
         AppIconView(appName: "Safari", size: 32)
         AppIconView(appName: "Xcode", size: 32)
         AppIconView(appName: "Finder", size: 32)

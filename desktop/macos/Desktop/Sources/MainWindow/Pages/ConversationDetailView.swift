@@ -120,35 +120,35 @@ struct ConversationDetailView: View {
                     // Card container wrapping summary content
                     VStack(alignment: .leading, spacing: 0) {
                         // Card header bar
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             Image(systemName: "doc.text")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textTertiary)
                             Text("Conversation Details")
-                                .scaledFont(size: 13, weight: .medium)
+                                .scaledFont(size: OmiType.body, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                             Spacer()
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, OmiSpacing.lg)
+                        .padding(.vertical, OmiSpacing.sm)
                         .background(OmiColors.backgroundTertiary.opacity(0.4))
 
-                        VStack(alignment: .leading, spacing: 24) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                             summaryContent
                         }
-                        .padding(24)
+                        .padding(OmiSpacing.xxl)
                     }
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                             .fill(OmiColors.backgroundSecondary.opacity(0.6))
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                             .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
                     )
                     .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 8)
-                    .padding(24)
+                    .padding(OmiSpacing.xxl)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -171,7 +171,7 @@ struct ConversationDetailView: View {
                 conversationId: conversation.id,
                 transcriptDrawerOpen: showTranscriptDrawer
             )
-            withAnimation(.easeOut(duration: 0.5)) {
+            OmiMotion.withGated(.easeOut(duration: 0.5)) {
                 hasAppeared = true
             }
         }
@@ -220,7 +220,7 @@ struct ConversationDetailView: View {
             guard let conversationId = notification.userInfo?["conversationId"] as? String,
                   conversationId == displayConversation.id
             else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 showTranscriptDrawer = true
             }
         }
@@ -281,28 +281,28 @@ struct ConversationDetailView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // Back button
             Button(action: onBack) {
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                     Image(systemName: "chevron.left")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                     Text("Back")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                 }
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(OmiColors.accent)
             }
             .buttonStyle(.plain)
 
             // Emoji
             Text(displayConversation.structured.emoji.isEmpty ? "\u{1F4AC}" : displayConversation.structured.emoji)
-                .scaledFont(size: 28)
+                .scaledFont(size: OmiType.title)
 
             // Title + timestamp subtitle
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                HStack(spacing: OmiSpacing.sm) {
                     Text(displayConversation.title)
-                        .scaledFont(size: 18, weight: .semibold)
+                        .scaledFont(size: OmiType.heading, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
@@ -312,7 +312,7 @@ struct ConversationDetailView: View {
                         showEditDialog = true
                     }) {
                         Image(systemName: "pencil")
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -320,7 +320,7 @@ struct ConversationDetailView: View {
                 }
 
                 Text(formattedTimeRange)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -337,8 +337,8 @@ struct ConversationDetailView: View {
             // Inline action buttons
             inlineActionButtons
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.vertical, OmiSpacing.lg)
         .background(OmiColors.backgroundTertiary.opacity(0.5))
         .alert("Edit Conversation Title", isPresented: $showEditDialog) {
             TextField("Title", text: $editedTitle)
@@ -364,22 +364,22 @@ struct ConversationDetailView: View {
 
     private var viewTranscriptButton: some View {
         Button(action: {
-            withAnimation(.easeInOut(duration: 0.25)) {
+            OmiMotion.withGated(.easeInOut(duration: 0.25)) {
                 showTranscriptDrawer.toggle()
             }
         }) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "text.quote")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                 Text(showTranscriptDrawer ? "Hide Transcript" : "View Transcript")
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
             }
-            .foregroundColor(showTranscriptDrawer ? .white : OmiColors.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .foregroundColor(showTranscriptDrawer ? OmiColors.backgroundPrimary : OmiColors.textSecondary)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xs)
             .background(
                 Capsule()
-                    .fill(showTranscriptDrawer ? OmiColors.purplePrimary : OmiColors.backgroundTertiary)
+                    .fill(showTranscriptDrawer ? OmiColors.accent : OmiColors.backgroundTertiary)
             )
         }
         .buttonStyle(.plain)
@@ -388,11 +388,11 @@ struct ConversationDetailView: View {
     // MARK: - Inline Action Buttons
 
     private var inlineActionButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
             // Copy link button
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -407,7 +407,7 @@ struct ConversationDetailView: View {
             // Copy transcript button
             Button(action: copyTranscript) {
                 Image(systemName: "doc.on.doc")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -446,8 +446,8 @@ struct ConversationDetailView: View {
                     }
                 } label: {
                     Image(systemName: displayConversation.folderId != nil ? "folder.fill" : "folder")
-                        .scaledFont(size: 14)
-                        .foregroundColor(displayConversation.folderId != nil ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                        .scaledFont(size: OmiType.body)
+                        .foregroundColor(displayConversation.folderId != nil ? OmiColors.accent : OmiColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
                             Circle()
@@ -462,7 +462,7 @@ struct ConversationDetailView: View {
             // Delete button
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.error)
                     .frame(width: 28, height: 28)
                     .background(
@@ -541,10 +541,10 @@ struct ConversationDetailView: View {
 
     private var statusBadge: some View {
         Text(displayConversation.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-            .scaledFont(size: 11, weight: .medium)
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(statusColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xxs)
             .background(
                 Capsule()
                     .fill(statusColor.opacity(0.2))
@@ -603,24 +603,24 @@ struct ConversationDetailView: View {
     private var transcriptDrawerView: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Drawer header
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "text.quote")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Transcript")
-                    .scaledFont(size: 15, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 // Segment count badge
                 Text("\(displayConversation.transcriptSegments.count)")
-                    .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.purplePrimary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
+                    .foregroundColor(OmiColors.accent)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.hairline)
                     .background(
                         Capsule()
-                            .fill(OmiColors.purplePrimary.opacity(0.15))
+                            .fill(OmiColors.accent.opacity(0.15))
                     )
 
                 Spacer()
@@ -628,7 +628,7 @@ struct ConversationDetailView: View {
                 // Copy button
                 Button(action: copyTranscript) {
                     Image(systemName: "doc.on.doc")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
@@ -641,12 +641,12 @@ struct ConversationDetailView: View {
 
                 // Close button
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    OmiMotion.withGated(.easeInOut(duration: 0.25)) {
                         showTranscriptDrawer = false
                     }
                 }) {
                     Image(systemName: "xmark")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
@@ -657,42 +657,42 @@ struct ConversationDetailView: View {
                 .buttonStyle(.plain)
                 .help("Close transcript")
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.vertical, OmiSpacing.md)
             .background(OmiColors.backgroundTertiary.opacity(0.5))
 
             // Drawer content
             if displayConversation.transcriptPresenceState == .lockedOrRedacted && !isLoadingConversation {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "lock")
-                        .scaledFont(size: 40)
+                        .scaledFont(size: OmiType.hero)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                     Text("Transcript locked")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
                 // Empty state
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "text.quote")
-                        .scaledFont(size: 40)
+                        .scaledFont(size: OmiType.hero)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                     Text("No transcript available")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if isLoadingConversation {
                 // Loading state
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     ProgressView()
                         .scaleEffect(0.8)
 
                     Text("Loading transcript...")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -700,10 +700,10 @@ struct ConversationDetailView: View {
                 // LazyVStack is a DIRECT child of ScrollView so it gets bounded proposed height
                 // and only materializes visible children.
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
                         transcriptBubblesContent
                     }
-                    .padding(16)
+                    .padding(OmiSpacing.lg)
                 }
             }
         }
@@ -726,7 +726,7 @@ struct ConversationDetailView: View {
                     selectedSegmentForNaming = segment
                 }
             )
-            .padding(.horizontal, 16)
+            .padding(.horizontal, OmiSpacing.lg)
         }
     }
 
@@ -774,36 +774,36 @@ struct ConversationDetailView: View {
 
     /// Shown while a lazily-deferred conversation is being enriched on first open.
     private var deferredProcessingSection: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             ProgressView()
                 .controlSize(.small)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 Text("Processing conversation…")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Text("Generating summary and action items")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
             }
             Spacer()
         }
-        .padding(16)
+        .padding(OmiSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(12)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 
     // MARK: - Overview Section
 
     private var overviewSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "star.fill")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(Color(red: 0.95, green: 0.75, blue: 0.15))
 
                 Text("Summary")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
             }
 
@@ -817,7 +817,7 @@ struct ConversationDetailView: View {
     // MARK: - Metadata Section
 
     private var metadataSection: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // Source chip (device indicator)
             sourceChip
 
@@ -856,17 +856,17 @@ struct ConversationDetailView: View {
     }
 
     private func metadataChip(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
             Image(systemName: icon)
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text(text)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textSecondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
         .background(
             Capsule()
                 .fill(OmiColors.backgroundTertiary)
@@ -876,22 +876,22 @@ struct ConversationDetailView: View {
     // MARK: - App Results Section
 
     private var appResultsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
                 Text("App Insights")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
 
                 Button(action: { showAppSelector = true }) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                         Text("Reprocess")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                     }
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(OmiColors.accent)
                 }
                 .buttonStyle(.plain)
                 .disabled(isReprocessing)
@@ -909,10 +909,10 @@ struct ConversationDetailView: View {
     // MARK: - Suggested Apps Section
 
     private var suggestedAppsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
                 Text("Try with Apps")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -925,17 +925,17 @@ struct ConversationDetailView: View {
 
             if memoryApps.isEmpty && !appProvider.isLoading {
                 Text("Enable apps with memory capability to get additional insights")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .fill(OmiColors.backgroundSecondary)
                     )
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                         ForEach(Array(memoryApps)) { app in
                             SuggestedAppCard(
                                 app: app,
@@ -981,51 +981,51 @@ struct ConversationDetailView: View {
 
     private var actionItemsSection: some View {
         let activeItems = displayConversation.structured.actionItems.filter { !$0.deleted }
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "checklist")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Action Items")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Count badge
                 Text("\(activeItems.count)")
-                    .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.purplePrimary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
+                    .foregroundColor(OmiColors.accent)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.hairline)
                     .background(
                         Capsule()
-                            .fill(OmiColors.purplePrimary.opacity(0.15))
+                            .fill(OmiColors.accent.opacity(0.15))
                     )
 
                 Spacer()
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 ForEach(activeItems) { item in
-                    HStack(alignment: .top, spacing: 10) {
+                    HStack(alignment: .top, spacing: OmiSpacing.sm) {
                         Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-                            .scaledFont(size: 16)
+                            .scaledFont(size: OmiType.subheading)
                             .foregroundColor(item.completed ? OmiColors.success : OmiColors.textTertiary)
 
                         Text(item.description)
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(item.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
                             .textSelection(.enabled)
                             .strikethrough(item.completed, color: OmiColors.textTertiary)
                     }
-                    .padding(12)
+                    .padding(OmiSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                             .fill(OmiColors.backgroundTertiary)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                             .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -1063,9 +1063,9 @@ struct AppResultCard: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             // Header
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 if let app = app {
                     AsyncImage(url: URL(string: app.image)) { phase in
                         switch phase {
@@ -1074,40 +1074,40 @@ struct AppResultCard: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         default:
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .fill(OmiColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         Text(app.name)
-                            .scaledFont(size: 13, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.author)
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "app.fill")
-                        .scaledFont(size: 16)
+                        .scaledFont(size: OmiType.subheading)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(OmiColors.backgroundTertiary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
 
                     Text("App")
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                 }
 
                 Spacer()
 
-                Button(action: { withAnimation { isExpanded.toggle() } }) {
+                Button(action: { OmiMotion.withGated { isExpanded.toggle() } }) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -1116,13 +1116,13 @@ struct AppResultCard: View {
             // Content
             if isExpanded || result.content.count < 200 {
                 Text(result.content)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .textSelection(.enabled)
                     .lineSpacing(4)
             } else {
                 Text(result.content.prefix(200) + "...")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .textSelection(.enabled)
                     .lineSpacing(4)
@@ -1130,7 +1130,7 @@ struct AppResultCard: View {
 
             // "Generated by" footer
             if let app = app {
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                     AsyncImage(url: URL(string: app.image)) { phase in
                         switch phase {
                         case .success(let image):
@@ -1138,28 +1138,28 @@ struct AppResultCard: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         default:
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                                 .fill(OmiColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 16, height: 16)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.stripRadius))
 
                     Text("Generated by \(app.name)")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.xxs)
                 .background(
                     Capsule()
                         .fill(OmiColors.backgroundTertiary.opacity(0.6))
                 )
             }
         }
-        .padding(14)
+        .padding(OmiSpacing.md)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundSecondary)
         )
     }
@@ -1176,7 +1176,7 @@ struct SuggestedAppCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 8) {
+            VStack(spacing: OmiSpacing.sm) {
                 ZStack {
                     AsyncImage(url: URL(string: app.image)) { phase in
                         switch phase {
@@ -1185,15 +1185,15 @@ struct SuggestedAppCard: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         default:
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                 .fill(OmiColors.backgroundTertiary)
                         }
                     }
                     .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
                     if isLoading {
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                             .fill(Color.black.opacity(0.5))
                             .frame(width: 56, height: 56)
 
@@ -1204,15 +1204,15 @@ struct SuggestedAppCard: View {
                 }
 
                 Text(app.name)
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .lineLimit(1)
             }
             .frame(width: 80)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 8)
+            .padding(.vertical, OmiSpacing.sm)
+            .padding(.horizontal, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                     .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
             )
         }
@@ -1237,14 +1237,14 @@ struct AppSelectorSheet: View {
             // Header
             HStack {
                 Text("Select App")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 20)
+                        .scaledFont(size: OmiType.heading)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -1256,17 +1256,17 @@ struct AppSelectorSheet: View {
 
             // Apps list
             if apps.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "square.grid.2x2")
-                        .scaledFont(size: 40)
+                        .scaledFont(size: OmiType.hero)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text("No Apps Available")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     Text("Enable apps with memory capability to reprocess conversations")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -1274,7 +1274,7 @@ struct AppSelectorSheet: View {
                 .padding()
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: OmiSpacing.hairline) {
                         ForEach(apps) { app in
                             AppSelectorRow(
                                 app: app,
@@ -1286,8 +1286,8 @@ struct AppSelectorSheet: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.sm)
                 }
             }
         }
@@ -1306,7 +1306,7 @@ struct AppSelectorRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 AsyncImage(url: URL(string: app.image)) { phase in
                     switch phase {
                     case .success(let image):
@@ -1314,20 +1314,20 @@ struct AppSelectorRow: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     default:
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                             .fill(OmiColors.backgroundTertiary)
                     }
                 }
                 .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(app.name)
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(app.author)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -1338,14 +1338,14 @@ struct AppSelectorRow: View {
                         .scaleEffect(0.7)
                 } else if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .scaledFont(size: 18)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.heading)
+                        .foregroundColor(OmiColors.accent)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                     .fill(isSelected || isHovering ? OmiColors.backgroundTertiary : Color.clear)
             )
         }
