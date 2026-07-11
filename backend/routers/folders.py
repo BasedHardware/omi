@@ -16,7 +16,7 @@ from models.folder import (
     FolderMutationResponse,
     BulkMoveConversationsResponse,
 )
-from models.conversation import Conversation
+from models.conversation import Conversation, ConversationMutationResponse
 from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
 
@@ -144,7 +144,9 @@ def get_folder_conversations(
     return valid_conversations
 
 
-@router.patch('/v1/conversations/{conversation_id}/folder', response_model=FolderMutationResponse, tags=['folders'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/folder', response_model=ConversationMutationResponse, tags=['folders']
+)
 def move_conversation_to_folder(
     conversation_id: str, request: MoveConversationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -161,7 +163,7 @@ def move_conversation_to_folder(
             raise HTTPException(status_code=404, detail="Folder not found")
 
     folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
-    return {"status": "ok"}
+    return {"status": "ok", "conversation": conversations_db.get_conversation(uid, conversation_id)}
 
 
 @router.post(

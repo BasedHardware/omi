@@ -1,0 +1,8 @@
+{
+  "version": "0.12.42",
+  "date": "2026-07-07",
+  "changes": [
+    "Fixed Gemini realtime voice sessions failing to start for managed users due to a malformed token-mint request",
+    "Fixed a duplicate AppState at desktop launch that could cause double lifecycle observers and fragile state initialization"
+  ]
+}

@@ -20,8 +20,7 @@ async def get_omi_github_releases(
 
     When tag_filter is provided, paginates through all pages and returns only
     releases whose tag_name matches the filter. Without tag_filter, returns
-    the first page of releases unfiltered (sufficient for desktop releases
-    which are always recent).
+    the first page of releases unfiltered.
 
     Resilience: if GitHub returns errors or an empty list during an upstream
     outage, we fall back to a longer-lived "last known good" cache so the

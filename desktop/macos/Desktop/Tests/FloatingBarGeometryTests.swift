@@ -20,6 +20,57 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(frame.size, compactSize)
     }
 
+    func testDraggableBarForcesPillPresentationOnNotchedDisplays() {
+        XCTAssertFalse(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: false,
+                draggableBarEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: true,
+                draggableBarEnabled: true
+            )
+        )
+        XCTAssertTrue(
+            FloatingControlBarWindow.shouldUseNotchIsland(
+                displayHasCameraHousing: true,
+                hasActiveIsland: false,
+                draggableBarEnabled: false
+            )
+        )
+    }
+
+    func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {
+        let compactFrame = NSRect(x: 586, y: 876, width: 268, height: 58)
+        let expandedFrame = FloatingControlBarGeometry.topCenterAnchoredFrame(
+            currentFrame: compactFrame,
+            targetSize: NSSize(width: 430, height: 110)
+        )
+
+        XCTAssertEqual(expandedFrame.midX, compactFrame.midX)
+        XCTAssertEqual(expandedFrame.maxY, compactFrame.maxY)
+        XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
+    }
+
+    func testNotchIslandExpansionRecentersShiftedPanelOnDisplay() {
+        let shiftedFrame = NSRect(x: 606, y: 876, width: 268, height: 58)
+        let expandedFrame = FloatingControlBarGeometry.topAnchoredFrame(
+            currentFrame: shiftedFrame,
+            targetSize: NSSize(width: 430, height: 110),
+            screenFrame: visibleFrame,
+            pinsToScreenCenter: true
+        )
+
+        XCTAssertEqual(shiftedFrame.midX, 740)
+        XCTAssertEqual(expandedFrame.midX, visibleFrame.midX)
+        XCTAssertEqual(expandedFrame.maxY, visibleFrame.maxY)
+        XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
+    }
+
     func testPTTExpansionKeepsCompactPillCenter() {
         let compactFrame = FloatingControlBarGeometry.defaultPillFrame(
             size: compactSize,

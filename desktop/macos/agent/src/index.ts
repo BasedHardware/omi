@@ -56,7 +56,7 @@ import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
@@ -85,6 +85,7 @@ import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-stor
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 import { failureFromError } from "./runtime/failures.js";
 import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
+import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -288,22 +289,42 @@ function startOmiToolsRelay(): Promise<string> {
               }
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
-                  const controlToolContext = agentControlToolContext
-                    ? {
+                  const controlOwnerId = activeControlToolOwnerId({
+                    requestKey: controlRequestKey({ requestId, clientId }),
+                    ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                  });
+                  let result: string;
+                  try {
+                    if (!agentControlToolContext) {
+                      throw new Error("Agent runtime kernel is not ready");
+                    }
+                    const activeSession = requireControlSessionPolicy(
+                      resolvedCorrelation.sessionId,
+                      controlOwnerId,
+                    );
+                    result = await handleAgentControlToolCall(
+                      {
                         ...agentControlToolContext,
-                        getOwnerId: () =>
-                          activeControlToolOwnerId({
-                            requestKey: controlRequestKey({ requestId, clientId }),
-                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                          }),
-                      }
-                    : undefined;
-                  const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
-                    : JSON.stringify({
-                        ok: false,
-                        error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-                      });
+                        callerSessionId: resolvedCorrelation.sessionId,
+                        executionRole: activeSession.executionRole,
+                        providerBoundary: activeSession.providerBoundary,
+                        defaultAdapterId: activeSession.defaultAdapterId,
+                        getOwnerId: () => controlOwnerId,
+                      },
+                      msg.name,
+                      msg.input ?? {},
+                    );
+                  } catch (error) {
+                    result = JSON.stringify({
+                      ok: false,
+                      error: {
+                        code: error instanceof Error && error.message === "Agent runtime kernel is not ready"
+                          ? "runtime_not_ready"
+                          : "control_tool_failed",
+                        message: error instanceof Error ? error.message : String(error),
+                      },
+                    });
+                  }
                   try {
                     client.write(
                       JSON.stringify({
@@ -619,6 +640,15 @@ function buildMcpServers(
       if (context.attemptId) {
         omiToolsEnv.push({ name: "OMI_ATTEMPT_ID", value: context.attemptId });
       }
+      if (context.surfaceKind) {
+        omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
+      }
+      if (context.externalRefKind) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_KIND", value: context.externalRefKind });
+      }
+      if (context.externalRefId) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_ID", value: context.externalRefId });
+      }
     }
     if (cwd) {
       omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
@@ -626,6 +656,13 @@ function buildMcpServers(
     if (sessionKey === "onboarding") {
       omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
     }
+    if (context?.screenContext === true) {
+      omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
+    }
+    omiToolsEnv.push({
+      name: "OMI_EXECUTION_ROLE",
+      value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
+    });
     servers.push({
       name: "omi-tools",
       command: process.execPath,
@@ -689,6 +726,13 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   const defaultFromInput =
     typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
+}
+
+function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
+  if (!sessionId || !ownerId || !agentControlToolContext) {
+    throw new Error("missing active control session policy");
+  }
+  return agentControlToolContext.kernel.executionPolicyForOwnedSession(sessionId, ownerId);
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
@@ -821,10 +865,29 @@ async function main(): Promise<void> {
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
-  registry.register("acp", () => acpAdapter, 1);
+  // ACP reads the user's local Claude Code credential.  Do not even expose it
+  // to managed Omi runs; switching to User Claude restarts the bridge with
+  // `defaultAdapterId === "acp"` and registers it there.
+  if (defaultAdapterId === "acp") {
+    registry.register("acp", () => acpAdapter, 1);
+  }
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
+  const recoverRunInput = (adapterId: string) => {
+    if (adapterId !== "acp") return {};
+    let recoveries = 0;
+    return {
+      maxAttempts: 3,
+      recoverAfterError: async (error: unknown) => {
+        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
+        recoveries += 1;
+        logErr("ACP auth required during run; starting OAuth flow before retry");
+        await startAuthFlow();
+        return true;
+      },
+    };
+  };
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {
@@ -920,11 +983,13 @@ async function main(): Promise<void> {
   };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
+  } else if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+    logErr("Pi-mono adapter unavailable; starting the non-production control-only runtime");
   }
   if (!hermesAvailable && defaultAdapterId === "hermes") {
     const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
@@ -940,8 +1005,12 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    defaultAdapterId,
+    providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
+    executionRole: "coordinator",
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
+    recoverRunInput,
   };
   const transport = new JsonlTransport({
     kernel,
@@ -949,8 +1018,9 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error) => error instanceof AcpError && error.code === -32000,
-    onRecoverableError: async () => {
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    onRecoverableError: async (_error, adapterId) => {
+      if (adapterId !== "acp") return;
       logErr("ACP auth required during query; starting OAuth flow before retry");
       await startAuthFlow();
     },
@@ -1361,6 +1431,9 @@ async function main(): Promise<void> {
         const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
         const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
         const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
+        if (surfaceKind === "workstream" && externalRefKind === "workstream" && externalRefId.trim()) {
+          kernel.resolveWorkstreamSession({ ownerId, workstreamId: externalRefId });
+        }
         const turns = Array.isArray(msg.turns) ? msg.turns : [];
         const imported = kernel.importConversationTurns({
           ownerId,
@@ -1416,25 +1489,25 @@ async function main(): Promise<void> {
           interrupted: record.interrupted === true,
           idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
         });
-        if (result.recorded) {
-          send({
-            type: "turn_recorded",
-            protocolVersion: record.protocolVersion,
-            requestId: record.requestId,
-            clientId: record.clientId,
-            conversationId: result.conversationId,
-            surfaceKind,
-            externalRefKind,
-            externalRefId,
-            userText: userText.trim(),
-            assistantText: assistantText.trim(),
-            origin,
-            interrupted: record.interrupted === true,
-            idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
-            userTurnId: result.userTurn?.turnId,
-            assistantTurnId: result.assistantTurn?.turnId,
-          });
-        }
+        send({
+          type: "turn_recorded",
+          protocolVersion: record.protocolVersion,
+          requestId: record.requestId,
+          clientId: record.clientId,
+          conversationId: result.conversationId,
+          surfaceKind,
+          externalRefKind,
+          externalRefId,
+          userText: userText.trim(),
+          assistantText: assistantText.trim(),
+          origin,
+          interrupted: record.interrupted === true,
+          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
+          userTurnId: result.userTurn?.turnId,
+          assistantTurnId: result.assistantTurn?.turnId,
+          recorded: result.recorded,
+          duplicate: result.duplicate,
+        });
         break;
       }
 
@@ -1444,8 +1517,11 @@ async function main(): Promise<void> {
         const requestId = seed.requestId.trim();
         let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
         let context = "";
+        let idempotencyKeys: string[] = [];
         if (conversationId) {
-          context = kernel.getVoiceSeedContext({ conversationId });
+          const snapshot = kernel.getVoiceSeedSnapshot({ conversationId });
+          context = snapshot.context;
+          idempotencyKeys = snapshot.idempotencyKeys;
         } else {
           const surfaceKind = typeof seed.surfaceKind === "string" ? seed.surfaceKind : "main_chat";
           const externalRefKind = typeof seed.externalRefKind === "string" ? seed.externalRefKind : "chat";
@@ -1456,6 +1532,7 @@ async function main(): Promise<void> {
           });
           conversationId = resolved.conversationId;
           context = resolved.context;
+          idempotencyKeys = resolved.idempotencyKeys;
         }
         send({
           type: "voice_seed_context",
@@ -1464,6 +1541,7 @@ async function main(): Promise<void> {
           clientId: seed.clientId,
           conversationId,
           context,
+          idempotencyKeys,
         });
         break;
       }
@@ -1549,6 +1627,8 @@ async function main(): Promise<void> {
             idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
             userTurnId: result.userTurn?.turnId,
             assistantTurnId: result.assistantTurn?.turnId,
+            recorded: true,
+            duplicate: false,
           });
         }
         break;

@@ -17,12 +17,26 @@ class TranscriptionService {
         /// PTT live transcription via `/v2/voice-message/transcribe-stream` — transcription only,
         /// no conversation lifecycle. Supports "finalize" text message for flush.
         case ptt
+
+        var telemetryLabel: String {
+            switch self {
+            case .conversation: return "conversation"
+            case .ptt: return "ptt"
+            }
+        }
     }
 
     /// Translation from backend (lang code + translated text)
     struct BackendTranslation: Decodable {
         let lang: String
         let text: String
+    }
+
+    /// The backend-selected provider for one pre-recorded PTT request.
+    struct BatchTranscriptionResult: Equatable {
+        let transcript: String?
+        let provider: String?
+        let model: String?
     }
 
     /// Transcript segment from Python backend
@@ -322,7 +336,7 @@ class TranscriptionService {
             guard let self = self else { return }
             do {
                 let authService = await MainActor.run { AuthService.shared }
-                let authHeader = try await authService.getAuthHeader()
+                let authHeader = try await authService.getAuthHeader(forceRefresh: self.reconnectAttempts > 0)
                 self.connectToBackend(authHeader: authHeader)
             } catch {
                 logError("TranscriptionService: Failed to get auth token", error: error)
@@ -391,6 +405,15 @@ class TranscriptionService {
         // Create URL request with authorization header
         var request = URLRequest(url: url)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Keep capture provenance on the WebSocket upgrade as well as regular
+        // API requests. The backend stamps this onto the conversation, which
+        // flows through evidence into canonical memory device filtering.
+        request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+        request.setValue(ClientDeviceService.shared.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
+        request.setValue(
+          Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+          forHTTPHeaderField: "X-App-Version"
+        )
 
         // BYOK: attach user keys so the transcription backend can use the user's
         // Deepgram token for this session (and any downstream LLM calls).
@@ -515,7 +538,13 @@ class TranscriptionService {
                 self.connect()
             }
         } else if reconnectAttempts >= maxReconnectAttempts {
-            log("TranscriptionService: Max reconnect attempts reached")
+            log(
+                "TranscriptionService: Max reconnect attempts reached "
+                    + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
+            DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
+                reconnectAttempts: reconnectAttempts,
+                streamingMode: streamingMode.telemetryLabel
+            )
             onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
         }
     }
@@ -532,7 +561,13 @@ class TranscriptionService {
 
         guard shouldReconnect, reconnectAttempts < maxReconnectAttempts else {
             if reconnectAttempts >= maxReconnectAttempts {
-                log("TranscriptionService: Max reconnect attempts reached (pre-connect)")
+                log(
+                    "TranscriptionService: Max reconnect attempts reached (pre-connect) "
+                        + "(failure_class=ws_reconnect_exhausted recovery_action=surface_error recovery_result=exhausted)")
+                DesktopDiagnosticsManager.shared.recordTranscriptionWsReconnectExhausted(
+                    reconnectAttempts: reconnectAttempts,
+                    streamingMode: streamingMode.telemetryLabel
+                )
                 onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
             }
             return
@@ -651,13 +686,13 @@ enum WebSocketConnectionAttempt {
 
 extension TranscriptionService {
     /// Transcribe a complete audio buffer using the Python backend `/v2/voice-message/transcribe`.
-    /// Returns the transcript string, or nil if transcription failed.
+    /// Returns the transcript plus the provider/model selected by the backend.
     static func batchTranscribe(
         audioData: Data,
         language: String = "en",
         apiKey: String? = nil,
         contextKeywords: [String] = []
-    ) async throws -> String? {
+    ) async throws -> BatchTranscriptionResult {
         // Always use Firebase auth + Python backend
         let authService = await MainActor.run { AuthService.shared }
         let authHeader = try await authService.getAuthHeader()
@@ -705,11 +740,17 @@ extension TranscriptionService {
             throw TranscriptionError.invalidResponse
         }
 
-        // Parse Python backend response: {"transcript": "...", "language": "..."}
+        // Parse Python backend response, including the provider selected by routed STT.
         let json = try JSONDecoder().decode(PythonTranscribeResponse.self, from: data)
         let transcript = json.transcript.isEmpty ? nil : json.transcript
-        log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
-        return transcript
+        let result = BatchTranscriptionResult(
+            transcript: transcript,
+            provider: json.stt_provider,
+            model: json.stt_model)
+        log(
+            "TranscriptionService: Batch transcription result provider=\(result.provider ?? "unknown") "
+                + "model=\(result.model ?? "unknown") transcriptCharacters=\(transcript?.count ?? 0)")
+        return result
     }
 
 }
@@ -718,4 +759,6 @@ extension TranscriptionService {
 private struct PythonTranscribeResponse: Decodable {
     let transcript: String
     let language: String?
+    let stt_provider: String?
+    let stt_model: String?
 }

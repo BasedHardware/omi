@@ -8,7 +8,7 @@ struct AIResponseView: View {
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
-    @State private var followUpText: String = ""
+    @Binding var followUpText: String
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
@@ -25,7 +25,8 @@ struct AIResponseView: View {
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
-    var onOpenAgent: ((UUID) -> Void)?
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -132,6 +133,30 @@ struct AIResponseView: View {
                 return ["thinking", id, text].joined(separator: "\u{1E}")
             case .discoveryCard(let id, let title, let summary, let fullText):
                 return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+                return [
+                    "agentSpawn",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId,
+                    runId,
+                    title,
+                    objective,
+                ].joined(separator: "\u{1E}")
+            case .agentCompletion(
+                let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+            ):
+                return [
+                    "agentCompletion",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId ?? "",
+                    runId ?? "",
+                    title,
+                    promptSnippet,
+                    output,
+                    status,
+                ].joined(separator: "\u{1E}")
             }
         }.joined(separator: "\u{1D}")
     }
@@ -184,7 +209,11 @@ struct AIResponseView: View {
                         .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
-                    ToolCallsGroup(calls: calls, onOpenAgent: onOpenAgent)
+                    ToolCallsGroup(
+                        calls: calls,
+                        onOpenAgent: onOpenAgent,
+                        onOpenAgentRef: onOpenAgentRef
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
@@ -192,6 +221,28 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                    AgentSpawnCard(
+                        title: title,
+                        objective: objective,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentCompletion(
+                    _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+                ):
+                    // Keep the completion card + resources on the same message —
+                    // never EmptyView the card while leaving a standalone artifact strip.
+                    AgentCompletionCard(
+                        title: title,
+                        promptSnippet: promptSnippet,
+                        output: output,
+                        status: status,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else if !message.text.isEmpty {
@@ -211,13 +262,25 @@ struct AIResponseView: View {
         }
     }
 
+    private func openAgentRef(_ ref: AgentTimelineRef, completion: @escaping (Bool) -> Void) {
+        if let onOpenAgentRef {
+            onOpenAgentRef(ref, completion)
+            return
+        }
+        if let pillId = ref.pillId, let onOpenAgent {
+            onOpenAgent(pillId, completion)
+            return
+        }
+        completion(false)
+    }
+
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
         let grouped = ContentBlockGroup.group(message.contentBlocks)
         guard !message.isStreaming else { return grouped }
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
             case .toolCalls(_, let calls):
                 return calls.contains { $0.spawnedAgentID != nil }
@@ -521,7 +584,7 @@ struct AIResponseView: View {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         let staged = attachments
         guard !trimmed.isEmpty || !staged.isEmpty else { return }
-        followUpText = ""
+        followUpText = trimmed
         attachments = []
         if !staged.isEmpty {
             FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)

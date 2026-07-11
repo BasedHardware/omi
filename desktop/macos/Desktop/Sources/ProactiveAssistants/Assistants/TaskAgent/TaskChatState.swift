@@ -1,16 +1,18 @@
 import SwiftUI
 import Combine
 
-/// Per-task chat UI state. Execution uses the shared `TaskChatRuntime` bridge and
-/// kernel-owned `task_chat` sessions — no per-task bridge or session identity.
+/// Task-scoped UI projected over one kernel-owned workstream conversation.
 @MainActor
 class TaskChatState: ObservableObject {
-    let taskId: String
+    let workstreamId: String
+    @Published private(set) var activeTaskId: String
 
     @Published var messages: [ChatMessage] = []
     @Published var isSending = false
     @Published var isStopping = false
-    @Published var draftText = ""
+    @Published var draftText: String {
+        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(workstreamId)) }
+    }
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
     /// Monotonic token that increments each time the local user sends a message
@@ -20,32 +22,32 @@ class TaskChatState: ObservableObject {
     /// Workspace path for file-system tools
     let workspacePath: String
     var systemPromptBuilder: (() -> String)?
+    var onQueryCompleted: ((AgentBridge.QueryResult, String) async -> Void)?
 
     /// Auth callbacks for ACP mode
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
     var onAuthSuccess: AgentBridge.AuthSuccessHandler?
 
-    /// Follow-up chaining
-    private var pendingFollowUpText: String?
-
     private var runtimeProjectionCancellable: AnyCancellable?
     private var surfacedFailureKeys: Set<String> = []
     private var activeAssistantMessageId: String?
 
-    // MARK: - Streaming Buffers (mirrored from ChatProvider)
+    // MARK: - Streaming Buffer
 
-    private var streamingTextBuffer: String = ""
-    private var streamingThinkingBuffer: String = ""
-    private var streamingBufferMessageId: String?
-    private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.1
+    private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.1)
 
     /// Whether persisted messages have been loaded from GRDB
     private var hasLoadedFromStorage = false
 
-    init(taskId: String, workspacePath: String) {
-        self.taskId = taskId
+    init(taskId: String, workstreamId: String, workspacePath: String) {
+        self.activeTaskId = taskId
+        self.workstreamId = workstreamId
         self.workspacePath = workspacePath
+        self.draftText = ChatDraftStore.shared.text(for: .taskChat(workstreamId))
+    }
+
+    func selectTask(_ taskId: String) {
+        activeTaskId = taskId
     }
 
     // MARK: - Persistence
@@ -56,7 +58,7 @@ class TaskChatState: ObservableObject {
         hasLoadedFromStorage = true
 
         do {
-            let records = try await TaskChatMessageStorage.shared.getMessages(forTaskId: taskId)
+            let records = try await TaskChatMessageStorage.shared.getMessages(forWorkstreamId: workstreamId)
             observeRuntimeProjectionFailures()
             guard !records.isEmpty else {
                 surfaceCurrentRuntimeFailureIfNeeded()
@@ -66,33 +68,33 @@ class TaskChatState: ObservableObject {
             messages = records.map { $0.toChatMessage() }
 
             surfaceCurrentRuntimeFailureIfNeeded()
-            log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
+            log("TaskChatState[\(workstreamId)]: Loaded \(records.count) persisted messages")
         } catch {
-            logError("TaskChatState[\(taskId)]: Failed to load persisted messages", error: error)
+            logError("TaskChatState[\(workstreamId)]: Failed to load persisted messages", error: error)
         }
     }
 
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
-        let taskId = self.taskId
+        let workstreamId = self.workstreamId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, workstreamId: workstreamId)
             } catch {
-                logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
+                logError("TaskChatState[\(workstreamId)]: Failed to persist message \(message.id)", error: error)
             }
         }
     }
 
     /// Update a persisted message (for finalizing AI streaming)
     private func updatePersistedMessage(_ message: ChatMessage) {
-        let taskId = self.taskId
+        let workstreamId = self.workstreamId
         Task.detached {
             do {
                 let blocksJson: String?
                 if message.sender == .ai && !message.contentBlocks.isEmpty {
                     // Re-encode through the record's serialization
-                    let record = TaskChatMessageRecord.from(message, taskId: taskId)
+                    let record = TaskChatMessageRecord.from(message, taskId: workstreamId)
                     blocksJson = record.contentBlocksJson
                 } else {
                     blocksJson = nil
@@ -103,37 +105,36 @@ class TaskChatState: ObservableObject {
                     contentBlocksJson: blocksJson
                 )
             } catch {
-                logError("TaskChatState[\(taskId)]: Failed to update persisted message \(message.id)", error: error)
+                logError("TaskChatState[\(workstreamId)]: Failed to update persisted message \(message.id)", error: error)
             }
         }
     }
 
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
+    func sendMessage(_ text: String, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
-            log("TaskChatState[\(taskId)]: sendMessage called while already sending, ignoring")
+            log("TaskChatState[\(workstreamId)]: sendMessage called while already sending, ignoring")
             return
         }
 
         isSending = true
         errorMessage = nil
-        TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
         // Signal local send for turn anchoring.
         localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
-        // Skip for follow-ups — sendFollowUp() already added and persisted it
-        if !isFollowUp {
-            let userMessage = ChatMessage(
-                id: UUID().uuidString,
-                text: trimmedText,
-                sender: .user
-            )
-            messages.append(userMessage)
-            persistMessage(userMessage)
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+        persistMessage(userMessage)
+        if draftText == text {
+            draftText = ""
         }
 
         // Create placeholder AI message
@@ -167,7 +168,7 @@ class TaskChatState: ObservableObject {
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
-                        status: status == "started" ? .running : .completed,
+                        status: ToolCallStatus.fromBridgeStatus(status),
                         toolUseId: toolUseId,
                         input: input
                     )
@@ -187,7 +188,7 @@ class TaskChatState: ObservableObject {
             let queryResult = try await TaskChatRuntime.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                taskId: taskId,
+                workstreamId: workstreamId,
                 workspacePath: workspacePath,
                 mode: chatMode.rawValue,
                 surfaceContextJson: taskContext,
@@ -201,8 +202,7 @@ class TaskChatState: ObservableObject {
             )
 
             // Flush remaining streaming buffers
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Finalize AI message
@@ -235,21 +235,19 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            log("TaskChatState[\(taskId)]: response complete (cost=$\(queryResult.costUsd))")
+            log("TaskChatState[\(workstreamId)]: response complete (cost=$\(queryResult.costUsd))")
             let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
             if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
                 let failureText =
-                    AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId))
+                    AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId))
                     .flatMap(AgentFailureTranscriptFormatter.errorText(for:))
                     ?? "Agent failed"
                 errorMessage = failureText
-                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: failureText)
             } else {
-                TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
+                await onQueryCompleted?(queryResult, userMessage.id)
             }
         } catch {
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             let failedByUserStop: Bool
@@ -263,7 +261,9 @@ class TaskChatState: ObservableObject {
                 if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages.remove(at: index)
                 } else {
-                    Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    if !failedByUserStop {
+                        Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    }
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(
                         messageId: aiMessageId,
@@ -273,36 +273,68 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            if failedByUserStop {
-                TaskAgentStatusRegistry.shared.markStopped(taskId: taskId)
-            } else {
+            if !failedByUserStop {
                 errorMessage = error.localizedDescription
-                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: error.localizedDescription)
             }
-            logError("TaskChatState[\(taskId)]: query failed", error: error)
+            logError("TaskChatState[\(workstreamId)]: query failed", error: error)
         }
 
         activeAssistantMessageId = nil
         isSending = false
         isStopping = false
+    }
 
-        // Chain follow-up if queued
-        if let followUp = pendingFollowUpText {
-            pendingFollowUpText = nil
-            await sendMessage(followUp, isFollowUp: true)
+    // MARK: - Failure Formatting
+
+    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
+        let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        let existingText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingText.isEmpty {
+            message.text = failureText
+        } else if !existingText.contains(failureText) {
+            message.text += "\n\n\(failureText)"
+        }
+
+        guard !message.contentBlocks.isEmpty else { return }
+
+        if !existingText.isEmpty && !Self.contentBlocks(message.contentBlocks, containText: existingText) {
+            message.contentBlocks.insert(.text(id: UUID().uuidString, text: existingText), at: 0)
+        }
+
+        let hasFailureTextBlock = message.contentBlocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.trimmingCharacters(in: .whitespacesAndNewlines) == failureText
+            }
+            return false
+        }
+        if !hasFailureTextBlock {
+            message.contentBlocks.append(.text(id: UUID().uuidString, text: failureText))
         }
     }
 
-    // MARK: - Follow-Up
+    private static func contentBlocks(_ blocks: [ChatContentBlock], containText needle: String) -> Bool {
+        let combinedText = blocks.compactMap { block in
+            if case .text(_, let text) = block {
+                return text
+            }
+            return nil
+        }
+        .joined()
 
-    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
-        if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            message.text = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        if combinedText.contains(needle) {
+            return true
+        }
+
+        return blocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.contains(needle)
+            }
+            return false
         }
     }
 
     func surfaceRuntimeFailure(_ projection: AgentRunProjection, fallbackMessage: String? = nil, persist: Bool = true) {
-        guard projection.surface == .taskChat(taskId: taskId) else { return }
+        guard projection.surface == .workstream(workstreamId: workstreamId) else { return }
         guard let errorText = AgentFailureTranscriptFormatter.errorText(for: projection) ?? fallbackMessage else { return }
         let failureKey = [
             projection.runId,
@@ -321,7 +353,7 @@ class TaskChatState: ObservableObject {
 
     private func observeRuntimeProjectionFailures() {
         guard runtimeProjectionCancellable == nil else { return }
-        let surface = AgentSurfaceReference.taskChat(taskId: taskId)
+        let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
         runtimeProjectionCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
             .dropFirst()
             .sink { [weak self] projections in
@@ -331,7 +363,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: String? = nil) {
-        if let projection = AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId)) {
+        if let projection = AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId)) {
             surfaceRuntimeFailure(projection, fallbackMessage: fallbackMessage)
         } else if let fallbackMessage {
             appendFailureTranscriptMessage(fallbackMessage)
@@ -381,129 +413,62 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    func sendFollowUp(_ text: String) async {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, isSending else { return }
-
-        // Add user message locally and persist
-        let userMessage = ChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-        persistMessage(userMessage)
-
-        // Queue follow-up and interrupt current query
-        pendingFollowUpText = trimmedText
-        await TaskChatRuntime.interrupt(taskId: taskId)
-        log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
-    }
-
     // MARK: - Stop
 
     func stopAgent() {
         guard isSending else { return }
         isStopping = true
         Task {
-            await TaskChatRuntime.interrupt(taskId: taskId)
+            await TaskChatRuntime.interrupt(workstreamId: workstreamId)
         }
     }
 
-    // MARK: - Streaming Helpers (mirrored from ChatProvider)
+    // MARK: - Streaming Helpers
 
     private func appendToMessage(id: String, text: String) {
-        streamingBufferMessageId = id
-        streamingTextBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
     private func flushStreamingBuffer() {
-        streamingFlushWorkItem = nil
-
-        guard let id = streamingBufferMessageId,
-              let index = messages.firstIndex(where: { $0.id == id }) else {
-            streamingTextBuffer = ""
-            streamingThinkingBuffer = ""
-            return
-        }
-
-        if !streamingTextBuffer.isEmpty {
-            let buffered = streamingTextBuffer
-            streamingTextBuffer = ""
-
-            messages[index].text += buffered
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
-            }
-        }
-
-        if !streamingThinkingBuffer.isEmpty {
-            let buffered = streamingThinkingBuffer
-            streamingThinkingBuffer = ""
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
-            }
-        }
+        streamingBuffer.flush(messages: &messages)
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolActivity(
-            to: &messages[index].contentBlocks,
+        streamingBuffer.applyToolActivity(
+            messageId: messageId,
             toolName: toolName,
             status: status,
             toolUseId: toolUseId,
-            input: input
+            input: input,
+            messages: &messages
         )
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolOutput(
-            to: &messages[index].contentBlocks,
+        streamingBuffer.applyToolResult(
+            messageId: messageId,
             toolUseId: toolUseId,
             name: name,
-            output: output
+            output: output,
+            messages: &messages
         )
     }
 
     private func appendThinking(messageId: String, text: String) {
-        streamingBufferMessageId = messageId
-        streamingThinkingBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
-    /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
-    /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
-    /// promoted blocks resolve when the turn ends.
+    /// Matches any in-flight state (`.running`, `.slow`, `.stalled`) so
+    /// detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.completeRemainingToolCalls(
-            in: &messages[index].contentBlocks,
-            terminalStatus: terminalStatus
+        streamingBuffer.completeRemainingToolCalls(
+            messageId: messageId,
+            terminalStatus: terminalStatus,
+            messages: &messages
         )
     }
 }

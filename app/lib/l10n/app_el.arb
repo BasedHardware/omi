@@ -1,5 +1,6 @@
 {
     "@@locale": "el",
+    "sessionExpiredSignInAgain": "Η συνεδρία έληξε — συνδεθείτε ξανά.",
     "appTitle": "Omi",
     "conversationTab": "Συνομιλία",
     "transcriptTab": "Απομαγνητοφώνηση",
@@ -3116,5 +3117,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό."
+    "pendantStorageAlmostFull": "Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό.",
+    "connectRayBanMeta": "Σύνδεση Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Χρησιμοποιήστε τα γυαλιά σας Ray-Ban Meta ως συσκευή καταγραφής Omi για συνομιλίες και οπτικό πλαίσιο. Το Omi θα ανοίξει την εφαρμογή Meta AI για να συνδέσει τα γυαλιά σας.",
+    "raybanMetaOpenMetaAI": "Σύνδεση μέσω Meta AI",
+    "raybanMetaWaitingForMetaAI": "Ολοκληρώστε τη σύνδεση στην εφαρμογή Meta AI και μετά επιστρέψτε εδώ.",
+    "raybanMetaCheckAgain": "Έλεγχος ξανά",
+    "raybanMetaAllowCamera": "Να επιτρέπεται η κάμερα στα γυαλιά",
+    "raybanMetaCameraExplanation": "Το Omi χρησιμοποιεί την κάμερα των γυαλιών σας για να προσθέτει φωτογραφίες στις συνομιλίες σας. Μπορείτε να το παραλείψετε και να χρησιμοποιήσετε μόνο ήχο.",
+    "raybanMetaSkipForNow": "Παράλειψη προς το παρόν",
+    "raybanMetaAudioOnlyTitle": "Λειτουργία μόνο ήχου Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Αυτή η έκδοση του Omi μπορεί να χρησιμοποιεί το μικρόφωνο των γυαλιών σας μέσω Bluetooth. Η λήψη φωτογραφιών απαιτεί την έκδοση προγραμματιστή Meta του Omi.",
+    "raybanMetaMusicPauseNote": "Η μουσική στο τηλέφωνό σας σταματά προσωρινά όσο χρησιμοποιείται το μικρόφωνο των γυαλιών.",
+    "raybanMetaContinue": "Συνέχεια",
+    "raybanMetaCapturePhoto": "Λήψη φωτογραφίας",
+    "raybanMetaPhotoRequested": "Ζητήθηκε φωτογραφία — θα εμφανιστεί στη συνομιλία σας.",
+    "raybanMetaMicrophoneReady": "Το μικρόφωνο είναι έτοιμο",
+    "raybanMetaImageCaptureReady": "Η λήψη εικόνας είναι έτοιμη",
+    "raybanMetaImageCaptureUnavailable": "Μη διαθέσιμο σε λειτουργία μόνο ήχου",
+    "raybanMetaCamera": "Κάμερα",
+    "errorConnectingRayBanMeta": "Σφάλμα σύνδεσης με Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

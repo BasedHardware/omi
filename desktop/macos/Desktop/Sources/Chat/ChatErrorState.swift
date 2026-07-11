@@ -47,8 +47,8 @@ enum ChatErrorState: Equatable, Sendable {
   /// runtimeMissing open runtime install docs; crashed / unknown retry.
   case bridgeUnavailable(reason: BridgeUnavailableReason)
 
-  /// User pressed Stop / Cancel mid-turn. Recovery: resume (replay last
-  /// user turn with a fresh `turnId`) or discard.
+  /// User pressed Stop / Cancel mid-turn. Recovery: dismiss; the user can
+  /// type and send a new message when they want to continue.
   case interrupted
 
   /// Tools returned empty payloads and the model produced no text. Recovery:
@@ -61,9 +61,9 @@ enum ChatErrorState: Equatable, Sendable {
 // MARK: - Recovery actions
 
 /// One primary recovery action per error card. Multiple cases may share the
-/// same recovery (e.g. timeout + interrupted both → retry) — that's intentional.
+/// same recovery — that's intentional.
 enum ChatErrorRecoveryAction: Equatable, Sendable, CaseIterable {
-  /// Replay the last user turn with a fresh `turnId`.
+  /// Replay the last failed user turn with a fresh `turnId`.
   case retry
   /// Open the sign-in flow (Firebase / OAuth, NOT the Claude paywall).
   case signIn
@@ -94,9 +94,25 @@ extension ChatErrorState {
         return .retry
       }
     case .interrupted:
-      return .retry
+      return .dismiss
     case .noDataFound:
       return .dismiss
+    }
+  }
+
+  /// Compact summary for surfaces that only show a single line (floating bar).
+  var userFacingSummary: String {
+    switch self {
+    case .authRequired:
+      return "Please sign in to continue."
+    case .timeout:
+      return "AI took too long to respond."
+    case .bridgeUnavailable:
+      return "AI isn't available right now."
+    case .interrupted:
+      return "Response stopped."
+    case .noDataFound:
+      return "No matching data found."
     }
   }
 }
@@ -111,7 +127,6 @@ extension ChatErrorState {
   ///
   /// Cases handled:
   ///   - `.timeout`              → `.timeout(toolName: nil)`
-  ///   - `.stopped`              → `.interrupted`
   ///   - `.nodeNotFound`         → `.bridgeUnavailable(.nodeMissing)`
   ///   - `.bridgeScriptNotFound` → `.bridgeUnavailable(.runtimeMissing)`
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
@@ -134,7 +149,7 @@ extension ChatErrorState {
     case .timeout:
       return .timeout(toolName: nil)
     case .stopped:
-      return .interrupted
+      return nil
     case .nodeNotFound:
       return .bridgeUnavailable(reason: .nodeMissing)
     case .bridgeScriptNotFound:

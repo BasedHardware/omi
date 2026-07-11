@@ -20,6 +20,12 @@ def _read_sync_source():
         return f.read()
 
 
+def _read_pipeline_source():
+    pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+    with open(pipeline_path, encoding='utf-8') as f:
+        return f.read()
+
+
 def _extract_function_body(source, func_name):
     """Extract the body of a function from source code."""
     pattern = rf'(async\s+)?def {re.escape(func_name)}\('
@@ -121,7 +127,7 @@ class TestV1RecordUsage:
 class TestV2RecordUsage:
     @staticmethod
     def _get_v2_body():
-        return _extract_function_body(_read_sync_source(), '_run_full_pipeline_background_async')
+        return _extract_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
 
     def test_record_usage_called_in_v2(self):
         body = self._get_v2_body()
@@ -155,9 +161,9 @@ class TestV2RecordUsage:
     def test_record_usage_wrapped_in_try_except(self):
         body = self._get_v2_body()
         record_idx = body.find('record_usage,')
-        preceding = body[max(0, record_idx - 400) : record_idx]
+        preceding = body[max(0, record_idx - 1000) : record_idx]
         assert 'try:' in preceding, "record_usage must be inside a try block"
-        following = body[record_idx : record_idx + 400]
+        following = body[record_idx : record_idx + 800]
         assert 'except Exception' in following, "record_usage must have an except handler"
 
 

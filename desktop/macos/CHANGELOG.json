@@ -2,6 +2,258 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.69",
+      "date": "2026-07-10",
+      "changes": [
+        "Improved task capture so suggestions stay quiet, retry safely, and keep working when task notifications are off",
+        "Added a quiet Suggested review lane with simple feedback and clear task provenance",
+        "Background agents now stay on Omi's managed cloud route and operate as leaf workers. Explicit User Claude sign-in uses a validated, bounded reconnect flow, and failed agent-control actions show as failures instead of misleading completion. Stalled tool calls now stop before a chat can hang for three minutes.",
+        "Made What Matters Now refresh with relevant Mac context while keeping proactive task alerts opt-in, rate-limited, and privacy-bounded",
+        "Added persistent task threads that keep shared context, cited draft history, and agent progress across related tasks and restarts",
+        "Clarified task interruption settings, task chat empty state, evidence labels, and attribution analytics for What Matters Now and Suggested",
+        "Added a calm What Matters Now dashboard and richer goal focus and history controls"
+      ]
+    },
+    {
+      "version": "0.12.68",
+      "date": "2026-07-10",
+      "changes": [
+        "Made Home load instantly when returning from another page while keeping cached status isolated to the signed-in account",
+        "Fixed requests like “look it up” searching Omi history instead of the public web",
+        "Fixed rapid back-to-back push-to-talk so every spoken turn appears in chat and the reply keeps the full transcription context"
+      ]
+    },
+    {
+      "version": "0.12.67",
+      "date": "2026-07-10",
+      "changes": [
+        "Fixed a stalled AI chat response silently ending with no message — it now shows \"Response took too long. Try again.\" so you know to retry",
+        "Improved Conversations so cached details load instantly without hiding newer summaries, statuses, titles, stars, or folders",
+        "Kept conversation details and edits isolated across account changes while preserving simultaneous title, star, and folder updates",
+        "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)",
+        "Fixed the This device memory filter for new desktop conversations and memories",
+        "Made the desktop brain map reopen faster by preserving its scene during navigation and reusing cached layouts when the graph has not changed.",
+        "Fixed Reset Onboarding clearing signed-in state incorrectly and leaving the app in a broken half-onboarded state",
+        "Preserved unsent chat drafts separately across the main app, notch, agents, tasks, restarts, and updates",
+        "Made desktop updates safer with qualified beta releases, explicit stable and beta channels, and verified post-relaunch install reporting",
+        "Made push-to-talk and realtime voice more reliable during barge-in, provider delays, playback fallbacks, and rapid repeated turns.",
+        "Improved transcription cloud/local fallback reliability and memory sync stability."
+      ]
+    },
+    {
+      "version": "0.12.66",
+      "date": "2026-07-09",
+      "changes": [
+        "Made the draggable floating bar use the movable pill layout on notched Macs"
+      ]
+    },
+    {
+      "version": "0.12.65",
+      "date": "2026-07-09",
+      "changes": [
+        "Prevented stale backend recording events from attaching to a newer desktop recording session"
+      ]
+    },
+    {
+      "version": "0.12.64",
+      "date": "2026-07-09",
+      "changes": [
+        "Protected signed-in sessions across app updates and added a clear recovery screen when credentials cannot be verified"
+      ]
+    },
+    {
+      "version": "0.12.63",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed desktop sign-in so expired sessions show a Sign in button instead of a dead-end AI error, and chat drafts are preserved when re-authenticating."
+      ]
+    },
+    {
+      "version": "0.12.62",
+      "date": "2026-07-09",
+      "changes": [
+        "Smoothed the notch bar's hover expansion so it no longer hops, keeps sliding after opening, or re-zooms when switching Spaces"
+      ]
+    },
+    {
+      "version": "0.12.61",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.60",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.59",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed named-bundle auth seed so local test apps no longer show a login-keychain password prompt on launch"
+      ]
+    },
+    {
+      "version": "0.12.58",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed Claude MCP connector setup to use the registered production OAuth client instead of a stale fallback",
+        "Removed the optional API keys step from onboarding and cleaned up the 2nd brain graph label",
+        "Improved the sign-in browser page and automatically brings Omi to the front when authentication finishes"
+      ]
+    },
+    {
+      "version": "0.12.57",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed rare crashes when the app received data with duplicate ids (tasks, apps list, chat artifacts)",
+        "Fixed a data-loss bug where periodic WAL flush could mark a recording as saved to disk without actually persisting it, causing the audio to be lost during sync"
+      ]
+    },
+    {
+      "version": "0.12.56",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.55",
+      "date": "2026-07-09",
+      "changes": [
+        "Hardened screen-aware agent launches, tool schemas, and realtime tool error reporting.",
+        "Improved desktop chat screen-context detection and diagnostics",
+        "Background agent chat links now reopen from the timeline even after pills dismiss",
+        "Fixed Background agent cards so the header collapses again, markdown renders in the expanded body, and the open-agent link hides when the agent is unavailable",
+        "Fixed floating bar treating block-only or artifact answers as failed empty responses",
+        "Fixed silent agent-link opens and restored background-agent chat continuity after pills dismiss",
+        "Fixed a main-thread freeze where chat text selection wrapped agent card headers and pegged CPU",
+        "Show typed notch, notch PTT, and spawned-agent link turns in the shared Omi chat history",
+        "Background agent cards and proactive notifications now stay consistent across chat surfaces after reload",
+        "Fixed continuity review findings: restage can create a missing assistant after a user-only stage, owner-swap clear no longer clobbers a mid-session auth uid, agent open ordering is generation-guarded, and agent cards hide dead Open links / avoid false-success status icons",
+        "Floating bar chat now reads from the shared chat timeline instead of keeping a separate copy",
+        "Attach Gemini push-to-talk screen frames immediately after activity start instead of at commit so current-screen questions have time to ground on the image",
+        "Send Gemini push-to-talk screen frames inside the active voice turn before commit so screen questions ground on current pixels instead of a too-late screenshot tool call",
+        "Fixed Home chat input focus after expansion and added Escape-to-Home navigation on secondary Home pages",
+        "Polished the desktop Home stage layout, wider chat surface, responsive ask bar, and icon-only notch thinking state",
+        "Fixed notch and chat so agent artifacts stay attached to the turn that produced them, old orphan artifact cards no longer appear in the floating viewport, and agent list/card previews show the prompt instead of the response",
+        "Fixed a test-owner swap that could wipe sign-in tokens and break chat loading until relaunch",
+        "Make push-to-talk screen context fresher and less brittle by prefetching canonical voice-turn screen context while the user speaks and preventing stale screenshot OCR from biasing transcript correction",
+        "Made push-to-talk screen context prefer live capture when finalized screen frames are more than a few seconds old",
+        "PTT now tries available Omi context before asking follow-up questions and delegates larger work to background agents when a short voice answer is not the right surface",
+        "Fixed duplicate chat messages after push-to-talk",
+        "Buffered push-to-talk screen context until realtime sessions are ready so cold starts and reconnects do not drop it",
+        "Fixed subagent chats so completed agents show their final output and stop showing stale Running or Working indicators",
+        "Keep main chat subagent links visible without showing completed implementation-only tool logs, and keep externally spawned agent pills synced to terminal runtime state"
+      ]
+    },
+    {
+      "version": "0.12.54",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed connector import progress disappearing when the import window is closed and reopened — the running import, its result, and any error now stay visible, and an import can no longer be started twice",
+        "Local files connector now shows a concise status line instead of a raw scan report, with a clear message when folder access is denied",
+        "The ChatGPT/Claude import button now stays disabled until you paste something, instead of showing an error after the click",
+        "Tidied the ChatGPT/Claude paste box: it starts compact and grows as you add text, and the placeholder now lines up with the cursor",
+        "ChatGPT/Claude memory imports now say whether the pasted text had nothing to extract or the import itself failed, instead of one ambiguous error",
+        "Sign-in tokens are now stored in the macOS Keychain on every build; dev and beta builds no longer fall back to keeping credentials in plaintext UserDefaults",
+        "Fixed macOS Keychain password prompts for Beta/Prod and local contributor builds by isolating sign-in and device-id secrets per signing team and bundle, and never querying the old shared Keychain items"
+      ]
+    },
+    {
+      "version": "0.12.53",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.52",
+      "date": "2026-07-08",
+      "changes": [
+        "Ask Omi can see your screen again when you ask about it — screenshot sharing in chat was accidentally dead since June 29; a new \"Screen Sharing in Chat\" toggle in Settings → Floating Bar (on by default) controls it"
+      ]
+    },
+    {
+      "version": "0.12.51",
+      "date": "2026-07-08",
+      "changes": [
+        "Centered the Home content vertically so it no longer sits low on tall windows"
+      ]
+    },
+    {
+      "version": "0.12.50",
+      "date": "2026-07-08",
+      "changes": [
+        "Fixed WiFi SD-card sync not uploading downloaded recordings to the cloud"
+      ]
+    },
+    {
+      "version": "0.12.49",
+      "date": "2026-07-08",
+      "changes": [
+        "Restored normal launch visibility for the enabled floating bar on notched Macs while keeping deferred reveal scoped to explicit opt-in contexts.",
+        "Improved push-to-talk reliability by preventing realtime and fallback voices from speaking over each other",
+        "Reduced random-language push-to-talk replies by tightening short speech detection and rejecting misheard realtime tool queries"
+      ]
+    },
+    {
+      "version": "0.12.48",
+      "date": "2026-07-08",
+      "changes": [
+        "Fixed the Screen Recording permission flow so Omi reliably appears in the Screen Recording list when you click Open Settings, instead of sometimes needing a second attempt"
+      ]
+    },
+    {
+      "version": "0.12.47",
+      "date": "2026-07-08",
+      "changes": [
+        "Desktop API models now recognize Ray-Ban Meta conversations as a first-class source."
+      ]
+    },
+    {
+      "version": "0.12.46",
+      "date": "2026-07-08",
+      "changes": [
+        "Questions asked from the floating bar no longer mix into the main chat transcript during a session (restored history from before the app relaunches still shows in the main chat)"
+      ]
+    },
+    {
+      "version": "0.12.45",
+      "date": "2026-07-08",
+      "changes": [
+        "Added a System Audio permission status row that can test and reflect whether Omi can capture audio from other apps"
+      ]
+    },
+    {
+      "version": "0.12.44",
+      "date": "2026-07-07",
+      "changes": [
+        "Improved the desktop chat loading indicator so it matches the calmer notch thinking animation",
+        "Updated the Home ask bar to use one action button for Connect, Send, and Stop"
+      ]
+    },
+    {
+      "version": "0.12.43",
+      "date": "2026-07-07",
+      "changes": [
+        "Reduced noisy Sentry session heartbeat issues by switching to breadcrumb telemetry",
+        "Device offline audio now uploads to the cloud via POST /v2/sync-local-files instead of being marked synced locally without a server call",
+        "Fixed on-device desktop conversations staying untitled after backend processing completes."
+      ]
+    },
+    {
+      "version": "0.12.42",
+      "date": "2026-07-07",
+      "changes": [
+        "Fixed Gemini realtime voice sessions failing to start for managed users due to a malformed token-mint request",
+        "Fixed a duplicate AppState at desktop launch that could cause double lifecycle observers and fragile state initialization"
+      ]
+    },
+    {
       "version": "0.12.41",
       "date": "2026-07-07",
       "changes": [

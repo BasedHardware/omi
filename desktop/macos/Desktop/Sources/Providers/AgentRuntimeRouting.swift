@@ -146,14 +146,16 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
+    // Detection is intentionally hermetic: only home-relative activation directories
+    // (plus the explicit OMI_*_ADAPTER_COMMAND env) are trusted, never arbitrary $PATH
+    // or absolute system bin dirs. Consulting /opt/homebrew/bin or /usr/local/bin made
+    // availability depend on the host machine's global installs (see #9033).
     private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
             "\(homeDirectory)/.local/bin",
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
         ]
     }
 }

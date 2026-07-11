@@ -23,9 +23,11 @@ Requires macOS 14.0+, Rust toolchain, and code signing with an Apple Developer I
 # Run an isolated named bundle for parallel testing
 OMI_APP_NAME="omi-subagent-test" ./run.sh
 
-# Run with the prod backend (skips local Rust + tunnel)
+# Run with the dev backend (skips local Rust + tunnel)
 ./run.sh --yolo
 ```
+
+`--yolo` targets the deployed development services. Those services currently use production Firebase identities and data stores, so use a named `omi-*` bundle for isolated desktop state and avoid treating it as an offline data sandbox.
 
 `run.sh` auto-detects an `Apple Development` or `Developer ID Application` signing identity from your login keychain. Override with `OMI_SIGN_IDENTITY="..." ./run.sh`.
 

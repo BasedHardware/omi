@@ -8,9 +8,8 @@ import OmiTheme
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 ///
 /// When `isSending` is true:
-///   - Input stays enabled so the user can type a follow-up
-///   - If input is empty, the button becomes a stop button
-///   - If input has text, pressing send calls `onFollowUp` (redirects the agent)
+///   - Input stays enabled so the user can draft the next message
+///   - The action button remains Stop until the current response ends
 ///
 /// Attachment support is opt-in: pass `attachments`, `onAttachmentsAdded`, and
 /// `onAttachmentRemoved` to enable the paperclip button, the staged-files row,
@@ -18,7 +17,6 @@ import OmiTheme
 /// before.
 struct ChatInputView: View {
     let onSend: (String) -> Void
-    var onFollowUp: ((String) -> Void)? = nil
     var onStop: (() -> Void)? = nil
     let isSending: Bool
     var isStopping: Bool = false
@@ -124,7 +122,7 @@ struct ChatInputView: View {
                 }
 
                 // Send/Stop button — inline to the right of the input
-                if isSending && !hasText {
+                if isSending {
                     if isStopping {
                         ProgressView()
                             .controlSize(.small)
@@ -192,13 +190,9 @@ struct ChatInputView: View {
 
     private func handleSubmit() {
         guard canSend else { return }
+        guard !isSending else { return }
         let text = inputText
-        inputText = ""
-        if isSending {
-            onFollowUp?(text)
-        } else {
-            onSend(text)
-        }
+        onSend(text)
     }
 
     private func pickFiles() {

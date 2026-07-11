@@ -401,14 +401,16 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
 }
 
 fn gemini_auth_token_body(new_session_expire: &str, expire: &str) -> serde_json::Value {
-    // Google's CreateAuthTokenRequest wraps token settings under `authToken`.
-    // Top-level `uses`/`expireTime` fields are ignored/rejected by the v1alpha API.
+    // The Gemini Developer API's CreateAuthToken (POST /v1alpha/auth_tokens)
+    // takes the token settings FLAT at the request root — this matches the
+    // google-genai SDK, whose request converter sets `uses`/`expireTime`/
+    // `newSessionExpireTime` directly on the request body. Wrapping them under
+    // `authToken` makes v1alpha reject the request with
+    // `Unknown name "authToken" ... Cannot find field`.
     serde_json::json!({
-        "authToken": {
-            "uses": 1,
-            "expireTime": expire,
-            "newSessionExpireTime": new_session_expire,
-        }
+        "uses": 1,
+        "expireTime": expire,
+        "newSessionExpireTime": new_session_expire,
     })
 }
 
@@ -549,18 +551,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gemini_auth_token_body_wraps_settings_under_auth_token() {
+    fn gemini_auth_token_body_is_flat_at_request_root() {
         let body = gemini_auth_token_body("2026-07-03T18:40:00Z", "2026-07-03T19:08:00Z");
 
-        assert_eq!(body["authToken"]["uses"], 1);
-        assert_eq!(
-            body["authToken"]["newSessionExpireTime"],
-            "2026-07-03T18:40:00Z"
-        );
-        assert_eq!(body["authToken"]["expireTime"], "2026-07-03T19:08:00Z");
-        assert!(body.get("uses").is_none());
-        assert!(body.get("expireTime").is_none());
-        assert!(body.get("newSessionExpireTime").is_none());
+        // v1alpha auth_tokens takes the settings flat at the root (google-genai
+        // SDK shape); wrapping under `authToken` is what caused the mint 400s.
+        assert_eq!(body["uses"], 1);
+        assert_eq!(body["newSessionExpireTime"], "2026-07-03T18:40:00Z");
+        assert_eq!(body["expireTime"], "2026-07-03T19:08:00Z");
+        assert!(body.get("authToken").is_none());
     }
 
     #[test]

@@ -19,6 +19,7 @@ import httpx
 
 from utils.llm.persona import generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -176,20 +177,22 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     timeline = await get_twitter_timeline(handle)
 
     # Create or update persona
-    persona = _create_or_update_persona(profile, username, uid, handle)
+    persona = await run_blocking(db_executor, _create_or_update_persona, profile, username, uid, handle)
 
     # Generate persona prompt from tweets
     formatted_tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
-    persona_prompt = generate_twitter_persona_prompt(formatted_tweets, persona["name"])
+    persona_prompt = await run_blocking(
+        llm_executor, generate_twitter_persona_prompt, formatted_tweets, persona["name"]
+    )
     persona['persona_prompt'] = persona_prompt
 
     # Save persona to database
-    upsert_app_to_db(persona)
-    save_username(username, uid)
-    delete_generic_cache('get_public_approved_apps_data')
+    await run_blocking(db_executor, upsert_app_to_db, persona)
+    await run_blocking(db_executor, save_username, username, uid)
+    await run_blocking(db_executor, delete_generic_cache, 'get_public_approved_apps_data')
 
     # Create memories from persona prompt and tweets
-    create_memories_from_twitter_tweets(uid, persona['id'], timeline.timeline)
+    await run_blocking(postprocess_executor, create_memories_from_twitter_tweets, uid, persona['id'], timeline.timeline)
 
     return persona
 
@@ -237,7 +240,7 @@ def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, 
 
 async def add_twitter_to_persona(handle: str, persona_id: str) -> Dict[str, Any]:
     """Add Twitter account to an existing persona"""
-    persona = get_persona_by_id_db(persona_id)
+    persona = await run_blocking(db_executor, get_persona_by_id_db, persona_id)
     if persona is None:
         raise ValueError(f"Persona not found: {persona_id}")
     profile = await get_twitter_profile(handle)
@@ -251,14 +254,16 @@ async def add_twitter_to_persona(handle: str, persona_id: str) -> Dict[str, Any]
         "connected_at": datetime.now(timezone.utc),
     }
 
-    update_app_in_db(persona)
-    delete_generic_cache('get_public_approved_apps_data')
+    await run_blocking(db_executor, update_app_in_db, persona)
+    await run_blocking(db_executor, delete_generic_cache, 'get_public_approved_apps_data')
 
     # Get tweets from the Twitter timeline
     timeline = await get_twitter_timeline(handle)
 
     # Create memories from the tweets
     if timeline and timeline.timeline:
-        create_memories_from_twitter_tweets(persona['uid'], persona_id, timeline.timeline)
+        await run_blocking(
+            postprocess_executor, create_memories_from_twitter_tweets, persona['uid'], persona_id, timeline.timeline
+        )
 
     return persona

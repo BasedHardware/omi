@@ -3,6 +3,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 import OmiTheme
 
+/// The Sentry event title used when a user submits feedback. Shared by the real
+/// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run
+/// can never drift from the title that actually ships to Sentry (SET-02).
+func feedbackReportTitle(for message: String) -> String {
+  message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+}
+
+/// Filename of the JSON diagnostics attachment on the feedback Sentry event.
+/// Shared so the dry-run reports the same attachment name the real submit uses.
+let feedbackDiagnosticsAttachmentFilename = "desktop_diagnostics.json"
+
 /// Window controller for the feedback dialog
 @MainActor
 class FeedbackWindow {
@@ -145,7 +156,7 @@ struct FeedbackView: View {
     AnalyticsManager.shared.feedbackSubmitted(feedbackLength: message.count)
 
     // Submit to Sentry with log file attachment (dev + prod — user explicitly chose to report)
-    let sentryMessage = message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+    let sentryMessage = feedbackReportTitle(for: message)
 
     // Capture event with log file attached via scope
     let eventId = SentrySDK.capture(message: sentryMessage) { scope in
@@ -158,7 +169,7 @@ struct FeedbackView: View {
       if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
         let attachment = Attachment(
           path: diagnosticsURL.path,
-          filename: "desktop_diagnostics.json",
+          filename: feedbackDiagnosticsAttachmentFilename,
           contentType: "application/json")
         scope.addAttachment(attachment)
       }

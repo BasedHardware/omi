@@ -1,5 +1,6 @@
 {
     "@@locale": "ko",
+    "sessionExpiredSignInAgain": "세션이 만료되었습니다. 다시 로그인하세요.",
     "appTitle": "Omi",
     "conversationTab": "대화",
     "transcriptTab": "녹취록",
@@ -3116,5 +3117,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요."
+    "pendantStorageAlmostFull": "펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요.",
+    "connectRayBanMeta": "Ray-Ban Meta 연결",
+    "raybanMetaSetupDescription": "Ray-Ban Meta 안경을 대화 및 시각적 컨텍스트를 위한 Omi 캡처 기기로 사용하세요. Omi가 Meta AI 앱을 열어 안경을 연결합니다.",
+    "raybanMetaOpenMetaAI": "Meta AI를 통해 연결",
+    "raybanMetaWaitingForMetaAI": "Meta AI 앱에서 연결을 완료한 후 여기로 돌아오세요.",
+    "raybanMetaCheckAgain": "다시 확인",
+    "raybanMetaAllowCamera": "안경 카메라 허용",
+    "raybanMetaCameraExplanation": "Omi는 안경 카메라를 사용하여 대화에 사진을 추가합니다. 이 단계를 건너뛰고 오디오만 사용할 수 있습니다.",
+    "raybanMetaSkipForNow": "지금은 건너뛰기",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta 오디오 전용 모드",
+    "raybanMetaAudioOnlyExplanation": "이 버전의 Omi는 Bluetooth를 통해 안경 마이크를 사용할 수 있습니다. 사진 촬영에는 Omi의 Meta 개발자 빌드가 필요합니다.",
+    "raybanMetaMusicPauseNote": "안경 마이크를 사용하는 동안 휴대폰의 음악이 일시 정지됩니다.",
+    "raybanMetaContinue": "계속",
+    "raybanMetaCapturePhoto": "사진 촬영",
+    "raybanMetaPhotoRequested": "사진을 요청했습니다 — 대화에 표시됩니다.",
+    "raybanMetaMicrophoneReady": "마이크 준비됨",
+    "raybanMetaImageCaptureReady": "이미지 캡처 준비됨",
+    "raybanMetaImageCaptureUnavailable": "오디오 전용 모드에서는 사용할 수 없음",
+    "raybanMetaCamera": "카메라",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta 연결 오류: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

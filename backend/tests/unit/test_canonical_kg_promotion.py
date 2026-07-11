@@ -37,6 +37,20 @@ def _refresh_kg_runtime() -> None:
     )
 
 
+def test_set_canonical_memory_kg_extracted_missing_doc_is_idempotent(caplog):
+    from google.api_core.exceptions import NotFound
+
+    from utils.memory.canonical_kg_promotion import set_canonical_memory_kg_extracted
+
+    ref = MagicMock()
+    ref.update.side_effect = NotFound('No document to update')
+    client = MagicMock()
+    client.document.return_value = ref
+
+    assert set_canonical_memory_kg_extracted('uid-abc', 'memory-1', db_client=client) is False
+    assert 'No document to update' not in caplog.text
+
+
 @pytest.fixture(autouse=True)
 def _refresh_kg_runtime_fixture():
     _refresh_kg_runtime()
@@ -210,7 +224,19 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
         assert kg_content == "works_at (company=Omi): builds memory products"
 
 
-def test_update_canonical_memory_content_refreshes_kg_for_long_term():
+def test_extract_kg_rejects_negative_user_review_before_projection():
+    item = _long_term_item(promotion={"user_review": False})
+    with (
+        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
+    ):
+        result = extract_kg_for_promoted_memory("uid-canonical", item)
+
+    assert result.skipped_reason == "user_rejected"
+    mock_extract.assert_not_called()
+
+
+def test_update_canonical_memory_content_invalidates_kg_until_reprocessed():
     from utils.memory.canonical_memory_adapter import update_canonical_memory_content
 
     item = _long_term_item(kg_extracted=True, memory_id="mem_edit")
@@ -223,15 +249,18 @@ def test_update_canonical_memory_content_refreshes_kg_for_long_term():
             "utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory",
             return_value=CanonicalKgPromotionResult(attempted=True, success=True),
         ) as mock_extract,
-        patch("utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item"),
-        patch("utils.memory.canonical_memory_adapter.sync_canonical_memory_vector"),
+        patch("utils.memory.canonical_memory_adapter.delete_atom_keyword_doc"),
+        patch("utils.memory.canonical_memory_adapter.delete_canonical_memory_vector"),
     ):
         updated = update_canonical_memory_content("uid-canonical", "mem_edit", "Updated content", db_client=db)
 
     mock_prune.assert_called_once_with("uid-canonical", ["mem_edit"], db_client=db)
-    mock_extract.assert_called_once()
+    mock_extract.assert_not_called()
     assert updated.content == "Updated content"
-    assert updated.kg_extracted is True
+    assert updated.tier == MemoryTier.short_term
+    assert updated.processing_state == ProcessingState.pending
+    assert updated.kg_extracted is False
+    assert updated.promotion["processing_status"] == "pending_processing"
 
 
 def test_invalidate_kg_prunes_citations(monkeypatch):

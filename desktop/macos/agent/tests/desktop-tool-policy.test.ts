@@ -62,6 +62,48 @@ describe("desktop tool policy", () => {
     expect(denied.reason).toContain("Missing selected bundle");
   });
 
+  it("keeps workstream external sends blocked until a matching scoped grant exists", () => {
+    const base = {
+      requestedBundles: ["external.write_send"] as const,
+      selectedBundles: ["external.write_send"] as const,
+      externalSend: true,
+      operation: "send_email",
+      resourceRef: "workstream:ws-launch",
+      nowMs: 1_000,
+    };
+
+    expect(evaluateDesktopToolPolicy(base).decision).toBe("dispatch_required");
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        grants: [
+          {
+            bundle: "external.write_send" as const,
+            operation: "send_email",
+            resourceRef: "workstream:ws-launch",
+            effect: "allow" as const,
+            expiresAtMs: 2_000,
+          },
+        ],
+      }).decision,
+    ).toBe("allow");
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        resourceRef: "workstream:ws-other",
+        grants: [
+          {
+            bundle: "external.write_send" as const,
+            operation: "send_email",
+            resourceRef: "workstream:ws-launch",
+            effect: "allow" as const,
+            expiresAtMs: 2_000,
+          },
+        ],
+      }).decision,
+    ).toBe("dispatch_required");
+  });
+
   it("keeps automation actuation dev-only", () => {
     const prod = evaluateDesktopToolPolicy({
       requestedBundles: ["desktop.automation.act_dev_only"],

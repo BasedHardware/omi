@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import http.client
 import json
@@ -33,6 +34,29 @@ TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
 DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
 PRUNE_ABORTED_BUNDLE_DAYS = 7
+RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION = 1
+RESILIENCE_FORBIDDEN_TERMINAL_REASONS = {
+    "bridge_launch_error",
+    "generic_chat_error",
+    "no_assistant_response",
+    "no_query_trace",
+    "response_already_running",
+    "response_stopped",
+    "skipped_missing_action",
+    "skipped_unimplemented_action",
+    "subagent_missing",
+    "subagent_status_invisible",
+}
+RESILIENCE_GENERIC_CHAT_PATTERNS = {
+    "AI not available",
+    "AI is not running",
+    "AI stopped unexpectedly",
+    "AI took too long to respond",
+    "A response is already running for this chat",
+    "Response stopped",
+    "requestAlreadyActive",
+    "response_already_running",
+}
 
 
 def now_iso() -> str:
@@ -61,6 +85,35 @@ def bridge_action_timeout_sec(
     return 60.0
 
 
+class AutomationTokenError(RuntimeError):
+    """Token file exists but cannot be read (permissions/encoding). Fail closed."""
+
+
+def automation_token(port: int) -> str | None:
+    """Load the per-launch bridge bearer token (same contract as omi-ctl).
+
+    Missing token file → None (caller may proceed unauthenticated or fail later).
+    Unreadable/corrupt token file → AutomationTokenError (fail closed; do not
+    silently omit Authorization).
+    """
+    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = Path(
+        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
+        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
+    )
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError) as exc:
+        raise AutomationTokenError(
+            f"automation token file unreadable at {token_file}: {exc}"
+        ) from exc
+    return token or None
+
+
 def bridge_request(
     port: int,
     method: str,
@@ -71,6 +124,14 @@ def bridge_request(
 ) -> dict[str, Any]:
     payload = None
     headers = {"Accept": "application/json"}
+    try:
+        token = automation_token(port)
+    except AutomationTokenError as exc:
+        # Fail closed: never send an unauthenticated request when the token
+        # contract is broken. Still return a structured failure (no crash).
+        return {"ok": False, "error": f"automation_token_unreadable: {exc}"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         payload = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -333,6 +394,49 @@ def latest_assistant_text(snapshot_detail: dict[str, str]) -> str:
     return ""
 
 
+def current_turn_snapshot_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(messages, list):
+        return ""
+    query = query_text.strip()
+    start_index: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
+            start_index = index
+    if start_index is None:
+        return ""
+    return json.dumps(messages[start_index:], sort_keys=True)
+
+
+def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(messages, list):
+        return ""
+    query = query_text.strip()
+    start_index: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
+            start_index = index
+    if start_index is None:
+        return ""
+    for message in reversed(messages[start_index:]):
+        if isinstance(message, dict) and message.get("role") == "assistant" and message.get("streaming") != "true":
+            text = (message.get("text") or "").strip()
+            if text:
+                return text
+    return ""
+
+
 def kernel_surface_identity(database_path: str, owner_id: str) -> dict[str, str] | None:
     """Read kernel-owned main_chat identity from omi-agentd.sqlite3."""
     if not owner_id or not database_path or not Path(database_path).is_file():
@@ -425,6 +529,7 @@ class GauntletRunner:
         self.failures: list[str] = []
         self.warnings: list[str] = []
         self.steps: list[dict[str, Any]] = []
+        self.resilience_terminal_reason_counts: dict[str, int] = {}
         self.pcm_path = self.run_dir / "fixtures" / "ptt-voice.pcm"
 
     def bridge_act(self, name: str, params: dict[str, str] | None = None) -> dict[str, Any]:
@@ -435,6 +540,90 @@ class GauntletRunner:
 
     def warn(self, message: str) -> None:
         self.warnings.append(message)
+
+    def record_resilience_diagnostic(
+        self,
+        scenario: str,
+        iteration: int,
+        terminal_reason: str,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        record = {
+            "schema_version": RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION,
+            "run_id": self.run_id,
+            "scenario": scenario,
+            "iteration": iteration,
+            "terminal_reason": terminal_reason,
+            "detail": detail or {},
+        }
+        append_text(self.run_dir / "resilience-diagnostics.jsonl", json.dumps(record, sort_keys=True) + "\n")
+        self.resilience_terminal_reason_counts[terminal_reason] = (
+            self.resilience_terminal_reason_counts.get(terminal_reason, 0) + 1
+        )
+        if terminal_reason in RESILIENCE_FORBIDDEN_TERMINAL_REASONS:
+            self.fail(f"{scenario} iteration {iteration}: forbidden terminal reason {terminal_reason}")
+
+    def classify_resilience_turn(
+        self,
+        *,
+        scenario: str,
+        iteration: int,
+        query: str,
+        send: dict[str, Any],
+        snapshot: dict[str, str],
+        traces: list[dict[str, Any]],
+        require_trace: bool = True,
+    ) -> str:
+        detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
+        assistant = current_turn_assistant_text(snapshot, query)
+        trace_matches = traces_for_query(traces, query)
+        evidence = "\n".join(
+            [
+                json.dumps(send, sort_keys=True, default=str),
+                current_turn_snapshot_text(snapshot, query),
+                "\n".join(
+                    str(value)
+                    for key, value in snapshot.items()
+                    if "error" in key.lower() and value
+                ),
+                assistant,
+                "\n".join(flatten_trace_text(trace) for trace in trace_matches),
+            ]
+        )
+        lower_evidence = evidence.lower()
+        terminal_reason = "passed"
+        if send.get("ok") is False or detail.get("error"):
+            message = str(detail.get("error", send.get("error", send)))
+            if "failed to start agent bridge" in message.lower() or "ai not available" in message.lower():
+                terminal_reason = "bridge_launch_error"
+            elif "already running" in message.lower() or "already_active" in message.lower():
+                terminal_reason = "response_already_running"
+            else:
+                terminal_reason = "generic_chat_error"
+        elif "response_already_running" in lower_evidence or "a response is already running" in lower_evidence:
+            terminal_reason = "response_already_running"
+        elif "response stopped" in lower_evidence:
+            terminal_reason = "response_stopped"
+        elif any(pattern.lower() in lower_evidence for pattern in RESILIENCE_GENERIC_CHAT_PATTERNS):
+            terminal_reason = "generic_chat_error"
+        elif not assistant:
+            terminal_reason = "no_assistant_response"
+        elif require_trace and not trace_matches:
+            terminal_reason = "no_query_trace"
+
+        self.record_resilience_diagnostic(
+            scenario,
+            iteration,
+            terminal_reason,
+            {
+                "assistant_chars": len(assistant),
+                "query_trace_count": len(trace_matches),
+                "trace_count": len(traces),
+                "send_ok": send.get("ok"),
+                "send_detail": detail,
+            },
+        )
+        return terminal_reason
 
     def ensure_bridge(self) -> None:
         health = bridge_request(self.port, "GET", "/health")
@@ -615,6 +804,40 @@ class GauntletRunner:
         traces = read_new_traces(trace_start)
         return send, snapshot_detail, traces
 
+    def send_and_wait_resilience(
+        self,
+        query: str,
+        timeout_ms: int,
+    ) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
+        """Main-chat send path for resilience probes; capture failures instead of aborting."""
+        trace_start = trace_line_count()
+        send = self.bridge_act("ask_main_chat", {"query": query})
+        detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
+        if send.get("ok") is False or detail.get("error"):
+            snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+            snapshot_detail = snapshot.get("result", {}).get("detail", {})
+            return send, snapshot_detail, read_new_traces(trace_start)
+
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        snapshot_detail: dict[str, str] = {}
+        while time.monotonic() < deadline:
+            wait = bridge_action(
+                self.port,
+                "wait_main_chat_idle",
+                {"timeoutMs": "2000", "pollMs": "250"},
+            )
+            snapshot_detail = wait.get("result", {}).get("detail", {})
+            if wait.get("ok") and snapshot_detail.get("idle") == "true":
+                break
+            time.sleep(0.25)
+        else:
+            self.fail(f"timed out waiting for resilience main chat idle after query: {query[:120]}")
+
+        snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+        traces = read_new_traces(trace_start)
+        return send, snapshot_detail, traces
+
     def assert_trace_contains(self, traces: list[dict[str, Any]], needle: str, label: str) -> None:
         haystack = "\n".join(flatten_trace_text(trace) for trace in traces)
         if needle not in haystack:
@@ -715,6 +938,8 @@ class GauntletRunner:
             self.run_agents_suite()
         if "prompts" in self.suites:
             self.run_prompts_suite()
+        if "resilience" in self.suites:
+            self.run_resilience_suite()
         if "owner" in self.suites:
             self.run_owner_suite()
 
@@ -1097,6 +1322,32 @@ class GauntletRunner:
         swap_detail = swap.get("result", {}).get("detail", {})
         if swap.get("ok") is False or swap_detail.get("error"):
             self.fail(f"owner-switch swap_test_owner failed: {swap_detail.get('error', swap.get('error', swap))}")
+        # Guard against the ghost-auth regression: swap must keep Firebase
+        # auth_userId intact and only set an automation owner override.
+        swapped_auth_uid = (swap_detail.get("auth_user_id") or "").strip()
+        swapped_override = (swap_detail.get("owner_override") or "").strip()
+        swapped_owner_a = (swap_detail.get("owner_a") or "").strip()
+        if not swapped_auth_uid or not swapped_override:
+            self.fail(
+                "owner-switch: swap_test_owner missing auth_user_id/owner_override "
+                f"(detail keys={sorted(swap_detail.keys())}); rebuild app with override-based swap"
+            )
+        if swapped_auth_uid == owner_b_id:
+            self.fail(
+                "owner-switch: auth_user_id equals synthetic owner_b; "
+                "swap must use automation_owner_override instead"
+            )
+        if swapped_owner_a and swapped_auth_uid != swapped_owner_a:
+            self.fail(
+                "owner-switch: swap_test_owner rewrote auth_userId "
+                f"(owner_a={swapped_owner_a}, auth_user_id={swapped_auth_uid}); "
+                "this clears Firebase tokens via getIdToken mismatch"
+            )
+        if swapped_override != owner_b_id:
+            self.fail(
+                "owner-switch: owner_override mismatch "
+                f"(expected={owner_b_id}, actual={swapped_override})"
+            )
 
         deadline = time.monotonic() + (self.args.turn_timeout_ms / 1000.0)
         snapshot_detail: dict[str, str] = swap_detail
@@ -1276,9 +1527,470 @@ class GauntletRunner:
         if len(assistant) > 450:
             self.warn(f"P3 register: unknown-person reply too long ({len(assistant)} chars)")
 
+    def run_resilience_r3_race_policy(self) -> None:
+        """Probe concurrent main-chat send rejection via no-wait + busy-state actions."""
+        long_query = (
+            f"Resilience race hold {self.run_id}. "
+            "Take about twenty seconds to reply with exactly: RACE_HOLD_DONE"
+        )
+        race_query = f"Resilience race probe {self.run_id}. Reply with exactly: RACE_PROBE_REJECTED"
+        # Deterministic busy window (bridge latch) so R3 does not depend on LLM latency.
+        hold_busy_ms = "15000"
+
+        fire = self.bridge_act(
+            "ask_main_chat_no_wait",
+            {"query": long_query, "hold_busy_ms": hold_busy_ms},
+        )
+        fire_detail = fire.get("result", {}).get("detail", {}) if isinstance(fire, dict) else {}
+        if fire.get("ok") is False or fire_detail.get("error"):
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "generic_chat_error",
+                {"phase": "fire", "fire_detail": fire_detail, "fire": fire},
+            )
+            self.fail(f"R3 race policy: ask_main_chat_no_wait failed: {fire_detail.get('error', fire)}")
+            return
+        if fire_detail.get("accepted") != "true":
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "generic_chat_error",
+                {"phase": "fire", "fire_detail": fire_detail},
+            )
+            self.fail(f"R3 race policy: initial no-wait send was not accepted: {fire_detail}")
+            return
+
+        # Hold was accepted — always drain before returning so R4 starts idle.
+        busy_detail: dict[str, Any] = {}
+        race_detail: dict[str, Any] = {}
+        wait_detail: dict[str, Any] = {}
+        terminal_reason = "generic_chat_error"
+        provider_busy_seen = False
+        try:
+            busy_seen = False
+            busy_deadline = time.monotonic() + 5.0
+            while time.monotonic() < busy_deadline:
+                busy = self.bridge_act("main_chat_busy_state")
+                busy_detail = busy.get("result", {}).get("detail", {}) if isinstance(busy, dict) else {}
+                if busy.get("ok") is False or busy_detail.get("error"):
+                    self.record_resilience_diagnostic(
+                        "R3-already-running-race-policy",
+                        2,
+                        "generic_chat_error",
+                        {"phase": "busy_poll", "busy_detail": busy_detail, "busy": busy},
+                    )
+                    self.fail(
+                        f"R3 race policy: main_chat_busy_state failed: {busy_detail.get('error', busy)}"
+                    )
+                    return
+                if (
+                    busy_detail.get("is_sending") == "true"
+                    or busy_detail.get("is_streaming") == "true"
+                ):
+                    provider_busy_seen = True
+                if busy_detail.get("busy") == "true":
+                    busy_seen = True
+                    break
+                time.sleep(0.05)
+            if not busy_seen:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    2,
+                    "generic_chat_error",
+                    {
+                        "phase": "busy_poll",
+                        "busy_detail": busy_detail,
+                        "fire_detail": fire_detail,
+                        "note": "hold never became busy (or finished before poll)",
+                    },
+                )
+                self.fail("R3 race policy: main chat never reported busy after no-wait send")
+                return
+            # Latch alone is not enough — require ChatProvider isSending/isStreaming
+            # at least once so R3 is not a pure harness-gate self-test.
+            if not provider_busy_seen:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    2,
+                    "generic_chat_error",
+                    {
+                        "phase": "provider_busy_missing",
+                        "busy_detail": busy_detail,
+                        "fire_detail": fire_detail,
+                        "note": "busy was latch-only; never observed is_sending/is_streaming",
+                    },
+                )
+                self.fail(
+                    "R3 race policy: never observed ChatProvider is_sending/is_streaming "
+                    "(latch-only busy is insufficient)"
+                )
+                return
+
+            # Re-check immediately before the race send — models often finish the
+            # hold prompt early; accepting a second send while idle is not a race bug.
+            # Latch may keep busy=true after provider idle; that is OK for the race
+            # window only after provider_busy_seen above.
+            pre_race = self.bridge_act("main_chat_busy_state")
+            pre_race_detail = (
+                pre_race.get("result", {}).get("detail", {}) if isinstance(pre_race, dict) else {}
+            )
+            if pre_race.get("ok") is False or pre_race_detail.get("error"):
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    3,
+                    "generic_chat_error",
+                    {"phase": "pre_race_busy", "busy_detail": pre_race_detail},
+                )
+                self.fail(
+                    "R3 race policy: main_chat_busy_state failed before race: "
+                    f"{pre_race_detail.get('error', pre_race)}"
+                )
+                return
+            if pre_race_detail.get("busy") != "true":
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    3,
+                    "generic_chat_error",
+                    {
+                        "phase": "hold_completed_early",
+                        "busy_detail": busy_detail,
+                        "pre_race_detail": pre_race_detail,
+                        "fire_detail": fire_detail,
+                        "note": "hold turn went idle before concurrent send; race inconclusive",
+                    },
+                )
+                self.fail(
+                    "R3 race policy: hold turn completed before concurrent send "
+                    "(busy cleared; race inconclusive — retry or lengthen hold)"
+                )
+                return
+            busy_detail = pre_race_detail
+
+            race = self.bridge_act("ask_main_chat_no_wait", {"query": race_query})
+            race_detail = race.get("result", {}).get("detail", {}) if isinstance(race, dict) else {}
+            if race.get("ok") is False or race_detail.get("error"):
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    "generic_chat_error",
+                    {"phase": "race", "race_detail": race_detail, "race": race},
+                )
+                self.fail(
+                    f"R3 race policy: concurrent no-wait send errored: {race_detail.get('error', race)}"
+                )
+                return
+
+            rejected = (
+                race_detail.get("accepted") == "false"
+                or race_detail.get("busy") == "true"
+                or race_detail.get("reason") == "already_sending"
+            )
+            if not rejected:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    "generic_chat_error",
+                    {
+                        "phase": "race",
+                        "fire_detail": fire_detail,
+                        "busy_detail": busy_detail,
+                        "race_detail": race_detail,
+                        "rejected": False,
+                        "provider_busy_seen": provider_busy_seen,
+                    },
+                )
+                self.fail(
+                    "R3 race policy: concurrent ask_main_chat_no_wait was accepted while chat was busy "
+                    f"(race_detail={race_detail})"
+                )
+                terminal_reason = "generic_chat_error"
+            else:
+                terminal_reason = "passed"
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    terminal_reason,
+                    {
+                        "phase": "race",
+                        "fire_detail": fire_detail,
+                        "busy_detail": busy_detail,
+                        "race_detail": race_detail,
+                        "rejected": True,
+                        "provider_busy_seen": provider_busy_seen,
+                    },
+                )
+        finally:
+            # Must use bridge_act so HTTP client timeout tracks turn_timeout_ms
+            # (bare bridge_action defaults to 60s and can abort a longer drain).
+            wait = self.bridge_act(
+                "wait_main_chat_idle",
+                {"timeoutMs": str(self.args.turn_timeout_ms), "pollMs": "250"},
+            )
+            wait_detail = wait.get("result", {}).get("detail", {}) if isinstance(wait, dict) else {}
+            drain_ok = (
+                wait.get("ok") is not False
+                and not wait_detail.get("error")
+                and wait_detail.get("idle") == "true"
+            )
+            if not drain_ok:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    5,
+                    "generic_chat_error",
+                    {
+                        "phase": "drain",
+                        "wait_detail": wait_detail,
+                        "wait": wait if isinstance(wait, dict) else {"raw": str(wait)},
+                        "prior_terminal_reason": terminal_reason,
+                    },
+                )
+                self.fail(
+                    "R3 race policy: wait_main_chat_idle did not reach idle before R4 "
+                    f"(wait_detail={wait_detail})"
+                )
+                terminal_reason = "generic_chat_error"
+            self.record_step(
+                "r3-already-running-race-policy",
+                "resilience: already-running/race policy",
+                user_text=long_query,
+                action_response=fire,
+                snapshot_detail=wait_detail,
+                traces=[],
+                extra={
+                    "terminal_reason": terminal_reason,
+                    "busy_detail": busy_detail,
+                    "race_query": race_query,
+                    "race_detail": race_detail,
+                    "wait_detail": wait_detail,
+                    "provider_busy_seen": provider_busy_seen,
+                    "drain_ok": drain_ok,
+                },
+            )
+
+    def run_resilience_suite(self) -> None:
+        """Startup/bad-state probes for bridge, main chat, and subagent launch continuity.
+
+        Run with --suite resilience for release-candidate startup QA; --suite all
+        includes this suite alongside the canonical continuity, agents, owner, and
+        prompt checks.
+        """
+        self.manifest["resilience_forbidden_terminal_reasons"] = sorted(
+            RESILIENCE_FORBIDDEN_TERMINAL_REASONS
+        )
+
+        # R1 — cold/simple bridge launch probe. ask_main_chat goes through the
+        # real agent bridge and QueryTracer; it is safe for a named non-prod bundle
+        # and avoids process restarts or destructive simulation.
+        r1_query = (
+            f"Resilience startup probe {self.run_id}. "
+            "Reply with exactly: RESILIENCE_BRIDGE_READY"
+        )
+        send, snapshot, traces = self.send_and_wait_resilience(r1_query, self.args.turn_timeout_ms)
+        r1_reason = self.classify_resilience_turn(
+            scenario="R1-cold-simple-bridge-launch",
+            iteration=1,
+            query=r1_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        self.record_step(
+            "r1-cold-bridge-launch",
+            "resilience: cold/simple bridge launch probe",
+            user_text=r1_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"terminal_reason": r1_reason},
+        )
+        self.assert_assistant_mentions(latest_assistant_text(snapshot), ["RESILIENCE_BRIDGE_READY"], "R1 bridge launch")
+
+        # R2 — warm reuse probe. Sequential short prompts must settle cleanly and
+        # must not surface already-running or generic stopped-response text.
+        for index in range(1, 4):
+            query = f"Warm reuse probe {index}. Reply with exactly WARM_REUSE_{index}."
+            send, snapshot, traces = self.send_and_wait_resilience(query, self.args.turn_timeout_ms)
+            terminal_reason = self.classify_resilience_turn(
+                scenario="R2-warm-reuse",
+                iteration=index,
+                query=query,
+                send=send,
+                snapshot=snapshot,
+                traces=traces,
+            )
+            self.record_step(
+                f"r2-warm-reuse-{index}",
+                f"resilience: warm reuse probe {index}",
+                user_text=query,
+                action_response=send,
+                snapshot_detail=snapshot,
+                traces=traces,
+                extra={"terminal_reason": terminal_reason},
+            )
+            self.assert_assistant_mentions(
+                latest_assistant_text(snapshot),
+                [f"WARM_REUSE_{index}"],
+                f"R2 warm reuse {index}",
+            )
+
+        # R3 — already-running/race policy. Fire a non-waiting main-chat send,
+        # confirm busy state, then attempt a concurrent send and assert the bridge
+        # rejects it (or reports busy) instead of overlapping turns.
+        # Missing actions are a hard fail (skipped_missing_action is forbidden);
+        # --self-check also requires these actions so CI catches drift before live.
+        bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
+        race_actions = {"ask_main_chat_no_wait", "main_chat_busy_state"}
+        present = sorted(name for name in race_actions if f'name: "{name}"' in bridge_source)
+        missing = sorted(race_actions - set(present))
+        if missing:
+            # skipped_missing_action is forbidden → record_resilience_diagnostic fails the run.
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "skipped_missing_action",
+                {
+                    "missing_bridge_actions": missing,
+                    "note": "need ask_main_chat_no_wait + main_chat_busy_state",
+                },
+            )
+        else:
+            self.run_resilience_r3_race_policy()
+
+        # R4 — subagent launch cold/resilience probe. This is stricter than the
+        # agents suite because it records terminal reasons and requires runtime,
+        # coordinator/pill projection, spawn tool evidence, and status visibility.
+        # Prompt mirrors the agents-suite spawn wording (track marker + wait) so
+        # the model treats it as a real background-work objective, not a probe.
+        marker = f"RESILIENCE-SUBAGENT-{self.run_id}-{secrets.token_hex(3).upper()}"
+        spawn_title = f"Resilience Monitor {marker[-8:]}"
+        spawn_query = (
+            f"Use spawn_agent now to start a visible background agent titled \"{spawn_title}\". "
+            f"Objective: track marker {marker} and wait silently. "
+            "Do not ask follow-up questions."
+        )
+        trace_start = trace_line_count()
+        send, snapshot, traces = self.send_and_wait_resilience(spawn_query, self.args.turn_timeout_ms)
+        spawn_tools: list[dict[str, Any]] = []
+        settle_deadline = time.monotonic() + 10.0
+        while time.monotonic() < settle_deadline:
+            traces = read_new_traces(trace_start)
+            spawn_tools = [
+                tool
+                for tool in trace_tool_executions(traces, {"spawn_agent"})
+                if marker in str(tool.get("input", "")) or marker in str(tool.get("output", ""))
+            ]
+            if spawn_tools:
+                break
+            time.sleep(0.25)
+        coordinator = self.bridge_act("coordinator_awareness_snapshot")
+        coordinator_detail = coordinator.get("result", {}).get("detail", {})
+        runtime = self.bridge_act("agent_runtime_evidence")
+        runtime_detail = runtime.get("result", {}).get("detail", {})
+        terminal_reason = self.classify_resilience_turn(
+            scenario="R4-subagent-launch",
+            iteration=1,
+            query=spawn_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        if not spawn_tools:
+            terminal_reason = "subagent_missing"
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                2,
+                terminal_reason,
+                {
+                    "spawn_tool_calls": 0,
+                    "coordinator_snapshot_chars": len(str(coordinator_detail.get("snapshot", ""))),
+                    "database_exists": runtime_detail.get("database_exists"),
+                },
+            )
+            self.fail("R4 subagent launch: no spawn_agent execution carrying the resilience marker")
+        if runtime.get("ok") is False or runtime_detail.get("error") or runtime_detail.get("database_exists") != "true":
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                3,
+                "runtime_evidence_missing",
+                {"runtime_detail": runtime_detail},
+            )
+            self.fail("R4 subagent launch: runtime sqlite evidence missing")
+        if marker not in str(coordinator_detail):
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                4,
+                "pill_runtime_evidence_missing",
+                {"coordinator_snapshot_chars": len(str(coordinator_detail.get("snapshot", "")))},
+            )
+            self.fail("R4 subagent launch: coordinator/pill evidence missing resilience marker")
+        self.record_step(
+            "r4-subagent-launch",
+            "resilience: subagent launch cold probe",
+            user_text=spawn_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "terminal_reason": terminal_reason,
+                "spawn_tool_calls": spawn_tools,
+                "coordinator_snapshot": coordinator_detail,
+                "runtime_evidence": runtime_detail,
+            },
+        )
+
+        status_query = (
+            "What is the status of the background agent you just started? "
+            "Use list_agent_sessions and include its exact resilience marker."
+        )
+        send, snapshot, traces = self.send_and_wait_resilience(status_query, self.args.turn_timeout_ms)
+        terminal_reason = self.classify_resilience_turn(
+            scenario="R4-subagent-status",
+            iteration=1,
+            query=status_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        assistant = latest_assistant_text(snapshot)
+        list_tools = trace_tool_executions(traces, {"list_agent_sessions"})
+        list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
+        if not list_tools or marker not in (assistant + "\n" + list_outputs):
+            terminal_reason = "subagent_status_invisible"
+            self.record_resilience_diagnostic(
+                "R4-subagent-status",
+                2,
+                terminal_reason,
+                {
+                    "list_agent_sessions_calls": len(list_tools),
+                    "assistant_chars": len(assistant),
+                    "marker_in_tool_output": marker in list_outputs,
+                },
+            )
+            self.fail("R4 subagent status: status query could not see the spawned resilience agent")
+        self.record_step(
+            "r4-subagent-status",
+            "resilience: subagent status query",
+            user_text=status_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "terminal_reason": terminal_reason,
+                "list_agent_sessions_calls": list_tools,
+            },
+        )
+
     def finalize(self) -> int:
         manifest = self.manifest
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
+        if "resilience" in self.suites:
+            manifest["resilience_terminal_reason_counts"] = dict(
+                sorted(self.resilience_terminal_reason_counts.items())
+            )
+            manifest["resilience_forbidden_terminal_reasons"] = sorted(
+                RESILIENCE_FORBIDDEN_TERMINAL_REASONS
+            )
         manifest["steps"] = self.steps
         manifest["failures"] = self.failures
         manifest["warnings"] = self.warnings
@@ -1320,12 +2032,16 @@ def run_owner_switch_kernel_check() -> tuple[bool, str]:
 def self_check() -> int:
     script = SCRIPT_DIR / "agent-continuity-gauntlet.sh"
     bridge_actions = {
+        "ask",
         "ask_main_chat",
+        "ask_main_chat_no_wait",
+        "main_chat_busy_state",
         "main_chat_snapshot",
         "wait_main_chat_idle",
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
         "swap_test_owner",
+        "restore_test_owner",
         "clear_owner_surface_state",
         "kernel_turn_tail",
     }
@@ -1346,19 +2062,303 @@ def self_check() -> int:
     if "clearOwnerState()" not in source:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
+    driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
+    missing_auth_checks = bridge_auth_self_check_failures(driver_source)
+    if missing_auth_checks:
+        print(f"self-check failed: bridge auth wiring missing {missing_auth_checks}", file=sys.stderr)
+        return 1
+    missing_driver_checks = resilience_driver_self_check_failures(driver_source)
+    if missing_driver_checks:
+        print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
+        return 1
+    missing_contract_checks = continuity_contract_self_check_failures()
+    if missing_contract_checks:
+        print(
+            f"self-check failed: INV-6 hermetic contract coverage missing {missing_contract_checks}",
+            file=sys.stderr,
+        )
+        return 1
     owner_ok, owner_detail = run_owner_switch_kernel_check()
     if not owner_ok:
         print(f"self-check failed: owner-switch kernel check: {owner_detail}", file=sys.stderr)
         return 1
-    print("self-check passed (owner-switch: kernel vitest + swap_test_owner action registered)")
+    print(
+        "self-check passed "
+        "(R3 race actions + resilience wiring + INV-6 hermetic contract gates + owner-switch)"
+    )
     return 0
+
+
+def continuity_contract_self_check_failures() -> list[str]:
+    """Fail if hermetic INV-6 contract tests / harness filter drift out of the DoD gate.
+
+    Live gauntlet suites exercise bridge/LLM continuity; they do NOT replace these
+    hermetic behavioral tests. See AGENTS.md → "Live gauntlet vs hermetic INV-6".
+    """
+    failures: list[str] = []
+    tests_dir = DESKTOP_DIR / "Desktop/Tests"
+    harness = (SCRIPT_DIR / "agent-logic-harness.sh").read_text(encoding="utf-8")
+
+    required_filter_classes = [
+        "KernelTurnRecordedProjectionTests",
+        "ChatTimelineContinuityTests",
+        "FloatingControlBarStateTests",
+        "AgentContinuityGauntletTests",
+        "RuntimeOwnerIdentityTests",
+    ]
+    for class_name in required_filter_classes:
+        if class_name not in harness:
+            failures.append(f"agent-logic-harness filter includes {class_name}")
+
+    projection = (tests_dir / "KernelTurnRecordedProjectionTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate(",
+        "func testApplyKernelTurnRecordedDedupesByIdempotencyKey(",
+        "func testMainAndFloatingAutomationSnapshotsAliasSameTimeline(",
+        "func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout(",
+        "func testPillCompletionKeyCoalescesSecondStageWithoutDuplicate(",
+        "func testSameTextDifferentContinuityKeysKeepsTwoPairs(",
+        "func testResourcesStayOnProducingMessageThroughStageAndPromote(",
+    ):
+        if needle not in projection:
+            failures.append(f"KernelTurnRecordedProjectionTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    timeline = (tests_dir / "ChatTimelineContinuityTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testHydratePreferencePrefersRunThenSessionThenPill(",
+        "func testFindPillMatchesByHydratePreferenceOrder(",
+        "func testAgentCompletionBlockExposesOpenRefAndStaysVisible(",
+        "func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay(",
+        "func testAgentPreviewTextPrefersPromptOverOutput(",
+        "func testAgentCompletionCardsUsePromptPreviewHelper(",
+        "func testFloatingResourceStripsBindPerMessageNotProviderWide(",
+        "func testForbiddenContinuityPatternsAbsentFromWritePath(",
+    ):
+        if needle not in timeline:
+            failures.append(f"ChatTimelineContinuityTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    floating_state = (tests_dir / "FloatingControlBarStateTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testViewportDerivesCurrentAnswerAndHistoryFromProviderMessages(",
+        "func testCanRestoreUsesViewportAnchorsAndActivityWindow(",
+        "func testViewportDisplayResourcesOnlyFromAnchoredMessageIds(",
+        "chatViewport",
+    ):
+        if needle not in floating_state:
+            label = needle.split("(")[0].removeprefix("func ") if needle.startswith("func ") else needle
+            failures.append(f"FloatingControlBarStateTests covers {label}")
+
+    owner_identity = (tests_dir / "RuntimeOwnerIdentityTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testOverrideDoesNotRewriteAuthUserIdOrTokens(",
+        "func testSwapPathSourceNeverWritesAuthUserId(",
+    ):
+        if needle not in owner_identity:
+            failures.append(f"RuntimeOwnerIdentityTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    # Forbidden-pattern tripwires must stay present in hermetic coverage.
+    if "suppressNextRecordedTurn" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids suppressNextRecordedTurn")
+    if "addTurnRecordedHandler" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids addTurnRecordedHandler")
+    if "@Published var chatHistory" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids @Published var chatHistory")
+
+    return failures
+
+
+
+def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
+    """Fail if bridge_request no longer sends the automation bearer token."""
+    tree = ast.parse(driver_source)
+    failures: list[str] = []
+    funcs = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    classes = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    if "AutomationTokenError" not in classes:
+        failures.append("AutomationTokenError class")
+    token_fn = funcs.get("automation_token")
+    if token_fn is None:
+        failures.append("automation_token helper")
+    else:
+        if not method_contains_string(token_fn, "OMI_AUTOMATION_TOKEN"):
+            failures.append("automation_token reads OMI_AUTOMATION_TOKEN")
+        if not method_contains_string(token_fn, "omi-automation-"):
+            failures.append("automation_token reads omi-automation-{port}.token")
+        if not method_references_name(token_fn, "FileNotFoundError"):
+            failures.append("automation_token treats missing file as optional")
+        if not method_references_name(token_fn, "AutomationTokenError"):
+            failures.append("automation_token fails closed on unreadable token")
+    bridge = funcs.get("bridge_request")
+    if bridge is None:
+        failures.append("bridge_request function")
+        return failures
+    if not method_calls(bridge, "automation_token"):
+        failures.append("bridge_request calls automation_token")
+    if not method_contains_string(bridge, "Authorization"):
+        failures.append("bridge_request sets Authorization header")
+    # f"Bearer {token}" -> JoinedStr with Constant("Bearer ")
+    if not method_contains_string(bridge, "Bearer "):
+        failures.append("bridge_request uses Bearer token scheme")
+    if not method_contains_string_prefix(bridge, "automation_token_unreadable"):
+        failures.append("bridge_request fails closed on unreadable token")
+    return failures
+
+
+def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
+    tree = ast.parse(driver_source)
+    failures: list[str] = []
+    runner = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"
+        ),
+        None,
+    )
+    if runner is None:
+        return ["GauntletRunner class"]
+
+    methods = {
+        node.name: node
+        for node in runner.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for method_name in (
+        "record_resilience_diagnostic",
+        "run_resilience_suite",
+        "finalize",
+        "run",
+    ):
+        if method_name not in methods:
+            failures.append(f"GauntletRunner.{method_name}")
+
+    if "resilience" not in ast_literal_set(tree, "SUITE_NAMES"):
+        failures.append("SUITE_NAMES includes resilience")
+    if "resilience" not in ast_literal_set(tree, "SUITE_ALIASES", key="all"):
+        failures.append("SUITE_ALIASES['all'] includes resilience")
+    if not method_contains_string(methods.get("record_resilience_diagnostic"), "resilience-diagnostics.jsonl"):
+        failures.append("record_resilience_diagnostic writes resilience-diagnostics.jsonl")
+    if not method_contains_string(methods.get("run_resilience_suite"), "skipped_missing_action"):
+        failures.append("run_resilience_suite can record skipped_missing_action")
+    if not method_contains_string(methods.get("run_resilience_suite"), "ask_main_chat_no_wait"):
+        failures.append("run_resilience_suite references ask_main_chat_no_wait")
+    if not method_contains_string(methods.get("run_resilience_suite"), "main_chat_busy_state"):
+        failures.append("run_resilience_suite references main_chat_busy_state")
+    if "run_resilience_r3_race_policy" not in methods:
+        failures.append("GauntletRunner.run_resilience_r3_race_policy")
+    elif not method_calls(methods.get("run_resilience_suite"), "run_resilience_r3_race_policy"):
+        failures.append("run_resilience_suite calls run_resilience_r3_race_policy")
+    else:
+        r3 = methods.get("run_resilience_r3_race_policy")
+        if not method_contains_string(r3, "hold_busy_ms"):
+            failures.append("run_resilience_r3_race_policy arms hold_busy_ms latch")
+        if not method_contains_string(r3, "provider_busy_missing"):
+            failures.append("run_resilience_r3_race_policy requires provider is_sending/is_streaming")
+        if not method_contains_string(r3, "hold_completed_early"):
+            failures.append("run_resilience_r3_race_policy handles hold_completed_early")
+        if not method_contains_string(r3, "drain"):
+            failures.append("run_resilience_r3_race_policy asserts wait_main_chat_idle drain")
+    if not method_contains_string(methods.get("run_resilience_suite"), '". Objective: track marker '):
+        failures.append("run_resilience_suite R4 spawn uses track-marker objective")
+    if not method_contains_attr(methods.get("record_resilience_diagnostic"), "resilience_terminal_reason_counts"):
+        failures.append("record_resilience_diagnostic updates resilience_terminal_reason_counts")
+    if not method_contains_attr(methods.get("finalize"), "resilience_terminal_reason_counts"):
+        failures.append("finalize emits resilience_terminal_reason_counts")
+    if not method_contains_string(methods.get("finalize"), "resilience_forbidden_terminal_reasons"):
+        failures.append("finalize emits resilience_forbidden_terminal_reasons")
+    if not method_calls(methods.get("run"), "run_resilience_suite"):
+        failures.append("run dispatches run_resilience_suite")
+    return failures
+
+
+def ast_literal_set(tree: ast.Module, name: str, *, key: str | None = None) -> set[str]:
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                continue
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            value = node.value
+            if value is None:
+                return set()
+        else:
+            continue
+        if key is not None:
+            if not isinstance(value, ast.Dict):
+                return set()
+            for dict_key, dict_value in zip(value.keys, value.values):
+                if isinstance(dict_key, ast.Constant) and dict_key.value == key:
+                    value = dict_value
+                    break
+            else:
+                return set()
+        if isinstance(value, (ast.Set, ast.List, ast.Tuple)):
+            return {
+                item.value
+                for item in value.elts
+                if isinstance(item, ast.Constant) and isinstance(item.value, str)
+            }
+    return set()
+
+
+def method_contains_string(node: ast.AST | None, text: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Constant) and child.value == text
+        for child in ast.walk(node)
+    )
+
+
+def method_contains_string_prefix(node: ast.AST | None, prefix: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Constant)
+        and isinstance(child.value, str)
+        and child.value.startswith(prefix)
+        for child in ast.walk(node)
+    )
+
+
+def method_references_name(node: ast.AST | None, name: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Name) and child.id == name
+        for child in ast.walk(node)
+    )
+
+
+def method_contains_attr(node: ast.AST | None, name: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Attribute) and child.attr == name
+        for child in ast.walk(node)
+    )
+
+
+def method_calls(node: ast.AST | None, method_name: str) -> bool:
+    """True if node calls method_name as attr (obj.foo) or bare name (foo)."""
+    if node is None:
+        return False
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Attribute) and func.attr == method_name:
+            return True
+        if isinstance(func, ast.Name) and func.id == method_name:
+            return True
+    return False
 
 
 SUITE_ALIASES: dict[str, set[str]] = {
     "core": {"continuity", "agents", "owner"},
-    "all": {"continuity", "agents", "owner", "prompts"},
+    "all": {"continuity", "agents", "owner", "prompts", "resilience"},
 }
-SUITE_NAMES = {"continuity", "agents", "owner", "prompts"}
+SUITE_NAMES = {"continuity", "agents", "owner", "prompts", "resilience"}
 
 
 def expand_suites(raw: str) -> set[str]:
@@ -1392,8 +2392,9 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Comma-separated suites: continuity (steps 1-3, includes PTT), agents (4-5), "
             "owner (6), prompts (fast typed-only prompt-regression probes), "
-            "core (default: continuity+agents+owner), all (core+prompts). "
-            "Example: --suite prompts for fast prompt iteration."
+            "resilience (startup/bad-state bridge + subagent probes), "
+            "core (default: continuity+agents+owner), all (core+prompts+resilience). "
+            "Example: --suite resilience for release-candidate startup QA."
         ),
     )
     parser.add_argument("--self-check", action="store_true")

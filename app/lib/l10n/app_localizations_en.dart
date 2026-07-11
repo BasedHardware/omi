@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Session expired — sign in again.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9503,4 +9506,66 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'Pendant storage is almost full — keep the app open to sync.';
+
+  @override
+  String get connectRayBanMeta => 'Connect Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Connect through Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Finish connecting in the Meta AI app, then come back here.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Check Again';
+
+  @override
+  String get raybanMetaAllowCamera => 'Allow Camera on Glasses';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Skip for Now';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta audio-only mode';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Music on your phone pauses while the glasses microphone is in use.';
+
+  @override
+  String get raybanMetaContinue => 'Continue';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Capture Photo';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Photo requested — it will appear in your conversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microphone ready';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Image capture ready';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Unavailable in audio-only mode';
+
+  @override
+  String get raybanMetaCamera => 'Camera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Error connecting to Ray-Ban Meta: $error';
+  }
 }

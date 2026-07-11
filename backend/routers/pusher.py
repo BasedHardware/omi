@@ -23,7 +23,7 @@ from utils.app_integrations import (
     trigger_external_integrations,
 )
 from utils.conversations.location import async_get_google_maps_location
-from utils.byok import set_byok_keys
+from utils.byok import set_byok_keys, set_byok_uid
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
@@ -37,7 +37,8 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunks_batch
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -119,6 +120,7 @@ async def _process_conversation_task(
     """
     if byok_keys:
         set_byok_keys(byok_keys)
+        set_byok_uid(uid)
     try:
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
@@ -296,13 +298,30 @@ async def _websocket_util_trigger(
                         storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                     )
                     if audio_files:
+                        files_payload = [af.model_dump() for af in audio_files]
                         await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
-                            {'audio_files': [af.model_dump() for af in audio_files]},
+                            {'audio_files': files_payload},
                         )
+                        # Rebuild the conversation playback artifact if a stamped one
+                        # went stale. No stamp (the live-conversation common case) → no-op.
+                        if is_audio_merge_dispatch_enabled():
+                            stamp = await run_blocking(
+                                storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
+                            )
+                            if stamp:
+                                await run_blocking(
+                                    storage_executor,
+                                    maybe_invalidate_conversation_playback,
+                                    uid,
+                                    conv_id,
+                                    {'conversation_audio': stamp},
+                                    files_payload,
+                                    'pusher_flush',
+                                )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
             except Exception as e:

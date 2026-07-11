@@ -48,21 +48,14 @@ class _WaveformBar extends StatelessWidget {
   final bool showStar;
   final bool isMuted;
 
-  const _WaveformBar({
-    required this.wavePhase,
-    this.showStar = false,
-    this.isMuted = false,
-  });
+  const _WaveformBar({required this.wavePhase, this.showStar = false, this.isMuted = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
           Container(
@@ -88,14 +81,8 @@ class _WaveformBar extends StatelessWidget {
               size: const Size(double.infinity, 28),
             ),
           ),
-          if (showStar) ...[
-            const SizedBox(width: 10),
-            const Icon(Icons.star, color: Color(0xFFFFB300), size: 20),
-          ],
-          if (isMuted) ...[
-            const SizedBox(width: 10),
-            const Icon(Icons.mic_off, color: Color(0xFFEF5350), size: 16),
-          ],
+          if (showStar) ...[const SizedBox(width: 10), const Icon(Icons.star, color: Color(0xFFFFB300), size: 20)],
+          if (isMuted) ...[const SizedBox(width: 10), const Icon(Icons.mic_off, color: Color(0xFFEF5350), size: 16)],
         ],
       ),
     );
@@ -203,21 +190,27 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                     height: 3,
                     width: leftWidth * 0.9,
                     decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)),
+                      color: Colors.black.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     height: 3,
                     width: leftWidth * 0.6,
                     decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(2)),
+                      color: Colors.black.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     height: 3,
                     width: leftWidth * 0.75,
                     decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(2)),
+                      color: Colors.black.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ],
               ),
@@ -228,8 +221,10 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                 child: Container(
                   width: 2,
                   height: 20,
-                  decoration:
-                      BoxDecoration(color: Colors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(1)),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(1),
+                  ),
                 ),
               ),
             ),

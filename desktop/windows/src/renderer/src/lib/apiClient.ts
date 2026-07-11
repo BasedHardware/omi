@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { auth } from './firebase'
+import { getWindowsDeviceIdHash } from './clientDevice'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before.
@@ -21,6 +22,8 @@ function makeClient(baseURL: string): AxiosInstance {
       const token = await user.getIdToken()
       config.headers.Authorization = `Bearer ${token}`
     }
+    config.headers['X-App-Platform'] = 'windows'
+    config.headers['X-Device-Id-Hash'] = await getWindowsDeviceIdHash()
     return config
   })
 

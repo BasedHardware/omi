@@ -71,8 +71,10 @@ class TaskAgentSettings: ObservableObject {
         skipPermissions = true
     }
 
-    /// Build the full prompt for a task, shared by both the tmux agent and the chat sidebar.
-    func buildTaskPrompt(for task: TaskActionItem) -> String {
+    /// Build the bounded canonical prompt for the workstream-backed thread.
+    /// Runtime history and prior output come from the kernel/context packet,
+    /// never from the legacy tmux projection.
+    func buildCanonicalTaskPrompt(for task: TaskActionItem) -> String {
         var prompt = "# Task\n\n\(task.chatContext)"
 
         let customPrefix = customPromptPrefix
@@ -82,6 +84,13 @@ class TaskAgentSettings: ObservableObject {
 
         let instructions = defaultPrompt
         prompt += "\n\n## Instructions\n\n\(instructions)"
+
+        return prompt
+    }
+
+    /// Legacy tmux prompt builder retained until Ticket 14 removes that path.
+    func buildTaskPrompt(for task: TaskActionItem) -> String {
+        var prompt = buildCanonicalTaskPrompt(for: task)
 
         // Live agent output (from running/completed session)
         if let session = TaskAgentManager.shared.getSession(for: task.id),

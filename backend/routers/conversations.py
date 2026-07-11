@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
     MergeConversationsRequest,
@@ -47,7 +48,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import search_conversations
+from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
@@ -373,12 +374,12 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationMutationResponse
 )
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
-    return {'status': 'Ok'}
+    return {'status': 'Ok', 'conversation': _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.delete(
@@ -605,15 +606,10 @@ def delete_conversation(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
-    conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(uid, conversation_id)
-    delete_transcript_chunk_vectors(uid, conversation_id)
 
     if cascade:
-        # Delete audio files
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
-
-        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        # Delete associated memories and action items before removing the conversation doc
+        # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
@@ -623,8 +619,12 @@ def delete_conversation(
             for memory_id in deletion_result.get('vector_delete_ids', []):
                 delete_memory_vector(uid, memory_id)
 
-        # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+
+    conversations_db.delete_conversation(uid, conversation_id)
+    delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
 
     return {"status": "Ok"}
 
@@ -1011,13 +1011,13 @@ def set_conversation_visibility(
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationMutationResponse
 )
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok"}
+    return {"status": "Ok", "conversation": _get_valid_conversation_by_id(uid, conversation_id)}
 
 
 @router.get(
@@ -1074,16 +1074,19 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    search_results = search_conversations(
-        query=search_request.query,
-        page=search_request.page,
-        per_page=search_request.per_page,
-        uid=uid,
-        include_discarded=search_request.include_discarded,
-        start_date=start_timestamp,
-        end_date=end_timestamp,
-        speaker_id=search_request.speaker_id,
-    )
+    try:
+        search_results = search_conversations(
+            query=search_request.query,
+            page=search_request.page,
+            per_page=search_request.per_page,
+            uid=uid,
+            include_discarded=search_request.include_discarded,
+            start_date=start_timestamp,
+            end_date=end_timestamp,
+            speaker_id=search_request.speaker_id,
+        )
+    except ConversationSearchUnavailableError:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
     conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,

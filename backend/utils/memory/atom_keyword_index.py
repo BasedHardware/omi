@@ -77,6 +77,7 @@ def is_indexable_long_term_atom(item: MemoryItem) -> bool:
         item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and item.processing_state == ProcessingState.processed
+        and (item.promotion or {}).get("user_review") is not False
         and bool((item.content or "").strip())
     )
 

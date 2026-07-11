@@ -9,6 +9,9 @@ class AppLocalizationsMs extends AppLocalizations {
   AppLocalizationsMs([String locale = 'ms']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesi tamat tempoh — log masuk semula.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9533,4 +9536,66 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.';
+
+  @override
+  String get connectRayBanMeta => 'Sambungkan Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Gunakan cermin mata Ray-Ban Meta anda sebagai peranti tangkapan Omi untuk perbualan dan konteks visual. Omi akan membuka aplikasi Meta AI untuk memautkan cermin mata anda.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Sambung melalui Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Selesaikan penyambungan dalam aplikasi Meta AI, kemudian kembali ke sini.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Semak Semula';
+
+  @override
+  String get raybanMetaAllowCamera => 'Benarkan Kamera pada Cermin Mata';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi menggunakan kamera cermin mata anda untuk menambah foto pada perbualan anda. Anda boleh melangkau ini dan menggunakan audio sahaja.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Langkau Buat Masa Ini';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mod audio sahaja Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Versi Omi ini boleh menggunakan mikrofon cermin mata anda melalui Bluetooth. Tangkapan foto memerlukan binaan pembangun Meta bagi Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Muzik pada telefon anda dijeda semasa mikrofon cermin mata sedang digunakan.';
+
+  @override
+  String get raybanMetaContinue => 'Teruskan';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Tangkap Foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto diminta — ia akan muncul dalam perbualan anda.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon sedia';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Tangkapan imej sedia';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Tidak tersedia dalam mod audio sahaja';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ralat semasa menyambung ke Ray-Ban Meta: $error';
+  }
 }

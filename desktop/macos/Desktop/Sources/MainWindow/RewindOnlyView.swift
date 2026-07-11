@@ -24,6 +24,11 @@ struct RewindOnlyView: View {
                         .tint(.white.opacity(0.6))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if authState.sessionPhase == .recoveryRequired {
+                SessionRecoveryView()
+                    .onAppear {
+                        log("RewindOnlyView: Showing recoverable auth state")
+                    }
             } else if !authState.isSignedIn {
                 // Not signed in - show sign in view
                 SignInView(authState: authState)
@@ -310,7 +315,7 @@ struct RewindSettingsView: View {
                 .foregroundColor(.white.opacity(0.8))
 
             Button {
-                ScreenCaptureService.openScreenRecordingPreferences()
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             } label: {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")

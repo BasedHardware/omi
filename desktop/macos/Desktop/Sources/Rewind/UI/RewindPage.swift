@@ -355,11 +355,7 @@ struct RewindPage: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Open Settings FIRST, then request permissions after a delay
-            ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                ScreenCaptureService.requestAllScreenCapturePermissions()
-            }
+            ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
             return
         }
 
@@ -1028,11 +1024,7 @@ struct RewindPage: View {
                     // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
                     screenAnalysisEnabled = true
                     AssistantSettings.shared.screenAnalysisEnabled = true
-                    // Open Settings FIRST, then request permissions after a delay
-                    ScreenCaptureService.openScreenRecordingPreferences()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                    }
+                    ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 } label: {
                     Text("Grant Permission")
                         .scaledFont(size: 13, weight: .semibold)
@@ -1176,7 +1168,7 @@ struct RewindPage: View {
         }
     }
 
-    private func errorView(_ message: String) -> some View {
+    private func errorView(_: String) -> some View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
@@ -1192,7 +1184,7 @@ struct RewindPage: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(.white)
 
-            Text(message)
+            Text("Try again. If this continues, restart Omi.")
                 .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
 

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Push to Talk audio being lost while the realtime session reconnects"
+}

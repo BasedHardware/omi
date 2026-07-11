@@ -97,8 +97,13 @@ if [[ ! -x "$BACKEND_PYTHON" ]]; then
 fi
 
 run_step() {
+  local started
+  local elapsed
+  started=$SECONDS
   echo "==> $*"
   "$@"
+  elapsed=$((SECONDS - started))
+  echo "<== PASS $* (${elapsed}s)"
 }
 
 changed_matches() {
@@ -240,7 +245,10 @@ check_backend_runtime_env_if_needed() {
     'backend/scripts/validate-backend-runtime-env.py' \
     '.github/workflows/gcp_backend*.yml' \
     '.github/workflows/gcp_backend*.yaml' \
-    '.github/workflows/lint.yml'
+    '.github/workflows/repo-checks.yml' \
+    '.github/workflows/backend-checks.yml' \
+    '.github/actions/detect-changes/*' \
+    '.github/actions/detect-changes/**/*'
   then
     return
   fi
@@ -257,7 +265,14 @@ check_backend_async_blockers_if_needed() {
     return
   fi
 
-  if ! changed_matches 'backend/*.py' 'backend/**/*.py' '.github/workflows/lint.yml'; then
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    '.github/workflows/repo-checks.yml' \
+    '.github/workflows/backend-checks.yml' \
+    '.github/actions/detect-changes/*' \
+    '.github/actions/detect-changes/**/*'
+  then
     echo "Skipping backend async blocker scan; no backend Python files changed."
     return
   fi
@@ -342,6 +357,28 @@ check_import_time_side_effects_if_needed() {
   rm -f "$filter_file"
 
   "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
+}
+
+check_workflow_contracts_if_needed() {
+  if [ "${PRE_PUSH_SKIP_WORKFLOW_CONTRACTS:-}" = "1" ]; then
+    echo "Skipping workflow contract checks because PRE_PUSH_SKIP_WORKFLOW_CONTRACTS=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/testing/workflow_contracts.json' \
+    'backend/scripts/check_workflow_contracts.py' \
+    'scripts/pre-push' \
+    '.github/workflows/backend-checks.yml' \
+    '.github/actions/detect-changes/*' \
+    '.github/actions/detect-changes/**/*'
+  then
+    return
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/check_workflow_contracts.py --changed-files "$CHANGED_FILES_LIST"
 }
 
 check_backend_typecheck_if_needed() {
@@ -579,7 +616,14 @@ check_desktop_rust_if_needed() {
     return
   fi
 
-  if ! changed_matches 'desktop/macos/Backend-Rust/*' 'desktop/macos/Backend-Rust/**/*' '.github/workflows/lint.yml'; then
+  if ! changed_matches \
+    'desktop/macos/Backend-Rust/*' \
+    'desktop/macos/Backend-Rust/**/*' \
+    '.github/workflows/repo-checks.yml' \
+    '.github/workflows/desktop-checks.yml' \
+    '.github/actions/detect-changes/*' \
+    '.github/actions/detect-changes/**/*'
+  then
     return
   fi
 
@@ -664,6 +708,7 @@ run_step check_backend_async_blockers_if_needed
 run_step check_module_stub_pollution_if_needed
 run_step check_import_time_side_effects_if_needed
 run_step check_backend_typecheck_if_needed
+run_step check_workflow_contracts_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed

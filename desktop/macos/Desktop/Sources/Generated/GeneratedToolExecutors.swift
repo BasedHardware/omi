@@ -30,6 +30,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case askHigherModel = "ask_higher_model"
   case screenshot = "screenshot"
   case pointClick = "point_click"
+  case getWorkContext = "get_work_context"
 }
 
 enum GeneratedSwiftToolExecutor: String {
@@ -72,7 +73,8 @@ enum GeneratedToolExecutors {
     .createCalendarEvent: .chatToolExecutor,
     .askHigherModel: .realtimeHub,
     .screenshot: .realtimeHub,
-    .pointClick: .realtimeHub
+    .pointClick: .realtimeHub,
+    .getWorkContext: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -128,6 +130,7 @@ enum GeneratedToolExecutors {
     case completeOnboarding
     case getEmailInsights
     case createCalendarEvent
+    case getWorkContext
     case unhandled
   }
 
@@ -160,6 +163,7 @@ enum GeneratedToolExecutors {
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
+    case .getWorkContext: return .getWorkContext
     default: return .unhandled
     }
   }

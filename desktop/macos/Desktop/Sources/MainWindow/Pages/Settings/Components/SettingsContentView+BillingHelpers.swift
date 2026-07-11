@@ -537,7 +537,7 @@ extension SettingsContentView {
     if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
       permissionError = "Screen recording permission required"
       isMonitoring = false
-      ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
       return
     }
 

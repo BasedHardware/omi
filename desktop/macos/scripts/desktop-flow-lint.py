@@ -23,6 +23,10 @@ DESKTOP_DIR = SCRIPT_DIR.parent
 FLOWS_DIR = DESKTOP_DIR / "e2e" / "flows"
 BRIDGE_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift"
 HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+VIEW_MODEL_ACTION_SOURCES = (
+    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
+    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+)
 
 TYPED_STEP_KEYS = {
     "bridge.navigate",
@@ -37,7 +41,8 @@ TYPED_STEP_KEYS = {
 }
 
 MANUAL_TIER = "manual"
-ALLOWED_TIERS = {0, 1, 2, 3, MANUAL_TIER}
+FAULT_TIER = "fault"
+ALLOWED_TIERS = {0, 1, 2, 3, MANUAL_TIER, FAULT_TIER}
 
 
 def fail(message: str) -> None:
@@ -48,7 +53,7 @@ def fail(message: str) -> None:
 def registered_actions() -> set[str]:
     actions: set[str] = set()
     pattern = re.compile(r'name:\s*"([^"]+)"')
-    for path in (BRIDGE_SOURCE, HUB_SOURCE):
+    for path in (BRIDGE_SOURCE, HUB_SOURCE, *VIEW_MODEL_ACTION_SOURCES):
         if not path.is_file():
             fail(f"missing automation source: {path}")
         actions.update(pattern.findall(path.read_text(encoding="utf-8")))
@@ -82,7 +87,7 @@ def lint_flow(path: Path, actions: set[str]) -> list[str]:
     if tier is None:
         errors.append(f"{path.name}: missing required tier metadata")
     elif tier not in ALLOWED_TIERS:
-        errors.append(f"{path.name}: invalid tier {tier!r}; expected 0-3 or manual")
+        errors.append(f"{path.name}: invalid tier {tier!r}; expected 0-3, manual, or fault")
 
     covers = flow.get("covers") or []
     repo_root = DESKTOP_DIR.parent.parent

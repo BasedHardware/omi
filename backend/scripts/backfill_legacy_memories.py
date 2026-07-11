@@ -36,9 +36,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-resume", action="store_true", help="Ignore prior checkpoint and start from 0")
     parser.add_argument(
         "--strategy",
-        choices=["bulk-long-term", "bucketed"],
-        default="bulk-long-term",
-        help="Migration strategy (default: bulk-long-term for backward compatibility)",
+        choices=["stage-all-for-admission", "bucketed"],
+        default="stage-all-for-admission",
+        help="Migration strategy (default: all rows enter canonical admission staging)",
     )
     parser.add_argument(
         "--bucket",

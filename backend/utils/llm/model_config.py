@@ -86,6 +86,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4-mini', 'openai'),
         'notifications': ('gpt-5.4-mini', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gemini-2.5-flash-lite', 'gemini'),
         'smart_glasses': ('gpt-4.1-nano', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -138,6 +139,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -189,6 +191,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
         'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'what_matters_now': ('gpt-4.1-mini', 'openai'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -257,6 +260,7 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'conv_app_select',
     'external_structure',
     'trends',
+    'what_matters_now',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
@@ -320,8 +324,9 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         temperature = _OPENROUTER_TEMPERATURES.get(feature)
         if temperature is not None:
             options['temperature'] = temperature
-    if provider == 'gemini':
-        # Mechanical Gemini-routed features do not need paid thinking tokens.
+    if provider == 'gemini' and not is_structured_output_feature(feature):
+        # Structured-output features use .with_structured_output(), which routes through
+        # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
     return options
 

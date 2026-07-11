@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
@@ -272,6 +273,13 @@ async fn gemini_proxy(
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
         if effective_path != path {
+            record_fallback(
+                "gemini_proxy",
+                bucket_gemini_tier(model),
+                bucket_gemini_tier(extract_gemini_model(&effective_path)),
+                "quota",
+                FallbackOutcome::Degraded,
+            );
             tracing::info!(
                 "gemini_proxy: degraded uid={} {} -> {}",
                 user.uid,
@@ -590,6 +598,13 @@ async fn gemini_stream_proxy(
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
         if effective_path != path {
+            record_fallback(
+                "gemini_stream_proxy",
+                bucket_gemini_tier(model),
+                bucket_gemini_tier(extract_gemini_model(&effective_path)),
+                "quota",
+                FallbackOutcome::Degraded,
+            );
             tracing::info!(
                 "gemini_stream_proxy: degraded uid={} {} -> {}",
                 user.uid,
@@ -776,6 +791,18 @@ fn extract_gemini_model(path: &str) -> &str {
     path.strip_prefix("models/")
         .and_then(|rest| rest.split(':').next())
         .unwrap_or("")
+}
+
+/// Closed Gemini model tier for fallback telemetry (no free model ID strings).
+fn bucket_gemini_tier(model: &str) -> &'static str {
+    let lower = model.to_ascii_lowercase();
+    if lower.contains("pro") {
+        "pro"
+    } else if lower.contains("flash") {
+        "flash"
+    } else {
+        "other"
+    }
 }
 
 /// Check if a Gemini action is in the allowlist
@@ -1190,6 +1217,13 @@ mod tests {
             extract_gemini_model("models/gemini-embedding-001:embedContent"),
             "gemini-embedding-001"
         );
+    }
+
+    #[test]
+    fn bucket_gemini_tier_maps_pro_and_flash() {
+        assert_eq!(bucket_gemini_tier("gemini-2.5-pro"), "pro");
+        assert_eq!(bucket_gemini_tier("gemini-2.5-flash"), "flash");
+        assert_eq!(bucket_gemini_tier("gemini-embedding-001"), "other");
     }
 
     #[test]

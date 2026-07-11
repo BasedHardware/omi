@@ -225,7 +225,10 @@ class TestUserFacingEndpoint:
 
     def test_status_shows_restrict_message(self):
         """Restrict stage shows support contact info."""
-        _state_store[TEST_UID] = {'stage': 'restrict'}
+        _state_store[TEST_UID] = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() + timedelta(days=1),
+        }
 
         app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
         resp = client.get('/v1/fair-use/status')
@@ -235,6 +238,23 @@ class TestUserFacingEndpoint:
         data = resp.json()
         assert data['stage'] == 'restrict'
         assert 'team@basedhardware.com' in data['message']
+
+    def test_status_naturally_expired_restriction_reports_throttle(self):
+        _state_store[TEST_UID] = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() - timedelta(seconds=1),
+        }
+
+        app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+        resp = client.get('/v1/fair-use/status')
+        app.dependency_overrides.pop(get_current_user_uid, None)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['stage'] == 'throttle'
+        assert 'temporarily reduced' in data['message']
+        assert _state_store[TEST_UID]['stage'] == 'throttle'
+        assert _state_store[TEST_UID]['restrict_until'] is None
 
 
 class TestPublicCaseStatusEndpoint:

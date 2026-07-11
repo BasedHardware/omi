@@ -4,9 +4,39 @@ tier: 2
 description: Hermetic main chat navigation and typed turn using Rust OMI_LLM_STUB=1 (no live LLM)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
+  - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  - desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
+  - desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
+  - desktop/macos/Desktop/Sources/Generated/OmiToolManifest.generated.swift
+  - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
+  - desktop/macos/Desktop/Sources/PostHogManager.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
   - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
 preconditions:
   - automation_bridge_ready

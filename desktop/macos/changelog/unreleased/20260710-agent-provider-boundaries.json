@@ -1,0 +1,3 @@
+{
+  "change": "Agent provider boundaries and worker roles are now enforced by the desktop runtime: managed work stays on Omi cloud routing, local modes stay pinned to their selected provider, leaf workers cannot create more agents, and failed required control actions cannot appear as successful completion."
+}

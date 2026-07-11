@@ -1,5 +1,6 @@
 {
     "@@locale": "lv",
+    "sessionExpiredSignInAgain": "Sesija ir beigusies — pierakstieties vēlreiz.",
     "appTitle": "Omi",
     "conversationTab": "Saruna",
     "transcriptTab": "Transkripcija",
@@ -3116,5 +3117,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu."
+    "pendantStorageAlmostFull": "Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.",
+    "connectRayBanMeta": "Savienot Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Izmantojiet savas Ray-Ban Meta brilles kā Omi tveršanas ierīci sarunām un vizuālajam kontekstam. Omi atvērs Meta AI lietotni, lai savienotu jūsu brilles.",
+    "raybanMetaOpenMetaAI": "Savienot, izmantojot Meta AI",
+    "raybanMetaWaitingForMetaAI": "Pabeidziet savienošanu Meta AI lietotnē un pēc tam atgriezieties šeit.",
+    "raybanMetaCheckAgain": "Pārbaudīt vēlreiz",
+    "raybanMetaAllowCamera": "Atļaut kameru brillēs",
+    "raybanMetaCameraExplanation": "Omi izmanto jūsu briļļu kameru, lai pievienotu fotoattēlus jūsu sarunām. Jūs varat to izlaist un izmantot tikai audio.",
+    "raybanMetaSkipForNow": "Izlaist pagaidām",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta tikai audio režīms",
+    "raybanMetaAudioOnlyExplanation": "Šī Omi versija var izmantot jūsu briļļu mikrofonu, izmantojot Bluetooth. Fotoattēlu tveršanai nepieciešama Omi Meta izstrādātāja versija.",
+    "raybanMetaMusicPauseNote": "Mūzika jūsu tālrunī tiek pauzēta, kamēr tiek izmantots briļļu mikrofons.",
+    "raybanMetaContinue": "Turpināt",
+    "raybanMetaCapturePhoto": "Uzņemt fotoattēlu",
+    "raybanMetaPhotoRequested": "Fotoattēls pieprasīts — tas parādīsies jūsu sarunā.",
+    "raybanMetaMicrophoneReady": "Mikrofons gatavs",
+    "raybanMetaImageCaptureReady": "Attēlu tveršana gatava",
+    "raybanMetaImageCaptureUnavailable": "Nav pieejams tikai audio režīmā",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Kļūda, veidojot savienojumu ar Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

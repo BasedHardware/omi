@@ -148,7 +148,7 @@ struct FloatingControlBarView: View {
 
     /// The notch "thinking" state: a PTT query is committed and being processed,
     /// with no live listening or open conversation surface. Shows the spinning
-    /// Omi mark + "Thinking" in the notch lobes.
+    /// Omi mark in the left notch lobe.
     private var showingNotchThinking: Bool {
         (state.isThinking || state.isVoiceResponseWaiting)
             && !state.showingAIConversation && !state.isVoiceListening
@@ -306,15 +306,14 @@ struct FloatingControlBarView: View {
         .contentShape(Rectangle())
         .contextMenu { barContextMenu }
         .onHover(perform: handleBarHover)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
-            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
-            // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
-            // dots are back in the notch before the surface shrinks (no stranded dots).
+            // NSPanel owns geometry. This value only fades/morphs the row
+            // contents, using a monotonic curve so it cannot overshoot
+            // vertically. Match the window's expand/collapse durations exactly
+            // so the rows and the panel finish together (no post-expand slide).
             let morphAnim: Animation = visible
-                ? .spring(response: 0.34, dampingFraction: 0.86)
-                : .spring(response: 0.18, dampingFraction: 0.92)
+                ? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)
+                : .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)
             withAnimation(morphAnim) {
                 notchSwitcherProgress = visible ? 1 : 0
             }
@@ -424,15 +423,7 @@ struct FloatingControlBarView: View {
             }
             .buttonStyle(.plain)
 
-            if showingNotchThinking {
-                Text("Thinking")
-                    .scaledFont(size: 11, weight: .medium)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            } else if notchSettingsHovering {
+            if !showingNotchThinking && notchSettingsHovering {
                 notchSettingsButton
                     .zIndex(1)
                     .transition(.scale.combined(with: .opacity))
@@ -752,24 +743,57 @@ struct FloatingControlBarView: View {
         openAgentInChat(agentID: pill.id)
     }
 
-    private func openAgentInChat(agentID: UUID) {
-        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
-        if state.conversationSurface == .agent(pill.id) {
-            showAgentListFromConversation()
-            return
+    private func openAgentInChat(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
+        openAgentInChat(
+            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),
+            completion: completion
+        )
+    }
+
+    private func openAgentInChat(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
+        Task { @MainActor in
+            let resolved = await agentPills.resolveAndPresentAgent(
+                pillId: ref.pillId,
+                sessionId: ref.sessionId,
+                runId: ref.runId
+            )
+            guard resolved else {
+                log(
+                    "FloatingControlBarView: agent open unavailable after hydrate "
+                        + "pillId=\(ref.pillId?.uuidString ?? "nil") "
+                        + "sessionId=\(ref.sessionId ?? "nil") "
+                        + "runId=\(ref.runId ?? "nil")"
+                )
+                completion?(false)
+                return
+            }
+            guard let pill = agentPills.pills.first(where: { pill in
+                if let pillId = ref.pillId, pill.id == pillId { return true }
+                if let runId = ref.runId, pill.canonicalRunId == runId { return true }
+                if let sessionId = ref.sessionId, pill.canonicalSessionId == sessionId { return true }
+                return false
+            }) ?? ref.pillId.flatMap({ id in agentPills.pills.first(where: { $0.id == id }) }) else {
+                completion?(false)
+                return
+            }
+            if state.conversationSurface == .agent(pill.id) {
+                showAgentListFromConversation()
+                completion?(true)
+                return
+            }
+            agentPills.markViewed(pillID: pill.id)
+            let barWindow = window as? FloatingControlBarWindow
+            let wasShowingConversation = state.showingAIConversation
+            state.setNotchHoverMenuOpen(false)
+            notchLogoHovering = false
+            barWindow?.makeKeyAndOrderFront(nil)
+            withAnimation(agentChatSwitchTransition) {
+                state.present(.agent(pill.id))
+                state.isAILoading = false
+            }
+            barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
+            completion?(true)
         }
-        agentPills.markViewed(pillID: pill.id)
-        let barWindow = window as? FloatingControlBarWindow
-        let wasShowingConversation = state.showingAIConversation
-        state.setNotchHoverMenuOpen(false)
-        notchLogoHovering = false
-        barWindow?.makeKeyAndOrderFront(nil)
-        withAnimation(agentChatSwitchTransition) {
-            state.present(.agent(pill.id))
-            state.isAILoading = false
-            state.aiInputText = ""
-        }
-        barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
     }
 
     private func openOmiChatFromNotchRow() {
@@ -1096,7 +1120,10 @@ struct FloatingControlBarView: View {
                         NotchAgentListRow(
                             title: pill.title,
                             status: pill.status,
-                            activity: pill.latestActivity,
+                            activity: ChatContinuityInvariants.agentPreviewText(
+                                prompt: pill.query,
+                                output: pill.latestActivity
+                            ),
                             isSelected: pill.id == state.activeAgentChatPillID,
                             progress: 1
                         )
@@ -1340,15 +1367,27 @@ struct FloatingControlBarView: View {
         state.inputViewHeight = baseHeight + headerBudget
     }
 
+    private var floatingChatProvider: ChatProvider? {
+        FloatingControlBarManager.shared.sharedFloatingProvider
+    }
+
     private var aiResponseView: some View {
-        AIResponseView(
+        // Re-read derived content when viewport anchors or streamed answer tokens change.
+        let _ = state.chatViewport
+        let _ = state.answerStreamToken
+        let provider = floatingChatProvider
+        return AIResponseView(
             isLoading: Binding(
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            currentMessage: state.currentAIMessage,
+            currentMessage: state.currentAIMessage(from: provider),
+            followUpText: Binding(
+                get: { state.aiInputText },
+                set: { state.aiInputText = $0 }
+            ),
             userInput: state.displayedQuery,
-            chatHistory: state.chatHistory,
+            chatHistory: state.derivedChatHistory(from: provider),
             isVoiceFollowUp: Binding(
                 get: { state.isVoiceFollowUp },
                 set: { state.isVoiceFollowUp = $0 }
@@ -1362,23 +1401,25 @@ struct FloatingControlBarView: View {
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
             onSendFollowUp: { message in
-                archiveCurrentExchange()
+                state.archiveCurrentExchange(using: floatingChatProvider)
 
                 (window as? FloatingControlBarWindow)?
                     .beginVisibleMainQuery(message, fromVoice: false, animated: true)
                 state.displayedQuery = message
-                state.currentQuestionMessageId = nil
+                state.bindQuestionMessageId(nil)
                 state.markConversationActivity()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = true
-                    state.currentAIMessage = nil
                 }
                 onSendQuery(message)
             },
             onRate: onRate,
             onShareLink: onShareLink,
-            onOpenAgent: { agentID in
-                openAgentInChat(agentID: agentID)
+            onOpenAgent: { agentID, completion in
+                openAgentInChat(agentID: agentID, completion: completion)
+            },
+            onOpenAgentRef: { ref, completion in
+                openAgentInChat(ref: ref, completion: completion)
             }
         )
         .transition(
@@ -1386,20 +1427,6 @@ struct FloatingControlBarView: View {
                 insertion: .move(edge: .bottom).combined(with: .opacity),
                 removal: .move(edge: .bottom).combined(with: .opacity)
             ))
-    }
-
-    private func archiveCurrentExchange() {
-        guard let currentMessage = state.currentAIMessage else { return }
-        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
-
-        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        state.chatHistory.append(
-            FloatingChatExchange(
-                question: currentQuery.isEmpty ? nil : currentQuery,
-                questionMessageId: state.currentQuestionMessageId,
-                aiMessage: currentMessage
-            )
-        )
     }
 
 }
@@ -1586,22 +1613,8 @@ private struct NotchOmiMark: View {
 /// carry a brightness trail (bright head → faint tail) so the continuous
 /// rotation reads as a sweeping comet rather than a static ring of dots.
 private struct NotchThinkingMark: View {
-    @State private var angle: Double = 0
-
-    private static let trail: [Color] = (0..<8).map { index in
-        Color.white.opacity(1.0 - Double(index) * 0.1)
-    }
-
     var body: some View {
-        NotchOmiMark(dotColors: Self.trail)
-            .rotationEffect(.degrees(angle))
-            .onAppear {
-                angle = 0
-                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
-            }
-            .accessibilityLabel("Thinking")
+        OmiThinkingMark()
     }
 }
 
@@ -1624,16 +1637,32 @@ private struct AgentMainChatView: View {
     let onEscape: () -> Void
     let onSpawnSibling: (UUID) -> Void
 
-    @State private var followUpText = ""
+    @State private var followUpText: String
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
+
+    init(
+        pill: AgentPill,
+        manager: AgentPillsManager,
+        onBackToAgentRows: @escaping () -> Void,
+        onEscape: @escaping () -> Void,
+        onSpawnSibling: @escaping (UUID) -> Void
+    ) {
+        self.pill = pill
+        self.manager = manager
+        self.onBackToAgentRows = onBackToAgentRows
+        self.onEscape = onEscape
+        self.onSpawnSibling = onSpawnSibling
+        _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
+    }
 
     private var isRecording: Bool {
         manager.recordingPillID == pill.id
     }
 
     private var isRunning: Bool {
+        guard !hasFinalAssistantOutput else { return false }
         switch pill.status {
         case .queued, .starting, .running:
             return true
@@ -1644,7 +1673,7 @@ private struct AgentMainChatView: View {
 
     private var displayedMessages: [ChatMessage] {
         if !pill.conversationMessages.isEmpty {
-            return pill.conversationMessages
+            return normalizedAgentMessages(pill.conversationMessages)
         }
         var fallback = [ChatMessage(id: "\(pill.id.uuidString)-query", text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
@@ -1653,11 +1682,19 @@ private struct AgentMainChatView: View {
                 fallback.append(message)
             }
         }
-        return fallback
+        return normalizedAgentMessages(fallback)
     }
 
     private var hasAssistantTurn: Bool {
         displayedMessages.contains { $0.sender == .ai }
+    }
+
+    private var hasFinalAssistantOutput: Bool {
+        displayedMessages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
     }
 
     private var activityText: String {
@@ -1748,7 +1785,7 @@ private struct AgentMainChatView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Group {
-                if pill.status.isFinished {
+                if displayStatus.isFinished {
                     Button {
                         manager.dismiss(pillID: pill.id)
                         onBackToAgentRows()
@@ -1785,17 +1822,24 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadgeLabel: some View {
-        Text(pill.status.displayLabel)
+        Text(displayStatus.displayLabel)
             .scaledFont(size: 9, weight: .bold)
             .foregroundColor(statusForeground)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(pill.status.tintColor.opacity(statusBackgroundOpacity))
+            .background(displayStatus.tintColor.opacity(statusBackgroundOpacity))
             .clipShape(Capsule())
     }
 
+    private var displayStatus: AgentPill.Status {
+        if hasFinalAssistantOutput, !pill.status.isFinished {
+            return .done
+        }
+        return pill.status
+    }
+
     private var statusForeground: Color {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done:
             return .black.opacity(0.86)
         case .stopped:
@@ -1806,7 +1850,7 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBackgroundOpacity: Double {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done, .stopped:
             return 1
         case .failed:
@@ -1825,6 +1869,26 @@ private struct AgentMainChatView: View {
                 runningActivityView
             }
         }
+    }
+
+    private func normalizedAgentMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        let hasFinalOutput = messages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
+        guard hasFinalOutput else { return messages }
+        return messages.filter { message in
+            !(message.sender == .ai
+                && message.isStreaming
+                && !hasVisibleAssistantContent(message))
+        }
+    }
+
+    private func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.displayResources.isEmpty
     }
 
     private var runningActivityView: some View {
@@ -1925,6 +1989,27 @@ private struct AgentMainChatView: View {
                     case .discoveryCard(_, let title, let summary, let fullText):
                         DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                        AgentSpawnCard(
+                            title: title,
+                            objective: objective,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentCompletion(
+                        _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output,
+                        let status
+                    ):
+                        AgentCompletionCard(
+                            title: title,
+                            promptSnippet: promptSnippet,
+                            output: output,
+                            status: status,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -1945,7 +2030,7 @@ private struct AgentMainChatView: View {
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
             case .toolCalls(_, let calls):
                 if calls.contains(where: { $0.spawnedAgentID != nil }) {
@@ -2027,6 +2112,9 @@ private struct AgentMainChatView: View {
             }
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
+        .onChange(of: followUpText) { _, text in
+            ChatDraftStore.shared.setText(text, for: .floatingAgent(pill.id))
+        }
     }
 
     private var canSend: Bool {
@@ -2348,7 +2436,10 @@ private struct NotchAgentMorphField: View {
                             NotchAgentListRow(
                                 title: pill.title,
                                 status: pill.status,
-                                activity: pill.latestActivity,
+                                activity: ChatContinuityInvariants.agentPreviewText(
+                                    prompt: pill.query,
+                                    output: pill.latestActivity
+                                ),
                                 isSelected: pill.id == activePillID,
                                 progress: rowRevealProgress
                             )

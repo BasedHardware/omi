@@ -54,6 +54,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Container(
               width: 36,
               height: 36,
+              alignment: Alignment.center,
               decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
               child: FaIcon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
             ),

@@ -10,7 +10,6 @@ enum HubTool: String {
   case inspectAgentArtifacts = "inspect_agent_artifacts"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   case spawnAgent = "spawn_agent"
-  case runAgentAndWait = "run_agent_and_wait"
   case setDesktopAttentionOverride = "set_desktop_attention_override"
   case getConversations = "get_conversations"
   case searchConversations = "search_conversations"
@@ -287,76 +286,6 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "objective"
-      ]
-    }
-  },
-  {
-    "type": "function",
-    "name": "run_agent_and_wait",
-    "description": "Run a parent-linked child agent synchronously and return its structured result.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "objective": {
-          "type": "string",
-          "description": "Delegated objective for the child agent."
-        },
-        "parentRunId": {
-          "type": "string",
-          "description": "Canonical parent Omi run_id."
-        },
-        "context": {
-          "type": "string",
-          "description": "Optional concise context, not a full transcript."
-        },
-        "ownerId": {
-          "type": "string",
-          "description": "Optional owner guard for the parent run."
-        },
-        "adapterId": {
-          "type": "string",
-          "description": "Optional adapter override."
-        },
-        "cwd": {
-          "type": "string",
-          "description": "Optional working directory."
-        },
-        "model": {
-          "type": "string",
-          "description": "Optional model override."
-        },
-        "runMode": {
-          "type": "string",
-          "description": "Child run mode. Default ask.",
-          "enum": [
-            "ask",
-            "act"
-          ]
-        },
-        "requestId": {
-          "type": "string",
-          "description": "Optional caller-provided request correlation id."
-        },
-        "clientId": {
-          "type": "string",
-          "description": "Logical caller id. Defaults to omi-control-tools."
-        },
-        "maxDepth": {
-          "type": "number",
-          "description": "Maximum delegation depth for this call. Default 3, hard max 5."
-        },
-        "maxBudgetUsd": {
-          "type": "number",
-          "description": "Per-delegation budget guard. Default 5, hard max 10."
-        },
-        "metadata": {
-          "type": "object",
-          "description": "Small structured metadata for the child run."
-        }
-      },
-      "required": [
-        "objective",
-        "parentRunId"
       ]
     }
   },

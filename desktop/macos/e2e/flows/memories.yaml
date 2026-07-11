@@ -5,6 +5,10 @@ description: Memories page navigation and refresh via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
 preconditions:
   - automation_bridge_ready
 
@@ -33,6 +37,16 @@ steps:
       # memory_count may be 0 on a fresh profile; happy_path alice seed has 22 default-scope memories.
 
   - id: S4
+    name: Search memories for common term
+    bridge.action:
+      name: memories_search
+      params:
+        query: "the"
+    expect:
+      result.detail.search_active: "true"
+      result.detail.result_count: { min: 1 }
+
+  - id: S5
     name: Logs clean
     log.expect:
       absent:

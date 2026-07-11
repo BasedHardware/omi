@@ -1,0 +1,3 @@
+{
+  "change": "Improved sync recovery reliability for large offline recording backlogs"
+}

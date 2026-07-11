@@ -186,8 +186,31 @@ actor ConversationFinalizationService {
       conversationStatus: status,
       allowBackendIdOverride: allowBackendIdOverride
     )
-    if completed {
-      log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
+    guard completed else {
+      if let latest = try await TranscriptionStorage.shared.getSession(id: sessionId),
+        latest.status == .completed,
+        latest.backendSynced
+      {
+        return
+      }
+      throw TranscriptionStorageError.invalidState(
+        "from-segments returned \(response.id) but local completion was rejected"
+      )
+    }
+    await hydrateUploadedLocalConversation(id: response.id)
+    log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
+  }
+
+  private func hydrateUploadedLocalConversation(id conversationId: String) async {
+    do {
+      let conversation = try await apiClient.getConversation(id: conversationId)
+      _ = try await TranscriptionStorage.shared.syncServerConversation(conversation)
+      log("ConversationFinalization: Hydrated uploaded local conversation \(conversationId)")
+    } catch {
+      logError(
+        "ConversationFinalization: Failed to hydrate uploaded local conversation \(conversationId)",
+        error: error
+      )
     }
   }
 
@@ -233,6 +256,22 @@ actor ConversationFinalizationService {
     guard let sessionId = session.id else { return }
 
     if let backendId = session.backendId, !backendId.isEmpty {
+      if let clientConversationId = session.clientConversationId,
+         !clientConversationId.isEmpty,
+         backendId != clientConversationId {
+        log(
+          "ConversationFinalization: Rejecting mismatched backend binding for session \(sessionId); resolving exact client recording id instead"
+        )
+        if try await completeCloudConversation(
+          id: clientConversationId,
+          sessionId: sessionId,
+          allowForceProcess: allowForceProcess,
+          allowBackendIdOverride: true
+        ) {
+          return
+        }
+        throw TranscriptionStorageError.invalidState("Bound backend conversation conflicts with client recording identity")
+      }
       let conversation: ServerConversation
       if allowForceProcess {
         conversation = try await apiClient.finalizeConversation(id: backendId)
@@ -405,7 +444,8 @@ actor ConversationFinalizationService {
   private func completeCloudConversation(
     id conversationId: String,
     sessionId: Int64,
-    allowForceProcess: Bool
+    allowForceProcess: Bool,
+    allowBackendIdOverride: Bool = false
   ) async throws -> Bool {
     let conversation: ServerConversation
     do {
@@ -431,7 +471,8 @@ actor ConversationFinalizationService {
     try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId,
       backendId: conversation.id,
-      conversationStatus: status
+      conversationStatus: status,
+      allowBackendIdOverride: allowBackendIdOverride
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by conversation id \(conversation.id)")
     return true

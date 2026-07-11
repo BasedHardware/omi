@@ -106,6 +106,7 @@ struct OnboardingVoiceDemoView: View {
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             resetFloatingBarConversation()
             refreshOutputReadiness()
             if let barState = FloatingControlBarManager.shared.barState {
@@ -196,7 +197,7 @@ struct OnboardingVoiceDemoView: View {
         // even if the network or bridge failed, so onboarding does not get stuck here.
         for _ in 0..<80 {
             try? await Task.sleep(nanoseconds: 250_000_000)
-            if let msg = barState.currentAIMessage,
+            if let msg = barState.currentAIMessage(from: chatProvider),
                !msg.isStreaming,
                !msg.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 showContinueNow()
@@ -204,7 +205,7 @@ struct OnboardingVoiceDemoView: View {
             }
             if !chatProvider.isSending,
                observedShortcutPress,
-               (chatProvider.errorMessage != nil || barState.currentAIMessage != nil) {
+               (chatProvider.errorMessage != nil || barState.currentAIMessage(from: chatProvider) != nil) {
                 showContinueNow()
                 return
             }
@@ -224,8 +225,7 @@ struct OnboardingVoiceDemoView: View {
         barState.showingAIConversation = false
         barState.showingAIResponse = false
         barState.aiInputText = ""
-        barState.currentAIMessage = nil
-        barState.chatHistory = []
+        barState.clearViewport()
         barState.isVoiceFollowUp = false
         barState.voiceFollowUpTranscript = ""
     }

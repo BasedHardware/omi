@@ -42,29 +42,31 @@ Examples:
   ./run.sh                                  # Full local dev (backend + tunnel + app)
   OMI_SKIP_BACKEND=1 ./run.sh               # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
-  ./run.sh --yolo                            # Quick start: use prod backend, no local services
+  ./run.sh --yolo                            # Quick start: use dev backend, no local services
 USAGE
     exit 0
 fi
 
-# ─── YOLO mode: use prod backend, zero local setup ───────────────────
-# WARNING: Temporary shortcut while desktop dev setup is being cleaned up.
-# Will be removed once all desktop slop is fixed.
+# ─── YOLO mode: use dev backend, zero local setup ────────────────────
+# Keep these endpoint values aligned with DesktopBackendEnvironment's dev
+# defaults. The dev services currently mint prod Firebase identities, so this
+# is a service-revision target, not an isolated local-data harness.
 apply_yolo_env() {
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omi.me"
+    export OMI_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
+    export OMI_PYTHON_API_URL="https://api.omiapi.com"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 
 if [ "$1" = "--yolo" ]; then
     echo ""
     echo "=========================================="
-    echo "  YOLO MODE — using production backend"
+    echo "  YOLO MODE — using development backend"
     echo "=========================================="
     echo ""
-    echo "  WARNING: This connects directly to the prod Cloud Run backend."
+    echo "  WARNING: This connects directly to the dev Cloud Run backends."
+    echo "  They currently use production Firebase identities and data stores."
     echo "  No local Rust backend, no local auth, no tunnel."
     echo "  This is a temporary shortcut — will be removed once"
     echo "  desktop dev setup friction is fully resolved."
@@ -104,25 +106,6 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-# Serialize bundle builds — parallel ./run.sh invocations corrupt the same build/Omi Dev.app tree.
-RUN_SH_LOCK_DIR="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-_release_run_sh_lock() {
-    rmdir "$RUN_SH_LOCK_DIR" 2>/dev/null || true
-}
-_run_sh_lock_waited=0
-while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
-    if [ "$_run_sh_lock_waited" -eq 0 ]; then
-        printf "[%6.1fs]   ├─ Waiting for another ./run.sh to finish...\n" "$(echo "$(date +%s.%N) - $SCRIPT_START_TIME" | bc)"
-    fi
-    sleep 2
-    _run_sh_lock_waited=$((_run_sh_lock_waited + 2))
-    if [ "$_run_sh_lock_waited" -ge 600 ]; then
-        echo "ERROR: timed out after 10 minutes waiting for ./run.sh lock ($RUN_SH_LOCK_DIR)"
-        exit 1
-    fi
-done
-trap '_release_run_sh_lock' EXIT INT TERM
-
 macos_copy_tree() {
     local src="$1"
     local dest="$2"
@@ -141,6 +124,16 @@ macos_copy_tree() {
 source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
 BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
+
+# Serialize same-worktree builds only (shared Desktop/.build + build/$APP_NAME.app).
+# Cross-worktree ./run.sh must not block each other. Hold through install/seed/open,
+# then release before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported
+# (/Applications/$APP_NAME.app is machine-global and not cross-locked).
+source "$SCRIPT_DIR/scripts/run-sh-build-lock.sh"
+omi_run_sh_acquire_build_lock "another ./run.sh in this worktree" 600 || exit 1
+# Temporary until `trap cleanup EXIT` below chains release into cleanup().
+trap 'omi_run_sh_release_build_lock' EXIT INT TERM
 
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
@@ -209,11 +202,10 @@ AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
-    # Release the serialization lock acquired above. This must be chained
-    # into cleanup rather than set via a separate `trap` because the
-    # `trap cleanup EXIT` below overwrites any earlier trap, so a standalone
-    # `trap _release_run_sh_lock EXIT` would never fire on normal exit.
-    _release_run_sh_lock
+    # Release the build lock if still held (early exit before install, or if
+    # the post-install release was skipped). Chained here because
+    # `trap cleanup EXIT` overwrites the earlier lock-only trap.
+    omi_run_sh_release_build_lock
     if [ -n "$AUTH_CACHE" ]; then
         rm -f "$AUTH_CACHE"
     fi
@@ -346,7 +338,7 @@ if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
     echo "  OMI_SKIP_BACKEND=1 ./run.sh"
     echo "  (set OMI_DESKTOP_API_URL and OMI_PYTHON_API_URL in .env.app to point to remote backends)"
     echo ""
-    echo "Or just use the production backend (no setup needed):"
+    echo "Or just use the development backend (no setup needed):"
     echo "  ./run.sh --yolo"
     echo "==========================="
     exit 1
@@ -856,7 +848,11 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
         if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+            # Pass the just-installed app path so seed can resolve Team ID and
+            # clear any prior CLI-written Keychain item (apple-tool: partition).
+            # Tokens are seeded into UserDefaults; the app migrates them into
+            # Keychain on launch with the correct teamid: partition (no prompt).
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
                 auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
             else
                 echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
@@ -913,6 +909,12 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
+
+# Launch finished — free this worktree's lock so other checkouts (and a later
+# rebuild here) are not blocked by the long-running wait below. Kept through
+# open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
+omi_run_sh_release_build_lock
+substep "Released per-worktree build lock"
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

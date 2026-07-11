@@ -139,6 +139,16 @@ actor AgentBridge {
     registered = true
   }
 
+  /// Reset client registration after an unexpected process exit so `restart()`/`start()`
+  /// can spawn a fresh Node bridge (the process is already gone).
+  func prepareForCrashRecovery() {
+    tokenRefreshTask?.cancel()
+    tokenRefreshTask = nil
+    registered = false
+    activeRequestId = nil
+    lastKnownQuota = nil
+  }
+
   func stopAndWaitForExit() async {
     tokenRefreshTask?.cancel()
     tokenRefreshTask = nil
@@ -227,15 +237,17 @@ actor AgentBridge {
 
   func recordSurfaceTurn(
     surface: AgentSurfaceReference,
+    ownerID: String? = nil,
     userText: String,
     assistantText: String,
     origin: String,
     interrupted: Bool = false,
     idempotencyKey: String? = nil
-  ) async {
-    await runtime.recordSurfaceTurn(
+  ) async throws -> Bool {
+    try await runtime.recordSurfaceTurn(
       clientId: clientId,
       surface: surface,
+      ownerID: ownerID,
       userText: userText,
       assistantText: assistantText,
       origin: origin,
@@ -244,7 +256,7 @@ actor AgentBridge {
     )
   }
 
-  func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> (conversationId: String, context: String) {
+  func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> AgentRuntimeProcess.VoiceSeedContextResult {
     try await start()
     return try await runtime.getVoiceSeedContext(
       clientId: clientId,
@@ -281,7 +293,9 @@ actor AgentBridge {
   }
 
   func setTurnRecordedHandler(_ handler: @escaping AgentRuntimeProcess.TurnRecordedHandler) async {
-    await runtime.addTurnRecordedHandler(handler)
+    // Single-slot replace — KernelTurnProjection.attachClient re-registers on
+    // every bridge start/warm. Never append; that double-applied turn_recorded.
+    await runtime.setTurnRecordedHandler(handler)
   }
 
   func controlTool(name: String, input: [String: Any]) async throws -> String {
@@ -293,6 +307,23 @@ actor AgentBridge {
       input: input
     )
   }
+
+#if DEBUG
+  func debugAutomationControlTool(
+    name: String,
+    input: [String: Any],
+    ownerId: String = "scenario-13-automation-owner"
+  ) async throws -> String {
+    try await start()
+    return try await runtime.debugAutomationControlTool(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      name: name,
+      input: input,
+      ownerId: ownerId
+    )
+  }
+#endif
 
   func query(
     prompt: String,
@@ -483,7 +514,7 @@ actor AgentBridge {
 
   private func migrateFloatingChatIntoMainChatIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     let migrationKey = "\(Self.floatingChatMigrationDefaultsKey).\(ownerId)"
@@ -494,7 +525,7 @@ actor AgentBridge {
 
   private func migrateLegacyMainChatSessionsIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     guard let map = UserDefaults.standard.dictionary(forKey: Self.legacyMainChatDefaultsKey) as? [String: String],
@@ -518,6 +549,36 @@ actor AgentBridge {
     }
   }
 }
+
+#if DEBUG
+extension AgentBridge.QueryResult {
+  /// Protocol-layer constructor for deterministic automation fixtures. Keeping
+  /// the wire session placeholder here prevents UI/domain code from depending
+  /// on transport identity fields.
+  static func debugFixture(
+    text: String,
+    runId: String,
+    attemptId: String,
+    artifacts: [AgentArtifactProjection]
+  ) -> Self {
+    Self(
+      text: text,
+      costUsd: 0,
+      omiSessionId: "debug-fixture-session",
+      runId: runId,
+      attemptId: attemptId,
+      adapterSessionId: nil,
+      terminalStatus: "succeeded",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      artifacts: artifacts,
+      completionDeltaArtifacts: artifacts
+    )
+  }
+}
+#endif
 
 enum BridgeError: LocalizedError {
   case nodeNotFound

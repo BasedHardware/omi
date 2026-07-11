@@ -727,6 +727,15 @@ class TasksViewModel: ObservableObject {
     /// Guards against transient DB re-query flicker during optimistic bulk updates.
     private var suppressDatabaseRequery = false
 
+    /// Automation-only (TASK-06): counts real SQLite requeries so a harness can
+    /// prove a server-push recompute during an active drag is suppressed.
+    private(set) var automationRequeryCount = 0
+
+    /// Automation-only (TASK-06): forces the filtered-requery branch so the drag
+    /// suppression probe is never vacuous when no user filter is active — the ONLY
+    /// thing that should then block the requery is the drag guard.
+    private var automationForceFilteredRequery = false
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -903,6 +912,25 @@ class TasksViewModel: ObservableObject {
         return base + (itemIndex + 1) * spacing
     }
 
+    /// Rewrites `array`'s `sortOrder` for every task id named in `order`, using the
+    /// single `sortOrder` banding helper. `moveTask` applies this to each source array
+    /// the displayed list can be backed by (`store.incompleteTasks`,
+    /// `filteredFromDatabase`, `searchResults`) so they agree on the new order — a write
+    /// to only one diverges when filters/search are active. Ids not in `order` keep
+    /// their existing sortOrder. Extracted so the mirrored-array invariant is
+    /// unit-testable (TASK-07 / BL-030).
+    nonisolated static func applyReorder(
+        _ order: [String], categoryIndex: Int, to array: inout [TaskActionItem]
+    ) {
+        let itemCount = order.count
+        for (index, taskId) in order.enumerated() {
+            let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
+            if let i = array.firstIndex(where: { $0.id == taskId }) {
+                array[i].sortOrder = newSortOrder
+            }
+        }
+    }
+
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
@@ -924,23 +952,13 @@ class TasksViewModel: ObservableObject {
         // reassignment fires its own @Published; recomputeAllCaches at the end folds
         // them all into categorizedTasks.
         let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
-        let itemCount = order.count
-
-        func applyOrder(to array: inout [TaskActionItem]) {
-            for (index, taskId) in order.enumerated() {
-                let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
-                if let i = array.firstIndex(where: { $0.id == taskId }) {
-                    array[i].sortOrder = newSortOrder
-                }
-            }
-        }
 
         var incomplete = store.incompleteTasks
-        applyOrder(to: &incomplete)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &incomplete)
         store.incompleteTasks = incomplete
 
-        applyOrder(to: &filteredFromDatabase)
-        applyOrder(to: &searchResults)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &filteredFromDatabase)
+        Self.applyReorder(order, categoryIndex: categoryIndex, to: &searchResults)
 
         // Recompute caches immediately so the UI updates. Suppress the async
         // SQLite requery — when filters are active, the requery would otherwise
@@ -1424,7 +1442,7 @@ class TasksViewModel: ObservableObject {
         // Otherwise just recompute from the in-memory store arrays.
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
-        if hasNonStatusFilters && !suppressDatabaseRequery {
+        if (hasNonStatusFilters || automationForceFilteredRequery) && !suppressDatabaseRequery {
             Task { [weak self] in
                 guard let self, self.recomputeVersion == version else { return }
                 await self.loadFilteredTasksFromDatabase()
@@ -1492,11 +1510,15 @@ class TasksViewModel: ObservableObject {
         let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
 
-        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters else {
+        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters
+            || automationForceFilteredRequery else {
             filteredFromDatabase = []
             recomputeDisplayCaches()
             return
         }
+        // Count only real SQLite requeries (past the empty-filter early return), so
+        // the automation counter reflects an actual DB read (TASK-06).
+        automationRequeryCount += 1
 
         isLoadingFiltered = true
 
@@ -1951,6 +1973,23 @@ class TasksViewModel: ObservableObject {
         await store.loadTasks()
     }
 
+    func revealTaskForNavigation(_ task: TaskActionItem) {
+        searchText = ""
+        if task.completed {
+            if !store.completedTasks.contains(where: { $0.id == task.id }) {
+                store.completedTasks = sortTasks(store.completedTasks + [task])
+            }
+            selectedTags = [.done]
+        } else {
+            if !store.incompleteTasks.contains(where: { $0.id == task.id }) {
+                store.incompleteTasks = sortTasks(store.incompleteTasks + [task])
+            }
+            selectedTags = [.todo]
+        }
+        selectedDynamicTags.removeAll()
+        recomputeDisplayCaches()
+    }
+
     /// Throttled wrapper called from .onAppear — skips if called too recently
     func throttledLoadMoreIfNeeded(currentTask: TaskActionItem) async {
         let now = Date()
@@ -2185,34 +2224,60 @@ class TasksViewModel: ObservableObject {
         registry.register(
             name: "toggle_task",
             summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller (Tasks page never opened) resolves
             // the task instead of getting a spurious "not found".
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.toggleTask(task)
             // Report the real post-toggle state read back from the store rather than the
             // assumed negation — TasksStore leaves the prior state if the local write fails.
-            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
-            return ["id": id, "completed": completed ? "true" : "false"]
+            let completed = self.store.tasks.first(where: { $0.id == task.id })?.completed ?? !task.completed
+            return ["id": task.id, "completed": completed ? "true" : "false"]
         }
 
         registry.register(
             name: "delete_task",
             summary: "Delete a task by id (mirrors swipe / menu delete)",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller resolves the task instead of a
             // spurious "not found" when the Tasks page was never opened.
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.deleteTask(task)
-            return ["id": id, "deleted": "true"]
+            return ["id": task.id, "deleted": "true"]
         }
 
         registry.register(
@@ -2236,8 +2301,8 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "dump_tasks",
-            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
-            params: ["includeCompleted", "limit"]
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field. Pass `marker` to get a boolean `marker_absent` field for post-delete verification.",
+            params: ["includeCompleted", "limit", "marker"]
         ) { params in
             let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
             let limit = Int(params["limit"] ?? "") ?? 500
@@ -2264,8 +2329,83 @@ class TasksViewModel: ObservableObject {
             }
             let json = (try? JSONSerialization.data(withJSONObject: rows))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-            return ["count": String(sorted.count), "tasks": json]
+            var result: [String: String] = ["count": String(sorted.count), "tasks": json]
+            if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !marker.isEmpty
+            {
+                let present = sorted.contains { $0.description.contains(marker) }
+                result["marker_absent"] = present ? "false" : "true"
+            }
+            return result
         }
+
+        registry.register(
+            name: "inject_requery_during_drag",
+            summary: "TASK-06: inject a server-push recompute while a drag is active and report whether the SQLite requery was suppressed (order not clobbered). Non-prod only.",
+            params: []
+        ) { [weak self] _ in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            return await self.automationInjectRequeryDuringDrag()
+        }
+    }
+
+    /// TASK-06: prove a server push arriving mid-drag does not clobber the order.
+    /// Forces the filtered-requery branch (so the probe is never vacuous), sets
+    /// `suppressDatabaseRequery` (the flag the drag/sort-sync window holds), injects
+    /// a server-push recompute via the real `recomputeAllCaches` path, and reports
+    /// whether the SQLite requery was suppressed — plus a control recompute WITHOUT
+    /// the flag that MUST requery (proving the guard is load-bearing). A suppressed
+    /// requery is exactly what keeps the in-memory drag order on screen, so
+    /// `requery_suppressed_during_drag` is the load-bearing signal. Automation-only.
+    @MainActor
+    func automationInjectRequeryDuringDrag() async -> [String: String] {
+        await ensureTasksLoadedForAutomation()
+        // Force the filtered-requery branch so the ONLY thing that can block the
+        // requery is the drag guard — never a vacuous pass because no filter is set.
+        automationForceFilteredRequery = true
+        // Never leave either flag stuck (a stuck suppress flag would permanently
+        // block filtered requeries for this view model).
+        defer {
+            automationForceFilteredRequery = false
+            suppressDatabaseRequery = false
+        }
+
+        // Suppress phase: with the drag flag held, the forced requery must NOT run.
+        let countBefore = automationRequeryCount
+        suppressDatabaseRequery = true
+        recomputeAllCaches()
+        // Give a (wrongly) scheduled requery a bounded window to appear; a correct
+        // guard never lets it, so this observes no increment.
+        _ = await waitForRequeryCount(above: countBefore, timeoutMs: 1000)
+        let countDuringDrag = automationRequeryCount
+
+        // Control: the same forced push WITHOUT the drag flag must requery. Poll
+        // (rather than a fixed sleep) so the signal is deterministic under load.
+        suppressDatabaseRequery = false
+        recomputeAllCaches()
+        let controlFired = await waitForRequeryCount(above: countDuringDrag, timeoutMs: 3000)
+
+        // Settle back to the real filtered state. The control requery has already
+        // completed (we polled for it), so this recompute cannot invalidate it.
+        automationForceFilteredRequery = false
+        recomputeAllCaches()
+
+        return [
+            "requery_suppressed_during_drag": countDuringDrag == countBefore ? "true" : "false",
+            "requery_fires_without_suppress": controlFired ? "true" : "false",
+        ]
+    }
+
+    /// Poll `automationRequeryCount` until it exceeds `baseline` or the timeout
+    /// elapses. Deterministic replacement for a fixed sleep in the TASK-06 probe.
+    @MainActor
+    private func waitForRequeryCount(above baseline: Int, timeoutMs: Int) async -> Bool {
+        let steps = max(1, timeoutMs / 50)
+        for _ in 0..<steps {
+            if automationRequeryCount > baseline { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return automationRequeryCount > baseline
     }
 
     /// Ensure the store + category caches are populated before a headless reorder, so
@@ -2513,6 +2653,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
+    @StateObject private var suggestedStore = SuggestedTasksStore()
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -2617,11 +2758,15 @@ struct TasksPage: View {
         .onAppear {
             Task { @MainActor in
                 await viewModel.loadTasksForFirstUse()
+                await suggestedStore.load()
+                hydratePendingDashboardNavigationTarget()
+                chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
                 // If tasks are already loaded, notify sidebar to clear loading indicator
                 if !viewModel.isLoading {
                     NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
                 }
             }
+            suggestedStore.registerAutomationActions()
             // Restore panel UI if coordinator was open when we navigated away
             if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
                 showChatPanel = true
@@ -2650,6 +2795,25 @@ struct TasksPage: View {
         .onReceive(chatCoordinator.$activeTaskId) { taskId in
             activeChatTaskId = taskId
         }
+        .onReceive(viewModel.$displayTasks) { tasks in
+            chatCoordinator.ingestTaskMappings(tasks)
+        }
+        .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
+            guard isOpen != showChatPanel else { return }
+            if isOpen {
+                adjustWindowWidth(expand: true)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showChatPanel = true
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showChatPanel = false
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    adjustWindowWidth(expand: false)
+                }
+            }
+        }
     }
 
     /// Start a background AI investigation for a task (no panel opens)
@@ -2670,23 +2834,16 @@ struct TasksPage: View {
                 showChatPanel = true
             }
         }
-        // Switch to (or start) chat for this task
+        // Generic navigation only resumes an existing thread. Durable work is
+        // created solely by the labeled “Work on this with Omi” action.
         Task {
-            await chatCoordinator.openChat(for: task)
+            _ = await chatCoordinator.openExistingThread(for: task)
         }
     }
 
     /// Close the chat panel and shrink window
     private func closeChatPanel() {
         chatCoordinator.closeChat()
-        // Animate panel out and shrink window together
-        withAnimation(.easeInOut(duration: 0.25)) {
-            showChatPanel = false
-        }
-        // Shrink window after a short delay so the slide-out animation is visible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            adjustWindowWidth(expand: false)
-        }
     }
 
     /// Expand or shrink the main window to accommodate the chat panel.
@@ -2758,7 +2915,8 @@ struct TasksPage: View {
                 loadingView
             } else if let error = viewModel.error, viewModel.tasks.isEmpty {
                 errorView(error)
-            } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating {
+            } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating
+                        && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading {
                 emptyView
             } else {
                 // Render the list view (which hosts the InlineTaskCreationRow) whenever
@@ -3398,11 +3556,11 @@ struct TasksPage: View {
         } label: {
             Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                 .scaledFont(size: 12)
-                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                .foregroundColor(showChatPanel ? OmiColors.textPrimary : OmiColors.textSecondary)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
+                        .fill(showChatPanel ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundSecondary)
                 )
         }
         .buttonStyle(.plain)
@@ -3462,7 +3620,7 @@ struct TasksPage: View {
         .padding(.top, 8)
     }
 
-    private func errorView(_ error: String) -> some View {
+    private func errorView(_: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: 48)
@@ -3472,7 +3630,7 @@ struct TasksPage: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(error)
+            Text("Check your connection and try again.")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -3532,6 +3690,13 @@ struct TasksPage: View {
                     let onlyDone = viewModel.selectedTags.contains(.done) && !viewModel.selectedTags.contains(.todo)
                     let onlyDeleted = (viewModel.selectedTags.contains(.removedByAI) || viewModel.selectedTags.contains(.removedByMe)) && !viewModel.selectedTags.contains(.todo) && !viewModel.selectedTags.contains(.done)
                     if !onlyDone && !onlyDeleted && !viewModel.isMultiSelectMode {
+                        SuggestedTasksSection(
+                            store: suggestedStore,
+                            onCanonicalChange: {
+                                await viewModel.loadTasks()
+                            }
+                        )
+
                         // Inline creation at top (Cmd+N)
                         if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
                             InlineTaskCreationRow(
@@ -3740,8 +3905,49 @@ struct TasksPage: View {
             }
             .refreshable {
                 await viewModel.loadTasks()
+                await suggestedStore.load()
             }
-            .onAppear { viewModel.scrollProxy = proxy }
+            .onAppear {
+                viewModel.scrollProxy = proxy
+                schedulePendingDashboardNavigation(proxy: proxy)
+            }
+            .onChange(of: dashboardNavigationRenderKey) { _, _ in
+                schedulePendingDashboardNavigation(proxy: proxy)
+            }
+        }
+    }
+
+    private var dashboardNavigationRenderKey: String {
+        let taskIDs = viewModel.displayTasks.map(\.id).joined(separator: ",")
+        let candidateIDs = suggestedStore.candidates.map(\.id).joined(separator: ",")
+        return "\(taskIDs)|\(candidateIDs)"
+    }
+
+    private func schedulePendingDashboardNavigation(proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            hydratePendingDashboardNavigationTarget()
+            guard let target = TaskNavigationRequestStore.shared.consumeIfAvailable(
+                taskIDs: Set(viewModel.displayTasks.map(\.id)),
+                candidateIDs: Set(suggestedStore.candidates.map(\.id))
+            ) else { return }
+            switch target {
+            case .task(let taskID):
+                guard let task = viewModel.displayTasks.first(where: { $0.id == taskID }) else { return }
+                selectTask(task)
+                proxy.scrollTo(taskID, anchor: .center)
+            case .candidate(let candidateID):
+                proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
+            }
+        }
+    }
+
+    private func hydratePendingDashboardNavigationTarget() {
+        let navigation = TaskNavigationRequestStore.shared
+        if let task = navigation.pendingTask {
+            viewModel.revealTaskForNavigation(task)
+        }
+        if let candidate = navigation.pendingCandidate {
+            _ = suggestedStore.revealCandidateForNavigation(candidate)
         }
     }
 }
@@ -4140,7 +4346,7 @@ struct TaskDragPreviewSimple: View {
 // MARK: - Chat Session Status Indicator
 
 /// Shows streaming activity or unread dot for a task's chat session.
-/// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+/// Appears inline in the TaskRow FlowLayout next to the explicit thread action.
 ///
 /// Uses @State + .onReceive instead of @ObservedObject so that only this
 /// specific task's indicator re-renders when coordinator state changes —
@@ -4170,18 +4376,18 @@ struct ChatSessionStatusIndicator: View {
                         .lineLimit(1)
                 }
             } else if hasUnread {
-                // Unread: purple dot
+                // Unread: quiet neutral dot
                 Button {
                     onOpenChat?(task)
                 } label: {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(OmiColors.purplePrimary)
+                            .fill(OmiColors.textPrimary)
                             .frame(width: 8, height: 8)
 
                         Text("New reply")
                             .scaledFont(size: 10, weight: .medium)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(OmiColors.textPrimary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -4338,11 +4544,11 @@ struct TaskRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+                .fill(isActiveChatTask ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isActiveChatTask ? OmiColors.textPrimary.opacity(0.25) : Color.clear, lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
             if showShareCopiedToast {
@@ -4707,46 +4913,42 @@ struct TaskRow: View {
                             NewBadge()
                         }
 
-                        // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
-                        if TaskAgentSettings.shared.isEnabled {
-                            AgentStatusIndicator(task: task)
-                        }
+                        AutoAcceptedTaskWhyButton(task: task)
 
-                        // Investigate / View chat button (background AI chat)
+                        // Explicit durable-work action. Merely viewing/selecting a
+                        // task never creates a thread.
                         if let coordinator = chatCoordinator,
                            TaskAgentSettings.shared.isChatEnabled,
                            !coordinator.streamingTaskIds.contains(task.id),
                            !coordinator.unreadTaskIds.contains(task.id) {
-                            if task.chatSessionId != nil {
-                                // Previous session exists but is no longer active — let user view/resume it
+                            if task.workstreamId != nil {
                                 Button {
                                     onOpenChat?(task)
                                 } label: {
                                     HStack(spacing: 3) {
                                         Image(systemName: "bubble.left")
                                             .scaledFont(size: 9)
-                                        Text("View chat")
+                                        Text("Open thread")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .foregroundColor(OmiColors.textPrimary)
                                 }
                                 .buttonStyle(.plain)
-                                .help("View previous AI investigation")
+                                .help("Resume this task's ongoing work")
                             } else {
-                                // No prior session — start fresh investigation
                                 Button {
-                                    onInvestigate?(task)
+                                    Task { await coordinator.openChat(for: task) }
                                 } label: {
                                     HStack(spacing: 3) {
-                                        Image(systemName: "magnifyingglass")
+                                        Image(systemName: "sparkles")
                                             .scaledFont(size: 9)
-                                        Text("Investigate")
+                                        Text("Work on this with Omi")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(OmiColors.textPrimary)
                                 }
                                 .buttonStyle(.plain)
-                                .help("Start AI investigation in background")
+                                .help("Create ongoing work only when you choose")
                             }
                         }
 
@@ -4775,13 +4977,11 @@ struct TaskRow: View {
             // Hover actions overlaid on trailing edge (no layout shift)
             if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
                 HStack(spacing: 4) {
-                    // Execute: spawn an agent pill that handles this task end-to-end.
+                    // Execute is an explicit work intent and stays in the same
+                    // durable task-backed thread as chat/investigate.
                     if !task.completed {
                         Button {
-                            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                                ? ModelQoS.Claude.defaultSelection
-                                : ShortcutSettings.shared.selectedModel
-                            AgentPillsManager.shared.spawn(query: task.description, model: model)
+                            onInvestigate?(task)
                         } label: {
                             HStack(spacing: 3) {
                                 Image(systemName: "sparkles")

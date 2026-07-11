@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Warn when pushing desktop-agent-* branches whose HEAD lacks green gauntlet evidence.
+# Warn when pushing continuity-sensitive branches whose HEAD lacks green gauntlet evidence.
 #
 # Usage:
 #   ./scripts/check-gauntlet-evidence-at-head.sh          # warn (default)
@@ -7,6 +7,11 @@
 #
 # Looks for desktop/macos/.harness/agent-continuity-gauntlet/*/manifest.json with
 # matching git SHA and passed: true.
+#
+# Applies to branches matching:
+#   desktop-agent-* | *continuity* | *chat-timeline* | *floating-viewport*
+#   | *kernel-turn* | *agent-pill* | *floating-chat*
+# (INV-6 Continuity PR DoD — live suite is a PR/RC gate, not CI.)
 
 set -euo pipefail
 
@@ -20,7 +25,7 @@ cd "$REPO_ROOT"
 HEAD_SHA="$(git rev-parse --short HEAD)"
 BRANCH="$(git symbolic-ref --short -q HEAD 2>/dev/null || true)"
 
-if [[ ! "$BRANCH" =~ ^desktop-agent- ]]; then
+if [[ ! "$BRANCH" =~ (^desktop-agent-|continuity|chat-timeline|floating-viewport|kernel-turn|agent-pill|floating-chat) ]]; then
   exit 0
 fi
 

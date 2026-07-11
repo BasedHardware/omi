@@ -460,10 +460,10 @@ extension PostHogManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+    func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext,
+            "has_selected_app_context": hasSelectedAppContext,
             "source": source
         ])
     }
@@ -620,6 +620,22 @@ extension PostHogManager {
         ])
     }
 
+    func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
+        track("Task Intelligence Attribution", properties: event.analyticsProperties)
+    }
+
+    func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+        track("Proactive Task Gate Evaluated", properties: [
+            "schema_version": trace.schemaVersion,
+            "decision_id": trace.decisionID,
+            "recommendation_id": trace.recommendationID,
+            "intervention_id": trace.interventionID,
+            "dedupe_hash": trace.dedupeHash,
+            "cohort": trace.cohort.rawValue,
+            "reason": trace.reason.rawValue,
+        ])
+    }
+
     func taskPromoted(taskCount: Int) {
         track("Task Promoted", properties: [
             "task_count": taskCount
@@ -683,8 +699,36 @@ extension PostHogManager {
         track("Update Available", properties: updateProperties(version: version, context: context, item: item))
     }
 
-    func updateInstalled(version: String, context: UpdateAnalyticsContext, item: UpdateItemAnalytics) {
-        track("Update Installed", properties: updateProperties(version: version, context: context, item: item))
+    func updateInstallStarted(attempt: UpdateInstallAttempt) {
+        track("Update Install Started", properties: attempt.analyticsProperties)
+    }
+
+    func updateInstalled(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = true
+        track("Update Installed", properties: properties)
+    }
+
+    func updateInstallVerificationFailed(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = false
+        properties["error"] = "post_relaunch_build_mismatch"
+        properties["phase"] = "post_relaunch_verification"
+        track("Update Install Verification Failed", properties: properties)
     }
 
     func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
