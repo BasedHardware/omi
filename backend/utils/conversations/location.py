@@ -61,6 +61,23 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
     return geo
 
 
+def resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocation]:
+    """Enrich a raw geolocation via Google Places, keeping the original coordinates when the lookup
+    misses (returns None) or errors, so a geocode miss/failure never drops the user's location.
+
+    Only a geolocation that has coordinates but no google_place_id yet is enriched; anything else is
+    returned unchanged. Callers should assign the return value once (do not overwrite it afterward).
+    """
+    if not geolocation or geolocation.google_place_id:
+        return geolocation
+    try:
+        enriched = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    except Exception as e:
+        logger.error('resolve_geolocation enrichment failed: %s', e)
+        return geolocation
+    return enriched or geolocation
+
+
 async def async_get_google_maps_location(latitude: float, longitude: float) -> Optional[Geolocation]:
     """Async version of get_google_maps_location using httpx.AsyncClient."""
     logger.info(f'async_get_google_maps_location {latitude} {longitude}')
@@ -112,3 +129,16 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
         logging.warning('Failed to cache geocode for key %s: %s', cache_key, e)
 
     return geo
+
+
+async def async_resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocation]:
+    """Async variant of resolve_geolocation: enrich via async_get_google_maps_location, keeping the
+    original coordinates when the lookup misses (returns None) or errors."""
+    if not geolocation or geolocation.google_place_id:
+        return geolocation
+    try:
+        enriched = await async_get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    except Exception as e:
+        logger.error('async_resolve_geolocation enrichment failed: %s', e)
+        return geolocation
+    return enriched or geolocation
