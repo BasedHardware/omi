@@ -337,12 +337,20 @@ export type BarMode = 'peek' | 'expanded' | 'ptt'
 /** What triggered a reveal — drives the renderer's entrance motion (strip =
  *  slide-in; summon/ptt = orb genesis). */
 export type BarReveal = 'strip' | 'summon' | 'ptt'
-export type BarShowPayload = { mode: BarMode; reveal: BarReveal }
+/** `token` is a per-reveal monotonic id: the renderer echoes it back via
+ *  `showAck` once it has painted the revealed frame, so main can reject a stale
+ *  ack from a reveal that was cancelled/superseded (see the paint-ack handshake
+ *  in main/bar/window.ts). */
+export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
 
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
   ready: () => void
+  /** Per-reveal paint acknowledgement: the renderer has committed a frame with
+   *  the revealed state (double-rAF), so main may now show the HWND without
+   *  flashing the previous off-screen frame. Echoes the reveal `token`. */
+  showAck: (token: number) => void
   /** Slide-out finished; main may hide the window now. */
   requestHide: () => void
   /** Ask main to switch modes (focusability + hit-testing follow). */

@@ -51,6 +51,17 @@ let activeDisplayId: number | null = null
 let pendingShow: { mode: BarMode; reveal: BarReveal } | null = null
 let pendingPttDown = false
 let hideFallback: ReturnType<typeof setTimeout> | null = null
+// Per-reveal paint-ack handshake (see presentBar/commitReveal): the bar window
+// is ARMED (renderer told to reveal) but stays hidden until the renderer acks
+// it painted the revealed frame, so we never flash the previous off-screen
+// frame (blank-bar paint race). The token rejects stale acks from a reveal that
+// was cancelled or superseded before it painted.
+let revealToken = 0
+let pendingReveal: { token: number; mode: BarMode; reveal: BarReveal } | null = null
+let revealFallback: ReturnType<typeof setTimeout> | null = null
+// If the renderer is wedged/slow and never acks, show anyway after this — the
+// bar must never become unsummonable.
+const REVEAL_ACK_FALLBACK_MS = 150
 
 export function getBarWindow(): BrowserWindow | null {
   return barWindow
@@ -133,6 +144,7 @@ export function createBarWindow(): BrowserWindow {
     barWindow = null
     barReady = false
     currentMode = null
+    cancelPendingReveal()
   })
   win.webContents.on('did-fail-load', (_e, code, desc, url) =>
     console.error('[bar] did-fail-load', code, desc, url)
@@ -216,24 +228,58 @@ function applyClickThrough(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
 }
 
+/** Invalidate an armed-but-not-yet-shown reveal (its token + fallback timer). */
+function cancelPendingReveal(): void {
+  pendingReveal = null
+  if (revealFallback) {
+    clearTimeout(revealFallback)
+    revealFallback = null
+  }
+}
+
+/**
+ * ARM phase: prepare window state and tell the renderer to reveal, but do NOT
+ * show the HWND yet. The window is shown in commitReveal, once the renderer
+ * acks (bar:showAck) that it painted the revealed frame — otherwise the
+ * compositor shows the previous off-screen frame first (the blank-bar race).
+ */
 function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void {
+  // A pending hide-fallback must not fire mid-reveal.
   if (hideFallback) {
     clearTimeout(hideFallback)
     hideFallback = null
   }
   currentMode = mode
   applyClickThrough(win)
-  if (mode === 'expanded') {
-    win.setFocusable(true)
-    win.showInactive()
-    win.focus()
-  } else {
-    win.setFocusable(false)
-    win.showInactive()
+  win.setFocusable(mode === 'expanded')
+  const token = ++revealToken
+  pendingReveal = { token, mode, reveal }
+  if (revealFallback) clearTimeout(revealFallback)
+  revealFallback = setTimeout(() => {
+    // No paint ack arrived — present anyway so a wedged/slow renderer can never
+    // make the bar unsummonable. Not silent: this is the fail-open path.
+    console.warn('[bar] reveal paint-ack timed out; presenting via fallback')
+    commitReveal(token)
+  }, REVEAL_ACK_FALLBACK_MS)
+  send('bar:show', { mode, reveal, token })
+}
+
+/** COMMIT phase: the renderer painted the revealed frame (or the fallback
+ *  fired) — show the HWND now. Rejects a stale ack whose reveal was cancelled
+ *  or superseded. */
+function commitReveal(token: number): void {
+  const pending = pendingReveal
+  if (!pending || pending.token !== token) return
+  const win = barWindow
+  if (!win || win.isDestroyed()) {
+    cancelPendingReveal()
+    return
   }
-  if (mode === 'peek') startPeekWatch()
+  cancelPendingReveal()
+  win.showInactive()
+  if (pending.mode === 'expanded') win.focus()
+  if (pending.mode === 'peek') startPeekWatch()
   else stopPeekWatch()
-  send('bar:show', { mode, reveal })
   send('overlay:shown')
   broadcastVisibility()
 }
@@ -323,7 +369,17 @@ export function setBarMode(mode: BarMode): void {
  *  if the renderer is wedged. */
 export function hideBar(): void {
   const win = barWindow
-  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!win || win.isDestroyed()) return
+  // An armed-but-unshown reveal is cancelled outright — there is nothing to
+  // slide out, and a late ack/fallback must not resurrect it.
+  if (pendingReveal) {
+    cancelPendingReveal()
+    if (!win.isVisible()) {
+      currentMode = null
+      return
+    }
+  }
+  if (!win.isVisible()) return
   send('overlay:willHide')
   send('bar:willHide')
   if (hideFallback) clearTimeout(hideFallback)
@@ -335,6 +391,8 @@ function hideBarNow(): void {
     clearTimeout(hideFallback)
     hideFallback = null
   }
+  // Kill any armed reveal so a late ack/fallback can't re-show after a hide.
+  cancelPendingReveal()
   stopPeekWatch()
   const win = barWindow
   if (!win || win.isDestroyed()) return
@@ -544,6 +602,11 @@ export function registerBarIpc(): void {
       send('bar:ptt', 'down')
     }
   })
+  // Paint ack for a per-reveal token — show the HWND now (see commitReveal).
+  ipcMain.on('bar:showAck', (e, token: number) => {
+    if (!barWindow || e.sender.id !== barWindow.webContents.id) return
+    commitReveal(token)
+  })
   ipcMain.on('bar:requestHide', () => hideBarNow())
   ipcMain.on('bar:expand', () => setBarMode('expanded'))
   ipcMain.on('bar:collapse', () => setBarMode('peek'))
@@ -578,6 +641,7 @@ export function destroyBar(): void {
   gesture?.dispose()
   gesture = null
   stopPeekWatch()
+  cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)
   hideFallback = null
   unsubForeground?.()

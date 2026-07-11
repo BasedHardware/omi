@@ -91,6 +91,16 @@ export function BarApp(): React.JSX.Element {
       setSliding('in')
       // Signature motion: the orb materializes from nothing on every reveal.
       setGenesisNonce((n) => n + 1)
+      // Paint-ack handshake: main keeps the HWND hidden until we confirm a frame
+      // with the revealed (slide-in) state has been composited — otherwise the
+      // window shows the previous off-screen translateY(-110%) frame first (the
+      // blank-bar paint race on first hover). A double requestAnimationFrame is
+      // the Chromium-standard "the new state has been committed to a frame"
+      // proxy: rAF #1 runs after the React commit but before that paint, rAF #2
+      // runs after it, so by here the revealed frame is on screen.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.omiBar.showAck(p.token))
+      })
     })
   }, [])
   useEffect(() => window.omiBar.onMode((m) => setMode(m)), [])

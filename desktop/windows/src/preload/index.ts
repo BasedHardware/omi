@@ -285,6 +285,7 @@ const omiOverlay: OmiOverlayApi = {
 
 const omiBar: OmiBarApi = {
   ready: () => ipcRenderer.send('bar:ready'),
+  showAck: (token: number) => ipcRenderer.send('bar:showAck', token),
   requestHide: () => ipcRenderer.send('bar:requestHide'),
   expand: () => ipcRenderer.send('bar:expand'),
   collapse: () => ipcRenderer.send('bar:collapse'),
