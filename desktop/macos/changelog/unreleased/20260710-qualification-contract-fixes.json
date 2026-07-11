@@ -1,0 +1,3 @@
+{
+  "change": "Fixed goal creation, memory editing, memory visibility, and voice-provider authorization failures that could interrupt desktop workflows"
+}

@@ -28,9 +28,34 @@ enum FloatingControlBarGeometry {
         )
     }
 
-    /// Canonical top-center placement. Non-draggable notch surfaces must use
-    /// the display midpoint rather than an in-flight window frame: PTT, chat,
-    /// and the agent list can otherwise preserve a transient animation offset.
+    /// A notch island is tied to the display's camera housing, not to a prior
+    /// transient panel frame. When its surface changes size, retain the display
+    /// top edge and re-center it on the display so a stale panel offset cannot
+    /// leave a lobe underneath the hardware notch.
+    static func topAnchoredFrame(
+        currentFrame: NSRect,
+        targetSize: NSSize,
+        screenFrame: NSRect?,
+        pinsToScreenCenter: Bool
+    ) -> NSRect {
+        guard pinsToScreenCenter,
+              let screenFrame,
+              screenFrame.width > 0,
+              screenFrame.height > 0
+        else {
+            return topCenterAnchoredFrame(currentFrame: currentFrame, targetSize: targetSize)
+        }
+
+        return NSRect(
+            x: (screenFrame.midX - targetSize.width / 2).rounded(.toNearestOrAwayFromZero),
+            y: screenFrame.maxY - targetSize.height,
+            width: targetSize.width,
+            height: targetSize.height
+        )
+    }
+
+    /// Canonical top-center placement for a display-anchored surface whose
+    /// current frame must not influence its position.
     static func topCenteredFrame(size: NSSize, anchorFrame: NSRect) -> NSRect {
         NSRect(
             x: (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero),

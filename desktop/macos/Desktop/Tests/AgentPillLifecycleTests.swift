@@ -179,6 +179,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(voiceServiceSource.contains("\"I'm kicking off an agent now.\""))
     XCTAssertTrue(voiceServiceSource.contains("background-agent-kickoff-v1"))
     XCTAssertTrue(voiceServiceSource.contains("cachedOrSynthesizedBackgroundAgentKickoffAudio"))
+    XCTAssertTrue(voiceServiceSource.contains("DesktopLocalProfile.applicationSupportURL()"))
+    XCTAssertFalse(voiceServiceSource.contains(".appendingPathComponent(\"Omi\", isDirectory: true)"))
+    XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.canUseBYOK"))
+    XCTAssertTrue(voiceServiceSource.contains("CredentialHealthManager.shared.recordProviderFailure"))
+    XCTAssertTrue(voiceServiceSource.contains("context: \"openai_tts\""))
   }
 
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
@@ -482,7 +487,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains(".strokeBorder(Color.white.opacity(0.10 * Double(progress)), lineWidth: 0.6)"))
     XCTAssertTrue(windowSource.contains("private static let askOmiAnimationDuration: TimeInterval = 0.14"))
     XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.16"))
-    XCTAssertTrue(windowSource.contains("FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin"))
+    XCTAssertTrue(windowSource.contains("FloatingControlBarGeometry.topAnchoredFrame("))
+    XCTAssertTrue(windowSource.contains("screenFrame: screenForPlacement?.frame"))
+    XCTAssertTrue(windowSource.contains("pinsToScreenCenter: notchModeEnabled"))
     XCTAssertFalse(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseGlowActive"))
     XCTAssertTrue(windowSource.contains("FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)"))

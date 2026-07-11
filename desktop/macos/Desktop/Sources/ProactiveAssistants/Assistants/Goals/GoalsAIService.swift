@@ -302,7 +302,7 @@ actor GoalsAIService {
       currentValue: 0,
       minValue: suggestion.suggestedMin,
       maxValue: suggestion.suggestedMax,
-      source: "ai"
+      source: "ai_suggested"
     )
 
     // Sync to local storage
