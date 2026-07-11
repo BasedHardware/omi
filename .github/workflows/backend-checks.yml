@@ -61,16 +61,20 @@ jobs:
       - name: Check backend import purity
         if: needs.changes.outputs.has_backend_isolation_gate == 'true'
         run: |
+          # Match scripts/pre-push: compare allowlists to the PR merge-base, not
+          # the moving tip of the base branch (diff_base is origin/<base_ref>).
+          MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"
           python3 backend/scripts/scan_import_time_side_effects.py
           python3 backend/scripts/scan_import_time_side_effects.py \
-            --check-allowlist-monotonic "${{ needs.changes.outputs.diff_base }}"
+            --check-allowlist-monotonic "$MERGE_BASE"
 
       - name: Check backend test module isolation
         if: needs.changes.outputs.has_backend_isolation_gate == 'true'
         run: |
+          MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"
           python3 backend/scripts/check_module_stub_pollution.py
           python3 backend/scripts/check_module_stub_pollution.py \
-            --check-allowlist-monotonic "${{ needs.changes.outputs.diff_base }}"
+            --check-allowlist-monotonic "$MERGE_BASE"
 
       - name: Check workflow contracts
         if: needs.changes.outputs.has_backend_workflow_contracts == 'true' || needs.changes.outputs.has_backend_async_gate == 'true'

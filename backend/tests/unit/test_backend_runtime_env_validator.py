@@ -302,14 +302,35 @@ def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallb
         ]
 
 
-def test_full_validation_reports_missing_provider_binding_once(tmp_path):
-    validator = load_validator()
-    manifest = yaml.safe_load(validator.DEFAULT_MANIFEST.read_text(encoding='utf-8'))
-    del manifest['environments']['dev']['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
-    manifest_path = tmp_path / 'runtime_env.yaml'
-    write_yaml(manifest_path, manifest)
+def test_full_validation_reports_missing_provider_binding_once():
+    """Missing HOSTED_PARAKEET_API_URL must surface once per service, not fan out.
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path)
+    Uses the pure STT contract helper with a tiny synthetic env so this stays under
+    the fast-unit CPU budget (full-manifest validate_runtime_env is covered elsewhere).
+    """
+    validator = load_validator()
+    env_config = {
+        'gke': {},
+        'cloud_run': {
+            'services': {
+                service: {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.local'}},
+                    'secrets': {
+                        'STT_PRERECORDED_MODEL': {
+                            'secret': 'STT_PRERECORDED_MODEL',
+                            'version': 'latest',
+                        },
+                        'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
+                        'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
+                    },
+                }
+                for service in ('backend', 'backend-sync', 'backend-integration')
+            }
+        },
+    }
+    del env_config['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
     matching = [
         error
         for error in errors
@@ -322,6 +343,7 @@ def test_full_validation_reports_missing_provider_binding_once(tmp_path):
             'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
         )
     ]
+    assert len(errors) == 1
 
 
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):

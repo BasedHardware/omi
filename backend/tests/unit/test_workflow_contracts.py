@@ -200,10 +200,13 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
     assert "scan_import_time_side_effects.py" in backend_checks
     assert "check_module_stub_pollution.py" in backend_checks
+    assert 'MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"' in backend_checks
+    assert '--check-allowlist-monotonic "$MERGE_BASE"' in backend_checks
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
     assert 'scripts/changed-files "$DIFF_BASE" "$local_oid"' in pre_push
     assert "run_step check_desktop_quality_if_needed" in pre_push
     assert 'python3 "$SCRIPT_DIR/check_desktop_test_quality.py"' in swift_test_suites
+    assert 'if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then' in swift_test_suites
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
