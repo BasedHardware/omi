@@ -20,12 +20,15 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 HOOK_NAME="$(basename "$0")"
+if [ "$HOOK_NAME" = "pre-push" ]; then
+  exec "$ROOT/scripts/pre-push-singleflight" "$@"
+fi
 exec "$ROOT/scripts/$HOOK_NAME" "$@"
 HOOK
   chmod +x "$hook_path"
 }
 
-chmod +x "$ROOT/scripts/pre-commit" "$ROOT/scripts/pre-push"
+chmod +x "$ROOT/scripts/pre-commit" "$ROOT/scripts/pre-push" "$ROOT/scripts/pre-push-singleflight" "$ROOT/scripts/pr-preflight"
 install_dispatch_hook pre-commit
 install_dispatch_hook pre-push
 

@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
 preconditions:
   - automation_bridge_ready
 

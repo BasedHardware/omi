@@ -3,11 +3,26 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/conversations.dart';
 
 void main() {
+  group('sync capture manifest admission', () {
+    test('requests proof only for conversation-targeted fresh uploads', () {
+      expect(shouldRequestSyncCaptureManifest('conversation', SyncUploadLane.fresh), isTrue);
+      expect(shouldRequestSyncCaptureManifest('conversation', SyncUploadLane.backfill), isFalse);
+      expect(shouldRequestSyncCaptureManifest(null, SyncUploadLane.fresh), isFalse);
+    });
+  });
+
   group('syncRateLimitKindForResponse', () {
     test('recognizes the explicit fair-use header', () {
       final response = http.Response('', 429, headers: {'x-omi-rate-limit-reason': 'fair_use'});
 
       expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.fairUse);
+    });
+
+    test('recognizes historical pacing and capacity headers', () {
+      for (final reason in ['backfill_paced', 'backfill_capacity']) {
+        final response = http.Response('', 503, headers: {'x-omi-rate-limit-reason': reason});
+        expect(syncRateLimitKindForResponse(response), SyncRateLimitKind.backfillPaced);
+      }
     });
 
     test('keeps unknown JSON, text, and misleading detail generic', () {

@@ -169,13 +169,15 @@ async function requestSwiftTool(
 
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
 const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const projectionContext = { onboarding: isOnboarding, screenContext: hasScreenContext, executionRole } as const;
 
 // Tool order is owned by the canonical manifest projection.
-const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", projectionContext);
 const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
-const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding, screenContext: hasScreenContext });
+const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", projectionContext);
 
 // --- JSON-RPC handling ---
 

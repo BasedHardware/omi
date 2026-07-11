@@ -51,6 +51,14 @@ final class FloatingBarUsageLimiter: ObservableObject {
     /// Update cached plan directly from an already-fetched subscription (no extra API call).
     func applyPlan(plan: SubscriptionPlanType, status: SubscriptionStatusType) {
         hasPaidPlan = plan != .basic && status == .active
+        // A verified active subscription is authoritative over a stale
+        // trial/usage flag. Neo uses the Free Desktop floor for non-premium
+        // features, but it is still paid and must never remain blocked from
+        // audio capture while the app waits for another trial-metadata poll.
+        if hasPaidPlan {
+            AppState.current?.isPaywalled = false
+            UserDefaults.standard.set(false, forKey: .desktopIsPaywalled)
+        }
         if hasPaidPlan, serverQuota?.planType == SubscriptionPlanType.basic.rawValue {
             serverQuota = nil
             optimisticDelta = 0

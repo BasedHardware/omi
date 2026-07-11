@@ -1,9 +1,11 @@
 # INV-CHAT-1: One shared transcript across surfaces
 
 **Status:** locked
-**Statement:** Typed chat, notch / floating bar, PTT/realtime, and floating pills
-are input/output devices against one kernel-owned conversation transcript. There
-is one shared chat mind across surfaces — not per-surface product histories.
+**Statement:** Every canonical conversation has one kernel-owned transcript.
+Typed chat, notch / floating bar, PTT/realtime, and floating pills are input/output
+devices against the shared main conversation; they never fork it. A workstream is
+an explicit product conversation boundary: every task view linked to that
+workstream resolves the same kernel conversation and artifact history.
 
 ## MUST NOT
 
@@ -22,12 +24,15 @@ is one shared chat mind across surfaces — not per-surface product histories.
 - Notch / floating control bar chat
 - PTT / realtime
 - Floating agent pills
-- Task chat projections that share the user conversation
+- Task views: the shared main conversation when unlinked, or the task's one
+  canonical workstream conversation when linked
 
 ## Guard tests
 
 - `desktop/macos/agent/tests/surface-session.test.ts` — surface session reuse,
   floating→main merge, owner isolation
+- `desktop/macos/agent/tests/workstream-continuity.test.ts` — one conversation
+  per workstream, compatibility migration, minimized continuation
 - `desktop/macos/agent/tests/chat-continuity-invariant.test.ts` — ratchet against
   a second authoritative transcript store and per-surface history APIs
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →

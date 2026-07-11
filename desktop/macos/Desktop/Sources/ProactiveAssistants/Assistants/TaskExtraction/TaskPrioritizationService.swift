@@ -64,15 +64,19 @@ actor TaskPrioritizationService {
         log("TaskPrioritize: Service started")
 
         timer = Task { [weak self] in
+            guard let self else { return }
             // Startup delay
             try? await Task.sleep(nanoseconds: UInt64(90 * 1_000_000_000))
 
             while !Task.isCancelled {
-                guard let self = self else { break }
                 await self.checkAndRescore()
                 try? await Task.sleep(nanoseconds: UInt64(300 * 1_000_000_000))
             }
         }
+    }
+
+    private func legacyRankingEnabled() async -> Bool {
+        await TaskLegacyEffectGate.live.isAllowed(.ranking)
     }
 
     func stop() {
@@ -84,6 +88,10 @@ actor TaskPrioritizationService {
     }
 
     private func checkAndRescore() async {
+        guard await legacyRankingEnabled() else {
+            log("TaskPrioritize: Canonical or unresolved mode; staged ranking skipped")
+            return
+        }
         // Regenerate AI user profile if >24h old (runs daily)
         await regenerateProfileIfNeeded()
 
@@ -107,6 +115,7 @@ actor TaskPrioritizationService {
 
     /// Force a full re-scoring (e.g. from settings button).
     func forceFullRescore() async {
+        guard await legacyRankingEnabled() else { return }
         lastFullRunTime = nil
         await runFullRescore()
     }
@@ -115,6 +124,10 @@ actor TaskPrioritizationService {
 
     /// Send ALL staged tasks to Gemini, get back only the ones that need re-ranking
     private func runFullRescore() async {
+        guard await legacyRankingEnabled() else {
+            log("TaskPrioritize: Canonical or unresolved mode; staged ranking skipped")
+            return
+        }
         guard !isScoringInProgress else {
             log("TaskPrioritize: [FULL] Skipping — scoring already in progress")
             return
@@ -287,7 +300,14 @@ actor TaskPrioritizationService {
         if !validReranks.isEmpty {
             let reranks = validReranks.map { (backendId: $0.taskId, newPosition: $0.newPosition) }
             do {
-                try await StagedTaskStorage.shared.applySelectiveReranking(reranks)
+                let applied: Bool = try await TaskLegacyEffectGate.live.perform(.ranking) {
+                    try await StagedTaskStorage.shared.applySelectiveReranking(reranks)
+                    return true
+                } ?? false
+                guard applied else {
+                    log("TaskPrioritize: Mode changed; stopping before ranking write")
+                    return
+                }
                 log("TaskPrioritize: [FULL] Applied selective re-ranking for \(validReranks.count) staged tasks")
             } catch {
                 log("TaskPrioritize: [FULL] Failed to apply re-ranking: \(error)")
@@ -309,7 +329,14 @@ actor TaskPrioritizationService {
         do {
             let scores = try await StagedTaskStorage.shared.getAllScoredTasks()
             guard !scores.isEmpty else { return }
-            try await APIClient.shared.batchUpdateStagedScores(scores)
+            let synced: Bool = try await TaskLegacyEffectGate.live.perform(.ranking) {
+                try await APIClient.shared.batchUpdateStagedScores(scores)
+                return true
+            } ?? false
+            guard synced else {
+                log("TaskPrioritize: Mode changed; stopping before score sync")
+                return
+            }
             log("TaskPrioritize: Synced \(scores.count) staged scores to backend")
         } catch {
             logError("TaskPrioritize: Failed to sync staged scores to backend", error: error)

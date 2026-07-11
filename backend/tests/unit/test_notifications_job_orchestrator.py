@@ -30,7 +30,9 @@ def test_memory_maintenance_job_entrypoint_calls_cron_runner():
     source = entry_path.read_text(encoding="utf-8")
     assert "run_canonical_short_term_maintenance_cron" in source
     assert "from utils.other.jobs import start_job" not in source
-    assert "asyncio.run(run_canonical_short_term_maintenance_cron())" in source
+    assert "recurrence_signal_persister=persist_recurrence_signals_for_maintenance" in source
+    assert "recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance" in source
+    assert "asyncio.run(" in source
     assert 'if __name__ == "__main__":' in source
     assert "def main() -> None:" in source
     assert "firebase_admin.initialize_app" in source

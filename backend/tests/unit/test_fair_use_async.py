@@ -317,7 +317,7 @@ class TestOverflowAndInvalidData:
         now = int(time.time())
         bucket = str((now - 3600) // 60)
 
-        _redis().zrangebyscore.return_value = [bucket.encode()]
+        _redis().zrangebyscore.side_effect = [[bucket.encode()], [], []]
         _redis().hmget.return_value = [None]
 
         result = fair_use_mod.get_rolling_speech_ms('user1')
@@ -340,7 +340,7 @@ class TestOverflowAndInvalidData:
         now = int(time.time())
         bucket = str((now - 60) // 60)
 
-        _redis().zrangebyscore.return_value = [bucket.encode()]
+        _redis().zrangebyscore.side_effect = [[bucket.encode()], [], []]
         _redis().hmget.return_value = [b'999999999999']  # ~277 hours
 
         result = fair_use_mod.get_rolling_speech_ms('user1')

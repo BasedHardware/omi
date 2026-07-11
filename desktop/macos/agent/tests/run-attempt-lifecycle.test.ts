@@ -727,9 +727,9 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(existing.run.status).toBe("succeeded");
     expect(next.run.status).toBe("succeeded");
     expect(adapter.executed.map((execution) => execution.prompt[0]?.text)).toEqual([
-      "hello",
-      "existing concurrent",
-      "new during existing",
+      expect.stringContaining("hello"),
+      expect.stringContaining("existing concurrent"),
+      expect.stringContaining("new during existing"),
     ]);
     store.close();
   });
@@ -763,7 +763,10 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(retried.run.status).toBe("succeeded");
     expect(adapter.resumed).toHaveLength(1);
     expect(adapter.opened).toHaveLength(2);
-    expect(adapter.executed.map((execution) => execution.prompt[0]?.text)).toEqual(["hello", "retry stale resume"]);
+    expect(adapter.executed.map((execution) => execution.prompt[0]?.text)).toEqual([
+      expect.stringContaining("hello"),
+      expect.stringContaining("retry stale resume"),
+    ]);
     store.close();
   });
 

@@ -41,6 +41,8 @@ import type {
   RunStatus,
   DelegationStatus,
   DesktopAttentionOverride,
+  DesktopArtifactDelivery,
+  NewDesktopArtifactDelivery,
   NewDesktopCoordinatorDispatch,
 } from "./types.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
@@ -134,6 +136,50 @@ import { StaleAdapterBindingError } from "./kernel-types.js";
 import { KernelRuns } from "./kernel-runs.js";
 
 export class KernelArtifacts extends KernelRuns {
+  queueArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery {
+    if (input.deliveryId) {
+      const existing = this.store.getOptionalRow(
+        "SELECT * FROM desktop_artifact_deliveries WHERE delivery_id = ? AND owner_id = ?",
+        [input.deliveryId, input.ownerId],
+      );
+      if (existing) return desktopArtifactDeliveryFromRow(existing);
+    }
+    return this.store.insertDesktopArtifactDelivery(input);
+  }
+
+  listArtifactDeliveries(input: {
+    ownerId: string;
+    targetRef?: string;
+    statuses?: DesktopArtifactDelivery["deliveryStatus"][];
+    limit?: number;
+  }): DesktopArtifactDelivery[] {
+    const where = ["owner_id = ?"];
+    const values: unknown[] = [input.ownerId];
+    if (input.targetRef) {
+      where.push("target_ref = ?");
+      values.push(input.targetRef);
+    }
+    if (input.statuses?.length) {
+      where.push(`delivery_status IN (${placeholders(input.statuses.length)})`);
+      values.push(...input.statuses);
+    }
+    values.push(boundedLimit(input.limit, 100, 500));
+    return this.store.allRows(
+      `SELECT * FROM desktop_artifact_deliveries
+       WHERE ${where.join(" AND ")}
+       ORDER BY created_at_ms ASC LIMIT ?`,
+      values,
+    ).map(desktopArtifactDeliveryFromRow);
+  }
+
+  updateArtifactDelivery(
+    deliveryId: string,
+    input: { ownerId: string } & Partial<Pick<DesktopArtifactDelivery,
+      "deliveryStatus" | "attemptCount" | "receiptJson" | "errorJson" | "deliveredAtMs">>,
+  ): DesktopArtifactDelivery {
+    return this.store.updateDesktopArtifactDelivery(deliveryId, input);
+  }
+
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);

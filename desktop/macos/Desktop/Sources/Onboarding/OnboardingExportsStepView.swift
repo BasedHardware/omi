@@ -221,7 +221,7 @@ private struct OnboardingInlineExportPanel: View {
       }
 
       if let errorMessage = model.errorMessage {
-        Text(errorMessage)
+        Text(UserFacingErrorPresentation.message(from: errorMessage, while: .memoryExport))
           .font(.system(size: 12, weight: .medium))
           .foregroundColor(OmiColors.warning)
       }
