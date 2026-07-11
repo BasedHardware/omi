@@ -36,6 +36,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   static final Version _timestampMarkerMinVersion = Version.parse("3.0.16");
 
+  /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
+  /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
+  static List<int>? parseLegacyPacketFrame(List<int> value) {
+    final amount = value[3];
+    if (amount <= 0 || 4 + amount > value.length) {
+      return null;
+    }
+    return value.sublist(4, 4 + amount);
+  }
+
   SDCardWalSyncImpl(this.listener);
 
   bool _supportsTimestampMarkers() {
@@ -306,8 +316,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
 
         if (value.length == 83) {
-          var amount = value[3];
-          bytesData.add(value.sublist(4, 4 + amount));
+          final frame = parseLegacyPacketFrame(value);
+          if (frame != null) {
+            bytesData.add(frame);
+          } else {
+            Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+          }
           offset += 80;
         } else if (value.length == 440) {
           var packageOffset = 0;
@@ -441,8 +455,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
 
         if (value.length == 83) {
-          var amount = value[3];
-          bytesData.add(value.sublist(4, 4 + amount));
+          final frame = parseLegacyPacketFrame(value);
+          if (frame != null) {
+            bytesData.add(frame);
+          } else {
+            Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+          }
           offset += 80;
         } else if (value.length == 440) {
           var packageOffset = 0;
