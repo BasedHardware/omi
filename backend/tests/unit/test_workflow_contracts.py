@@ -200,6 +200,11 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
     assert "scan_import_time_side_effects.py" in backend_checks
     assert "check_module_stub_pollution.py" in backend_checks
+    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
+    assert "--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py" in backend_checks
+    assert "--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py" in pre_push
+    assert "unmanaged_thread_offload" in backend_checks
+    assert "unmanaged_thread_offload" in pre_push
     assert 'MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"' in backend_checks
     assert '--check-allowlist-monotonic "$MERGE_BASE"' in backend_checks
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push

@@ -1,7 +1,7 @@
 import importlib.util
 import textwrap
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -23,6 +23,14 @@ def _scan_source(scanner: ModuleType, tmp_path: Path, source: str):
     source_path = tmp_path / "sample.py"
     source_path.write_text(textwrap.dedent(source), encoding="utf-8")
     return source_path, scanner.scan_dirs([str(tmp_path)])
+
+
+def _scan_agent_proxy_source(scanner: ModuleType, tmp_path: Path, source: str):
+    service_dir = tmp_path / "backend" / "agent-proxy"
+    service_dir.mkdir(parents=True)
+    source_path = service_dir / "main.py"
+    source_path.write_text(textwrap.dedent(source), encoding="utf-8")
+    return source_path, scanner.scan_dirs([str(service_dir)])
 
 
 def test_direct_local_sync_wrapper_is_reported_at_async_call_site(scanner, tmp_path):
@@ -167,6 +175,253 @@ def test_local_sync_helper_passed_to_run_blocking_is_safe(scanner, tmp_path):
     )
 
     assert results["async_helpers_with_blocking"] == []
+
+
+def test_direct_credentials_refresh_is_reported_as_sync_network_io(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        async def refresh_token():
+            creds.refresh(request)
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert finding["function"] == "refresh_token"
+    assert finding["network_io"] == [{"line": 3, "call": "creds.refresh() [sync HTTP]"}]
+
+
+def test_agent_proxy_transitive_credentials_refresh_is_selected(scanner, tmp_path):
+    source_path, results = _scan_agent_proxy_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def _refresh_credentials():
+            creds.refresh(request)
+
+        def _get_gce_access_token():
+            _refresh_credentials()
+            return creds.token
+
+        async def _check_gce_status():
+            await asyncio.sleep(0)
+            return _get_gce_access_token()
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    call = finding["network_io"][0]
+    assert finding["file"] == str(source_path)
+    assert call["call"] == "_get_gce_access_token() -> _refresh_credentials() -> creds.refresh() [sync HTTP]"
+    assert call["via"] == ["_get_gce_access_token", "_refresh_credentials"]
+
+
+def test_agent_proxy_credentials_refresh_passed_to_run_blocking_is_safe(scanner, tmp_path):
+    _source_path, results = _scan_agent_proxy_source(
+        scanner,
+        tmp_path,
+        """
+        def _get_gce_access_token():
+            creds.refresh(request)
+            return creds.token
+
+        async def _check_gce_status():
+            return await run_blocking(critical_executor, _get_gce_access_token)
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, tmp_path):
+    _source_path, results = _scan_agent_proxy_source(
+        scanner,
+        tmp_path,
+        """
+        from firebase_admin import auth, firestore
+
+        def _get_firestore_db():
+            return firestore.client()
+
+        def _get_user_context():
+            return _get_firestore_db().collection("users")
+
+        async def websocket_handler(token):
+            auth.verify_id_token(token)
+            return _get_user_context()
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert {call["call"] for call in finding["network_io"]} == {"verify_id_token() [sync HTTP]"}
+    assert {call["call"] for call in finding["db_calls"]} == {
+        "_get_user_context() -> _get_firestore_db() -> firestore.client"
+    }
+
+
+def test_firebase_auth_and_firestore_helpers_are_safe_on_owned_executors(scanner, tmp_path):
+    _source_path, results = _scan_agent_proxy_source(
+        scanner,
+        tmp_path,
+        """
+        from firebase_admin import auth, firestore
+
+        def _verify(token):
+            return auth.verify_id_token(token)
+
+        def _get_firestore_db():
+            return firestore.client()
+
+        def _get_user_context():
+            return _get_firestore_db().collection("users")
+
+        async def websocket_handler(token):
+            decoded = await run_blocking(critical_executor, _verify, token)
+            context = await run_blocking(db_executor, _get_user_context)
+            return decoded, context
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_prerecorded_stt_and_storage_lifecycle_calls_are_network_io(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.other.storage import (
+            get_syncing_file_temporal_signed_url,
+            schedule_syncing_temporal_file_deletion,
+        )
+        from utils.stt.pre_recorded import prerecorded, prerecorded_from_bytes
+
+        async def stream_voice_message():
+            await checkpoint()
+            url = get_syncing_file_temporal_signed_url("audio.wav")
+            schedule_syncing_temporal_file_deletion("audio.wav")
+            prerecorded(url)
+            prerecorded_from_bytes(b"audio")
+        """,
+    )
+
+    calls = results["async_helpers_with_blocking"][0]["network_io"]
+    assert {call["call"] for call in calls} == {
+        "get_syncing_file_temporal_signed_url",
+        "schedule_syncing_temporal_file_deletion",
+        "prerecorded() [sync STT]",
+        "prerecorded_from_bytes() [sync STT]",
+    }
+
+
+def test_prerecorded_stt_and_storage_helpers_are_safe_on_managed_executors(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.other.storage import (
+            get_syncing_file_temporal_signed_url,
+            schedule_syncing_temporal_file_deletion,
+        )
+        from utils.stt.pre_recorded import prerecorded
+
+        def _prepare_url(path):
+            url = get_syncing_file_temporal_signed_url(path)
+            schedule_syncing_temporal_file_deletion(path)
+            return url
+
+        def _transcribe(url):
+            return prerecorded(url)
+
+        async def stream_voice_message():
+            url = await run_blocking(storage_executor, _prepare_url, "audio.wav")
+            return await run_blocking(sync_executor, _transcribe, url)
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_asyncio_to_thread_is_reported_as_unmanaged_offload(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        async def legacy_helper():
+            return await asyncio.to_thread(blocking_call)
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == [
+        {
+            "file": str(_source_path),
+            "line": 4,
+            "end_line": 5,
+            "function": "legacy_helper",
+            "calls": [{"line": 5, "call": "asyncio.to_thread() [unmanaged executor]"}],
+        }
+    ]
+
+
+def test_explicit_python_file_path_is_scanned(scanner, tmp_path):
+    source_path = tmp_path / "dependencies.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def auth_dependency():
+                creds.refresh(request)
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["summary"]["files_scanned"] == 1
+    assert results["high_network_io"][0]["endpoint"] == "auth_dependency"
+
+
+def test_dependency_module_async_without_await_is_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "dependencies.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def pure_dependency():
+                return "uid"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"][0]["endpoint"] == "pure_dependency"
+
+
+def test_changed_scope_preserves_hyphenated_agent_proxy_path(scanner, monkeypatch):
+    diff = """\
+diff --git a/backend/agent-proxy/main.py b/backend/agent-proxy/main.py
+--- a/backend/agent-proxy/main.py
++++ b/backend/agent-proxy/main.py
+@@ -8,0 +9 @@ async def _check_gce_status():
++    creds.refresh(request)
+"""
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return SimpleNamespace(stdout=diff)
+
+    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
+
+    scope = scanner.changed_scope("origin/main", ["backend/agent-proxy"])
+
+    assert captured["cmd"][-2:] == ["--", "backend/agent-proxy"]
+    assert scope["ranges"] == {"backend/agent-proxy/main.py": [(9, 9)]}
 
 
 def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
