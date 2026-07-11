@@ -508,7 +508,6 @@ environments:
           --subnet:
             env_var: CLOUD_RUN_VPC_SUBNET
           --vpc-egress: private-ranges-only
-          --remove-secrets: GOOGLE_APPLICATION_CREDENTIALS
       services:
         backend:
           env:
@@ -518,6 +517,9 @@ environments:
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
               value: '0.01'
               category: rollout
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -543,6 +545,12 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
+            # Temporary signing compatibility: signed GCS URLs still require
+            # private-key credentials. Keep this until storage.py uses IAM
+            # signBlob with a narrowly authorized runtime identity.
+            GOOGLE_APPLICATION_CREDENTIALS:
+              secret: GOOGLE_APPLICATION_CREDENTIALS
+              version: '1'
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               secret: MCP_OAUTH_CLAUDE_CLIENT_ID
               version: latest
@@ -586,6 +594,9 @@ environments:
               value: '555'
               category: rollout
               provisional: true
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -615,6 +626,9 @@ environments:
               category: rollout
               provisional: true
           secrets:
+            GOOGLE_APPLICATION_CREDENTIALS:
+              secret: GOOGLE_APPLICATION_CREDENTIALS
+              version: '1'
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -628,6 +642,9 @@ environments:
           <<: *prod_backend_sync
         backend-integration:
           env:
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -653,6 +670,9 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
+            GOOGLE_APPLICATION_CREDENTIALS:
+              secret: GOOGLE_APPLICATION_CREDENTIALS
+              version: '1'
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest

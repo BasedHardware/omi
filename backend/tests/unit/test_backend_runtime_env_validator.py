@@ -759,7 +759,7 @@ def test_repo_rendered_cloud_run_matches_manifest():
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
 
 
-def test_prod_remove_secrets_remains_in_rendered_deploy_flags():
+def test_prod_cloud_run_retains_signing_credentials_until_keyless_signing_lands():
     validator = load_validator()
     workflow = validator._load_yaml(ROOT.parent / '.github/workflows/gcp_backend.yml')
 
@@ -769,7 +769,23 @@ def test_prod_remove_secrets_remains_in_rendered_deploy_flags():
         manifest_path=ROOT / 'deploy/runtime_env.yaml',
     )
 
-    assert '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS' in outputs['cloud_run_flags'].split()
+    assert '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS' not in outputs['cloud_run_flags'].split()
+    expected_binding = 'GOOGLE_APPLICATION_CREDENTIALS=GOOGLE_APPLICATION_CREDENTIALS:1'
+    for output_name in (
+        'backend_secrets',
+        'backend_sync_secrets',
+        'backend_sync_backfill_secrets',
+        'backend_integration_secrets',
+    ):
+        assert expected_binding in outputs[output_name].splitlines()
+    expected_project = 'GOOGLE_CLOUD_PROJECT=based-hardware'
+    for output_name in (
+        'backend_env_vars',
+        'backend_sync_env_vars',
+        'backend_sync_backfill_env_vars',
+        'backend_integration_env_vars',
+    ):
+        assert expected_project in outputs[output_name].splitlines()
 
 
 def test_live_cloud_run_excludes_remove_secrets_from_retained_flags(tmp_path, monkeypatch):

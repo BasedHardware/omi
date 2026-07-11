@@ -106,12 +106,10 @@ the Deployment must contain `GOOGLE_CLOUD_PROJECT=based-hardware`. If the
 topology changes, update the manifest, IaC, environment variables, exact guards,
 and this table together.
 
-The live Cloud Run services also currently carry
-`GOOGLE_CLOUD_PROJECT=based-hardware`, but `backend/deploy/runtime_env.yaml` does
-not yet own that binding explicitly. Treat retained service state as rollout
-debt: add the identity value to all four Cloud Run surface declarations plus
-validator coverage, then prove a fresh candidate receives it without inheriting
-an older revision's environment.
+`backend/deploy/runtime_env.yaml` explicitly owns
+`GOOGLE_CLOUD_PROJECT=based-hardware` for all four Cloud Run surfaces. A fresh
+candidate must receive that value from the rendered manifest; inherited service
+state is not acceptable proof of runtime identity.
 
 Verify required secret and notification-channel *names* exist without printing
 values. `BACKEND_SECRETS_GSA` may use the checked-in deterministic default, but
@@ -202,8 +200,17 @@ For a bounded resume:
 - Create only the missing `backend-integration` candidate from that pinned
   digest. Do not rebuild, reapply GKE, or reprovision queues/TTL/IAM/alerts.
 - Require every candidate to be `Ready=True`, latest-created for its service,
-  and still at zero percent. Production candidates must not retain the legacy
-  `GOOGLE_APPLICATION_CREDENTIALS` binding.
+  and still at zero percent. Until keyless IAM signing is implemented,
+  all four production candidates must retain the
+  `GOOGLE_APPLICATION_CREDENTIALS` secret binding: removing it makes compute ADC
+  unable to generate GCS signed URLs, causes authenticated `/v1/users/people`
+  requests to return 500, and prevents backfill segment processing. The backfill
+  clone helper drops inherited credentials before applying explicit manifest
+  overlays: prod deliberately restores this binding, while dev continues to omit
+  it. The clone renderer must emit an explicit removal flag when the overlay
+  omits a dropped secret, because the deploy action merges secrets by default.
+  Pin the environment-variable secret to a numeric enabled version rather than
+  `latest`, and test both sides of that ordering contract.
 - Add temporary per-revision tags and require the exact tag/revision mapping to
   converge in both `spec.traffic` and `status.traffic`. Remove every attempted
   tag, including after an ambiguous command result, and poll until it is absent
@@ -229,6 +236,12 @@ network-dependent startup work, define a measured cold-start SLO (including a
 high-percentile target and hard maximum), and derive readiness/smoke retry
 budgets from that SLO. Until that work lands, record each candidate's cold-start
 duration and do not hide a regression by repeatedly extending timeouts.
+
+The `.70` backfill cutover also proved 512 MiB insufficient under real work:
+instances repeatedly used 517-561 MiB and were terminated. The worker contract
+now requests 1 GiB at concurrency 1. Treat that as a bounded mitigation; capture
+peak and high-percentile memory under representative backfill load before
+shrinking it, and keep the change reversible.
 
 Long term, give URL-disabled backend revisions a protected validation route:
 attach the exact traffic tag to a dedicated serverless NEG and expose it only
@@ -321,6 +334,11 @@ incident:
   wrong-project, traceback, and reconnect-anomaly gates.
 - Build a restricted pre-cutover probe path for the default-URL-disabled backend,
   or keep the integration-smoke/post-cutover-rollback limitation explicit.
+- Replace private-key GCS URL signing with refreshed ADC plus IAM `signBlob`,
+  grant the runtime service account the narrow self-signing permission, and only
+  then remove `GOOGLE_APPLICATION_CREDENTIALS`. Add an authenticated candidate
+  smoke that exercises at least one real signed-URL response; health/OpenAPI
+  checks did not catch the `.70` signing regression.
 - Generalize the resume lane's dependency ordering, smokes, and rollback to fresh
   deploys; add verified Helm rollback rather than relying on rollout timeout alone.
 - Add one verifier for the sync queues, IAM bindings, Firestore TTL, log metrics,

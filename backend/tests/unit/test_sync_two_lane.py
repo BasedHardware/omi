@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from database import sync_ledger, user_usage
-from scripts.render_cloud_run_clone_env import clone_environment
+from scripts.render_cloud_run_clone_env import clone_environment, secret_removal_flags
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
 
@@ -126,6 +126,51 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'GOOGLE_APPLICATION_CREDENTIALS' not in secrets
 
 
+def test_cloud_run_clone_allows_explicit_manifest_secret_to_restore_dropped_live_name():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'GOOGLE_APPLICATION_CREDENTIALS',
+                                    'valueFrom': {
+                                        'secretKeyRef': {'name': 'GOOGLE_APPLICATION_CREDENTIALS', 'key': '7'}
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    _, secrets = clone_environment(
+        service,
+        '',
+        'GOOGLE_APPLICATION_CREDENTIALS=GOOGLE_APPLICATION_CREDENTIALS:1',
+        drop_names='GOOGLE_APPLICATION_CREDENTIALS',
+    )
+
+    assert secrets == 'GOOGLE_APPLICATION_CREDENTIALS=GOOGLE_APPLICATION_CREDENTIALS:1'
+
+
+def test_cloud_run_clone_removes_dropped_secret_only_when_manifest_does_not_restore_it():
+    assert (
+        secret_removal_flags('', 'GOOGLE_APPLICATION_CREDENTIALS') == '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
+    )
+    assert (
+        secret_removal_flags(
+            'GOOGLE_APPLICATION_CREDENTIALS=GOOGLE_APPLICATION_CREDENTIALS:1',
+            'GOOGLE_APPLICATION_CREDENTIALS',
+        )
+        == ''
+    )
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
@@ -176,6 +221,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--min-instances=0' in action
     assert '--max-instances=4' in action
     assert '--concurrency=1' in action
+    assert '--memory=1Gi' in action
+    assert '${{ steps.backfill-runtime.outputs.remove_secret_flags }}' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=4' in action
