@@ -32,6 +32,7 @@
     "voice:loop-check": "node scripts/run-voice-loop-check.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
     "test:e2e:bar": "node scripts/run-bar-e2e.mjs",
+    "test:e2e:sidebar": "node scripts/run-sidebar-e2e.mjs",
     "orb:sheet": "node scripts/orb/contact-sheet.mjs",
     "orb:check": "node scripts/orb/check-invariants.mjs && node scripts/orb/check-motion.mjs && node scripts/orb/check-transitions.mjs",
     "orb:throttle": "node scripts/orb/check-throttle.mjs",
