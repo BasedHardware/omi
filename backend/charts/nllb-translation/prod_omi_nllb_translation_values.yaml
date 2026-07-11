@@ -84,6 +84,7 @@ autoscaling:
 
 nodeSelector:
   cloud.google.com/gke-accelerator: nvidia-l4
+  cloud.google.com/gke-nodepool: nllb-translation-pool
 
 tolerations:
   - key: nvidia.com/gpu
