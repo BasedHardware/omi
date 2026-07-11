@@ -169,6 +169,21 @@ class TestTranslateGoogleBatchHelper(unittest.TestCase):
         self.assertEqual(results[0], ("Hola", "en"))
         self.assertEqual(results[1], ("Mundo", "en"))
 
+    def test_google_batch_passes_correct_args(self):
+        mock_response = MagicMock()
+        t1 = MagicMock()
+        t1.translated_text = "Hola"
+        t1.detected_language_code = "en"
+        mock_response.translations = [t1]
+        _mock_translate_client.translate_text.return_value = mock_response
+
+        self.service._translate_google_batch(["Hello"], "es")
+        call_kwargs = _mock_translate_client.translate_text.call_args[1]
+        self.assertEqual(call_kwargs["contents"], ["Hello"])
+        self.assertEqual(call_kwargs["target_language_code"], "es")
+        self.assertIn("parent", call_kwargs)
+        self.assertIn("mime_type", call_kwargs)
+
     def test_google_batch_none_detected_lang(self):
         mock_response = MagicMock()
         t1 = MagicMock()
@@ -374,7 +389,7 @@ class TestShadowCallsitesCoverage(unittest.TestCase):
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
         try:
             with patch.object(self.service, '_schedule_shadow_compare') as mock_shadow:
-                units = [{"segment_id": 1, "text": "Hello world"}]
+                units = [("seg1", "Hello world")]
                 self.service.translate_units_batch("es", units)
                 mock_shadow.assert_called()
                 call_args = mock_shadow.call_args
@@ -435,6 +450,98 @@ class TestShadowTimeoutHandling(unittest.TestCase):
                     self.assertEqual(call_kwargs["from_mode"], "shadow")
                     self.assertEqual(call_kwargs["to_mode"], "google")
                     self.assertEqual(call_kwargs["outcome"], "degraded")
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            self.service._shadow_client = None
+
+
+class TestShadowExecutorScheduling(unittest.TestCase):
+
+    def setUp(self):
+        self.service = _TranslationService()
+
+    def test_schedule_submits_to_postprocess_executor(self):
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        try:
+            with patch("utils.translation.submit_with_context") as mock_submit:
+                self.service._schedule_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
+                mock_submit.assert_called_once()
+                args = mock_submit.call_args[0]
+                from utils.executors import postprocess_executor
+
+                self.assertIs(args[0], postprocess_executor)
+                self.assertEqual(args[1], self.service._run_shadow_compare)
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+
+
+class TestShadowNon200Fallback(unittest.TestCase):
+
+    def setUp(self):
+        self.service = _TranslationService()
+
+    def test_non_200_calls_record_fallback(self):
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        self.service._shadow_client = None
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_client.post.return_value = mock_resp
+
+        try:
+            with patch("utils.translation.httpx.Client", return_value=mock_client):
+                with patch("utils.translation.record_fallback") as mock_fallback:
+                    self.service._shadow_client = None
+                    self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
+                    mock_fallback.assert_called_once()
+                    call_kwargs = mock_fallback.call_args[1]
+                    self.assertEqual(call_kwargs["from_mode"], "shadow")
+                    self.assertEqual(call_kwargs["to_mode"], "google")
+                    self.assertEqual(call_kwargs["outcome"], "degraded")
+        finally:
+            _translation_module.TRANSLATION_MODE = original_mode
+            _translation_module.HOSTED_TRANSLATION_API_URL = original_url
+            self.service._shadow_client = None
+
+
+class TestShadowCacheIsolation(unittest.TestCase):
+
+    def setUp(self):
+        self.service = _TranslationService()
+
+    def test_shadow_compare_never_writes_cache(self):
+        original_mode = _translation_module.TRANSLATION_MODE
+        original_url = _translation_module.HOSTED_TRANSLATION_API_URL
+        _translation_module.TRANSLATION_MODE = "shadow"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        self.service._shadow_client = None
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "translations": [{"translated_text": "Hola", "detected_language_code": "en"}],
+            "model": "nllb",
+        }
+        mock_client.post.return_value = mock_resp
+
+        try:
+            with patch("utils.translation.httpx.Client", return_value=mock_client):
+                with patch("utils.translation.cache_translation") as mock_cache:
+                    with patch.object(self.service, '_set_memory_cache') as mock_mem:
+                        self.service._shadow_client = None
+                        self.service._run_shadow_compare("test", "es", ["Hello"], [("Hola", "en")])
+                        mock_cache.assert_not_called()
+                        mock_mem.assert_not_called()
         finally:
             _translation_module.TRANSLATION_MODE = original_mode
             _translation_module.HOSTED_TRANSLATION_API_URL = original_url
