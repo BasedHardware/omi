@@ -250,15 +250,35 @@ async function main() {
         )
     }
 
-    // --- 6. Agents transition never bridges rows -------------------------------
-    // Component count must stay within 4..8 and no component may exceed ~1.4×
-    // a settled pill's area (a cross-row bridge is ~2× — review round 2).
+    // --- 6. Agents: whirl-then-settle; the glide never bridges rows -------------
+    // Entry whirls the dots on the ring for AGENTS_WHIRL seconds (8 separated
+    // dots, no pose yet), THEN they glide into four pills. During the glide the
+    // component count must stay within 4..8 and no component may exceed ~1.4× a
+    // settled pill's area (a cross-row bridge is ~2× — review round 2).
     {
-      const settled = await renderPixels(page, { t: 40, state: 'agents', stateTime: 3 })
+      // Keep in sync with AGENTS_WHIRL in choreography.ts.
+      const AGENTS_WHIRL = 1.0
+      const settled = await renderPixels(page, {
+        t: 40,
+        state: 'agents',
+        stateTime: AGENTS_WHIRL + 2
+      })
       const pills = components(whiteMask(settled))
       const pillArea = pills.reduce((a, c) => a + c.size, 0) / pills.length
+      // Whirl phase: still a separated orbiting ring — the pose hasn't begun.
+      for (const stateTime of [0.15, 0.5, 0.9]) {
+        const img = await renderPixels(page, { t: 40 + stateTime, state: 'agents', stateTime })
+        checked++
+        const comps = components(whiteMask(img))
+        if (comps.length !== 8) {
+          failures.push(
+            `agents-whirl/t${stateTime.toFixed(2)}: ${comps.length} components (want 8 dots still orbiting before the pose)`
+          )
+        }
+      }
+      // Glide phase (offset past the whirl): the pose forms without bridging rows.
       for (let i = 1; i <= 13; i++) {
-        const stateTime = (i / 14) * 0.7
+        const stateTime = AGENTS_WHIRL + (i / 14) * 0.7
         const img = await renderPixels(page, { t: 40 + stateTime, state: 'agents', stateTime })
         checked++
         const comps = components(whiteMask(img))
