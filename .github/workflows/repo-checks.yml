@@ -107,6 +107,12 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Test deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py --self-test
+
+      - name: Check deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py
+
       - name: Check desktop release terminology
         run: python3 .github/scripts/check-desktop-release-terminology.py
 
