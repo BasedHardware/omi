@@ -19,7 +19,9 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
@@ -37,6 +39,7 @@ covers:
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/PostHogManager.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
   - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
 preconditions:
