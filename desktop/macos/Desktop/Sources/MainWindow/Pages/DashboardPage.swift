@@ -564,7 +564,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onOpenAgent: { agentID, completion in
@@ -867,7 +869,9 @@ struct DashboardPage: View {
                 onCitationTap: { citation in
                     handleCitationTap(citation)
                 },
-                sessionsLoadError: chatProvider.sessionsLoadError,
+                sessionsLoadError: chatProvider.sessionsLoadError.map {
+                    UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
+                },
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },

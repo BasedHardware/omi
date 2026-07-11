@@ -445,7 +445,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(UserFacingErrorPresentation.message(from: error, while: .chatSessions))
+            Text(error)
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)

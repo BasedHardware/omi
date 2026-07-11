@@ -26,7 +26,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift

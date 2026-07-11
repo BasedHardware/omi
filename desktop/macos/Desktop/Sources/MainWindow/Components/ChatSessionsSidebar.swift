@@ -39,7 +39,7 @@ struct ChatSessionsSidebar: View {
                         .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text(UserFacingErrorPresentation.message(from: error, while: .chatSessions))
+                    Text(error)
                         .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
