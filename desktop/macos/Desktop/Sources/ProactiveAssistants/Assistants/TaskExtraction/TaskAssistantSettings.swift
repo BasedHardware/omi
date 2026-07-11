@@ -401,13 +401,11 @@ class TaskAssistantSettings {
     guard TaskAssistantSettings.isBrowser(appName) else { return true }
     guard let title = windowTitle, !title.isEmpty else { return false }
 
-    let lowercaseTitle = title.lowercased()
-    for keyword in browserKeywords {
-      if lowercaseTitle.contains(keyword.lowercased()) {
-        return true
-      }
-    }
-    return false
+    return TaskAssistantSettings.windowTitle(title, matchesAny: browserKeywords)
+  }
+
+  nonisolated static func windowTitle(_ title: String, matchesAny keywords: [String]) -> Bool {
+    keywords.contains { title.localizedStandardContains($0) }
   }
 
   /// Add an app to the allowed list
