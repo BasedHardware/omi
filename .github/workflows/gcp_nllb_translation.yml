@@ -56,10 +56,14 @@ jobs:
 
       - run: gcloud auth configure-docker
 
+      - name: Compute image tag from checked-out HEAD
+        id: vars
+        run: echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile backend/${{ env.SERVICE_UNDERSCORE }}/
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile backend/${{ env.SERVICE_UNDERSCORE }}/
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -70,7 +74,7 @@ jobs:
 
       - name: Deploy NLLB Translation to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml --set "image.tag=${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify rollout
         run: |
