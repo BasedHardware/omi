@@ -45,8 +45,17 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     private var lastAcknowledgedIndex = -1
 
     private var firstFlashPageTimestampMs: Int64?
+    // getStorageStatus() stores its continuation here and it is resumed from two
+    // unsynchronized executors — the 3s timeout Task and the RX parser Task — which
+    // without a lock can BOTH resume the same CheckedContinuation (double-resume
+    // trap / crash) or leak a displaced one. All three fields are guarded by
+    // storageStateLock: capture-and-nil the continuation UNDER the lock, resume it
+    // OUTSIDE (exactly one context wins). The generation tag lets a timeout resume
+    // only its OWN pending call, never a newer one that displaced it.
+    private let storageStateLock = NSLock()
     private var storageState: [String: Int]?
     private var storageStateCompletion: CheckedContinuation<[String: Int]?, Never>?
+    private var storageStateGeneration = 0
     private var lastLedBrightness: Int?
 
     // MARK: - Initialization
@@ -621,9 +630,12 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                         guard statusLength >= 5, statusLength <= 500, innerPos + statusLength <= data.count else { return }
 
                         if let state = parseStorageStateFromDeviceStatus(data, start: innerPos, end: innerPos + statusLength) {
+                            storageStateLock.lock()
                             storageState = state
-                            storageStateCompletion?.resume(returning: state)
+                            let completion = storageStateCompletion
                             storageStateCompletion = nil
+                            storageStateLock.unlock()
+                            completion?.resume(returning: state)
                         }
                         return
                     }
@@ -863,14 +875,30 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
 
             // Wait for response with timeout
             return await withCheckedContinuation { continuation in
+                storageStateLock.lock()
+                let displaced = storageStateCompletion
+                storageStateGeneration += 1
+                let myGeneration = storageStateGeneration
                 storageStateCompletion = continuation
+                storageStateLock.unlock()
+                // A prior in-flight getStorageStatus would otherwise be leaked (its
+                // continuation overwritten, never resumed) — resolve it with nil.
+                displaced?.resume(returning: nil)
 
                 Task {
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    if storageStateCompletion != nil {
-                        storageStateCompletion?.resume(returning: storageState)
+                    storageStateLock.lock()
+                    var timedOut: CheckedContinuation<[String: Int]?, Never>?
+                    var snapshot: [String: Int]?
+                    // Only fire if OUR call is still the pending one (a newer call
+                    // would have bumped the generation and owns the slot now).
+                    if storageStateGeneration == myGeneration, let completion = storageStateCompletion {
+                        timedOut = completion
                         storageStateCompletion = nil
+                        snapshot = storageState
                     }
+                    storageStateLock.unlock()
+                    timedOut?.resume(returning: snapshot)
                 }
             }
         } catch {
