@@ -40,10 +40,28 @@ final class AppIconCacheTests: XCTestCase {
   }
 
   /// Unknown names fall through every stage and return nil (the view then shows
-  /// the generic app.fill fallback symbol).
+  /// the letter-monogram fallback).
   func testUnknownAppReturnsNil() async {
     let icon = await AppIconCache.shared.getIcon(for: "DefinitelyNotAnInstalledApp2026", size: 24)
     XCTAssertNil(icon)
+  }
+
+  /// CoreServices apps (Finder, Archive Utility) resolve without being in the
+  /// classic /Applications folders — regression for the default excluded-apps
+  /// list showing fallback icons.
+  func testCoreServicesAppsResolve() async {
+    let finder = await AppIconCache.shared.getIcon(for: "Finder", size: 24)
+    XCTAssertNotNil(finder, "Finder lives in /System/Library/CoreServices")
+    let archiveUtility = await AppIconCache.shared.getIcon(for: "Archive Utility", size: 24)
+    XCTAssertNotNil(archiveUtility, "Archive Utility lives in CoreServices/Applications")
+  }
+
+  /// Renamed system apps resolve through their current name ("System
+  /// Preferences" no longer exists on modern macOS; stored names may predate
+  /// the System Settings rename).
+  func testRenamedSystemAppResolvesThroughAlias() async {
+    let icon = await AppIconCache.shared.getIcon(for: "System Preferences", size: 24)
+    XCTAssertNotNil(icon, "System Preferences should alias to System Settings")
   }
 
   /// Second lookup for the same name is served from NSCache — the exact same

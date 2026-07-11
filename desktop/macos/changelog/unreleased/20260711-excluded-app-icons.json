@@ -1,0 +1,3 @@
+{
+  "change": "Fixed missing app icons in the Excluded Apps lists — system apps like Finder now resolve, and uninstalled apps show a letter tile instead of a generic placeholder"
+}
