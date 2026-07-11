@@ -134,6 +134,8 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert "provision_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
     assert 'for THRESHOLD in 70 90' in action
     assert 'gcloud monitoring policies create' in action
+    assert 'Cannot find metric(s)' in action
+    assert 'Waiting for log-based metric' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
 
 

@@ -230,20 +230,35 @@ runs:
               --limit=1
           )"
           if [[ -z "$POLICY" ]]; then
-            POLICY="$(
-              gcloud monitoring policies create \
-                --project=${{ inputs.project_id }} \
-                --display-name="$DISPLAY_NAME" \
-                --condition-display-name="$DISPLAY_NAME" \
-                --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
-                --duration=0s \
-                --if='> 0' \
-                --trigger-count=1 \
-                --combiner=OR \
-                --notification-channels="$ALERT_CHANNELS" \
-                --documentation="Backfill has crossed ${THRESHOLD}% of the 555-hour UTC-day allowance." \
-                --format='value(name)'
-            )"
+            for ATTEMPT in $(seq 1 60); do
+              set +e
+              CREATE_OUTPUT="$(
+                gcloud monitoring policies create \
+                  --project=${{ inputs.project_id }} \
+                  --display-name="$DISPLAY_NAME" \
+                  --condition-display-name="$DISPLAY_NAME" \
+                  --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+                  --duration=0s \
+                  --if='> 0' \
+                  --trigger-count=1 \
+                  --combiner=OR \
+                  --notification-channels="$ALERT_CHANNELS" \
+                  --documentation="Backfill has crossed ${THRESHOLD}% of the 555-hour UTC-day allowance." \
+                  --format='value(name)' 2>&1
+              )"
+              CREATE_STATUS=$?
+              set -e
+              if [[ "$CREATE_STATUS" -eq 0 ]]; then
+                POLICY="$CREATE_OUTPUT"
+                break
+              fi
+              if [[ "$CREATE_OUTPUT" != *"Cannot find metric(s)"* || "$ATTEMPT" -eq 60 ]]; then
+                printf '%s\n' "$CREATE_OUTPUT" >&2
+                exit "$CREATE_STATUS"
+              fi
+              echo "Waiting for log-based metric $METRIC to become queryable (attempt $ATTEMPT/60)"
+              sleep 10
+            done
           fi
           test -n "$POLICY"
           gcloud monitoring policies describe "$POLICY" \
