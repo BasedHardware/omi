@@ -29,7 +29,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   bool _isSyncing = false;
   bool _cancelRequested = false;
-  String? _currentDeviceId;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -289,7 +288,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (_device == null) return false;
 
     String deviceId = _device!.id;
-    _currentDeviceId = deviceId;
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);

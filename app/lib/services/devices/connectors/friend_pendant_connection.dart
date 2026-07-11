@@ -16,7 +16,6 @@ class FriendPendantDeviceConnection extends DeviceConnection {
 
   final _audioController = StreamController<List<int>>.broadcast();
   StreamSubscription? _audioSub;
-  bool _isRecording = false;
 
   FriendPendantDeviceConnection(super.device, super.transport);
 
@@ -45,7 +44,6 @@ class FriendPendantDeviceConnection extends DeviceConnection {
 
   @override
   Future<void> disconnect() async {
-    _isRecording = false;
     await _audioSub?.cancel();
     await _audioController.close();
     await super.disconnect();
@@ -95,7 +93,6 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    _isRecording = true;
     return _audioController.stream.listen(onAudioBytesReceived);
   }
 
