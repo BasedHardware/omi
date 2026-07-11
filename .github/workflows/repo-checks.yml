@@ -93,6 +93,12 @@ jobs:
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 
+      - name: Test lifecycle header checker
+        run: python3 .github/scripts/test_check_lifecycle_headers.py
+
+      - name: Check lifecycle headers for rollout scaffolding
+        run: python3 .github/scripts/check_lifecycle_headers.py --changed-files /tmp/changed-files.txt
+
       - name: Check brand UI purple ratchet (INV-UI-1)
         if: github.event_name == 'pull_request'
         run: |

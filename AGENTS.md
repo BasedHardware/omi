@@ -91,6 +91,7 @@ Improve the code you touch — within your blast radius:
 
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
+- Designated rollout scaffolding (`backend/scripts/*readiness*`, `*gauntlet*`, `*proof*`, and `backend/utils/**/*rollout*`, `*compat*`) needs a near-top `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <GitHub issue URL or invariant ID>`. `.github/scripts/check_lifecycle_headers.py` enforces this with `.github/lifecycle-header-baseline.txt` as the frozen legacy census.
 
 ### Fallback / resilience telemetry
 

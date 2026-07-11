@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LIFECYCLE: permanent
 """Driver for the backend memory continuity gauntlet (INV-MEM)."""
 
 from __future__ import annotations
