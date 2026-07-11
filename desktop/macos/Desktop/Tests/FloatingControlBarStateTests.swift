@@ -76,38 +76,35 @@ final class FloatingControlBarStateTests: XCTestCase {
     }
 
     func testVoiceResponseGlowClearsIfNoOwnerTurnsItOff() {
-        let originalDelay = FloatingControlBarState.voiceResponseWatchdogDelay
-        FloatingControlBarState.voiceResponseWatchdogDelay = 0.02
-        defer { FloatingControlBarState.voiceResponseWatchdogDelay = originalDelay }
-
-        let state = FloatingControlBarState()
+        let scheduler = ManualDelayedActionScheduler()
+        let state = FloatingControlBarState(delayedActionScheduler: scheduler)
         state.isVoiceResponseActive = true
 
-        let expectation = expectation(description: "voice response watchdog fired")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 0.2)
-
+        XCTAssertTrue(scheduler.fireNext())
         XCTAssertFalse(state.isVoiceResponseActive)
     }
 
     func testVoiceResponseGlowWatchdogIsCancelledWhenClearedExplicitly() {
-        let originalDelay = FloatingControlBarState.voiceResponseWatchdogDelay
-        FloatingControlBarState.voiceResponseWatchdogDelay = 0.02
-        defer { FloatingControlBarState.voiceResponseWatchdogDelay = originalDelay }
-
-        let state = FloatingControlBarState()
+        let scheduler = ManualDelayedActionScheduler()
+        let state = FloatingControlBarState(delayedActionScheduler: scheduler)
         state.isVoiceResponseActive = true
         state.isVoiceResponseActive = false
 
-        let expectation = expectation(description: "cancelled watchdog would have fired")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 0.2)
-
+        XCTAssertFalse(scheduler.fireNext())
         XCTAssertFalse(state.isVoiceResponseActive)
+    }
+
+    func testThinkingWatchdogCanFireAndCancelDeterministically() {
+        let scheduler = ManualDelayedActionScheduler()
+        let state = FloatingControlBarState(delayedActionScheduler: scheduler)
+
+        state.isThinking = true
+        XCTAssertTrue(scheduler.fireNext())
+        XCTAssertFalse(state.isThinking)
+
+        state.isThinking = true
+        state.isThinking = false
+        XCTAssertFalse(scheduler.fireNext())
     }
 
     // MARK: - Review feedback P2 fixes
