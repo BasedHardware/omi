@@ -9,6 +9,12 @@ final class KernelTurnProjection {
   /// Continuity keys already committed from kernel `turn_recorded` (or promoted
   /// optimistic stages). Prevents double-append of the same logical turn.
   private var appliedKernelTurnKeys = Set<String>()
+  /// Insertion order of `appliedKernelTurnKeys`, so eviction drops the OLDEST
+  /// keys rather than an arbitrary hash-ordered subset (see
+  /// rememberAppliedKernelTurnKey).
+  private var appliedKernelTurnKeyOrder: [String] = []
+  private let appliedKernelTurnKeysCap = 64
+  private let appliedKernelTurnKeysTrimTo = 32
 
   init(host: ChatProvider) {
     self.host = host
@@ -100,9 +106,20 @@ final class KernelTurnProjection {
   }
 
   private func rememberAppliedKernelTurnKey(_ key: String) {
-    appliedKernelTurnKeys.insert(key)
-    if appliedKernelTurnKeys.count > 64 {
-      appliedKernelTurnKeys = Set(Array(appliedKernelTurnKeys).suffix(32))
+    // Track first-seen order so eviction can drop the OLDEST keys. The previous
+    // `Set(Array(set).suffix(32))` operated on a hash-ordered array, so it kept an
+    // ARBITRARY 32 keys — a just-applied key could be evicted while a stale one
+    // survived, letting a re-delivered turn_recorded (durable-outbox replay or
+    // bridge reattach) slip past the dedup guard and double-append the same
+    // logical turn (INV-6 rule 4).
+    guard appliedKernelTurnKeys.insert(key).inserted else { return }
+    appliedKernelTurnKeyOrder.append(key)
+    if appliedKernelTurnKeyOrder.count > appliedKernelTurnKeysCap {
+      let evictCount = appliedKernelTurnKeyOrder.count - appliedKernelTurnKeysTrimTo
+      for evicted in appliedKernelTurnKeyOrder.prefix(evictCount) {
+        appliedKernelTurnKeys.remove(evicted)
+      }
+      appliedKernelTurnKeyOrder.removeFirst(evictCount)
     }
   }
 
