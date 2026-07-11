@@ -89,6 +89,47 @@ final class FloatingBarHeuristicsTests: XCTestCase {
         }
     }
 
+    func testFloatingAgentHandoffRequiresQualifiedTargetAndObjectiveConnector() {
+        // Exercise every supported creation verb and target form through the
+        // public handoff API. This protects the side-effect boundary rather
+        // than just the regex helper used to implement it.
+        let qualifiedRequests: [(String, String)] = [
+            ("spawn a subagent to compare two files", "compare two files"),
+            ("start a background agent for a release review", "a release review"),
+            ("launch a floating agent that reviews the notes", "reviews the notes"),
+            ("kick off a new agent which compares two files", "compares two files"),
+            ("create a pill to draft a release note", "draft a release note"),
+            ("make an agent to summarize this transcript", "summarize this transcript"),
+            ("run an agent to compare two files", "compare two files"),
+            ("spawn two background agents to compare two files", "compare two files"),
+        ]
+        for (request, expectedTask) in qualifiedRequests {
+            XCTAssertEqual(
+                AgentPillsManager.floatingAgentHandoff(for: request)?.agentTask,
+                expectedTask,
+                "Expected qualified creation request to hand off: \"\(request)\"")
+        }
+
+        // These are developer/product phrases that contain the action and
+        // agent vocabulary but no explicit task connector. They must not turn
+        // into background-agent side effects as the wording evolves.
+        let nonCreationCommands = [
+            "run agent tests in desktop",
+            "run subagent tests locally",
+            "run background agent tests locally",
+            "launch floating agent tooling locally",
+            "create a pill UI fixture",
+            "start an agent right now",
+            "spawn a subagent: compare two files",
+            "spawn a subagent and compare two files",
+        ]
+        for command in nonCreationCommands {
+            XCTAssertNil(
+                AgentPillsManager.floatingAgentHandoff(for: command),
+                "Expected inline handling, not a handoff, for: \"\(command)\"")
+        }
+    }
+
     // MARK: - scoped negation guard (Cubic P1)
 
     func testNegationGuardDoesNotSuppressLegitimateSpawnRequests() {

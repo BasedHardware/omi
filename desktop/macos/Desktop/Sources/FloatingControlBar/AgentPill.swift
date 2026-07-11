@@ -569,17 +569,23 @@ final class AgentPillsManager: ObservableObject {
             return nil
         }
 
-        var task = String(text[matchRange.upperBound...])
+        let taskSuffix = String(text[matchRange.upperBound...])
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let connectorPattern = #"^(?:to|for|that\s+can|that\s+will|which\s+can|which\s+will|and)\s+"#
-        if let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) {
-            task = connectorRegex.stringByReplacingMatches(
-                in: task,
-                range: NSRange(task.startIndex..., in: task),
-                withTemplate: ""
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The objective must be explicitly introduced. Without this, source
+        // phrases such as "run subagent tests locally" look like a sibling
+        // request after the noun matcher. Requiring a natural task connector
+        // makes the deterministic handoff conservative by construction.
+        let connectorPattern = #"^(?:to|for|that|which)\s+"#
+        guard let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) else {
+            return nil
         }
+        let suffixRange = NSRange(taskSuffix.startIndex..., in: taskSuffix)
+        guard let connectorMatch = connectorRegex.firstMatch(in: taskSuffix, range: suffixRange),
+              let taskStart = Range(connectorMatch.range, in: taskSuffix)?.upperBound
+        else {
+            return nil
+        }
+        let task = String(taskSuffix[taskStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard task.split(whereSeparator: \.isWhitespace).count >= 2 else { return nil }
         return task
     }

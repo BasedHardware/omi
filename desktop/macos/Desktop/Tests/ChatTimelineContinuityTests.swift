@@ -211,6 +211,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
     // The canonical transcript retains separate lifecycle facts; only the
     // display projection collapses the terminal completion into the spawn row.
     XCTAssertEqual(canonical.count, 2)
+    XCTAssertTrue(canonical[0].resources.isEmpty)
+    XCTAssertEqual(canonical[1].resources.map(\.id), ["artifact-1"])
+    guard case .agentSpawn = canonical[0].contentBlocks.first,
+          case .agentCompletion = canonical[1].contentBlocks.first
+    else {
+      return XCTFail("the projection must not mutate canonical lifecycle blocks")
+    }
     XCTAssertEqual(projected.count, 1)
     XCTAssertEqual(projected[0].id, "spawn-message")
     XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
@@ -403,6 +410,12 @@ final class ChatTimelineContinuityTests: XCTestCase {
           status: "completed"
         ),
         .text(id: "surrounding-text", text: "The surrounding response remains visible."),
+        .toolCall(
+          id: "surrounding-tool",
+          name: "search_notes",
+          status: .completed,
+          output: "Found one related note."
+        ),
       ],
       resources: [artifact]
     )
@@ -420,11 +433,91 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
     XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
     XCTAssertEqual(projected[1].resources.map(\.id), ["artifact-1"])
-    XCTAssertEqual(projected[1].contentBlocks.count, 1)
+    XCTAssertEqual(projected[1].contentBlocks.count, 2)
     guard case .text(_, let text) = projected[1].contentBlocks[0] else {
       return XCTFail("the mixed completion's ordinary content must remain")
     }
     XCTAssertEqual(text, "The surrounding response remains visible.")
+    guard case .toolCall(_, let name, let status, _, _, let output) = projected[1].contentBlocks[1] else {
+      return XCTFail("the mixed completion's ordinary tool block must remain")
+    }
+    XCTAssertEqual(name, "search_notes")
+    XCTAssertEqual(status, .completed)
+    XCTAssertEqual(output, "Found one related note.")
+  }
+
+  func testAgentLifecycleDisplayProjectionRetainsUnmatchedCompletionInMixedSourceMessage() {
+    let pillID = UUID()
+    let spawn = ChatMessage(
+      id: "spawn-message",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "First Agent",
+          objective: "First objective"
+        ),
+      ]
+    )
+    let mixedCompletions = ChatMessage(
+      id: "mixed-completions-message",
+      text: "A separate agent is still available.",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "matching-completion",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "First Agent",
+          promptSnippet: "First objective",
+          output: "First result",
+          status: "completed"
+        ),
+        .agentCompletion(
+          id: "unmatched-completion",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-2",
+          title: "Second Agent",
+          promptSnippet: "Second objective",
+          output: "Second result",
+          status: "completed"
+        ),
+        .text(id: "surrounding-text", text: "A separate agent is still available."),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([spawn, mixedCompletions])
+
+    XCTAssertEqual(projected.count, 2)
+    guard case .agentCompletion(_, _, _, let renderedRun, _, _, let renderedOutput, _) =
+      projected[0].contentBlocks.first
+    else {
+      return XCTFail("the matching completion must replace the spawn row")
+    }
+    XCTAssertEqual(renderedRun, "run-1")
+    XCTAssertEqual(renderedOutput, "First result")
+    XCTAssertEqual(projected[1].contentBlocks.count, 2)
+    guard case .agentCompletion(_, _, _, let retainedRun, _, _, let retainedOutput, _) =
+      projected[1].contentBlocks[0]
+    else {
+      return XCTFail("an unmatched completion must remain in its source row")
+    }
+    XCTAssertEqual(retainedRun, "run-2")
+    XCTAssertEqual(retainedOutput, "Second result")
+    XCTAssertEqual(
+      projected.flatMap(\.contentBlocks).filter { block in
+        if case .agentCompletion = block { return true }
+        return false
+      }.count,
+      2,
+      "one terminal card must remain for each distinct run"
+    )
   }
 
   func testAgentIdentityBlocksSurviveSaveMessageMetadataRoundTrip() {
