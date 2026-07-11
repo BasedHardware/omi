@@ -98,10 +98,17 @@ void main() {
     dDots = smin(dDots, di, ki);
   }
   // Center pool blob: fills the middle of the converging ring (no punched
-  // hole mid-merge) and carries the held blob's slow breathing. It only exists
-  // once merge is substantial, so it blends with the full pooling distance.
+  // hole mid-merge) and GLUES the dots into one body. Its blend distance is
+  // generous once the blob is forming — larger than the dot↔dot k — so no
+  // interior field dip / hole survives between the pool and the ring; dots stay
+  // hard to EACH OTHER (no webbing), the pool does the liquid gluing. The bridge
+  // strength RAMPS with merge (smoothstep): near-zero while the dots are still a
+  // ring, full by the time the blob is holding. A constant-large bridge snapped
+  // the pool onto the dots the instant it became visible — the blob's rendered
+  // area jumped in one frame as a dissolve swept merge past that point (C6). The
+  // ramp lets the pool glue in gradually to match its smooth radius growth.
   if (u_centerR > 0.0) {
-    float kPool = mix(0.045, u_sminK, u_merge) * u_disc;
+    float kPool = u_sminK * 1.7 * smoothstep(0.12, 0.36, u_merge) * u_disc;
     dDots = smin(dDots, sdCircle(q, u_centerR * u_disc), kPool);
   }
 

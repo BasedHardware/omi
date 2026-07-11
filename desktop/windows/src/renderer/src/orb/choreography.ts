@@ -96,13 +96,15 @@ export const ORB_PRESETS: Record<string, OrbParams> = {
     sminK: 0.28,
     spinBusyMult: 1.7
   },
-  // Livelier: quicker steps, bigger wave.
+  // Livelier: quicker steps and spin. Wave amplitude stays in line with the
+  // others — its own 0.11 combined with the wider wave-gain span tore the
+  // merged silhouette into sharp inward notches (skeptical-review finding).
   lively: {
     ...DEFAULT_ORB_PARAMS,
     orbitPeriod: 2.8,
     restFraction: 0.26,
     stepDegrees: 60,
-    noiseAmp: 0.11,
+    noiseAmp: 0.092,
     sminK: 0.4,
     spinBusyMult: 2.3
   },
@@ -393,7 +395,9 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // ring collapse left a punched hole at the center mid-merge (the smin union
   // of a ring is an annulus — skeptical-review Critical); staggering means
   // mass accumulates from the first arrivals, so the blob is solid throughout.
-  const STAGGER = 0.5
+  // A WIDE stagger also spreads the gather/dissolve over a broad merge range so
+  // the blob forms and breaks up dot-by-dot — never a one-frame ring↔blob cut.
+  const STAGGER = 0.9
   const dotMerge = (i: number): number =>
     Math.min(1, Math.max(0, merge * (1 + STAGGER) - STAGGER * (i / DOT_COUNT)))
 
@@ -458,18 +462,21 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   }
 
   // Center pool: grows as the first dots arrive and breathes so the held blob
-  // feels liquid. Gated below merge≈0.1 — a sub-pixel pool at the very start
-  // of a merge reads as a stray white speck at the ring's center. The speech
-  // pool swells slightly with the (bounded) voice; the thinking pool is
-  // tighter with a quicker breath.
-  const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.15) / 0.3)))
+  // feels liquid. It comes up EARLY in the merge (so it is already present and —
+  // via the pool smin — bridged to the converging dots before they cluster; a
+  // late pool left a standalone center blob = a phantom 9th dot, and left the
+  // ring's interior unfilled = a punched hole). Its size is a SMOOTH, monotonic
+  // function of merge (eased gate, no hard visibility floor, no mid-merge bump):
+  // a floor or a hump made the rendered blob area jump in one frame as merge
+  // swept past it during a dissolve (thinking→idle explode/reform — C6). The
+  // shader ramps the pool's SMIN BRIDGE strength with merge to match, so the
+  // pool grows and glues in gradually instead of snapping onto the dots. The
+  // speech pool swells slightly with the (bounded) voice; thinking breathes
+  // quicker.
+  const poolGate = easeInOut(Math.min(1, Math.max(0, (merge - 0.3) / 0.42)))
   const poolBase = thinking ? 0.34 : 0.42 * (0.92 + 0.14 * shaped)
   const poolPulse = thinking ? 0.13 * Math.sin(t * 4.6) : (0.07 + 0.05 * shaped) * Math.sin(t * 1.7)
-  // Hard-zero below a visibility floor: smin INFLATES even a sub-pixel pool
-  // into a faint center speck (review round 2), so the pool only exists once
-  // it is genuinely visible; the smin blend masks the small pop.
-  const rawPool = poolGate * p.orbitRadius * poolBase * (1 + poolPulse)
-  const centerR = merge > 0 && rawPool > 0.02 ? rawPool : 0
+  const centerR = poolGate * p.orbitRadius * poolBase * (1 + poolPulse)
 
   // The wave: bounded by construction. Speech maps the shaped amplitude into
   // [WAVE_GAIN_MIN, WAVE_GAIN_MAX]×noiseAmp; thinking uses a fixed lower gain.

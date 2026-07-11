@@ -391,11 +391,20 @@ describe('computeOrbFrame', () => {
     }
   })
 
-  it('the center pool never exists below the visibility floor (no speck)', () => {
+  it('the center pool stays at zero until the dots cover the center (no floating speck)', () => {
+    // The pool is a separate primitive: if it appears while the dots are still a
+    // spread ring it renders as an isolated center speck — a phantom 9th dot
+    // (skeptical-review Critical). Its onset is held back until the leading
+    // (staggered) dot has converged onto the center, so the pool is always
+    // absorbed by a dot, never isolated, and its area grows in continuously
+    // (no hard floor to jump across mid-dissolve — C6). Below the onset it must
+    // be EXACTLY zero; a fully held blob must have a pool filling its interior.
     for (let m = 0; m <= 1.0001; m += 0.02) {
       const f = computeOrbFrame({ t: 0.41, state: 'speaking', stateTime: 1, speechMerge: m })
-      expect(f.centerR === 0 || f.centerR > 0.02).toBe(true)
+      if (f.merge < 0.3) expect(f.centerR).toBe(0)
     }
+    const held = computeOrbFrame({ t: 0.41, state: 'speaking', stateTime: 1, speechMerge: 1 })
+    expect(held.centerR).toBeGreaterThan(0.02)
   })
 
   it('genesis defaults to materialized; genesisTime drives the spring', () => {
