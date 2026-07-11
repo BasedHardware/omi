@@ -604,6 +604,7 @@ _STUB_MODULES = [
     'database.users',
     'database.user_usage',
     'database.conversations',
+    'database.sync_ledger',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -620,6 +621,7 @@ _STUB_MODULES = [
     'utils.fair_use',
     'utils.subscription',
     'utils.cloud_tasks',
+    'utils.sync.content_id',
     'utils.conversations.process_conversation',
     'python_multipart',
     'python_multipart.multipart',
@@ -695,6 +697,15 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
+        sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
+        sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_metered = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()

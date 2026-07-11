@@ -17964,10 +17964,74 @@
         "title": "SyncBatchRequest",
         "type": "object"
       },
+      "SyncCaptureManifestFile": {
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sha256"
+        ],
+        "title": "SyncCaptureManifestFile",
+        "type": "object"
+      },
+      "SyncCaptureManifestRequest": {
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/SyncCaptureManifestFile"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "files"
+        ],
+        "title": "SyncCaptureManifestRequest",
+        "type": "object"
+      },
+      "SyncCaptureManifestResponse": {
+        "properties": {
+          "manifest": {
+            "title": "Manifest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "title": "SyncCaptureManifestResponse",
+        "type": "object"
+      },
       "SyncJobStartResponse": {
         "properties": {
           "job_id": {
             "title": "Job Id",
+            "type": "string"
+          },
+          "lane": {
+            "default": "fresh",
+            "title": "Lane",
             "type": "string"
           },
           "poll_after_ms": {
@@ -18019,10 +18083,37 @@
             "title": "Job Id",
             "type": "string"
           },
+          "lane": {
+            "default": "fresh",
+            "title": "Lane",
+            "type": "string"
+          },
           "processed_segments": {
             "default": 0,
             "title": "Processed Segments",
             "type": "integer"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "recording_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Age Seconds"
           },
           "result": {
             "anyOf": [
@@ -18033,6 +18124,17 @@
                 "type": "null"
               }
             ]
+          },
+          "retry_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After"
           },
           "status": {
             "title": "Status",
@@ -53183,6 +53285,90 @@
         ]
       }
     },
+    "/v2/sync-capture-manifest": {
+      "post": {
+        "operationId": "create_sync_capture_manifest_v2_sync_capture_manifest_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCaptureManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Sync Capture Manifest"
+      }
+    },
     "/v2/sync-local-files": {
       "post": {
         "description": "Async version of sync-local-files. Saves raw files and returns 202\nimmediately, then runs the full pipeline (decode → VAD → STT → LLM) as\nan async background task. The app polls GET /v2/sync-local-files/{job_id}.",
@@ -53256,6 +53442,22 @@
                 }
               ],
               "title": "X-Cloud-Trace-Context"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Sync-Capture-Manifest",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Sync-Capture-Manifest"
             }
           },
           {
