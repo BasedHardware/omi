@@ -126,6 +126,53 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert '--notification-channels="$ALERT_CHANNELS"' in workflow
 
 
+def test_auto_dev_deploy_contract_includes_complete_sync_backfill_lifecycle():
+    workflow = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+    backfill_deploy_start = workflow.index('id: deploy-backend-sync-backfill')
+    backfill_deploy = workflow[backfill_deploy_start : workflow.index('id: capture-backend-sync-backfill-revision')]
+    sync_deploy_start = workflow.index('id: deploy-backend-sync\n')
+    sync_deploy = workflow[sync_deploy_start : workflow.index('id: capture-backend-sync-revision', sync_deploy_start)]
+
+    assert 'id: backfill-service' in workflow
+    assert '${{ env.SERVICE }}-sync-backfill-${PROJECT_NUMBER}.${{ env.REGION }}.run.app' in workflow
+    assert 'id: backfill-runtime' in workflow
+    assert 'gcloud run services describe backend-sync' in workflow
+    assert 'render_cloud_run_clone_env.py' in workflow
+    assert '${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in workflow
+    assert '${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}' in workflow
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' in workflow
+    assert 'SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run' in workflow
+    assert 'SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run' in workflow
+    assert 'service: ${{ env.SERVICE }}-sync-backfill' in backfill_deploy
+    assert 'no_traffic: true' in backfill_deploy
+    assert '--min-instances=0' in backfill_deploy
+    assert '--max-instances=4' in backfill_deploy
+    assert '--concurrency=1' in backfill_deploy
+    assert 'id: capture-backend-sync-backfill-revision' in workflow
+    assert 'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill' in sync_deploy
+    assert 'SYNC_BACKFILL_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run' in sync_deploy
+    assert 'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run' in sync_deploy
+    assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in workflow
+    assert 'gcloud tasks queues describe sync-backfill' in workflow
+    assert 'gcloud tasks queues update sync-backfill' in workflow
+    assert 'gcloud tasks queues create sync-backfill' in workflow
+    assert '--max-concurrent-dispatches=4' in workflow
+    assert (
+        '--wait-revision-ready backend-sync-backfill=${{ steps.capture-backend-sync-backfill-revision.outputs.revision }}'
+        in workflow
+    )
+    assert (
+        "gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)'"
+        in workflow
+    )
+    assert 'gcloud run services update-traffic backend-sync-backfill' in workflow
+    assert '--cloud-run-service backend-sync-backfill' in workflow
+    assert (
+        '--expect-cloud-run-traffic backend-sync-backfill=${{ steps.capture-backend-sync-backfill-revision.outputs.revision }}'
+        in workflow
+    )
+
+
 def test_processed_segment_marker_follows_partial_result_checkpoint():
     pipeline = (Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py').read_text()
     checkpoint = pipeline.index("update_sync_job(job_id, {'partial_result': partial})")
