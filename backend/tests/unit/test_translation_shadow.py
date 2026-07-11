@@ -731,6 +731,15 @@ class TestNllbPrimaryMode(unittest.TestCase):
                 payload = call_args[1]["json"]
                 self.assertEqual(payload["source_language_code"], "es")
 
+    def test_detect_source_language_normalizes_zh_cn(self):
+        with patch("utils.translation.langdetect_detect", return_value="zh-cn"):
+            result = self.service._detect_source_language(["This is long enough text for detection"])
+            self.assertEqual(result, "zh-cn")
+
+    def test_detect_source_language_short_text_returns_empty(self):
+        result = self.service._detect_source_language(["short"])
+        self.assertEqual(result, "")
+
     def test_translate_batch_uses_nllb_when_mode_nllb(self):
         _set_translation_provider(_translation_module, "nllb")
         _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"

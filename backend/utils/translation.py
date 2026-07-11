@@ -382,6 +382,7 @@ LANGDETECT_RELIABLE_LANGUAGES = {
     'uk',
     'ur',
     'vi',
+    'zh',
 }
 
 # Redis translation cache TTL (14 days)
@@ -764,7 +765,10 @@ class TranslationService:
             return ""
         try:
             detected = langdetect_detect(combined)
-            if detected and detected in LANGDETECT_RELIABLE_LANGUAGES:
+            if not detected:
+                return ""
+            base = detected.split('-')[0].lower()
+            if base in LANGDETECT_RELIABLE_LANGUAGES:
                 return detected
         except LangDetectException:
             pass
