@@ -231,6 +231,56 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(output, "Done.")
   }
 
+  func testAgentLifecycleDisplayProjectionPreservesTerminalStateForSameRowLifecycle() {
+    let pillID = UUID()
+    let sameRowLifecycle = ChatMessage(
+      id: "same-row-lifecycle",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Agent",
+          objective: "Research the release notes"
+        ),
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Agent",
+          promptSnippet: "Research the release notes",
+          output: "Final release-note summary",
+          status: "completed"
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([sameRowLifecycle])
+
+    // The structured canonical event still records both lifecycle facts.
+    XCTAssertEqual(sameRowLifecycle.contentBlocks.count, 2)
+    guard case .agentSpawn = sameRowLifecycle.contentBlocks[0],
+          case .agentCompletion = sameRowLifecycle.contentBlocks[1]
+    else {
+      return XCTFail("same-row canonical lifecycle facts must remain intact")
+    }
+
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertEqual(projected[0].contentBlocks.count, 1)
+    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+      projected[0].contentBlocks[0]
+    else {
+      return XCTFail("same-row lifecycle must render the terminal card")
+    }
+    XCTAssertEqual(renderedPill, pillID)
+    XCTAssertEqual(renderedRun, "run-1")
+    XCTAssertEqual(output, "Final release-note summary")
+  }
+
   func testAgentLifecycleDisplayProjectionUsesRunBeforePillAndFallsBackForLegacyCompletion() {
     let pillID = UUID()
     let runBoundSpawn = ChatMessage(

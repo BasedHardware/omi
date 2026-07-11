@@ -101,6 +101,8 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             ("create a pill to draft a release note", "draft a release note"),
             ("make an agent to summarize this transcript", "summarize this transcript"),
             ("run an agent to compare two files", "compare two files"),
+            ("please could you run an agent to compare two files", "compare two files"),
+            ("could you please run an agent to compare two files", "compare two files"),
             ("spawn two background agents to compare two files", "compare two files"),
         ]
         for (request, expectedTask) in qualifiedRequests {

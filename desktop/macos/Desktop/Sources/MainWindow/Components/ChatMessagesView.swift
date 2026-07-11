@@ -97,7 +97,11 @@ enum AgentLifecycleDisplayProjection {
                 matchedCompletionLocations.contains(Location(messageIndex: messageIndex, blockIndex: blockIndex))
             }
             guard hasMatchedCompletion else { continue }
-            let retainedBlocks = message.contentBlocks.enumerated().compactMap { blockIndex, block in
+            // Start from the display copy: a same-row lifecycle has already
+            // replaced its spawn block with the terminal completion above.
+            // Filtering the canonical blocks here would accidentally restore
+            // that old spawn card while removing the terminal block.
+            let retainedBlocks = projectedMessages[messageIndex].contentBlocks.enumerated().compactMap { blockIndex, block in
                 matchedCompletionLocations.contains(Location(messageIndex: messageIndex, blockIndex: blockIndex))
                     ? nil
                     : block

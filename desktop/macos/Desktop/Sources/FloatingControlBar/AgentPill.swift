@@ -542,7 +542,10 @@ final class AgentPillsManager: ObservableObject {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !lower.isEmpty else { return false }
 
-        let optionalPoliteness = #"(?:(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?)"#
+        // Permit polite modal requests in either natural order: "please could
+        // you …" and "could you please …". Both remain explicit creation
+        // requests only when the rest of the strict grammar matches.
+        let optionalPoliteness = #"(?:(?:please\s+)?(?:(?:can|could|would)\s+you\s+(?:please\s+)?)?)"#
         let creationVerb = #"(?:spawn|start|launch|kick\s+off|create|make|run)"#
         let optionalCount = #"(?:(?:\d+|one|two|three|four|five|six|seven|eight)\s+)?"#
         // A bare "agent" is too ambiguous: "run agent tests" and
