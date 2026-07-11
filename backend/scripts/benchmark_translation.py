@@ -110,16 +110,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+BCP47_TO_WMT = {
+    "de": "de",
+    "zh": "zh",
+    "ru": "ru",
+    "ja": "ja",
+    "uk": "uk",
+}
+
+WMT_TESTSET = "wmt22"
+
+
 def load_flores_devtest(languages: List[str]) -> Dict[str, List[str]]:
     """Load FLORES-200 devtest sentences from HuggingFace.
 
-    Returns {flores_code: [sentences]} for English source + all target languages.
+    Requires HF_TOKEN set (FLORES-200 is a gated dataset). Falls back to
+    load_wmt_testset() if FLORES is unavailable.
     """
     try:
         from datasets import load_dataset
     except ImportError:
-        logger.error("Install datasets: pip install datasets")
-        sys.exit(1)
+        logger.warning("datasets library not installed, falling back to WMT")
+        return {}
 
     logger.info("Loading FLORES-200 devtest from HuggingFace...")
     needed_flores = ["eng_Latn"]
@@ -131,12 +143,61 @@ def load_flores_devtest(languages: List[str]) -> Dict[str, List[str]]:
     result: Dict[str, List[str]] = {}
     for flores_code in needed_flores:
         try:
-            ds = load_dataset("facebook/flores", flores_code, split="devtest", trust_remote_code=True)
+            ds = load_dataset("facebook/flores", flores_code, split="devtest")
             sentences = [row["sentence"] for row in ds]
             result[flores_code] = sentences
             logger.info("  %s: %d sentences", flores_code, len(sentences))
         except Exception as e:
-            logger.warning("  %s: failed to load (%s)", flores_code, e)
+            logger.warning("  %s: failed (%s)", flores_code, e)
+            if not result:
+                logger.info("FLORES-200 unavailable (gated dataset, set HF_TOKEN). Falling back to WMT.")
+                return {}
+
+    return result
+
+
+def load_wmt_testset(languages: List[str]) -> Dict[str, List[str]]:
+    """Load WMT22 test set via sacrebleu as fallback when FLORES-200 is unavailable.
+
+    WMT covers fewer language pairs than FLORES but requires no authentication.
+    """
+    try:
+        import sacrebleu
+    except ImportError:
+        logger.error("sacrebleu not installed: pip install sacrebleu")
+        return {}
+
+    available_pairs = sacrebleu.get_langpairs_for_testset(WMT_TESTSET)
+    logger.info("Loading %s test set (available pairs: %s)", WMT_TESTSET, ", ".join(sorted(available_pairs)))
+
+    result: Dict[str, List[str]] = {}
+
+    for lang in languages:
+        wmt_code = BCP47_TO_WMT.get(lang)
+        if not wmt_code:
+            continue
+        pair = f"en-{wmt_code}"
+        if pair not in available_pairs:
+            continue
+
+        try:
+            src_file = sacrebleu.get_source_file(WMT_TESTSET, pair)
+            ref_files = sacrebleu.get_reference_files(WMT_TESTSET, pair)
+
+            with open(src_file, 'r', encoding='utf-8') as f:
+                src_sentences = [line.strip() for line in f if line.strip()]
+            with open(ref_files[0], 'r', encoding='utf-8') as f:
+                ref_sentences = [line.strip() for line in f if line.strip()]
+
+            flores_src = BCP47_TO_FLORES["en"]
+            flores_tgt = BCP47_TO_FLORES.get(lang, lang)
+
+            if flores_src not in result:
+                result[flores_src] = src_sentences
+            result[flores_tgt] = ref_sentences
+            logger.info("  %s (en->%s): %d sentences from %s", flores_tgt, wmt_code, len(ref_sentences), WMT_TESTSET)
+        except Exception as e:
+            logger.warning("  en->%s: failed (%s)", wmt_code, e)
 
     return result
 
@@ -510,29 +571,41 @@ def dry_run(args: argparse.Namespace) -> int:
     issues: List[str] = []
 
     print("  Dataset:")
+    flores_ok = False
     try:
         from datasets import load_dataset
 
-        ds = load_dataset("facebook/flores", "eng_Latn", split="devtest", trust_remote_code=True)
-        n = len(ds)
-        print(f"    [OK]   FLORES-200 devtest: {n} English sentences")
+        ds = load_dataset("facebook/flores", "eng_Latn", split="devtest")
+        print(f"    [OK]   FLORES-200 devtest: {len(ds)} English sentences")
+        flores_ok = True
     except Exception as e:
-        issues.append(f"Cannot load FLORES-200: {e}")
-        print(f"    [FAIL] FLORES-200: {e}")
+        print(f"    [WARN] FLORES-200: {e}")
+
+    wmt_data = load_wmt_testset(languages) if not flores_ok else {}
+    if not flores_ok and wmt_data:
+        en_key = BCP47_TO_FLORES["en"]
+        n = len(wmt_data.get(en_key, []))
+        wmt_langs = sum(1 for k in wmt_data if k != en_key)
+        print(f"    [OK]   WMT22 fallback: {n} English sentences, {wmt_langs} target languages")
+    elif not flores_ok and not wmt_data:
+        issues.append("No dataset available (set HF_TOKEN for FLORES-200, or install sacrebleu for WMT)")
 
     print(f"\n  Language pairs:")
     for lang in languages:
         flores = BCP47_TO_FLORES.get(lang)
-        if not flores:
-            issues.append(f"No FLORES mapping for {lang}")
-            print(f"    {lang:>5s} -> [FAIL] no FLORES-200 mapping")
-            continue
-        try:
-            ds = load_dataset("facebook/flores", flores, split="devtest", trust_remote_code=True)
-            print(f"    {lang:>5s} -> [OK]   {flores} ({len(ds)} sentences) [{get_tier(lang)}]")
-        except Exception:
-            issues.append(f"Cannot load {flores}")
-            print(f"    {lang:>5s} -> [FAIL] {flores}")
+        wmt = BCP47_TO_WMT.get(lang)
+        if flores_ok:
+            try:
+                ds = load_dataset("facebook/flores", flores, split="devtest")
+                print(f"    {lang:>5s} -> [OK]   {flores} ({len(ds)} sentences) [{get_tier(lang)}]")
+            except Exception:
+                print(f"    {lang:>5s} -> [FAIL] {flores}")
+        elif flores and flores in wmt_data:
+            print(f"    {lang:>5s} -> [OK]   WMT22 en-{wmt} ({len(wmt_data[flores])} sentences) [{get_tier(lang)}]")
+        elif wmt:
+            print(f"    {lang:>5s} -> [SKIP] not in WMT22 [{get_tier(lang)}]")
+        else:
+            print(f"    {lang:>5s} -> [SKIP] no WMT mapping [{get_tier(lang)}]")
 
     print(f"\n  Dependencies:")
     for pkg, pip_name, required in [
@@ -599,7 +672,10 @@ def main() -> int:
     flores_data = load_flores_devtest(languages)
     en_key = "eng_Latn"
     if en_key not in flores_data:
-        logger.error("Cannot load English source from FLORES-200")
+        logger.info("FLORES-200 unavailable, trying WMT22 fallback...")
+        flores_data = load_wmt_testset(languages)
+    if en_key not in flores_data:
+        logger.error("No dataset available. Set HF_TOKEN for FLORES-200, or install sacrebleu for WMT.")
         return 1
 
     source_sentences = flores_data[en_key]
