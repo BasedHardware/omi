@@ -50,7 +50,7 @@ final class ScreenCaptureService: Sendable {
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
     if !forceRefresh,
-      !UserDefaults.standard.bool(forKey: "rewindDisableContentCache")
+      !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
       let cached: SCShareableContent? = sharedContentLock.withLock {
         guard let ts = sharedContentCachedAt,
@@ -347,7 +347,7 @@ final class ScreenCaptureService: Sendable {
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+        task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
         do {
           try task.run()
@@ -390,10 +390,9 @@ final class ScreenCaptureService: Sendable {
         if success {
           log("Screen capture permission reset, restarting app...")
 
-          // Use a shell script to wait briefly, then relaunch the app
           let task = Process()
           task.executableURL = URL(fileURLWithPath: "/bin/sh")
-          task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+          task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
           do {
             try task.run()
@@ -409,6 +408,14 @@ final class ScreenCaptureService: Sendable {
         }
       }
     }
+  }
+
+  nonisolated static func screenCaptureRelaunchCommand(appPath: String) -> String {
+    AppState.relaunchCommand(
+      appPath: appPath,
+      isNonProduction: AppBuild.isNonProduction,
+      automationPort: DesktopAutomationLaunchOptions.port
+    )
   }
 
   /// Get the window ID of the frontmost application's main window

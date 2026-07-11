@@ -434,23 +434,26 @@ class SystemAudioCaptureService: @unchecked Sendable {
     }
 
     deinit {
-        // Use sync in deinit to ensure cleanup completes before deallocation
+        // Call the HAL teardown directly — do NOT `audioQueue.sync` here.
+        // deinit can run *on* audioQueue (the last strong reference is captured by
+        // the `audioQueue.async` block in startCapture and released when that block
+        // finishes), and dispatching sync to the current serial queue deadlocks it
+        // permanently. Mirrors AudioCaptureService.deinit. The object has no
+        // remaining references, so no concurrent audioQueue work can touch it, and
+        // these HAL calls are thread-safe — a direct call completes cleanup before
+        // deallocation (which `audioQueue.async` could not guarantee).
         let procID = self.ioProcID
         let aggDevID = self.aggregateDeviceID
         let tID = self.tapID
-        if procID != nil || aggDevID != kAudioObjectUnknown || tID != kAudioObjectUnknown {
-            audioQueue.sync {
-                if let procID = procID, aggDevID != kAudioObjectUnknown {
-                    AudioDeviceStop(aggDevID, procID)
-                    AudioDeviceDestroyIOProcID(aggDevID, procID)
-                }
-                if aggDevID != kAudioObjectUnknown {
-                    AudioHardwareDestroyAggregateDevice(aggDevID)
-                }
-                if tID != kAudioObjectUnknown {
-                    AudioHardwareDestroyProcessTap(tID)
-                }
-            }
+        if let procID = procID, aggDevID != kAudioObjectUnknown {
+            AudioDeviceStop(aggDevID, procID)
+            AudioDeviceDestroyIOProcID(aggDevID, procID)
+        }
+        if aggDevID != kAudioObjectUnknown {
+            AudioHardwareDestroyAggregateDevice(aggDevID)
+        }
+        if tID != kAudioObjectUnknown {
+            AudioHardwareDestroyProcessTap(tID)
         }
     }
 }

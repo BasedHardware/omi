@@ -355,7 +355,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         )
       }
     } catch {
-      lastActionError = error.localizedDescription
+      lastActionError = UserFacingErrorPresentation.message(for: error, while: .onboarding)
       appleNotesInsightsFailed = true
     }
   }
@@ -470,10 +470,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let browserBundleId = LSCopyDefaultHandlerForURLScheme("https" as CFString)?
-      .takeRetainedValue() as String?,
-      let browserURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browserBundleId)
-    {
+    if let browserURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
       NSWorkspace.shared.open([url], withApplicationAt: browserURL, configuration: configuration) {
         _, error in
         if let error {
@@ -1270,7 +1267,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         "Too many requests right now. Skip this step or try again in a moment."
     } catch {
       logError("OnboardingPagedIntroCoordinator: Failed to save onboarding goal", error: error)
-      lastActionError = error.localizedDescription
+      lastActionError = UserFacingErrorPresentation.message(for: error, while: .onboarding)
     }
   }
 
@@ -1295,7 +1292,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           targetValue: targetValue,
           currentValue: 0,
           unit: unit,
-          source: "onboarding_step_flow"
+          source: "user"
         )
       } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 429 {
         lastError = APIError.httpError(statusCode: 429)
@@ -1376,7 +1373,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   private func executeTool(name: String, arguments: [String: Any]) async -> String {
     await ChatToolExecutor.execute(
-      ToolCall(name: name, arguments: arguments, thoughtSignature: nil)
+      ToolCall(name: name, arguments: arguments, thoughtSignature: nil),
+      isOnboardingSurface: true
     )
   }
 

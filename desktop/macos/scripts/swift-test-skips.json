@@ -1,10 +1,9 @@
 {
-  "max_skip_count": 5,
+  "max_skip_count": 4,
   "allowed_tests": [
     "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
     "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
     "APIClientRoutingTests/testDeleteConversationRoutesToPython",
-    "ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable",
     "PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing"
   ],
   "skips": [
@@ -22,11 +21,6 @@
       "test": "APIClientRoutingTests/testDeleteConversationRoutesToPython",
       "issue": "https://github.com/BasedHardware/omi/issues/9031",
       "reason": "The client omits ?cascade=true; cascade is backend-gated behind owner sign-off, so flipping it is a data-deletion behavior change."
-    },
-    {
-      "test": "ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable",
-      "issue": "https://github.com/BasedHardware/omi/issues/9032",
-      "reason": "macOS 26 system SQLite rejects DELETE FROM sqlite_master even with writable_schema=ON, blocking the test corruption setup."
     },
     {
       "test": "PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing",

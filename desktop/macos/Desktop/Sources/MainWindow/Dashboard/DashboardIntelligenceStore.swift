@@ -194,35 +194,51 @@ final class DashboardIntelligenceStore: ObservableObject {
     guard !isLoading else { return }
     isLoading = true
     defer { isLoading = false }
+    error = nil
+
+    let control: OmiAPI.TaskWorkflowControl
     do {
-      let control = try await client.getCandidateWorkflowControl()
-      guard control.workflowMode == .read else {
-        accountGeneration = nil
-        recommendations = []
-        goals = []
-        return
-      }
-      accountGeneration = control.accountGeneration
-      let ownerID = outboxStore.currentOwnerID()
-      pendingFeedback = outboxStore.load(ownerID: ownerID)
-      pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
-      outboxStore.save(pendingFeedback, ownerID: ownerID)
-      await retryPendingFeedback(ownerID: ownerID)
-      do {
-        let projection = try await client.getWhatMattersNow(deviceID: deviceID())
-        recommendations = Self.project(projection, now: now())
-        emitPresentedInterventions(recommendations)
-      } catch {
-        // Canonical-read users outside the intelligence cohort retain calm
-        // dashboard behavior while canonical Goals remain available.
-        recommendations = []
-      }
-      goals = try await client.getCanonicalGoals(includeEnded: true)
-      error = pendingFeedback.isEmpty ? nil : "Saved feedback will retry automatically."
+      control = try await client.getCandidateWorkflowControl()
     } catch {
+      accountGeneration = nil
       recommendations = []
-      self.error = "What matters now could not be refreshed."
+      goals = []
+      self.error = UserFacingErrorPresentation.message(for: error, while: .dashboard)
+      logError("Dashboard: Failed to load workflow control", error: error)
+      return
     }
+
+    guard control.workflowMode == .read else {
+      accountGeneration = nil
+      recommendations = []
+      goals = []
+      return
+    }
+    accountGeneration = control.accountGeneration
+    let ownerID = outboxStore.currentOwnerID()
+    pendingFeedback = outboxStore.load(ownerID: ownerID)
+    pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
+    outboxStore.save(pendingFeedback, ownerID: ownerID)
+    await retryPendingFeedback(ownerID: ownerID)
+    do {
+      let projection = try await client.getWhatMattersNow(deviceID: deviceID())
+      recommendations = Self.project(projection, now: now())
+      emitPresentedInterventions(recommendations)
+    } catch {
+      // Canonical-read users outside the intelligence cohort retain calm
+      // dashboard behavior while canonical Goals remain available.
+      recommendations = []
+      logError("Dashboard: What Matters Now projection unavailable", error: error)
+    }
+    do {
+      goals = try await client.getCanonicalGoals(includeEnded: true)
+    } catch {
+      goals = []
+      self.error = UserFacingErrorPresentation.message(for: error, while: .dashboard)
+      logError("Dashboard: Failed to load canonical goals", error: error)
+      return
+    }
+    error = pendingFeedback.isEmpty ? nil : "Saved feedback will retry automatically."
   }
 
   /// Apply a context-triggered canonical projection without coupling dashboard

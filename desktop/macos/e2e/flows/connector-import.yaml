@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
+  - desktop/macos/Desktop/Sources/PipeProcessRunner.swift
 preconditions:
   - automation_bridge_ready
 
@@ -16,6 +17,7 @@ steps:
       name: memory_log_import_probe
       params:
         source: chatgpt
+        fixture: structured
         text: |
           # Memory log
           [[MARKER:connector-import]] hermetic connector import probe

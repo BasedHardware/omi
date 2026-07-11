@@ -116,7 +116,8 @@ class WalListItem extends StatelessWidget {
         final timeStr = dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = secondsToHumanReadable(wal.seconds, context);
         final source = _sourceLabel(context);
-        final showBar = wal.isSyncing &&
+        final showBar =
+            wal.isSyncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -532,12 +533,15 @@ class _SyncPageState extends State<SyncPage> {
           break;
       }
     } else if (syncProvider.isRateLimited) {
-      title =
-          syncProvider.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
+      title = switch (syncProvider.rateLimitReason) {
+        RateLimitReason.backendBusy => l.syncCardBackendBusy,
+        RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToSync),
+        _ => l.syncCardRateLimited,
+      };
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      subtitle = l.syncProcessingBackgroundHint;
+      subtitle = '${l.syncCardProgressOf(uploaded, uploaded + readyToSync)} · ${l.syncProcessingBackgroundHint}';
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
       action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () {
@@ -1037,16 +1041,9 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count)
-      : isHeader = true,
-        wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
 
-  _PendingListItem.wal(this.wal)
-      : isHeader = false,
-        label = null,
-        icon = null,
-        color = null,
-        count = null;
+  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
 }
 
 class _ManageStorageSheet extends StatelessWidget {

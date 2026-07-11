@@ -527,7 +527,7 @@ struct PersonaPage: View {
         do {
             persona = try await APIClient.shared.getPersona()
         } catch {
-            errorMessage = "Failed to load persona: \(error.localizedDescription)"
+            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
 
         isLoading = false
@@ -544,7 +544,7 @@ struct PersonaPage: View {
             newPersonaUsername = ""
         } catch {
             // Show error in sheet
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
 
         isCreating = false
@@ -555,7 +555,7 @@ struct PersonaPage: View {
             try await APIClient.shared.deletePersona()
             persona = nil
         } catch {
-            errorMessage = "Failed to delete persona: \(error.localizedDescription)"
+            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
     }
 
@@ -570,7 +570,7 @@ struct PersonaPage: View {
             persona = updated
             isEditing = false
         } catch {
-            errorMessage = "Failed to save: \(error.localizedDescription)"
+            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
     }
 
@@ -583,7 +583,7 @@ struct PersonaPage: View {
             await loadPersona()
             log("Persona prompt regenerated using \(result.memoriesUsed) memories")
         } catch {
-            errorMessage = "Failed to regenerate: \(error.localizedDescription)"
+            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
 
         isRegenerating = false

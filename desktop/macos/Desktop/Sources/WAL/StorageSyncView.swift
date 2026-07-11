@@ -197,12 +197,12 @@ struct StorageSyncView: View {
         )
     }
 
-    private func errorView(_ message: String) -> some View {
+    private func errorView(_: String) -> some View {
         HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
 
-            Text(message)
+            Text("Storage sync couldn't finish. Try again.")
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textSecondary)
 

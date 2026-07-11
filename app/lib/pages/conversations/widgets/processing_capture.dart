@@ -88,7 +88,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             if (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice) {
               return;
             }
-            final isCaptureActive = provider.recordingState == RecordingState.record ||
+            final isCaptureActive =
+                provider.recordingState == RecordingState.record ||
                 provider.recordingState == RecordingState.systemAudioRecord ||
                 provider.recordingState == RecordingState.deviceRecord ||
                 provider.recordingState == RecordingState.initialising ||
@@ -177,7 +178,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+    bool isUsingPhoneMic =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause ||
         captureProvider.recordingState == RecordingState.interrupted;
@@ -185,7 +187,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Check if any recording is active (phone mic, system audio, or device recording).
     // `interrupted` is included so the in-session UI stays visible while the
     // pipeline is transiently broken (e.g., iOS audio session interruption).
-    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
+    bool isAnyRecordingActive =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
         captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -314,7 +317,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording = provider.havingRecordingDevice &&
+    bool isDeviceRecording =
+        provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
 
     // Offline/batch mode: device audio is saved locally with no live transcription, so
@@ -323,7 +327,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       return _buildBatchRecordingUI(provider);
     }
 
-    bool isPhoneRecording = provider.recordingState == RecordingState.record ||
+    bool isPhoneRecording =
+        provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
         provider.recordingState == RecordingState.interrupted ||
@@ -346,10 +351,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     String statusText = provider.recordingState == RecordingState.interrupted && provider.isCallActive
         ? context.l10n.paused
         : isPaused
-            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasPhotos
-                ? 'Capturing'
-                : context.l10n.listening;
+        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
+        : hasPhotos
+        ? 'Capturing'
+        : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -453,7 +458,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
                 }
-                _toggleRecording(context, provider);
+                if (mounted) {
+                  _toggleRecording(context, provider);
+                }
               },
               child: Container(
                 width: 28,
@@ -461,22 +468,22 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 decoration: BoxDecoration(
                   color: isPaused
                       ? isDeviceRecording
-                          ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
+                            ? const Color(0xFFFE5D50)
+                            : const Color(0xFF7C3AED)
                       : isDeviceRecording
-                          ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
+                      ? const Color(0xFF35343B)
+                      : const Color(0xFFFF9500),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: FaIcon(
                     isPaused
                         ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
+                              ? FontAwesomeIcons.microphoneSlash
+                              : FontAwesomeIcons.play
                         : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
+                        ? FontAwesomeIcons.microphone
+                        : FontAwesomeIcons.pause,
                     color: Colors.white,
                     size: 12,
                   ),

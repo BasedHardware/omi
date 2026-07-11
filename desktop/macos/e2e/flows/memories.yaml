@@ -5,6 +5,7 @@ description: Memories page navigation and refresh via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
@@ -40,7 +41,7 @@ steps:
     bridge.action:
       name: memories_search
       params:
-        query: "the"
+        query: "connector-import"
     expect:
       result.detail.search_active: "true"
       result.detail.result_count: { min: 1 }

@@ -47,6 +47,7 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
+    - You can check or request macOS permissions immediately with check_permission_status and request_permission; permissions are direct local actions, never delegated work.
     - You can inspect task-chat agents, floating-bar pills, and canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can dismiss floating-bar pills with set_desktop_attention_override after checking list_agent_sessions.
@@ -144,12 +145,12 @@ enum DesktopCapabilityRegistry {
       when: !available(screenshotTools).isEmpty
     )
     append(
-      "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet, then call request_permission with the returned permission type.",
+      "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet and ask whether they want to grant it. Call request_permission with the returned permission type only after explicit current-turn consent.",
       when: has("request_permission")
     )
     let permissionTools = ["check_permission_status", "request_permission"]
     append(
-      "User asks to grant/check app permissions -> \(toolList(permissionTools)).",
+      "User explicitly asks to grant/check app permissions -> \(toolList(permissionTools)).",
       when: !available(permissionTools).isEmpty
     )
     append("What the user did today/yesterday/this week -> get_daily_recap.", when: has("get_daily_recap"))

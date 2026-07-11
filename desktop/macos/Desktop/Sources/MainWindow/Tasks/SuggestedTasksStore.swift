@@ -1,5 +1,6 @@
-import Foundation
 import CryptoKit
+import Foundation
+import OmiSupport
 
 protocol SuggestedTasksClient: AnyObject {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
@@ -208,7 +209,7 @@ final class SuggestedTasksStore: ObservableObject {
       let checkedAt = now()
       suppressions = suppressions.filter { $0.value > checkedAt }
       suppressionStore.save(suppressions, ownerID: activeSuppressionOwnerID)
-      recordsByID = Dictionary(uniqueKeysWithValues: pendingRecords.map { ($0.candidateId, $0) })
+      recordsByID = Dictionary(lastWriteWins: pendingRecords.map { ($0.candidateId, $0) })
       candidates = pendingRecords
         .filter { suppressions[$0.candidateId] == nil }
         .compactMap(Self.project)

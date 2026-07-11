@@ -30,12 +30,21 @@ from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from database.sync_jobs import (
     add_processed_segment,
+    get_sync_job,
     get_processed_segments,
     mark_job_completed,
     mark_job_failed,
     mark_job_processing,
     try_mark_once,
     update_sync_job,
+)
+from database.sync_ledger import (
+    add_processed_sync_segment_id,
+    checkpoint_sync_content_partial_result,
+    get_processed_sync_segment_ids,
+    get_sync_content_partial_result,
+    mark_sync_content_completed,
+    release_sync_content_claim,
 )
 from models.conversation import CreateConversation
 from models.conversation_enums import ConversationSource
@@ -80,6 +89,10 @@ from utils.stt.speaker_embedding import (
 )
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
+from utils.sync.content_id import compute_sync_segment_id
+from utils.sync.lanes import SyncLane
+from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -719,9 +732,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     return paths
 
 
-def _get_sync_pipeline_semaphore() -> asyncio.Semaphore:
+def _get_sync_pipeline_semaphore(sync_lane: str = SyncLane.FRESH.value) -> asyncio.Semaphore:
     """Return a loop-scoped semaphore capping concurrent sync pipelines."""
-    return _get_semaphore('sync_pipeline', 16)
+    if sync_lane == SyncLane.BACKFILL.value:
+        return _get_semaphore('sync_pipeline_backfill', int(os.getenv('SYNC_INLINE_BACKFILL_CONCURRENCY', '2')))
+    return _get_semaphore('sync_pipeline_fresh', 16)
 
 
 async def _run_full_pipeline_background_async(
@@ -735,6 +750,8 @@ async def _run_full_pipeline_background_async(
     task_mode: bool = False,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    sync_lane: str = SyncLane.FRESH.value,
+    content_id: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -752,7 +769,7 @@ async def _run_full_pipeline_background_async(
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
-    concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
+    concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore(sync_lane)
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
@@ -778,18 +795,21 @@ async def _run_full_pipeline_background_async(
             stage_timings['decode_ms'] = int((time.monotonic() - t0) * 1000)
 
             if not wav_paths:
+                empty_result = {
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'failed_segments': 0,
+                    'total_segments': 0,
+                    'errors': [],
+                }
                 await run_blocking(
                     db_executor,
                     mark_job_completed,
                     job_id,
-                    {
-                        'new_memories': [],
-                        'updated_memories': [],
-                        'failed_segments': 0,
-                        'total_segments': 0,
-                        'errors': [],
-                    },
+                    empty_result,
                 )
+                if content_id:
+                    await run_blocking(db_executor, mark_sync_content_completed, uid, content_id, job_id, empty_result)
                 return
 
             # --- Phase 2: VAD ---
@@ -839,36 +859,81 @@ async def _run_full_pipeline_background_async(
             )
 
             if total_segments == 0:
+                empty_result = {
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'failed_segments': 0,
+                    'total_segments': 0,
+                    'errors': [],
+                }
                 await run_blocking(
                     db_executor,
                     mark_job_completed,
                     job_id,
-                    {
-                        'new_memories': [],
-                        'updated_memories': [],
-                        'failed_segments': 0,
-                        'total_segments': 0,
-                        'errors': [],
-                    },
+                    empty_result,
                 )
+                if content_id:
+                    await run_blocking(db_executor, mark_sync_content_completed, uid, content_id, job_id, empty_result)
                 return
 
+            if sync_lane == SyncLane.BACKFILL.value:
+                reservation = await run_blocking(
+                    db_executor,
+                    reserve_backfill_speech,
+                    uid,
+                    content_id or job_id,
+                    total_speech_ms,
+                )
+                try:
+                    OMI_SYNC_BACKFILL_DAILY_USED_MS.set(reservation.global_used_ms)
+                except Exception:
+                    pass
+                if not reservation.allowed:
+                    await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
+                    segmented_paths = set()
+                    await run_blocking(
+                        db_executor,
+                        mark_job_failed,
+                        job_id,
+                        'Historical recovery is paced; audio retained for retry',
+                        reason_code=reservation.reason,
+                        retry_after=reservation.retry_after,
+                    )
+                    return
+
+            try:
+                OMI_SYNC_LANE_SPEECH_MS_TOTAL.labels(lane=sync_lane).inc(total_speech_ms)
+            except Exception:
+                pass
+
             if FAIR_USE_ENABLED and total_speech_ms > 0:
-                # Once-guard: a Cloud Tasks retry must not count the same audio twice
-                if await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms'):
-                    await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
-                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
-                if triggered_caps:
-                    logger.info(f'sync_v2 bg: soft caps triggered for {uid}: {triggered_caps}')
-                    try:
-                        asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
-                    except Exception as e:
-                        logger.error(f'sync_v2 bg: classifier scheduling failed for {uid}: {e}')
+                # Redis performs the content-key check and increment in one
+                # Lua transaction. Legacy jobs retain their job-scoped guard.
+                should_meter = bool(content_id) or await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms')
+                if should_meter:
+                    source = 'sync_backfill' if sync_lane == SyncLane.BACKFILL.value else 'sync_fresh'
+                    await run_blocking(
+                        db_executor,
+                        record_speech_ms,
+                        uid,
+                        total_speech_ms,
+                        source=source,
+                        idempotency_key=content_id,
+                        raise_on_error=bool(content_id),
+                    )
+                if sync_lane == SyncLane.FRESH.value:
+                    speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
+                    triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
+                    if triggered_caps:
+                        logger.info(f'sync_v2 bg: soft caps triggered for {uid}: {triggered_caps}')
+                        try:
+                            asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                        except Exception as e:
+                            logger.error(f'sync_v2 bg: classifier scheduling failed for {uid}: {e}')
 
             # DG budget gate
             fair_use_restrict_dg = False
-            if FAIR_USE_ENABLED:
+            if FAIR_USE_ENABLED and sync_lane == SyncLane.FRESH.value:
                 try:
                     fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
                     if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
@@ -907,7 +972,23 @@ async def _run_full_pipeline_background_async(
             # --- Phase 5: Process segments (STT + LLM) ---
             await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'stt_llm'})
             t0 = time.monotonic()
-            response = {'updated_memories': set(), 'new_memories': set()}
+            current_job = await run_blocking(db_executor, get_sync_job, job_id)
+            partial_result = (current_job or {}).get('partial_result') or {}
+            if content_id:
+                durable_partial = await run_blocking(db_executor, get_sync_content_partial_result, uid, content_id)
+                partial_result = {
+                    'new_memories': sorted(
+                        set(partial_result.get('new_memories') or []) | set(durable_partial.get('new_memories') or [])
+                    ),
+                    'updated_memories': sorted(
+                        set(partial_result.get('updated_memories') or [])
+                        | set(durable_partial.get('updated_memories') or [])
+                    ),
+                }
+            response = {
+                'updated_memories': set(partial_result.get('updated_memories') or []),
+                'new_memories': set(partial_result.get('new_memories') or []),
+            }
             segment_errors = []
             segment_lock = threading.Lock()
 
@@ -921,6 +1002,17 @@ async def _run_full_pipeline_background_async(
                         f'segment(s) processed in a prior attempt'
                     )
 
+            durable_processed_segment_ids: set[str] = set()
+            segment_ids_by_path: dict[str, str] = {}
+            if content_id:
+                durable_processed_segment_ids = await run_blocking(
+                    db_executor, get_processed_sync_segment_ids, uid, content_id
+                )
+                segment_ids_by_path = {
+                    path: await run_blocking(sync_executor, compute_sync_segment_id, uid, path)
+                    for path in segmented_paths
+                }
+
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
@@ -928,7 +1020,8 @@ async def _run_full_pipeline_background_async(
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
             def _process_one_segment(path):
-                if path in already_processed:
+                segment_id = segment_ids_by_path.get(path)
+                if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
                     assignment_turnstile.complete(path)
                     return
@@ -949,8 +1042,22 @@ async def _run_full_pipeline_background_async(
                     client_device_id=client_device_id,
                     client_platform=client_platform,
                 )
+                if ok:
+                    # Persist result contributions before the processed marker.
+                    # Therefore any skipped segment on a retry has its visible
+                    # conversation IDs available for response hydration.
+                    with segment_lock:
+                        partial = {
+                            'new_memories': sorted(response['new_memories']),
+                            'updated_memories': sorted(response['updated_memories']),
+                        }
+                        update_sync_job(job_id, {'partial_result': partial})
+                        if content_id:
+                            checkpoint_sync_content_partial_result(uid, content_id, job_id, partial)
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
+                if ok and content_id and segment_id:
+                    add_processed_sync_segment_id(uid, content_id, job_id, segment_id)
 
             chunk_size = 5
             for i in range(0, len(segment_list), chunk_size):
@@ -988,10 +1095,22 @@ async def _run_full_pipeline_background_async(
             if fair_use_restrict_dg:
                 try:
                     dg_ms = int(total_speech_seconds * 1000)
-                    if dg_ms > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'dg_ms'):
-                        await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
+                    should_record_dg = bool(content_id) or await run_blocking(
+                        db_executor, try_mark_once, job_id, 'dg_ms'
+                    )
+                    if dg_ms > 0 and should_record_dg:
+                        await run_blocking(
+                            db_executor,
+                            record_dg_usage_ms,
+                            uid,
+                            dg_ms,
+                            idempotency_key=content_id,
+                            raise_on_error=bool(content_id),
+                        )
                 except Exception as e:
                     logger.error(f'sync_v2 bg: DG usage record error for {uid}: {e}')
+                    if content_id:
+                        raise
 
             # Build result
             failed_segments = len(segment_errors)
@@ -1008,16 +1127,22 @@ async def _run_full_pipeline_background_async(
             if successful_segments > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
-                    if usage_seconds > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'usage'):
+                    should_record_usage = bool(content_id) or await run_blocking(
+                        db_executor, try_mark_once, job_id, 'usage'
+                    )
+                    if usage_seconds > 0 and should_record_usage:
                         await run_blocking(
                             db_executor,
                             record_usage,
                             uid,
                             transcription_seconds=usage_seconds,
                             speech_seconds=usage_seconds,
+                            idempotency_key=content_id,
                         )
                 except Exception as e:
                     logger.error(f'sync_v2 bg: usage record error for {uid}: {e}')
+                    if content_id:
+                        raise
 
             stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
             await run_blocking(
@@ -1033,6 +1158,23 @@ async def _run_full_pipeline_background_async(
                     'stage_timings': stage_timings,
                 },
             )
+            if content_id and failed_segments == 0:
+                await run_blocking(
+                    db_executor,
+                    mark_sync_content_completed,
+                    uid,
+                    content_id,
+                    job_id,
+                    {
+                        'new_memories': result['new_memories'],
+                        'updated_memories': result['updated_memories'],
+                        'failed_segments': failed_segments,
+                        'total_segments': total_segments,
+                        'errors': segment_errors[:10] if segment_errors else [],
+                    },
+                )
+            elif content_id:
+                await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
 
             logger.info(
                 f'sync_v2 bg complete job={job_id} uid={uid} '
@@ -1059,6 +1201,19 @@ async def _run_full_pipeline_background_async(
                     await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
             except Exception as e:
                 logger.error(f'sync_v2 bg: failed to cleanup job dir {job_dir}: {e}')
+            if not task_mode:
+                if sync_lane == SyncLane.BACKFILL.value:
+                    try:
+                        await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                    except Exception as e:
+                        logger.warning(f'sync_v2 bg: failed to release backfill slot job={job_id}: {e}')
+                if content_id:
+                    try:
+                        job = await run_blocking(db_executor, get_sync_job, job_id)
+                        if not job or job.get('status') != 'completed':
+                            await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
+                    except Exception as e:
+                        logger.warning(f'sync_v2 bg: failed to release content claim job={job_id}: {e}')
 
 
 def _stage_files_to_gcs(paths: list):

@@ -42,6 +42,7 @@ class AssistantSettings {
     private let defaultVadGateEnabled = false
     private let defaultBatchTranscriptionEnabled = false
     private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
+    private(set) var transcriptionVocabularyRevision: UInt64 = 0
 
     private init() {
         // Register defaults
@@ -217,8 +218,13 @@ class AssistantSettings {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: transcriptionVocabularyKey)
+            transcriptionVocabularyRevision &+= 1
             NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
         }
+    }
+
+    func shouldApplyTranscriptionVocabularyHydration(startedAtRevision: UInt64) -> Bool {
+        transcriptionVocabularyRevision == startedAtRevision
     }
 
     /// Returns vocabulary as comma-separated string for display

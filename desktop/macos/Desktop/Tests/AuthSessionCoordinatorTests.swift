@@ -79,7 +79,9 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     // Nuclear signOut still wipes onboarding — invalidate must not.
     let signOutRange = authSource.range(of: "func signOut() throws")
     XCTAssertNotNil(signOutRange)
-    let signOutSnippet = String(authSource[signOutRange!.lowerBound...]).prefix(4000)
+    let signOutTail = authSource[signOutRange!.lowerBound...]
+    let signOutEnd = signOutTail.range(of: "// MARK: - Helper Methods")?.lowerBound ?? signOutTail.endIndex
+    let signOutSnippet = String(signOutTail[..<signOutEnd])
     XCTAssertTrue(signOutSnippet.contains("onboardingStep"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
@@ -119,6 +121,22 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))
     XCTAssertTrue(snippet.contains("transition(to: .recoveryRequired)"))
     XCTAssertTrue(snippet.contains("resetAfterSuccessfulSignIn()"))
+  }
+
+  func testSignOutAsyncCleanupIsSessionGuarded() throws {
+    let authSource = try sourceFile("AuthService.swift")
+    let dbSource = try sourceFile("Rewind/Core/RewindDatabase.swift")
+
+    let signOutRange = authSource.range(of: "func signOut() throws")
+    XCTAssertNotNil(signOutRange)
+    let signOutSnippet = String(authSource[signOutRange!.lowerBound...]).prefix(4200)
+
+    XCTAssertTrue(signOutSnippet.contains("Task { [signingOutUserID] in"))
+    XCTAssertTrue(signOutSnippet.contains("skipping stale sign-out service cleanup after a new sign-in"))
+    XCTAssertTrue(signOutSnippet.contains("let didClose = await RewindDatabase.shared.closeIfStale"))
+    XCTAssertTrue(signOutSnippet.contains("guard didClose else"))
+    XCTAssertTrue(signOutSnippet.contains("skipping stale sign-out cache invalidation after a new database session"))
+    XCTAssertTrue(dbSource.contains("func closeIfStale(generation: Int) -> Bool"))
   }
 
   func testOnlyAuthenticatedPhaseReportsSignedIn() {

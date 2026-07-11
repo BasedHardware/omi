@@ -1,7 +1,8 @@
-import SwiftUI
 import Combine
 import CoreGraphics
 import GRDB
+import OmiSupport
+import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - UserDefaults Extension for KVO
@@ -12,6 +13,25 @@ extension UserDefaults {
     }
     @objc dynamic var playwrightUseExtension: Bool {
         return bool(forKey: "playwrightUseExtension")
+    }
+}
+
+private final class PendingToolTraceInputStore: @unchecked Sendable {
+    typealias Entry = (name: String, inputJson: String, started: ContinuousClock.Instant)
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    func set(_ entry: Entry, forKey key: String) {
+        lock.withLock {
+            entries[key] = entry
+        }
+    }
+
+    func removeValue(forKey key: String) -> Entry? {
+        lock.withLock {
+            entries.removeValue(forKey: key)
+        }
     }
 }
 
@@ -2421,8 +2441,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
-        let historyCount = min(historyMessages.count, 20)
         log("ChatProvider: prompt built — schema: \(style.includesDatabaseSchema && !cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: kernel-owned, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(style.includesSkills ? enabledSkillNames.count : 0), dev_mode_in_skills: \(style.includesSkills && devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
 
         // Log per-section character breakdown
@@ -3860,6 +3878,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
+        // Only the primary chat can turn the user's current message into a
+        // permission authorization. Child, floating, and lab surfaces never
+        // inherit this capability.
+        let isPrimaryChatPermissionSurface = systemPromptStyle == .main && !isOnboarding && surfaceRef == nil
+        let precedingAssistantMessage = messages.last.flatMap { message in
+            message.sender == .ai && !message.isStreaming ? message.copyableText : nil
+        }
+        let permissionAuthorization = isPrimaryChatPermissionSurface
+            ? PermissionRequestAuthorization.authorize(
+                userMessage: trimmedText,
+                precedingAssistantMessage: precedingAssistantMessage
+            )
+            : nil
         // saveMessage site 3 of 5: user message at turn start.
         // Fire-and-forget Task launched before the bridge query so
         // it doesn't block streaming. `isSending` already gates the
@@ -4041,7 +4072,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         "guidance": screenContextReason.isExplicitScreenRequest
                             ? (screenRecordingGranted
                                 ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
-                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.")
+                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and ask whether they want to grant it. Call request_permission with type=screen_recording only after they explicitly request or affirm it.")
                             : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
                     ]
                     if let data = try? JSONSerialization.data(
@@ -4072,14 +4103,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // any kind (text delta OR tool_use start). It also brackets the
             // text-streaming window so the `generation` span excludes tool time.
             let currentChatMode = chatMode
+            let currentIsOnboardingSurface = isOnboarding
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
                 ? AgentClientScope.floatingPill
                 : nil
             // Kernel control tools (spawn_agent, list_agent_sessions, …) execute in
             // the Node runtime and only surface via tool_activity + tool_result_display.
             // Pair started input with completed output for QueryTracer.tool_executions.
-            var pendingToolTraceInputs:
-                [String: (name: String, inputJson: String, started: ContinuousClock.Instant)] = [:]
+            let pendingToolTraceInputs = PendingToolTraceInputStore()
             let textDeltaHandler: AgentClient.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
@@ -4102,7 +4133,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     toolCall,
                     originatingChatMode: currentChatMode,
                     originatingClientScope: currentToolClientScope,
-                    originatingSurfaceRef: resolvedSurface)
+                    originatingSurfaceRef: resolvedSurface,
+                    permissionAuthorization: permissionAuthorization,
+                    isOnboardingSurface: currentIsOnboardingSurface)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
@@ -4132,7 +4165,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         let inputJson =
                             (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
                             ?? "\(input)"
-                        pendingToolTraceInputs[trackedId] = (name, inputJson, ContinuousClock.now)
+                        pendingToolTraceInputs.set(
+                            (name, inputJson, ContinuousClock.now),
+                            forKey: trackedId)
                     }
                 } else if toolStatus != .running {
                     tracer?.end(spanKey)
@@ -4193,12 +4228,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let toolResultDisplayHandler: AgentClient.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
                 let nowMs = ChatProvider.monotonicNowMs()
-                if let tracer {
+                if tracer != nil {
                     let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
                     let pending = pendingToolTraceInputs.removeValue(forKey: trackedId)
                     let inputJson = pending?.inputJson ?? ""
                     let durationMs = pending.map { (ContinuousClock.now - $0.started).milliseconds }
-                    tracer.captureToolExecution(
+                    tracer?.captureToolExecution(
                         toolUseId: toolUseId.isEmpty ? nil : toolUseId,
                         name: name,
                         input: inputJson,
@@ -5189,10 +5224,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for runId in runIds {
             guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
             else { continue }
-            // Guard against duplicate artifact ids (last-write-wins); Dictionary(uniqueKeysWithValues:)
-            // traps on a duplicate key and would crash the chat view.
-            artifactsByRunId[runId] = Dictionary(
-                artifacts.map { ($0.artifactId, $0) }, uniquingKeysWith: { _, latest in latest })
+            // Guard against duplicate artifact ids from the runtime (last-write-wins).
+            artifactsByRunId[runId] = Dictionary(lastWriteWins: artifacts.map { ($0.artifactId, $0) })
         }
         guard !artifactsByRunId.isEmpty else { return }
 

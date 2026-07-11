@@ -1,8 +1,9 @@
 import AppKit
-import SwiftUI
 import Combine
-import UniformTypeIdentifiers
+import OmiSupport
 import OmiTheme
+import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Task Category (by due date)
 
@@ -47,6 +48,11 @@ struct TaskSortOrderSyncFailure: Equatable {
             return "Could not confirm task order sync. Retry when your connection is available."
         }
     }
+}
+
+private struct TaskDynamicFilterInput: Sendable {
+    let source: String?
+    let tags: [String]
 }
 
 // MARK: - Task Filter Tag
@@ -726,6 +732,14 @@ class TasksViewModel: ObservableObject {
     private let loadMoreThrottleInterval: TimeInterval = 0.5
     /// Guards against transient DB re-query flicker during optimistic bulk updates.
     private var suppressDatabaseRequery = false
+    /// Ownership token for `suppressDatabaseRequery`. Each drag/reorder that sets
+    /// suppression bumps this; the async sync that clears suppression captures the
+    /// token and only clears if it still matches. Without it, an earlier sync's
+    /// post-await `defer` clears suppression that a newer, still-pending drag needs,
+    /// letting a stale SQLite requery overwrite the newer order (flicker). A plain
+    /// depth counter cannot be used because scheduleSortOrderSync cancels
+    /// intermediate sync tasks, so set/clear pairs would be unbalanced.
+    private var suppressRequeryGeneration = 0
 
     /// Automation-only (TASK-06): counts real SQLite requeries so a harness can
     /// prove a server-push recompute during an active drag is suppressed.
@@ -843,7 +857,7 @@ class TasksViewModel: ObservableObject {
         // Fallback: legacy UserDefaults categoryOrder (transitional for users who haven't synced yet)
         if let order = categoryOrder[category], !order.isEmpty {
             var orderedTasks: [TaskActionItem] = []
-            var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+            var taskMap = Dictionary(lastWriteWins: tasks.map { ($0.id, $0) })
 
             for id in order {
                 if let task = taskMap[id] {
@@ -966,6 +980,7 @@ class TasksViewModel: ObservableObject {
         // (debounced 500ms) writes the new sortOrders to SQLite. The flag is
         // cleared via defer inside syncSortOrders once SQLite is fresh.
         suppressDatabaseRequery = true
+        suppressRequeryGeneration += 1
         recomputeDisplayCaches()
 
         // Schedule debounced sync to SQLite + backend
@@ -1206,13 +1221,19 @@ class TasksViewModel: ObservableObject {
     /// Collect current sort orders from all categories and write to SQLite + backend
     private func syncSortOrders() async {
         // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
-        // during the debounce window. Always reset on exit (incl. errors / cancellation)
-        // so we don't leave the flag stuck on for unrelated callers.
+        // during the debounce window. Capture the ownership token at entry and only
+        // clear if it still matches — a newer drag that bumped the generation while
+        // we were awaiting owns suppression now, and clearing it here would let a
+        // stale requery revert the newer order. Always reset otherwise (incl.
+        // errors / cancellation) so we don't leave the flag stuck on.
+        let gen = suppressRequeryGeneration
         defer {
-            suppressDatabaseRequery = false
+            if gen == suppressRequeryGeneration {
+                suppressDatabaseRequery = false
+            }
             // Recompute caches after syncing sort orders. When non-status filters are
-            // active, recomputeAllCaches will now re-query SQLite (the flag is cleared)
-            // and pick up any membership changes that happened during the debounce window.
+            // active, recomputeAllCaches will now re-query SQLite (if the flag is
+            // cleared) and pick up any membership changes from the debounce window.
             recomputeAllCaches()
         }
         let updates = collectSortOrderUpdates()
@@ -1306,8 +1327,13 @@ class TasksViewModel: ObservableObject {
                 return
             }
             self.suppressDatabaseRequery = true
+            self.suppressRequeryGeneration += 1
+            let gen = self.suppressRequeryGeneration
             defer {
-                self.suppressDatabaseRequery = false
+                // Only clear if a newer drag hasn't taken ownership (see syncSortOrders).
+                if gen == self.suppressRequeryGeneration {
+                    self.suppressDatabaseRequery = false
+                }
                 self.recomputeAllCaches()
             }
             await self.syncSortOrderUpdates(updates)
@@ -1391,7 +1417,9 @@ class TasksViewModel: ObservableObject {
         let version = recomputeVersion
 
         // Snapshot inputs for background computation
-        let allTasks = store.incompleteTasks + store.completedTasks
+        let tagInputs = (store.incompleteTasks + store.completedTasks).map { task in
+            TaskDynamicFilterInput(source: task.source, tags: task.tags)
+        }
         let knownSources = TaskFilterTag.knownSources
         let knownCategories = TaskFilterTag.knownCategories
 
@@ -1403,11 +1431,11 @@ class TasksViewModel: ObservableObject {
             var allSources: [String: Int] = [:]
             var allCategories: [String: Int] = [:]
 
-            for task in allTasks {
-                if let source = task.source, !source.isEmpty {
+            for input in tagInputs {
+                if let source = input.source, !source.isEmpty {
                     allSources[source, default: 0] += 1
                 }
-                for tag in task.tags {
+                for tag in input.tags {
                     allCategories[tag, default: 0] += 1
                 }
             }
@@ -3620,7 +3648,7 @@ struct TasksPage: View {
         .padding(.top, OmiSpacing.sm)
     }
 
-    private func errorView(_ error: String) -> some View {
+    private func errorView(_: String) -> some View {
         VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: 48)
@@ -3630,7 +3658,7 @@ struct TasksPage: View {
                 .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(error)
+            Text("Check your connection and try again.")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)

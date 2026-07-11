@@ -63,6 +63,20 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertEqual(spawnCount, 0)
   }
 
+  func testStaleDelegationCannotExecuteRedirectedPermissionSideEffect() {
+    var permissionRequestCount = 0
+
+    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
+      isCurrent: { false },
+      operation: {
+        permissionRequestCount += 1
+        return "Screen Recording permission request opened."
+      })
+
+    XCTAssertNil(result)
+    XCTAssertEqual(permissionRequestCount, 0)
+  }
+
   func testFailedDelegationProducesNoSuccessAcknowledgement() {
     let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
       isCurrent: { true },
@@ -156,6 +170,25 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       source.contains(
         "return expectedTurnEpoch == realtimeToolTurnEpoch && pendingRealtimeToolCallIds.contains(key)"
       ))
+  }
+
+  func testPermissionRedirectChecksTurnBeforeOpeningSettings() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("originatingUserText: userText"))
+    XCTAssertTrue(source.contains("dropping stale spawn_agent permission redirect before side effects"))
+    XCTAssertTrue(source.contains("name: permissionRedirect.tool.rawValue"))
+    XCTAssertTrue(source.contains("if permissionRedirect.recoveredFromDelegation"))
+    XCTAssertTrue(source.contains("from: \"agent\""))
+    XCTAssertTrue(source.contains("to: \"native\""))
+  }
+
+  func testRealtimeDirectPermissionToolsUseCanonicalExecutorDescriptor() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("RealtimeHubTools.permissionExecutorRoute("))
+    XCTAssertTrue(source.contains("name: executorRoute.toolName"))
+    XCTAssertTrue(source.contains("originatingUserText: originatingUserText"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {

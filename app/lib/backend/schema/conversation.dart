@@ -96,9 +96,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -287,12 +289,14 @@ class ConversationAudioInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map((s) => ConversationAudioSpan(
-                fileId: s.fileId,
-                wallOffset: s.wallOffset,
-                artifactOffset: s.artifactOffset,
-                len: s.len,
-              ))
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
           .toList(),
     );
   }
@@ -396,12 +400,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -628,6 +634,9 @@ class SyncJobStatusResponse {
   final int failedSegments;
   final SyncLocalFilesResponse? result;
   final String? error;
+  final String? lane;
+  final String? reasonCode;
+  final int? retryAfter;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -638,6 +647,9 @@ class SyncJobStatusResponse {
     this.failedSegments = 0,
     this.result,
     this.error,
+    this.lane,
+    this.reasonCode,
+    this.retryAfter,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -645,7 +657,20 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    return SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
+    return SyncJobStatusResponse(
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
+      lane: json['lane'] as String?,
+      reasonCode: json['reason_code'] as String?,
+      retryAfter: (json['retry_after'] as num?)?.toInt(),
+    );
   }
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {

@@ -138,6 +138,20 @@ final class WALServiceUploadTests: XCTestCase {
     XCTAssertEqual(service.wals.first?.storage, .disk)
   }
 
+  func testWalMetadataPersistsLatestQueuedSnapshot() throws {
+    var wal = try seedWalOnDisk()
+    service.saveWals()
+
+    wal.status = .synced
+    service.setWalsForTesting([wal])
+    service.saveWals()
+    service.waitForWalMetadataWritesForTesting()
+
+    let metadataURL = walDir.appendingPathComponent("wals.json")
+    let metadata = try JSONDecoder().decode(WALMetadata.self, from: Data(contentsOf: metadataURL))
+    XCTAssertEqual(metadata.wals.first?.status, .synced)
+  }
+
   func testDegradedDirectoryRetainsCurrentFramesAndRecordsHealth() throws {
     service.setWalDirectoryForTesting(nil)
     service.startRecording(device: "dev1", codec: "opus")

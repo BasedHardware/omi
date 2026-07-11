@@ -855,6 +855,29 @@ routes:
         state: active
       owner: backend
   - route_type: http
+    method: POST
+    path: /v2/sync-capture-manifest
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: PUT
     path: /v1/workstreams/{workstream_id}/checkpoints/{runtime_id}
     policy:

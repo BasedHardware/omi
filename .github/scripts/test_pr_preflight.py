@@ -125,6 +125,52 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(coverage.returncode, 1, coverage.stdout)
             self.assertIn("UNCOVERED", coverage.stdout)
 
+    def test_suggest_flag_prints_paste_ready_invariants(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                ".github/scripts/pr_preflight.py",
+                "--base",
+                "HEAD",
+                "--head",
+                "HEAD",
+                "--suggest",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("## Product invariants affected", result.stdout)
+
+    def test_pr_body_file_env_is_honored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            body = temp / "body.md"
+            body.write_text("## Product invariants affected\n\nnone\n", encoding="utf-8")
+            env = {**os.environ, "OMI_PR_BODY_FILE": str(body)}
+            # Empty diff vs itself: product-invariants should pass with any body.
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    ".github/scripts/pr_preflight.py",
+                    "--base",
+                    "HEAD",
+                    "--head",
+                    "HEAD",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn(str(body.resolve()), result.stdout)
+
 
 class SingleFlightTests(unittest.TestCase):
     def run_runner(

@@ -355,6 +355,36 @@ enum DesktopAutomationActionError: LocalizedError {
   }
 }
 
+enum DesktopAutomationRevisionComparator {
+  static func matchesAtMillisecondPrecision(_ lhs: Date?, _ rhs: Date?) -> Bool {
+    guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+    let lhsMilliseconds = Int64((lhs.timeIntervalSince1970 * 1_000).rounded())
+    let rhsMilliseconds = Int64((rhs.timeIntervalSince1970 * 1_000).rounded())
+    return lhsMilliseconds == rhsMilliseconds
+  }
+}
+
+private func automationSafeErrorDetail(_ raw: String) -> String {
+  var detail = raw.replacingOccurrences(of: #"[\r\n\t]+"#, with: " ", options: .regularExpression)
+  let redactions: [(String, String)] = [
+    (#"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#, "[redacted-jwt]"),
+    (#"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}"#, "Bearer [redacted]"),
+    (#"sk-[A-Za-z0-9_-]{20,}"#, "sk-[redacted]"),
+  ]
+  for (pattern, replacement) in redactions {
+    detail = detail.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+  }
+  return String(detail.prefix(500))
+}
+
+private func automationActionErrorDescription(_ error: Error) -> String {
+  if case let APIError.httpError(statusCode, detail) = error {
+    let suffix = detail.map { " detail=\(automationSafeErrorDetail($0))" } ?? ""
+    return "api_http_error status=\(statusCode)\(suffix)"
+  }
+  return automationSafeErrorDetail(error.localizedDescription)
+}
+
 private struct DesktopAutomationResponse<T: Codable>: Codable {
   let ok: Bool
   let result: T?
@@ -577,6 +607,10 @@ final class DesktopAutomationActionRegistry {
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
   private var harnessBusyUntil: Date?
+  /// The current typed floating-bar submission and its pre-submit timeline size.
+  /// The wait action must observe this turn before it may accept an idle state.
+  private var pendingFloatingBarSubmission: (generation: Int, baselineMessageCount: Int)?
+  private var floatingBarSubmissionGeneration = 0
 
   private func harnessBusyLatchActive(now: Date = Date()) -> Bool {
     guard let until = harnessBusyUntil else { return false }
@@ -652,6 +686,42 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       NotificationCenter.default.post(name: .refreshAllData, object: nil)
       return nil
+    }
+
+    // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
+    // prove the counter is deterministic without spending LLM calls. Read-only.
+    register(
+      name: "usage_limiter_snapshot",
+      summary: "Read the free-tier monthly chat usage-limiter state (deterministic counter) — CHAT-05 harness read."
+    ) { _ in
+      await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        return [
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+          "limit_description": limiter.limitDescription,
+        ]
+      }
+    }
+
+    // CHAT-05: reset the usage-limiter counter so a harness can prove it is
+    // dev-resettable (the criterion's second half) without driving real LLM usage.
+    register(
+      name: "reset_usage_limiter",
+      summary: "Reset the free-tier monthly chat usage-limiter counter (dev-resettable proof) — CHAT-05. Non-prod only."
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_usage_limiter is disabled on production bundles"]
+      }
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.reset()
+        return [
+          "reset": "true",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+        ]
+      }
     }
 
     register(
@@ -928,7 +998,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_log_import_probe",
       summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text"]
+      params: ["source", "text", "fixture"]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -936,7 +1006,26 @@ final class DesktopAutomationActionRegistry {
       guard let text = params["text"], !text.isEmpty else {
         throw DesktopAutomationActionError.invalidParams("text must be non-empty")
       }
-      switch await ConnectorImportOperations.importMemoryLog(text: text, source: source) {
+      let outcome: ConnectorImportOperations.Outcome
+      if params["fixture"] == "structured" {
+        guard AppBuild.isNonProduction else {
+          return ["error": "structured memory-log fixture is disabled on production bundles"]
+        }
+        // Offline providers intentionally return a marker echo rather than JSON.
+        // Inject only the extracted provider result; the real connector operation
+        // still owns validation, durable save, and user-facing outcome mapping.
+        outcome = await ConnectorImportOperations.importMemoryLog(
+          text: text,
+          source: source,
+          extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog(
+            memories: [text],
+            profileSummary: "desktop qualification fixture"
+          )
+        )
+      } else {
+        outcome = await ConnectorImportOperations.importMemoryLog(text: text, source: source)
+      }
+      switch outcome {
       case .success(let result, let message):
         return [
           "outcome": "success",
@@ -1062,7 +1151,9 @@ final class DesktopAutomationActionRegistry {
         "detail_has_revision": detail.updatedAt == nil ? "false" : "true",
         "detail_transcript_included": detail.transcriptSegmentsIncluded ? "true" : "false",
         "cache_id_matches": persisted?.id == detail.id ? "true" : "false",
-        "cache_revision_matches": persisted?.updatedAt == detail.updatedAt ? "true" : "false",
+        "cache_revision_matches": DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(
+          persisted?.updatedAt, detail.updatedAt)
+          ? "true" : "false",
         "opened_detail": "true",
       ]
     }
@@ -1362,11 +1453,21 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      let baselineSnapshot = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 1)
+      guard baselineSnapshot["error"] == nil,
+        let baselineRaw = baselineSnapshot["message_count"],
+        let baseline = Int(baselineRaw)
+      else {
+        return ["error": baselineSnapshot["error"] ?? "floating chat timeline unavailable"]
+      }
+      self.floatingBarSubmissionGeneration += 1
+      let generation = self.floatingBarSubmissionGeneration
+      self.pendingFloatingBarSubmission = (generation: generation, baselineMessageCount: baseline)
       if !FloatingControlBarManager.shared.isVisible {
         FloatingControlBarManager.shared.show()
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
-      return ["sent": query]
+      return ["sent": query, "submission_generation": "\(generation)"]
     }
 
     // Force the floating-bar active state so the pill↔notch-island morph and the
@@ -1662,19 +1763,34 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "wait_floating_bar_chat_idle",
-      summary: "Block until floating-bar chat is not sending or streaming",
+      summary: "Block until the latest submitted floating-bar turn is observed and becomes idle",
       params: ["timeoutMs", "pollMs"]
     ) { params in
       let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
       let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let submission = self.pendingFloatingBarSubmission else {
+        return ["error": "no pending floating-bar submission to observe"]
+      }
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      var observedSubmission = false
       while Date() < deadline {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
-        if detail["error"] == nil,
+        let messageCount = Int(detail["message_count"] ?? "") ?? 0
+        observedSubmission = observedSubmission
+          || messageCount > submission.baselineMessageCount
+          || detail["is_sending"] == "true"
+          || detail["is_streaming"] == "true"
+        if observedSubmission,
+           detail["error"] == nil,
            detail["is_sending"] == "false",
            detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
+          detail["submission_observed"] = "true"
+          detail["submission_generation"] = "\(submission.generation)"
+          if self.pendingFloatingBarSubmission?.generation == submission.generation {
+            self.pendingFloatingBarSubmission = nil
+          }
           return detail
         }
         try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
@@ -1682,6 +1798,8 @@ final class DesktopAutomationActionRegistry {
       var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
       detail["error"] = "timeout"
       detail["timeout_ms"] = "\(timeoutMs)"
+      detail["submission_observed"] = observedSubmission ? "true" : "false"
+      detail["submission_generation"] = "\(submission.generation)"
       return detail
     }
 
@@ -2185,7 +2303,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
-      params: ["conversationId", "showTranscript"]
+      params: ["conversationId", "showTranscript", "timeoutMs"]
     ) { params in
       guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
         !conversationId.isEmpty
@@ -2199,16 +2317,24 @@ final class DesktopAutomationActionRegistry {
         object: nil,
         userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
       )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
       return [
         "opened": conversationId,
         "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
     }
 
     register(
       name: "open_latest_conversation",
       summary: "Open the most recently loaded conversation detail view",
-      params: ["showTranscript"]
+      params: ["showTranscript", "timeoutMs"]
     ) { params in
       guard let appState = AppState.current else {
         return ["error": "app state unavailable"]
@@ -2226,9 +2352,17 @@ final class DesktopAutomationActionRegistry {
         object: nil,
         userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
       )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
       return [
         "opened": conversationId,
         "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
     }
 
@@ -2407,11 +2541,14 @@ final class DesktopAutomationActionRegistry {
       let terms = raw.split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
-      AssistantSettings.shared.transcriptionVocabulary = terms
-      _ = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      // Persist remotely first. A Settings-page hydration already in flight may
+      // write its response into UserDefaults; the final assignment makes this
+      // completed mutation authoritative without relying on a settle delay.
+      let saved = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary
       return [
         "saved": "true",
-        "term_count": "\(terms.count)",
+        "term_count": "\(saved.vocabulary.count)",
       ]
     }
 
@@ -2458,7 +2595,7 @@ final class DesktopAutomationActionRegistry {
         goalType: .numeric,
         targetValue: targetValue,
         currentValue: currentValue,
-        source: "harness"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       let goals = (try? await GoalStorage.shared.getLocalGoals()) ?? []
@@ -2475,7 +2612,7 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       let v2 = try await APIClient.shared.getAppsV2()
       let marketplaceCount = v2.groups.reduce(0) { $0 + $1.data.count }
-      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 200)
+      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 100)
       return [
         "marketplace_count": "\(marketplaceCount)",
         "group_count": "\(v2.meta.groupCount)",
@@ -3046,6 +3183,11 @@ final class DesktopAutomationBridge {
   private var bindAttempts = 0
   private let maxBindAttempts = 3
 
+  /// Upper bound on a request body's declared Content-Length. Requests over this
+  /// are rejected before the body is sliced (see parseRequest); the automation
+  /// bridge only ever receives small JSON action payloads.
+  static let maxRequestBodyBytes = 8 * 1024 * 1024
+
   private init() {}
 
   func startIfNeeded() {
@@ -3180,7 +3322,15 @@ final class DesktopAutomationBridge {
       let value = pieces[1].trimmingCharacters(in: .whitespaces)
       headers[key] = value
       if key == "content-length" {
-        contentLength = Int(value) ?? 0
+        // Reject negative/absurd lengths before the body-slice range and the
+        // `distance + contentLength` addition below (which would trap/overflow).
+        // Reachable pre-auth from any local process, so fail closed.
+        guard
+          let parsed = LoopbackHTTPParsing.parseContentLength(value, maxBytes: Self.maxRequestBodyBytes)
+        else {
+          return nil
+        }
+        contentLength = parsed
       }
     }
 
@@ -3377,7 +3527,7 @@ final class DesktopAutomationBridge {
       } catch {
         return jsonResponse(
           DesktopAutomationResponse<DesktopAutomationActionResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: automationActionErrorDescription(error)),
           statusCode: 400
         )
       }

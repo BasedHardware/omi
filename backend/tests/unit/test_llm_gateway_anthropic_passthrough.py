@@ -100,7 +100,7 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     fake: _FakeAsyncClient = _reset_anthropic_client
     fake._post_response = httpx.Response(
         200,
-        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-sonnet-4-6'},
+        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-sonnet-5'},
     )
 
     response = TestClient(app).post('/v1/messages', json=_agentic_request(), headers=_auth_headers())
@@ -108,7 +108,8 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert response.status_code == 200
     assert len(fake.post_calls) == 1
     forwarded = fake.post_calls[0]['json']
-    assert forwarded['model'] == 'claude-sonnet-4-6'
+    assert forwarded['model'] == 'claude-sonnet-5'
+    assert forwarded['effort'] == 'medium'
     assert forwarded['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
     assert forwarded['tools'][0]['name'] == 'get_memories_tool'
     assert fake.post_calls[0]['headers']['x-api-key'] == 'anthropic-test-key'

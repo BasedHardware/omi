@@ -104,14 +104,16 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         isSubmitting.value = true;
                         try {
                           await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
-                          context.read<AppProvider>().updateLocalAppReviewResponse(
-                                widget.app.id,
-                                controller.text.trim(),
-                                review.uid,
-                              );
+                          if (context.mounted) {
+                            context.read<AppProvider>().updateLocalAppReviewResponse(
+                              widget.app.id,
+                              controller.text.trim(),
+                              review.uid,
+                            );
+                          }
                           review.response = controller.text.trim();
                           review.respondedAt = DateTime.now();
-                          if (mounted) {
+                          if (context.mounted) {
                             Navigator.pop(context);
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -122,7 +124,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                             );
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(context.l10n.failedToSendReply(e.toString())),
