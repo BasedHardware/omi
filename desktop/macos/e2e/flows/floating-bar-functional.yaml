@@ -59,6 +59,7 @@ steps:
         timeoutMs: "120000"
     expect:
       result.detail.idle: "true"
+      result.detail.submission_observed: "true"
 
   - id: S5
     name: Assert stub marker echoed in assistant reply

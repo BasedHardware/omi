@@ -10974,7 +10974,7 @@
       },
       "GoalCreate": {
         "additionalProperties": false,
-        "description": "Canonical create shape; legacy numeric fields remain accepted at this boundary.",
+        "description": "Canonical create shape with explicit compatibility for released request fields.",
         "properties": {
           "current_value": {
             "anyOf": [
@@ -13667,6 +13667,21 @@
           "has_rating"
         ],
         "title": "MemorySummaryRatingResponse",
+        "type": "object"
+      },
+      "MemoryValueRequest": {
+        "additionalProperties": false,
+        "description": "Canonical body for single-value memory mutations.",
+        "properties": {
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "MemoryValueRequest",
         "type": "object"
       },
       "MentorNotificationSettingsResponse": {
@@ -54770,12 +54785,23 @@
             }
           },
           {
+            "deprecated": true,
+            "description": "Deprecated; send JSON body {'value': ...} instead",
             "in": "query",
             "name": "value",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Value",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "deprecated": true,
+              "description": "Deprecated; send JSON body {'value': ...} instead",
+              "title": "Value"
             }
           },
           {
@@ -54815,6 +54841,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MemoryValueRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -54963,12 +55006,23 @@
             }
           },
           {
+            "deprecated": true,
+            "description": "Deprecated; send JSON body {'value': ...} instead",
             "in": "query",
             "name": "value",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Value",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "deprecated": true,
+              "description": "Deprecated; send JSON body {'value': ...} instead",
+              "title": "Value"
             }
           },
           {
@@ -55008,6 +55062,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MemoryValueRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
