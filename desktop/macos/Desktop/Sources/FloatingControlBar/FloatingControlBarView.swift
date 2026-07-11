@@ -607,11 +607,7 @@ struct FloatingControlBarView: View {
                     onBackToAgentRows: {
                         showAgentListFromConversation()
                     },
-                    onEscape: onEscape,
-                    onSpawnSibling: { siblingID in
-                        (window as? FloatingControlBarWindow)?
-                            .resizeForActiveAgentChatPublic(pillID: siblingID, animated: false)
-                    }
+                    onEscape: onEscape
                 )
                 .id(activeAgentChatPill.id)
                 .zIndex(1)
@@ -1635,7 +1631,6 @@ private struct AgentMainChatView: View {
     @ObservedObject var manager: AgentPillsManager
     let onBackToAgentRows: () -> Void
     let onEscape: () -> Void
-    let onSpawnSibling: (UUID) -> Void
 
     @State private var followUpText: String
     @State private var attachments: [ChatAttachment] = []
@@ -1646,14 +1641,12 @@ private struct AgentMainChatView: View {
         pill: AgentPill,
         manager: AgentPillsManager,
         onBackToAgentRows: @escaping () -> Void,
-        onEscape: @escaping () -> Void,
-        onSpawnSibling: @escaping (UUID) -> Void
+        onEscape: @escaping () -> Void
     ) {
         self.pill = pill
         self.manager = manager
         self.onBackToAgentRows = onBackToAgentRows
         self.onEscape = onEscape
-        self.onSpawnSibling = onSpawnSibling
         _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
     }
 
@@ -2127,32 +2120,10 @@ private struct AgentMainChatView: View {
         guard !trimmed.isEmpty || !staged.isEmpty else { return }
         followUpText = ""
         attachments = []
-        // Attachments are addressed to *this* agent (they reference local files it
-        // should read), so bypass the "@agent" handoff heuristic when files are staged.
-        if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            guard let sibling = AgentDelegationExecutor.shared.spawnResolvedDelegation(
-                .init(
-                    originalUserText: handoff.originalRequest,
-                    brief: handoff.agentTask,
-                    title: nil,
-                    spokenAck: nil,
-                    directedProvider: nil,
-                    harnessOverride: pill.bridgeHarnessOverride
-                ),
-                model: pill.model,
-                fromVoice: false
-            ) else {
-                manager.continueAgent(from: pill, text: trimmed)
-                return
-            }
-            state.present(.agent(sibling.id))
-            // Route through the window resize/observer setup so the new
-            // sibling's reportContentHeight(.agent(sibling.id)) updates are
-            // observed. Without this the height observer stays keyed to the
-            // previous agent and the sibling's chat stays clipped.
-            onSpawnSibling(sibling.id)
-            return
-        }
+        // This composer belongs to a leaf agent. It can only continue its own
+        // canonical session; nested/sibling creation stays on the top-level
+        // resolver path so questions about existing agents never become side
+        // effects.
         manager.continueAgent(from: pill, text: trimmed, attachments: staged)
     }
 
