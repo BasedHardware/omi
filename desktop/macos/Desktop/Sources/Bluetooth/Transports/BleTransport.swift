@@ -37,7 +37,13 @@ final class BleTransport: NSObject, DeviceTransport {
     private var serviceDiscoveryContinuation: CheckedContinuation<[CBService], Error>?
 
     private var isDisposed = false
-    private var centralManagerObserver: NSObjectProtocol?
+    // All block-based NotificationCenter observer tokens. Every token must be
+    // stored and removed individually in deinit: `removeObserver(self)` does NOT
+    // remove block-based observers (they are keyed by the returned token, not by
+    // `self`), so a discarded token leaks the observer and its closure for the
+    // process lifetime — and DeviceProvider recreates transports on every
+    // reconnect attempt, so leaks accumulate unboundedly.
+    private var connectionObservers: [NSObjectProtocol] = []
 
     // MARK: - Initialization
 
@@ -53,43 +59,46 @@ final class BleTransport: NSObject, DeviceTransport {
     private func setupConnectionObserver() {
         // Observe connection state changes via NotificationCenter
         // BluetoothManager posts these when CBCentralManagerDelegate methods fire
-        centralManagerObserver = NotificationCenter.default.addObserver(
-            forName: .bleDeviceConnected,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self,
-                  let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                  peripheralId == self.peripheral.identifier else { return }
+        connectionObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: .bleDeviceConnected,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self = self,
+                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
+                      peripheralId == self.peripheral.identifier else { return }
 
-            self.handleConnectionSuccess()
-        }
+                self.handleConnectionSuccess()
+            })
 
-        NotificationCenter.default.addObserver(
-            forName: .bleDeviceDisconnected,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self,
-                  let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                  peripheralId == self.peripheral.identifier else { return }
+        connectionObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: .bleDeviceDisconnected,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self = self,
+                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
+                      peripheralId == self.peripheral.identifier else { return }
 
-            let error = notification.userInfo?["error"] as? Error
-            self.handleDisconnection(error: error)
-        }
+                let error = notification.userInfo?["error"] as? Error
+                self.handleDisconnection(error: error)
+            })
 
-        NotificationCenter.default.addObserver(
-            forName: .bleDeviceFailedToConnect,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self,
-                  let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                  peripheralId == self.peripheral.identifier else { return }
+        connectionObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: .bleDeviceFailedToConnect,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self = self,
+                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
+                      peripheralId == self.peripheral.identifier else { return }
 
-            let error = notification.userInfo?["error"] as? Error
-            self.handleConnectionFailure(error: error)
-        }
+                let error = notification.userInfo?["error"] as? Error
+                self.handleConnectionFailure(error: error)
+            })
     }
 
     private func handleConnectionSuccess() {
@@ -113,9 +122,12 @@ final class BleTransport: NSObject, DeviceTransport {
     }
 
     deinit {
-        if let observer = centralManagerObserver {
+        // Remove every block-based observer by its token (removeObserver(self)
+        // does not cover them). Missing any one leaks that observer + closure.
+        for observer in connectionObservers {
             NotificationCenter.default.removeObserver(observer)
         }
+        connectionObservers.removeAll()
         NotificationCenter.default.removeObserver(self)
     }
 
