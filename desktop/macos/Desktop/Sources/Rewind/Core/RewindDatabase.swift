@@ -23,8 +23,17 @@ actor RewindDatabase {
     /// The user ID that was actually used to open the current database
     private var openedForUserId: String?
 
-    /// Generation counter — incremented on close() so stale task completions don't corrupt state
+    /// Generation counter — incremented on close() so stale task completions don't corrupt state.
+    /// NOTE: `initialize()` captures this before `performInitialization()` and clears
+    /// `initializationTask` only if it is unchanged afterward, so it MUST NOT be bumped
+    /// during a normal open. Pool-swap detection uses the separate `poolEpoch` below.
     private var initGeneration: Int = 0
+
+    /// Epoch of the current `dbQueue`, bumped on every close AND every pool (re)open.
+    /// Storage actors cache this alongside the pool and revalidate to detect a swap
+    /// (recovery replaces the pool) — kept distinct from `initGeneration` so bumping it
+    /// on open does not break the in-flight-close detection in `initialize()`.
+    private var poolEpoch: Int = 0
 
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
@@ -56,13 +65,13 @@ actor RewindDatabase {
     /// (corruption/maintenance recovery replaces the pool) and drop its stale
     /// reference instead of reading/writing a closed or unlinked file.
     func poolGeneration() -> Int {
-        return initGeneration
+        return poolEpoch
     }
 
     /// Atomically read the current pool and its epoch together, so a caching
     /// storage actor stores a consistent (pool, generation) pair.
     func getDatabaseQueueWithGeneration() -> (pool: DatabasePool?, generation: Int) {
-        return (dbQueue, initGeneration)
+        return (dbQueue, poolEpoch)
     }
 
     /// Report a query error from a storage actor or subsystem.
@@ -278,7 +287,8 @@ actor RewindDatabase {
         runningFlagPath = nil
         openedForUserId = nil
         initGeneration += 1
-        log("RewindDatabase: Closed database (generation \(initGeneration))")
+        poolEpoch += 1
+        log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
     }
 
     /// Switch to a different user's database.
@@ -485,10 +495,13 @@ actor RewindDatabase {
         }
 
         dbQueue = activeQueue
-        // Bump the epoch on every pool (re)open so storage actors that cached the
+        // Bump the pool epoch on every (re)open so storage actors that cached the
         // previous pool revalidate and drop it — recovery may have replaced the
         // underlying omi.db file, leaving the old pool pointing at a stale inode.
-        initGeneration += 1
+        // This is `poolEpoch`, NOT `initGeneration`: initialize() relies on
+        // initGeneration staying unchanged across a normal open to clear its
+        // initializationTask.
+        poolEpoch += 1
         openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
         consecutiveQueryIOErrors = 0
 
