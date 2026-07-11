@@ -531,7 +531,7 @@ export function Tasks(): React.JSX.Element {
           </ul>
         )}
 
-        {error && <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
+        {error && <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
 
         {!loading && items.length === 0 && !composing && (
           <EmptyState

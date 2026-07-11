@@ -362,6 +362,21 @@
     border-color: var(--border-strong);
   }
 
+  /* Elevated page surface (Conversations/Tasks search bars, filter/select
+     controls, info + error banners). These previously used .glass-subtle
+     (black 30% + a 6%-white hairline), which on the flat #0f0f0f canvas sat
+     DARKER than the page and read as murky — the top-right surfaces looked
+     "sucked into the black". Lift them onto the same raised-panel family as
+     .widget-card (--bg-tertiary + --border-strong + a soft shadow) so they
+     read as distinct raised surfaces. Deliberately kept OFF the shared glass-*
+     tokens (owned by the bar) — this is a page-level surface. */
+  .surface-panel {
+    @apply rounded-2xl border;
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  }
+
   /* Sidebar entrance — slides in from the left. This is the first thing to
      animate on startup; the main content fades in slightly after. */
   .slide-in-left {
