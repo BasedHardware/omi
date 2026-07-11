@@ -2,7 +2,10 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Iterator
 from unittest.mock import MagicMock
+
+import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -16,7 +19,9 @@ def _module(name: str, **attributes) -> ModuleType:
     return module
 
 
-def test_calendar_route_offloads_token_lookup_and_preserves_response_behavior():
+@pytest.fixture
+def calendar_route_harness() -> Iterator[SimpleNamespace]:
+    """Load the import-bound route during fixture setup, outside test CPU timing."""
     users_db = _module("database.users", get_integration=MagicMock())
     endpoints = _module("utils.other.endpoints", get_current_user_uid=lambda: "uid")
 
@@ -77,21 +82,26 @@ def test_calendar_route_offloads_token_lookup_and_preserves_response_behavior():
             return function(*args, **kwargs)
 
         route.run_blocking = run_blocking
+        yield SimpleNamespace(route=route, offloads=offloads)
 
-        result = asyncio.run(
-            route.list_google_calendar_events(
-                time_min=None,
-                time_max=None,
-                q=None,
-                max_results=20,
-                x_app_platform=None,
-                x_app_version=None,
-                x_app_build=None,
-                uid="uid-calendar",
-            )
+
+def test_calendar_route_offloads_token_lookup_and_preserves_response_behavior(calendar_route_harness):
+    route = calendar_route_harness.route
+    result = asyncio.run(
+        route.list_google_calendar_events(
+            time_min=None,
+            time_max=None,
+            q=None,
+            max_results=20,
+            x_app_platform=None,
+            x_app_version=None,
+            x_app_build=None,
+            uid="uid-calendar",
         )
+    )
 
     assert [event.event_id for event in result] == ["event-1"]
+    offloads = calendar_route_harness.offloads
     assert len(offloads) == 1
     executor, function, args, kwargs = offloads[0]
     assert executor is route.db_executor
