@@ -29,6 +29,15 @@ final class BleTransport: NSObject, DeviceTransport {
     private let connectionStateSubject = PassthroughSubject<DeviceTransportState, Never>()
 
     private var discoveredServices: [CBService] = []
+    // Guards every continuation field below. connect()/read/writeCharacteristic()
+    // run on an arbitrary task executor; the CBPeripheralDelegate callbacks run on
+    // the CoreBluetooth (main) queue; the NotificationCenter connection observers
+    // run on .main; and disconnect()/dispose() drain from yet another context.
+    // Swift Dictionary/Optional mutation is not thread-safe across those, and two
+    // contexts racing to resume the SAME CheckedContinuation traps (double-resume).
+    // So all access is serialized here: capture-and-nil the continuation UNDER the
+    // lock, then resume it OUTSIDE the lock (exactly one context wins the capture).
+    private let continuationsLock = NSLock()
     private var characteristicContinuations: [CBUUID: CheckedContinuation<Data, Error>] = [:]
     private var writeContinuations: [CBUUID: CheckedContinuation<Void, Error>] = [:]
     private var characteristicStreams: [String: CharacteristicStreamHandler] = [:]
@@ -102,22 +111,29 @@ final class BleTransport: NSObject, DeviceTransport {
     }
 
     private func handleConnectionSuccess() {
-        connectionContinuation?.resume()
+        continuationsLock.lock()
+        let continuation = connectionContinuation
         connectionContinuation = nil
+        continuationsLock.unlock()
+        continuation?.resume()
     }
 
     private func handleConnectionFailure(error: Error?) {
         let transportError = DeviceTransportError.connectionFailed(error?.localizedDescription ?? "Unknown error")
-        connectionContinuation?.resume(throwing: transportError)
+        continuationsLock.lock()
+        let continuation = connectionContinuation
         connectionContinuation = nil
+        continuationsLock.unlock()
+        continuation?.resume(throwing: transportError)
         updateState(.disconnected)
     }
 
     private func handleDisconnection(error: Error?) {
-        if let continuation = connectionContinuation {
-            continuation.resume(throwing: DeviceTransportError.connectionFailed("Disconnected during connection"))
-            connectionContinuation = nil
-        }
+        continuationsLock.lock()
+        let continuation = connectionContinuation
+        connectionContinuation = nil
+        continuationsLock.unlock()
+        continuation?.resume(throwing: DeviceTransportError.connectionFailed("Disconnected during connection"))
         updateState(.disconnected)
     }
 
@@ -142,13 +158,17 @@ final class BleTransport: NSObject, DeviceTransport {
         do {
             // Connect to the peripheral
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                continuationsLock.lock()
                 self.connectionContinuation = continuation
+                continuationsLock.unlock()
                 self.centralManager.connect(self.peripheral, options: nil)
             }
 
             // Discover services
             discoveredServices = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[CBService], Error>) in
+                continuationsLock.lock()
                 self.serviceDiscoveryContinuation = continuation
+                continuationsLock.unlock()
                 self.peripheral.discoverServices(nil)
             }
 
@@ -181,21 +201,29 @@ final class BleTransport: NSObject, DeviceTransport {
         }
         characteristicStreams.removeAll()
 
-        // Cancel pending continuations
-        connectionContinuation?.resume(throwing: CancellationError())
+        // Cancel pending continuations. Capture-and-nil every continuation under
+        // the lock, then resume OUTSIDE it, so a concurrent connect callback or
+        // delegate cannot double-resume the same continuation.
+        continuationsLock.lock()
+        let pendingConnection = connectionContinuation
         connectionContinuation = nil
-        serviceDiscoveryContinuation?.resume(throwing: CancellationError())
+        let pendingDiscovery = serviceDiscoveryContinuation
         serviceDiscoveryContinuation = nil
-
-        for (_, continuation) in characteristicContinuations {
-            continuation.resume(throwing: CancellationError())
-        }
+        let pendingReads = characteristicContinuations
+        let pendingWrites = writeContinuations
         characteristicContinuations.removeAll()
+        writeContinuations.removeAll()
+        continuationsLock.unlock()
 
-        for (_, continuation) in writeContinuations {
+        pendingConnection?.resume(throwing: CancellationError())
+        pendingDiscovery?.resume(throwing: CancellationError())
+
+        for (_, continuation) in pendingReads {
             continuation.resume(throwing: CancellationError())
         }
-        writeContinuations.removeAll()
+        for (_, continuation) in pendingWrites {
+            continuation.resume(throwing: CancellationError())
+        }
 
         // Disconnect
         centralManager.cancelPeripheralConnection(peripheral)
@@ -270,7 +298,12 @@ final class BleTransport: NSObject, DeviceTransport {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            characteristicContinuations[characteristicUUID] = continuation
+            continuationsLock.lock()
+            let displaced = characteristicContinuations.updateValue(continuation, forKey: characteristicUUID)
+            continuationsLock.unlock()
+            // A concurrent read on the same characteristic would silently overwrite
+            // (and leak) the prior continuation — fail it instead of hanging forever.
+            displaced?.resume(throwing: DeviceTransportError.readFailed("superseded by a newer read"))
             peripheral.readValue(for: characteristic)
         }
     }
@@ -295,7 +328,10 @@ final class BleTransport: NSObject, DeviceTransport {
 
         if withResponse {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                writeContinuations[characteristicUUID] = continuation
+                continuationsLock.lock()
+                let displaced = writeContinuations.updateValue(continuation, forKey: characteristicUUID)
+                continuationsLock.unlock()
+                displaced?.resume(throwing: DeviceTransportError.writeFailed("superseded by a newer write"))
                 peripheral.writeValue(data, for: characteristic, type: writeType)
             }
         } else {
@@ -342,12 +378,15 @@ final class BleTransport: NSObject, DeviceTransport {
 extension BleTransport: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        if let error = error {
-            serviceDiscoveryContinuation?.resume(throwing: error)
-        } else {
-            serviceDiscoveryContinuation?.resume(returning: peripheral.services ?? [])
-        }
+        continuationsLock.lock()
+        let continuation = serviceDiscoveryContinuation
         serviceDiscoveryContinuation = nil
+        continuationsLock.unlock()
+        if let error = error {
+            continuation?.resume(throwing: error)
+        } else {
+            continuation?.resume(returning: peripheral.services ?? [])
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -362,7 +401,10 @@ extension BleTransport: CBPeripheralDelegate {
         let uuid = characteristic.uuid
 
         // Handle pending read continuation
-        if let continuation = characteristicContinuations.removeValue(forKey: uuid) {
+        continuationsLock.lock()
+        let readContinuation = characteristicContinuations.removeValue(forKey: uuid)
+        continuationsLock.unlock()
+        if let continuation = readContinuation {
             if let error = error {
                 continuation.resume(throwing: DeviceTransportError.readFailed(error.localizedDescription))
             } else {
@@ -381,7 +423,10 @@ extension BleTransport: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         let uuid = characteristic.uuid
 
-        if let continuation = writeContinuations.removeValue(forKey: uuid) {
+        continuationsLock.lock()
+        let writeContinuation = writeContinuations.removeValue(forKey: uuid)
+        continuationsLock.unlock()
+        if let continuation = writeContinuation {
             if let error = error {
                 continuation.resume(throwing: DeviceTransportError.writeFailed(error.localizedDescription))
             } else {
