@@ -982,8 +982,11 @@ def execute_tool(
         end_date = arguments.get("end_date")
         raw_categories = arguments.get("categories", [])
         categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
-        limit = arguments.get("limit", 20)
-        offset = arguments.get("offset", 0)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=1000)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
         start_dt = None
@@ -1113,7 +1116,10 @@ def execute_tool(
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
@@ -1163,7 +1169,10 @@ def execute_tool(
         query = arguments.get("query")
         if not query:
             raise ToolExecutionError("query is required")
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
         if not matches:
@@ -1186,7 +1195,10 @@ def execute_tool(
         return {"posts": results}
 
     elif tool_name == "get_x_posts":
-        limit = arguments.get("limit", 50)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         kind = arguments.get("kind")
         posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
         results = [
