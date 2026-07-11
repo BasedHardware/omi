@@ -115,6 +115,11 @@ const startHidden = process.argv.includes('--hidden')
 // runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
 // var is explicitly set — no silent prod telemetry file. Runs before app:start.
 if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
+// Dev GPU stability: render in software + keep WebGL on SwiftShader + never let a
+// GPU crash permanently blocklist WebGL, so the orb / brain map / blur / effects
+// stay reliable on flaky dev GPUs (hybrid laptop, asleep display, headless soak).
+// Must run before app ready. Packaged builds keep full hardware acceleration.
+if (import.meta.env.DEV) devBench.applyDevGpuStability()
 perfMark('app:start')
 
 // --- Global crash observability --------------------------------------------
@@ -194,6 +199,13 @@ if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
 // harness's --user-data-dir) each get their own lock instead of contending.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
+
+// Wipe stale Chromium GPU/shader caches for THIS profile before the GPU process
+// opens them — a force-killed dev build corrupts them and the corruption poisons
+// the next launch's WebGL. Gated on the single-instance lock so a throwaway
+// second launch can't delete the RUNNING instance's live caches; still before
+// whenReady/first-window, so it lands ahead of GPU-process init.
+if (import.meta.env.DEV && gotSingleInstanceLock) devBench.clearStaleGpuCaches()
 
 // Crash/error reporting. After the lock check so the throwaway second-launch
 // process doesn't pay SDK setup; no-op unless a DSN is configured, and only
