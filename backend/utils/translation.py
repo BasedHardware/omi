@@ -2,6 +2,7 @@ import os
 import hashlib
 import json
 import re
+import time
 from collections import Counter, OrderedDict
 from typing import Callable, Dict, List, Match, Optional, Pattern, Set, Tuple, TypedDict, Union, cast
 
@@ -15,10 +16,17 @@ from langdetect.lang_detect_exception import LangDetectException
 from enum import Enum
 import logging
 
+import httpx
+
 from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
 
 logger = logging.getLogger(__name__)
+
+TRANSLATION_MODE = os.environ.get("TRANSLATION_MODE", "google")
+HOSTED_TRANSLATION_API_URL = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+TRANSLATION_SHADOW_SAMPLE_RATE = float(os.environ.get("TRANSLATION_SHADOW_SAMPLE_RATE", "1.0"))
+TRANSLATION_SHADOW_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_SHADOW_TIMEOUT_SECONDS", "2.0"))
 
 
 # LRU Cache for language detection (local, free via langdetect)
@@ -549,6 +557,129 @@ class TranslationService:
     def __init__(self) -> None:
         self.translation_cache: OrderedDict[str, Tuple[str, str]] = OrderedDict()
         self.MAX_CACHE_SIZE = 1000
+        self._shadow_client: Optional[httpx.Client] = None
+
+    def _get_shadow_client(self) -> httpx.Client:
+        if self._shadow_client is None:
+            self._shadow_client = httpx.Client(
+                base_url=HOSTED_TRANSLATION_API_URL,
+                timeout=TRANSLATION_SHADOW_TIMEOUT_SECONDS,
+            )
+        return self._shadow_client
+
+    def _translate_google_batch(self, contents: List[str], dest_language: str) -> List[Tuple[str, str]]:
+        response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]
+            contents=contents,
+            parent=_parent,
+            mime_type=_mime_type,
+            target_language_code=dest_language,
+        )
+        return [
+            (translation.translated_text, translation.detected_language_code or "")
+            for translation in response.translations
+        ]
+
+    def _run_shadow_compare(
+        self,
+        callsite: str,
+        dest_language: str,
+        source_texts: List[str],
+        google_results: List[Tuple[str, str]],
+    ) -> None:
+        if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
+            return
+        import random
+
+        if TRANSLATION_SHADOW_SAMPLE_RATE < 1.0 and random.random() > TRANSLATION_SHADOW_SAMPLE_RATE:
+            return
+        try:
+            source_lang = ""
+            if google_results:
+                lang_counts: Counter[str] = Counter(det for _, det in google_results if det)
+                if lang_counts:
+                    source_lang = lang_counts.most_common(1)[0][0]
+
+            client = self._get_shadow_client()
+            t0 = time.monotonic()
+            resp = client.post(
+                "/v1/translate",
+                json={
+                    "contents": source_texts,
+                    "target_language_code": dest_language,
+                    "source_language_code": source_lang or None,
+                },
+            )
+            nllb_latency = time.monotonic() - t0
+
+            if resp.status_code != 200:
+                logger.warning(
+                    "translation_shadow_error callsite=%s target=%s count=%d status=%d",
+                    callsite,
+                    dest_language,
+                    len(source_texts),
+                    resp.status_code,
+                )
+                return
+
+            nllb_data = resp.json()
+            nllb_translations = nllb_data.get("translations", [])
+
+            exact_matches = 0
+            total = min(len(google_results), len(nllb_translations))
+            total_google_chars = 0
+            total_nllb_chars = 0
+            for i in range(total):
+                g_text = google_results[i][0]
+                n_text = nllb_translations[i].get("translated_text", "")
+                total_google_chars += len(g_text)
+                total_nllb_chars += len(n_text)
+                if g_text.strip() == n_text.strip():
+                    exact_matches += 1
+
+            exact_match_ratio = exact_matches / total if total > 0 else 0.0
+            len_ratio = total_nllb_chars / total_google_chars if total_google_chars > 0 else 0.0
+
+            logger.info(
+                "translation_shadow_compare callsite=%s target=%s count=%d "
+                "google_detected=%s exact_match_ratio=%.2f len_ratio=%.2f "
+                "nllb_latency_ms=%.1f nllb_model=%s",
+                callsite,
+                dest_language,
+                total,
+                source_lang,
+                exact_match_ratio,
+                len_ratio,
+                nllb_latency * 1000,
+                nllb_data.get("model", "unknown"),
+            )
+        except Exception as e:
+            logger.warning(
+                "translation_shadow_error callsite=%s target=%s count=%d error_type=%s",
+                callsite,
+                dest_language,
+                len(source_texts),
+                type(e).__name__,
+            )
+
+    def _schedule_shadow_compare(
+        self,
+        callsite: str,
+        dest_language: str,
+        source_texts: List[str],
+        google_results: List[Tuple[str, str]],
+    ) -> None:
+        if TRANSLATION_MODE != "shadow" or not HOSTED_TRANSLATION_API_URL:
+            return
+        from utils.executors import postprocess_executor, submit_with_context
+
+        submit_with_context(
+            postprocess_executor,
+            self._run_shadow_compare,
+            callsite,
+            dest_language,
+            source_texts,
+            google_results,
+        )
 
     def _get_cache_key(self, text_hash: str, dest_language: str) -> str:
         return f"{text_hash}:{dest_language}"
@@ -628,24 +759,18 @@ class TranslationService:
                 chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
-                        contents=chunk,
-                        parent=_parent,
-                        mime_type=_mime_type,
-                        target_language_code=dest_language,
-                    )
+                    google_results = self._translate_google_batch(chunk, dest_language)
 
-                    for j, translation in enumerate(response.translations):
+                    for j, (trans_text, det_lang) in enumerate(google_results):
                         idx = chunk_indices[j]
-                        translated_text = translation.translated_text
-                        detected_lang = translation.detected_language_code or ""
-                        results[idx] = translated_text
-                        detected_langs.append(detected_lang)
+                        results[idx] = trans_text
+                        detected_langs.append(det_lang)
 
-                        # Cache in memory and Redis
                         text_hash = hashlib.md5(sentences[idx].encode()).hexdigest()
-                        self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
-                        cache_translation(text_hash, dest_language, translated_text, detected_lang)
+                        self._set_memory_cache(text_hash, dest_language, trans_text, det_lang)
+                        cache_translation(text_hash, dest_language, trans_text, det_lang)
+
+                    self._schedule_shadow_compare("translate_text_by_sentence", dest_language, chunk, google_results)
 
                 except Exception as e:
                     logger.error(f"Batch translation error: {e}")
@@ -770,26 +895,18 @@ class TranslationService:
                 chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
-                        contents=chunk,
-                        parent=_parent,
-                        mime_type=_mime_type,
-                        target_language_code=dest_language,
-                    )
+                    google_results = self._translate_google_batch(chunk, dest_language)
 
-                    for j, translation in enumerate(response.translations):
+                    for j, (trans_text, det_lang) in enumerate(google_results):
                         sent_hash = chunk_hashes[j]
-                        translated_text = translation.translated_text
-                        detected_lang = translation.detected_language_code or ""
+                        self._set_memory_cache(sent_hash, dest_language, trans_text, det_lang)
+                        cache_translation(sent_hash, dest_language, trans_text, det_lang)
+                        sent_translation[sent_hash] = (trans_text, det_lang)
 
-                        self._set_memory_cache(sent_hash, dest_language, translated_text, detected_lang)
-                        cache_translation(sent_hash, dest_language, translated_text, detected_lang)
-                        sent_translation[sent_hash] = (translated_text, detected_lang)
+                    self._schedule_shadow_compare("translate_units_batch", dest_language, chunk, google_results)
 
                 except Exception as e:
                     logger.error(f"Sentence-level batch translation error: {e}")
-                    # Mark failed sentences as fallbacks so Phase 3 does NOT
-                    # write them to Redis (avoids poisoning cache with raw text).
                     for h in chunk_hashes:
                         if h not in sent_translation:
                             sent_translation[h] = (sent_hash_to_info[h]['text'], '')
@@ -891,19 +1008,13 @@ class TranslationService:
             return result
 
         try:
-            response = _get_client().translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
-                contents=[text],
-                parent=_parent,
-                mime_type=_mime_type,
-                target_language_code=dest_language,
-            )
+            google_results = self._translate_google_batch([text], dest_language)
+            translated_text, detected_lang = google_results[0]
 
-            translated_text = response.translations[0].translated_text
-            detected_lang = response.translations[0].detected_language_code or ""
-
-            # Cache in memory and Redis
             self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
             cache_translation(text_hash, dest_language, translated_text, detected_lang)
+
+            self._schedule_shadow_compare("translate_text", dest_language, [text], google_results)
 
             return (translated_text, detected_lang)
         except Exception as e:
