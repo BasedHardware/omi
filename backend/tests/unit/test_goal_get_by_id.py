@@ -67,4 +67,5 @@ def test_db_get_goal_returns_dict_and_fills_id():
     doc.to_dict.return_value = {"title": "Read more"}  # no 'id' -> _goal_dict fills it from doc.id
     with patch.object(goals_db, "db", _fake_db(doc)):
         out = goals_db.get_goal("u1", "goal_1")
-    assert out == {"title": "Read more", "id": "goal_1"}
+    # _goal_dict fills both id and the goal_id alias from doc.id when absent.
+    assert out == {"title": "Read more", "id": "goal_1", "goal_id": "goal_1"}
