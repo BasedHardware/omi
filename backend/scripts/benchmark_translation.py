@@ -216,7 +216,7 @@ def translate_google_batch(texts: List[str], target_lang: str, cache_dir: str) -
     parent = f"projects/{project_id}/locations/global"
 
     total_latency = 0.0
-    api_batch_size = 128
+    api_batch_size = 32
     for batch_start in range(0, len(uncached_texts), api_batch_size):
         batch = uncached_texts[batch_start : batch_start + api_batch_size]
         batch_indices = uncached_indices[batch_start : batch_start + api_batch_size]
