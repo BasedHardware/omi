@@ -134,6 +134,14 @@ final class AgentControlService {
       input.removeValue(forKey: alias)
     }
     switch name {
+    case ToolName.listAgentSessions:
+      // Session lifecycle is independent from run completion: reusable agent
+      // sessions stay open after a run succeeds. Realtime models often use
+      // "closed" to mean "finished", which would otherwise hide every
+      // completed agent from the voice response.
+      if stringValue(input["status"]) == "closed" {
+        input.removeValue(forKey: "status")
+      }
     case ToolName.getAgentRun, ToolName.cancelAgentRun:
       // The runtime schemas for these operations are strict and run-scoped.
       // An opaque agentRef may resolve to a broader session/attempt handle, but

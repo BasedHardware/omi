@@ -57,6 +57,17 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertNil(service.missingScopeError(name: HubTool.getAgentRun.rawValue, input: input))
   }
 
+  func testVoiceListDoesNotTreatClosedSessionStatusAsFinishedRunFilter() {
+    let service = AgentControlService()
+
+    let input = service.canonicalizeVoiceArguments(
+      name: HubTool.listAgentSessions.rawValue,
+      arguments: ["status": "closed"]
+    )
+
+    XCTAssertNil(input["status"])
+  }
+
   func testAgentRunSummaryIncludesBoundedUntrustedFinalOutput() {
     let service = AgentControlService()
     let finalOutput = String(repeating: "x", count: 1_201)

@@ -790,6 +790,12 @@ For every compatibility query, the facade resolves a session in this order:
 
 A `sessionKey` is never an adapter-native session ID. It is only a compatibility alias.
 
+Legacy main-chat mappings created before provider boundaries were persisted may
+initially carry the old ACP default. Before their first run or adapter binding,
+the resolver MAY repair that empty mapping to the active main-chat provider
+boundary. Once either execution record exists, the persisted boundary remains
+immutable and mismatched provider requests fail closed.
+
 ### 13.4 Stable surface references
 
 Canonical surfaces MUST supply:
