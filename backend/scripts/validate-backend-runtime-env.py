@@ -117,6 +117,7 @@ def validate_runtime_env(
 
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
         errors.extend(
@@ -238,27 +239,65 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
 
 
 def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require a configured Parakeet endpoint anywhere the runtime selects Parakeet.
-
-    ``_validate_cloud_run`` then compares these declared values to both rendered and
-    live revisions, so a selected Parakeet route cannot silently lose its endpoint.
-    """
+    """Require a Parakeet endpoint anywhere the prerecorded model can select Parakeet."""
     errors: list[ValidationError] = []
+    surfaces: list[tuple[str, ConfigDict, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/gke/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                {},
+            )
+        )
+
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
-    services = _as_config_dict(cloud_run.get('services')) or {}
-    for service_name, raw_service_config in services.items():
-        service_config = _as_config_dict(raw_service_config) or {}
-        service_env = _as_config_dict(service_config.get('env')) or {}
-        configured_models = _manifest_literal_env_value(service_env, 'STT_PRERECORDED_MODEL') or ''
-        selected_models = {model.strip().lower() for model in configured_models.split(',') if model.strip()}
-        if 'parakeet' not in selected_models:
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    required_cloud_run_scopes: set[str] = set()
+    if env == 'dev':
+        for service in ('backend', 'backend-sync', 'backend-integration'):
+            if service not in cloud_run_services:
+                continue
+            scope = f'{env}/cloud_run/{service}'
+            required_cloud_run_scopes.add(scope)
+            service_config = _as_config_dict(cloud_run_services.get(service)) or {}
+            env_map = _as_config_dict(service_config.get('env')) or {}
+            secrets_map = _as_config_dict(service_config.get('secrets')) or {}
+            if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
+                errors.append(ValidationError(scope, 'required Cloud Run service is missing STT_PRERECORDED_MODEL'))
+            endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
+            if not endpoint:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+                    )
+                )
+
+    for service, raw_service in cloud_run_services.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/cloud_run/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                _as_config_dict(service_config.get('secrets')) or {},
+            )
+        )
+
+    for scope, env_map, secrets_map in surfaces:
+        if scope in required_cloud_run_scopes:
             continue
-        parakeet_url = (_manifest_literal_env_value(service_env, 'HOSTED_PARAKEET_API_URL') or '').strip()
-        if not parakeet_url:
+        if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
+            continue
+        endpoint = (_manifest_literal_env_value(env_map, 'HOSTED_PARAKEET_API_URL') or '').strip()
+        if not endpoint:
             errors.append(
                 ValidationError(
-                    f'{env}/cloud_run/{service_name}',
-                    'STT_PRERECORDED_MODEL selects parakeet but HOSTED_PARAKEET_API_URL is missing',
+                    scope,
+                    'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
                 )
             )
     return errors
