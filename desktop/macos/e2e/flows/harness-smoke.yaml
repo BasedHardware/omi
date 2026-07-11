@@ -13,6 +13,7 @@ covers:
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/APIKeyService.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
