@@ -61,7 +61,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
 
   void _showAudioRoutePicker(BuildContext context, PhoneCallProvider provider) async {
     await provider.loadAudioRoutes();
-    if (!mounted) return;
+    if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

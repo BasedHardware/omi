@@ -621,7 +621,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
 
                               // Navigate directly to chat page
-                              if (mounted) {
+                              if (context.mounted) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
