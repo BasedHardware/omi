@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from google.cloud import firestore
+from pydantic import ValidationError
 
 import database.redis_db as redis_db
 from database._client import db
@@ -87,9 +88,11 @@ def get_dev_keys_for_user(user_id: str) -> List[DevApiKey]:
             key_dict["scopes"] = None
         try:
             keys.append(DevApiKey.model_validate(key_dict))
-        except Exception:
-            # One malformed/legacy key doc must not 500 the whole key list.
-            logger.warning("Skipping malformed developer API key %s", getattr(doc, "id", None))
+        except ValidationError as e:
+            # One malformed/legacy key doc must not 500 the whole key list. Catch only the narrow
+            # pydantic validation failure so unexpected runtime errors on this security-sensitive path
+            # are not silently hidden as skipped documents; log the detail to identify the legacy shape.
+            logger.warning("Skipping malformed developer API key %s: %s", getattr(doc, "id", None), e)
     return keys
 
 
