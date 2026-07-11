@@ -965,6 +965,42 @@ def test_verify_control_plane_requires_post_routes_and_safe_method_smoke(monkeyp
     assert seen == [(f'https://candidate.example{path}', 'opaque-token') for path in resume.CONTROL_PLANE_PATHS]
 
 
+def test_http_helpers_retry_builtin_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self, *_: object) -> bytes:
+            return b'{"ok": true}'
+
+    outcomes: list[object] = [TimeoutError('read timed out'), FakeResponse()]
+    sleeps: list[float] = []
+
+    def urlopen(*_: object, **__: object) -> FakeResponse:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        assert isinstance(outcome, FakeResponse)
+        return outcome
+
+    monkeypatch.setattr(resume.request, 'urlopen', urlopen)
+    monkeypatch.setattr(resume.time, 'sleep', sleeps.append)
+
+    assert resume._http_status('https://candidate.example/v1/health', attempts=2) == 200
+    assert sleeps == [5]
+
+    outcomes[:] = [TimeoutError('read timed out'), FakeResponse()]
+    sleeps.clear()
+
+    assert resume._http_json('https://candidate.example/openapi.json', attempts=2) == {'ok': True}
+    assert sleeps == [5]
+
+
 def _gke_documents(desired: int = 3) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     deployment = {
         'metadata': {'generation': 7},

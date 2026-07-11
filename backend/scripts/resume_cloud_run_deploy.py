@@ -1112,7 +1112,7 @@ def _http_status(url: str, *, token: str | None = None, attempts: int = 12) -> i
                 last_status = int(response.status)
         except error.HTTPError as exc:
             last_status = int(exc.code)
-        except error.URLError:
+        except (error.URLError, TimeoutError):
             last_status = 0
         if last_status in {200, 405}:
             return last_status
@@ -1128,7 +1128,7 @@ def _http_json(url: str, *, token: str | None = None, attempts: int = 12) -> dic
         try:
             with request.urlopen(request.Request(url, headers=headers), timeout=20) as response:
                 return cast(dict[str, Any], json.load(response))
-        except (error.URLError, json.JSONDecodeError) as exc:
+        except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             last_error = str(exc)
         if attempt + 1 < attempts:
             time.sleep(5)
